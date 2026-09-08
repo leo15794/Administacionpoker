@@ -27,6 +27,7 @@ export default function Login() {
   return (
     <div className="login-shell">
       <div className="login-box">
+        <div className="login-mark">D</div>
         <h1>DigiPlayers</h1>
         <div className="sub">Sistema de gestión de agentes</div>
         <form onSubmit={onSubmit}>
