@@ -11,16 +11,28 @@ const LEDGER_LABEL: Record<string, string> = {
 
 export default function Tesoreria() {
   const [data, setData] = useState<any>(null);
+  const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState(false);
 
   function refresh() {
-    api.tesoreria().then(setData);
+    setError("");
+    api.tesoreria().then(setData).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
     refresh();
   }, []);
 
+  if (error) {
+    return (
+      <div className="error">
+        No se pudo cargar Tesorería: {error}
+        <div style={{ marginTop: 10 }}>
+          <button className="btn secondary small" onClick={refresh}>Reintentar</button>
+        </div>
+      </div>
+    );
+  }
   if (!data) return <div className="muted">Cargando...</div>;
 
   const wallet = data.porLedger.find((l: any) => l.ledger === "WALLET_MANOS");

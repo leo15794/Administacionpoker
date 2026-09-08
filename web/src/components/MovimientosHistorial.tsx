@@ -20,10 +20,12 @@ function truncar(texto: string, max = 140) {
 
 export default function MovimientosHistorial({ agentId, clubId }: { agentId?: string; clubId?: string }) {
   const [rows, setRows] = useState<any[] | null>(null);
+  const [error, setError] = useState("");
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
-    api.movimientos({ agentId, clubId }).then(setRows);
+    setError("");
+    api.movimientos({ agentId, clubId }).then(setRows).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
     }
   }
 
+  if (error) return <div className="error">No se pudo cargar el historial: {error}</div>;
   if (!rows) return <div className="muted">Cargando...</div>;
   if (rows.length === 0) {
     return <div className="muted">No hay movimientos cargados en el sistema nuevo para este filtro todavía (el saldo puede venir del estado inicial importado de la planilla).</div>;
