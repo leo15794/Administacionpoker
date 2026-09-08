@@ -126,10 +126,22 @@ async function main() {
   //    contra lo esperado — descontando cualquier actividad real y genuina posterior a la
   //    fecha de corte — y lo corrige con UN ajuste adicional. Re-correr esto en el mismo día
   //    no lo vuelve a aplicar (queda con la fecha de hoy en la clave).
+  //
+  //    OJO (bug encontrado 08/09): acá había que excluir los treasury_entries automáticos
+  //    generados por el import de historial de agentes (import:historial-automatizacion).
+  //    Esos representan eventos que YA están cubiertos por el historial real de Wallet Manos
+  //    que se importa en el paso 2 (con su fecha real, a veces justo el mismo día pero con
+  //    hora 00:00) — si su registro automático quedó con hora posterior a la fecha de corte
+  //    (por ejemplo porque se cargó a la tarde), antes se contaba acá como "actividad nueva
+  //    genuina" y se sumaba una segunda vez. Se los excluye explícitamente.
   const actividadPosterior = await pool.query(
     `SELECT COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END), 0) as neto
      FROM (
-       SELECT direction, amount FROM treasury_entries WHERE ledger = 'WALLET_MANOS' AND occurred_at > $1
+       SELECT t.direction, t.amount
+       FROM treasury_entries t
+       JOIN ledger_movements m ON m.id = t.movement_id
+       WHERE t.ledger = 'WALLET_MANOS' AND t.occurred_at > $1
+         AND (m.created_by IS NULL OR m.created_by <> 'import:historial-automatizacion')
        UNION ALL
        SELECT direction, amount FROM treasury_adjustments
        WHERE ledger = 'WALLET_MANOS' AND occurred_at > $1 AND (created_by IS NULL OR created_by NOT LIKE 'import:%')
