@@ -13,10 +13,26 @@ export default function Tesoreria() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState(false);
+  const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
     api.tesoreria().then(setData).catch((e) => setError(e.message));
+  }
+
+  async function eliminar(m: any) {
+    const detalle = m.source === "ajuste" ? m.observation : `${m.agent_name} (${m.type})`;
+    if (!confirm(`¿Eliminar este movimiento?\n\n${detalle}\n${m.direction === "INGRESO" ? "+" : "-"}${m.amount}\n\nEsto no se puede deshacer.`)) return;
+    setBorrando(m.id);
+    try {
+      if (m.source === "ajuste") await api.eliminarAjusteTesoreria(m.id);
+      else await api.eliminarMovimiento(m.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el movimiento.");
+    } finally {
+      setBorrando(null);
+    }
   }
 
   useEffect(() => {
@@ -107,7 +123,7 @@ export default function Tesoreria() {
           <div className="muted">Sin movimientos todavía.</div>
         ) : (
           <table>
-            <thead><tr><th>Fecha</th><th>Tesorería</th><th>Dirección</th><th>Monto</th><th>Custodio</th><th>Detalle</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Tesorería</th><th>Dirección</th><th>Monto</th><th>Custodio</th><th>Detalle</th><th></th></tr></thead>
             <tbody>
               {data.ultimosMovimientos.map((m: any) => (
                 <tr key={m.id}>
@@ -124,6 +140,16 @@ export default function Tesoreria() {
                     ) : (
                       m.agent_name
                     )}
+                  </td>
+                  <td>
+                    <button
+                      className="btn secondary small"
+                      disabled={borrando === m.id}
+                      onClick={() => eliminar(m)}
+                      title="Eliminar este movimiento"
+                    >
+                      {borrando === m.id ? "..." : "Eliminar"}
+                    </button>
                   </td>
                 </tr>
               ))}

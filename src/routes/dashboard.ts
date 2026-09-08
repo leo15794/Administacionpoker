@@ -156,12 +156,22 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
        FROM treasury_adjustments WHERE ledger = 'CAJA_EFECTIVO' GROUP BY custodian, ledger`
     ),
     pool.query(
+      // Excluye los treasury_entries automáticos que quedaron redundantes con el
+      // historial real de Wallet Manos que importamos aparte (import:wallet-historial):
+      // esos movimientos de agentes con medio de pago USDT ya generaron un treasury_entry
+      // automático en su momento, y el mismo evento real también entró en el historial
+      // importado (con su fecha real de la planilla). El saldo/KPI ya está bien (el ancla
+      // del import neutraliza el duplicado en la suma), pero en el LISTADO se veían los
+      // dos: uno automático (sin fecha real, con la fecha en que se cargó acá) y uno
+      // "[HISTÓRICO]" con la fecha real. Se oculta el automático viejo y se deja el
+      // histórico, que tiene el detalle y la fecha correctos.
       `SELECT t.id, t.ledger, t.direction, t.amount, t.custodian, t.occurred_at,
               m.type, m.observation, a.name as agent_name
        FROM treasury_entries t
        JOIN ledger_movements m ON m.id = t.movement_id
        JOIN agents a ON a.id = m.agent_id
-       ${ledgerFiltro ? "WHERE t.ledger = $2" : ""}
+       WHERE NOT (t.ledger = 'WALLET_MANOS' AND m.created_by = 'import:historial-automatizacion')
+       ${ledgerFiltro ? "AND t.ledger = $2" : ""}
        ORDER BY t.occurred_at DESC LIMIT $1`,
       ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
     ),
