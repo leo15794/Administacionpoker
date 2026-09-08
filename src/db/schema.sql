@@ -171,5 +171,9 @@ CREATE TABLE IF NOT EXISTS agent_users (
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'AGENT' CHECK (role IN ('AGENT','ADMIN')),
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Columna agregada despues del primer despliegue: en una base ya existente, CREATE TABLE
+-- IF NOT EXISTS no la crea, asi que se agrega aca de forma idempotente.
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;

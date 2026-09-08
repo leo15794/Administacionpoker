@@ -20,6 +20,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
             <NavLink to="/dashboard/agentes" className="nav-link">Agentes</NavLink>
             <NavLink to="/dashboard/movimientos" className="nav-link">Cargar movimiento</NavLink>
             <NavLink to="/dashboard/cierres" className="nav-link">Cierres semanales</NavLink>
+            <NavLink to="/dashboard/usuarios" className="nav-link">Usuarios y permisos</NavLink>
           </>
         ) : (
           <NavLink to="/mi-cuenta" className="nav-link">Mi cuenta</NavLink>

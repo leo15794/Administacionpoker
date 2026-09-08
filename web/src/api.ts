@@ -62,6 +62,13 @@ export const api = {
     custodian?: string;
   }) => request("/movements", { method: "POST", body: JSON.stringify({ ...data, idempotencyKey: idempotencyKey() }) }),
 
+  // Usuarios de acceso (login) y permisos
+  usuarios: () => request("/users"),
+  crearUsuario: (data: { agentId: string; email: string; password: string; role: "ADMIN" | "AGENT" }) =>
+    request("/users", { method: "POST", body: JSON.stringify(data) }),
+  actualizarUsuario: (id: string, data: { role?: "ADMIN" | "AGENT"; active?: boolean; password?: string }) =>
+    request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
   aplicarCierre: (data: {
     agentId: string;
     clubId: string;

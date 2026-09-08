@@ -44,6 +44,8 @@ authRouter.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: "Email o contraseña incorrectos." });
 
+    if (user.active === false) return res.status(403).json({ error: "Este usuario está desactivado." });
+
     const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
     res.json({ token, agentName: user.agent_name, role: user.role });
   } catch (err: any) {
