@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import MovimientosHistorial from "../components/MovimientosHistorial";
 
 const TIPOS = [
   { value: "CARGA", label: "Carga (agente recibe fichas/crédito)" },
@@ -33,6 +34,7 @@ export default function Movimientos() {
 
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     api.agentes().then(setAgentes);
@@ -62,6 +64,7 @@ export default function Movimientos() {
       setMsg({ ok: true, text: "Movimiento registrado y aplicado al ledger." });
       setAmount("");
       setObservation("");
+      setRefreshKey((k) => k + 1);
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
     } finally {
@@ -142,6 +145,14 @@ export default function Movimientos() {
           {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
           <button className="btn" disabled={loading}>{loading ? "Registrando..." : "Registrar movimiento"}</button>
         </form>
+      </div>
+
+      <div className="panel" style={{ marginTop: 24 }}>
+        <h3 style={{ marginTop: 0 }}>Historial de movimientos cargados</h3>
+        <div className="muted" style={{ marginBottom: 14 }}>
+          Últimos movimientos registrados en el sistema (los más recientes primero), para verificar rápido lo que se fue cargando.
+        </div>
+        <MovimientosHistorial key={refreshKey} />
       </div>
     </div>
   );

@@ -11,6 +11,8 @@
     "seed": "tsx src/seed.ts",
     "set-password": "tsx src/scripts/set-password.ts",
     "import:historial": "tsx src/scripts/importHistorialAutomatizacion.ts",
+    "sync:saldos": "tsx src/scripts/syncSaldosPlanilla.ts",
+    "sync:saldos:apply": "tsx src/scripts/syncSaldosPlanilla.ts --apply",
     "test:cierre": "tsx src/engine/__test__.ts"
   },
   "dependencies": {
