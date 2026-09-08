@@ -34,6 +34,7 @@ export const api = {
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
   agentes: () => request("/dashboard/agentes"),
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
+  supervisores: () => request("/dashboard/supervisores"),
   miCuenta: () => request("/portal/mi-cuenta"),
 
   // Drill-down de movimientos y tesorería

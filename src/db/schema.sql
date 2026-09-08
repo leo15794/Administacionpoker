@@ -172,6 +172,16 @@ ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS reverted_by_id TEXT;
 ALTER TABLE weekly_closings DROP CONSTRAINT IF EXISTS weekly_closings_status_check;
 ALTER TABLE weekly_closings ADD CONSTRAINT weekly_closings_status_check CHECK (status IN ('BORRADOR','APLICADO','CORREGIDO','REVERTIDO'));
 
+-- Módulo de supervisores (punto 5 del documento de rediseño): cuando el club del deal tiene
+-- rebate_destino = RAKEBACK_SUPERVISOR, el % de rebate de ESE cierre no se suma al saldo
+-- operativo del agente — se acredita centralizado al agente supervisor (agents.supervisor,
+-- resuelto por nombre) como un movimiento de ajuste aparte. Estas columnas dejan grabado en
+-- el propio cierre qué pasó (para reconstruir el historial) y qué movimiento hay que revertir
+-- si el cierre se revierte.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rebate_destino TEXT;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS supervisor_agent_id TEXT REFERENCES agents(id);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS supervisor_movement_id TEXT;
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (

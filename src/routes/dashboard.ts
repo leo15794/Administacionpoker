@@ -76,6 +76,48 @@ dashboardRouter.get("/agentes", requireAuth, requireAdmin, async (_req, res) => 
   res.json(r.rows);
 });
 
+// Módulo de supervisores (punto 5 del documento de rediseño): jerarquía supervisor -> agentes
+// a cargo, con el saldo propio del supervisor (incluye el rakeback centralizado que le llega
+// vía cierres con rebate_destino=RAKEBACK_SUPERVISOR) y el detalle de cada agente a cargo.
+dashboardRouter.get("/supervisores", requireAuth, requireAdmin, async (_req, res) => {
+  const supervisores = await pool.query(
+    `SELECT a.id, a.name, COALESCE(SUM(b.amount),0) as saldo_total
+     FROM agents a
+     LEFT JOIN balances b ON b.agent_id = a.id
+     WHERE a.active = true AND a.account_type = 'SUPERVISOR'
+     GROUP BY a.id, a.name
+     ORDER BY a.name`
+  );
+  const agentesPorSupervisor = await pool.query(
+    `SELECT a.id, a.name, a.supervisor, a.account_type, COALESCE(SUM(b.amount),0) as saldo_total
+     FROM agents a
+     LEFT JOIN balances b ON b.agent_id = a.id
+     WHERE a.active = true AND a.supervisor IS NOT NULL AND a.supervisor <> ''
+     GROUP BY a.id, a.name, a.supervisor, a.account_type
+     ORDER BY a.supervisor, a.name`
+  );
+  const rakebackAcreditado = await pool.query(
+    `SELECT wc.supervisor_agent_id, COALESCE(SUM(wc.rebate),0) as total
+     FROM weekly_closings wc
+     WHERE wc.supervisor_agent_id IS NOT NULL AND wc.status <> 'REVERTIDO'
+     GROUP BY wc.supervisor_agent_id`
+  );
+
+  const result = supervisores.rows.map((s) => ({
+    ...s,
+    agentes: agentesPorSupervisor.rows.filter((a) => a.supervisor === s.name),
+    rakeback_centralizado_acreditado: rakebackAcreditado.rows.find((r) => r.supervisor_agent_id === s.id)?.total ?? 0,
+  }));
+
+  // Agentes que tienen un supervisor cargado como texto pero que no matchea a ningún agente
+  // con account_type=SUPERVISOR activo — esto es exactamente el caso que hoy bloqueamos al
+  // aplicar un cierre con rebate_destino=RAKEBACK_SUPERVISOR, así que conviene que se vea acá.
+  const nombresSupervisoresValidos = new Set(supervisores.rows.map((s) => s.name));
+  const supervisoresInvalidos = agentesPorSupervisor.rows.filter((a) => !nombresSupervisoresValidos.has(a.supervisor));
+
+  res.json({ supervisores: result, supervisoresInvalidos });
+});
+
 dashboardRouter.get("/agentes/:id/deals", requireAuth, requireAdmin, async (req, res) => {
   const r = await pool.query(
     `SELECT d.*, c.name as club_name FROM agent_club_deals d JOIN clubs c ON c.id = d.club_id

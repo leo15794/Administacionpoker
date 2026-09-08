@@ -49,13 +49,73 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       specialRule: input.specialRule ?? null,
     });
 
+    // Módulo de supervisores (punto 5 del documento): si el club de este deal tiene
+    // rebate_destino = RAKEBACK_SUPERVISOR, el rebate de ESTE cierre no engorda el saldo
+    // operativo del agente — se acredita centralizado al supervisor configurado en
+    // agents.supervisor. Nunca se resuelve en silencio: si el club pide ese destino y el
+    // agente no tiene un supervisor válido cargado, se bloquea el cierre en vez de perder
+    // o mal-asignar la plata.
+    const clubRes = await client.query(`SELECT rebate_destino FROM clubs WHERE id = $1`, [input.clubId]);
+    const rebateDestino: string = clubRes.rows[0]?.rebate_destino ?? "SALDO_OPERATIVO";
+
+    let supervisorAgentId: string | null = null;
+    let montoAgente = calc.finalClosing;
+    let montoSupervisor = 0;
+
+    if (rebateDestino === "RAKEBACK_SUPERVISOR" && calc.rebate !== 0) {
+      const agentRes = await client.query(`SELECT supervisor FROM agents WHERE id = $1`, [input.agentId]);
+      const supervisorName: string | null = agentRes.rows[0]?.supervisor ?? null;
+      if (!supervisorName) {
+        throw new Error(
+          `El club de este cierre tiene el rebate configurado con destino "Rakeback supervisor", pero el agente no tiene un supervisor cargado. Asigná un supervisor al agente (pestaña Editar) antes de aplicar este cierre.`
+        );
+      }
+      const supRes = await client.query(`SELECT id FROM agents WHERE name = $1 AND active = true`, [supervisorName]);
+      if (!supRes.rows[0]) {
+        throw new Error(
+          `El supervisor "${supervisorName}" cargado en el agente no existe (o está inactivo) como agente en el catálogo — corregilo antes de aplicar este cierre.`
+        );
+      }
+      supervisorAgentId = supRes.rows[0].id;
+      // El agente solo recibe resultado + rakeback; el rebate se desvía íntegro al supervisor.
+      montoAgente = calc.result + calc.rakeback;
+      montoSupervisor = calc.rebate;
+    }
+
     const id = newId("wc");
+    let supervisorMovementId: string | null = null;
+
+    if (supervisorAgentId) {
+      supervisorMovementId = newId("mov");
+      await client.query(
+        `INSERT INTO ledger_movements
+          (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
+         VALUES ($1,$2,'AJUSTE',$3,$4,$5,'APLICADO',$6,$7)`,
+        [
+          supervisorMovementId,
+          `cierre_supervisor:${input.agentId}:${input.clubId}:${input.weekStart}`,
+          input.clubId,
+          supervisorAgentId,
+          montoSupervisor,
+          input.weekEnd,
+          `Rakeback centralizado de supervisor por cierre semanal ${input.weekStart} al ${input.weekEnd} (agente id ${input.agentId}).`,
+        ]
+      );
+      await client.query(
+        `INSERT INTO balances (id, agent_id, club_id, amount, updated_at)
+         VALUES ($1,$2,$3,$4, now())
+         ON CONFLICT (agent_id, club_id)
+         DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+        [newId("bal"), supervisorAgentId, input.clubId, montoSupervisor]
+      );
+    }
+
     await client.query(
       `INSERT INTO weekly_closings
         (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
          rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
-         rate_snapshot, rule_applied, status, observation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17)`,
+         rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20)`,
       [
         id,
         input.agentId,
@@ -70,10 +130,13 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         calc.rebatePct,
         calc.rebate,
         calc.adjustedResult,
-        calc.finalClosing,
+        montoAgente,
         input.rateSnapshot ?? 1,
         calc.ruleApplied,
         input.observation ?? null,
+        rebateDestino,
+        supervisorAgentId,
+        supervisorMovementId,
       ]
     );
 
@@ -87,9 +150,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         `cierre:${input.agentId}:${input.clubId}:${input.weekStart}`,
         input.clubId,
         input.agentId,
-        calc.finalClosing,
+        montoAgente,
         input.weekEnd,
-        `Cierre semanal ${input.weekStart} al ${input.weekEnd}` + (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : ""),
+        `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
+          (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
+          (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback de supervisor.` : ""),
       ]
     );
 
@@ -98,11 +163,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
        VALUES ($1,$2,$3,$4, now())
        ON CONFLICT (agent_id, club_id)
        DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
-      [newId("bal"), input.agentId, input.clubId, calc.finalClosing]
+      [newId("bal"), input.agentId, input.clubId, montoAgente]
     );
 
     await client.query("COMMIT");
-    return { id, alreadyApplied: false, calc };
+    return { id, alreadyApplied: false, calc: { ...calc, finalClosing: montoAgente }, supervisorAgentId, montoSupervisor };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -138,6 +203,18 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
   } else {
     await pool.query(`UPDATE weekly_closings SET status = 'REVERTIDO' WHERE id = $1`, [closingId]);
   }
+
+  // Si el rebate de este cierre se había desviado a un supervisor (módulo de supervisores),
+  // ese ajuste tampoco se borra: se revierte con el mismo mecanismo, para que el rakeback
+  // centralizado del supervisor quede correcto una vez revertido el cierre que lo generó.
+  if (wc.supervisor_movement_id) {
+    try {
+      await revertirMovimiento(wc.supervisor_movement_id, motivo ? `Reversión de cierre revertido: ${motivo}` : "Reversión de cierre revertido.", revertidoPor);
+    } catch {
+      // Si ya estaba revertido (o no se encuentra) no bloqueamos la reversión del cierre principal.
+    }
+  }
+
   return { found: true, id: closingId };
 }
 
