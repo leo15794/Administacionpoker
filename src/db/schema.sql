@@ -202,6 +202,30 @@ ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_digiplayers_share N
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_debt_before NUMERIC(18,4);
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_debt_after NUMERIC(18,4);
 
+-- "Rodeo" (pedido explícito del usuario, solo aplica a SupremaPoker: Fénix, TeamBack). Reglas
+-- verbatim del usuario: si un jugador pierde esa semana genera rodeo positivo (a favor); si
+-- gana, genera "memoria" negativa que se acumula y solo se compensa cuando ESE MISMO jugador
+-- vuelva a perder en el futuro (deuda eterna, igual que bancados) — nunca se mezcla con la
+-- cuenta corriente operativa del agente (fichas/cargas/descargas/saldo). Del rodeo ya neto de
+-- memoria se reparte: sin agente 30% App + 35% Unión + 35% Club; con agente 30% App + 35%
+-- Unión + 20% Club + 15% Agente. App/Unión son terceros, no se registran acá. El share de
+-- Club es informativo (nunca se acredita a nadie, como bancado_digiplayers_share). El share
+-- de Agente SÍ es plata real y se suma directo al cierre final de ese agente.
+CREATE TABLE IF NOT EXISTS rodeo_player_memory (
+  id                  TEXT PRIMARY KEY,
+  player_external_id  TEXT NOT NULL,
+  club_id             TEXT NOT NULL REFERENCES clubs(id),
+  memory              NUMERIC(18,4) NOT NULL DEFAULT 0,   -- deuda pendiente, siempre >= 0
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(player_external_id, club_id)
+);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo NUMERIC(18,4) NOT NULL DEFAULT 0;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_club_share NUMERIC(18,4) NOT NULL DEFAULT 0;
+-- Snapshot por jugador (playerExternalId, memoriaAnterior, memoriaNueva) para poder restaurar
+-- la memoria exacta de CADA jugador si este cierre se revierte (mismo principio que
+-- bancado_debt_before/after, pero acá son muchas filas por cierre en vez de una sola).
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_detalle JSONB;
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (

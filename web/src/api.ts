@@ -162,9 +162,14 @@ export const api = {
     rakebackPct: number;
     rebatePct?: number;
     observation?: string;
+    // "Rodeo" (solo SupremaPoker): lista cruda por jugador — NUNCA un total ya calculado. El
+    // backend aplica la memoria por jugador de forma transaccional (repo/rodeo.ts) y recién ahí
+    // sale el monto real que se le suma al cierre del agente.
+    rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
-  // memoria de bancado) pero nunca escribe nada — para mostrar el número real antes de aplicar.
+  // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
+  // mostrar el número real antes de aplicar.
   previsualizarCierre: (data: {
     agentId: string;
     clubId: string;
@@ -176,6 +181,7 @@ export const api = {
     rakebackPct: number;
     rebatePct?: number;
     observation?: string;
+    rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,

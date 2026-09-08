@@ -49,6 +49,15 @@ const closingSchema = z.object({
   rakeTotal: z.number(),
   rakebackPct: z.number(),
   rebatePct: z.number().default(0),
+  // "Rodeo" (solo SupremaPoker): nunca se confía un monto ya calculado del cliente — siempre
+  // se manda el detalle CRUDO por jugador (Player ID + rodeo base de esa semana) y el servidor
+  // recalcula la memoria y el reparto (30% App / 35% Unión / 20% Club / 15% Agente si tiene
+  // agente asignado, o 35% Club si no) DENTRO de la transacción del cierre, igual que la
+  // memoria de bancados. Nunca se pasa el % ya resuelto porque depende de la memoria previa
+  // de CADA jugador, que solo la base conoce (rodeo_player_memory).
+  rodeoJugadores: z
+    .array(z.object({ playerExternalId: z.string().min(1), baseRodeo: z.number() }))
+    .optional(),
   rateSnapshot: z.number().optional(),
   observation: z.string().optional(),
 });

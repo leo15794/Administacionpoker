@@ -15,6 +15,13 @@ export interface ClosingInput {
   rebatePct: number; // 0..1
   rateSnapshot: number;
   specialRule?: SpecialRule | null;
+  /** "Rodeo" (SupremaPoker, "solamente para Suprema" — pedido explícito del usuario): la parte
+   * que le toca al agente, YA calculada por repo/rodeo.ts a partir de la memoria por jugador
+   * (ver engine/rodeo.ts para las reglas de reparto y memoria). Este motor solo la suma directo
+   * al cierre final — nunca la multiplica por ningún % ni la desvía a un supervisor (a diferencia
+   * del rebate), y aplica igual aunque el agente tenga una regla especial vigente. Por defecto 0
+   * para cualquier cierre que no venga de una importación Suprema. */
+  rodeo?: number;
 }
 
 export type SpecialRule =
@@ -29,6 +36,7 @@ export interface ClosingResult {
   rebatePct: number;
   rebate: number;
   adjustedResult: number;
+  rodeo: number;
   finalClosing: number;
   ruleApplied: string | null;
 }
@@ -39,6 +47,8 @@ export interface ClosingResult {
  * este motor es puro (misma entrada -> misma salida), no debe depender de estado mutable externo.
  */
 export function calcularCierre(input: ClosingInput): ClosingResult {
+  const rodeo = input.rodeo ?? 0;
+
   if (input.specialRule?.key === "MANZUR_75_RAKE") {
     // Regla crítica documentada (BIT-068): Manzur en Fénix GG se liquida SIEMPRE
     // como Resultado + 75% del rake total del proveedor. Nunca usar rakebackPct genérico.
@@ -52,7 +62,8 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
       rebatePct: 0,
       rebate: 0,
       adjustedResult,
-      finalClosing: adjustedResult,
+      rodeo,
+      finalClosing: adjustedResult + rodeo,
       ruleApplied: "MANZUR_75_RAKE",
     };
   }
@@ -70,7 +81,8 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
     rebatePct: input.rebatePct,
     rebate,
     adjustedResult,
-    finalClosing: adjustedResult,
+    rodeo,
+    finalClosing: adjustedResult + rodeo,
     ruleApplied: null,
   };
 }

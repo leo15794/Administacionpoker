@@ -437,6 +437,9 @@ type FilaImport = {
   rakebackPct: number;
   rebatePct: number;
   configSource: "deal" | "default_club";
+  // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
+  // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
+  rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
   included: boolean;
   previewLoading: boolean;
   previewResult: any | null;
@@ -496,6 +499,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rakebackPct: a.rakebackPct,
             rebatePct: a.rebatePct,
             configSource: a.configSource,
+            rodeoJugadores: a.rodeoJugadores ?? [],
             included: true,
             previewLoading: false,
             previewResult: null,
@@ -553,6 +557,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rakebackPct: f.rakebackPct,
             rebatePct: f.rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
+            rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -599,6 +604,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           rakebackPct: f.rakebackPct,
           rebatePct: f.rebatePct,
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
+          rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
@@ -705,7 +711,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             <thead>
               <tr>
                 <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
-                <th>% Rakeback</th><th>Config</th><th>Cierre final (vista previa)</th>
+                <th>% Rakeback</th><th>Config</th><th>Rodeo</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
             <tbody>
@@ -720,6 +726,18 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td>{(f.rakebackPct * 100).toFixed(1)}%</td>
                   <td>
                     {f.configSource === "deal" ? <span className="badge pos">Deal agente</span> : <span className="badge neutral">Default club</span>}
+                  </td>
+                  <td>
+                    {f.rodeoJugadores.length > 0 ? (
+                      <span title="Solo SupremaPoker: se le suma al cierre la parte del agente ya neta de su memoria por jugador.">
+                        {f.rodeoJugadores.length} jug.
+                        {(f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo) != null && (
+                          <> · {usd(f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo)}</>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
                   </td>
                   <td>
                     {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}

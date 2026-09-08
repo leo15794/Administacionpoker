@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre, calcularCierreBancado, type SpecialRule } from "../engine/cierre.js";
 import { revertirMovimiento } from "./ledger.js";
+import { procesarRodeoAgenteTx, type RodeoJugadorEntrada } from "./rodeo.js";
 
 // Traduce una fila de rule_versions al SpecialRule que entiende el motor de cierre genérico.
 // Motor de reglas configurable: nunca "if (agente === 'Manzur')" en el código de negocio — la
@@ -27,6 +28,12 @@ export interface AplicarCierreInput {
   rakeTotal: number;
   rakebackPct: number;
   rebatePct: number;
+  /** "Rodeo" (solo SupremaPoker): NUNCA se recibe ya calculado del cliente — se manda el
+   * detalle crudo por jugador (Player ID + rodeo base de esa semana, con signo: positivo si
+   * el jugador perdió, negativo si ganó) y acá se recalcula la memoria y el reparto dentro de
+   * la misma transacción (ver repo/rodeo.ts). Vacío/undefined para cualquier cierre que no
+   * venga de una importación Suprema — no afecta en nada al resto de los agentes/clubes. */
+  rodeoJugadores?: RodeoJugadorEntrada[];
   rateSnapshot?: number;
   /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
@@ -86,6 +93,13 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     );
     const specialRule = resolverSpecialRule(ruleRow.rows[0] ?? null);
 
+    // "Rodeo" (solo SupremaPoker): procesa la memoria por jugador DENTRO de esta misma
+    // transacción — si más abajo se hace ROLLBACK (vista previa), esta actualización de
+    // memoria se revierte sola, exactamente igual que la memoria de bancados.
+    const rodeoResultado = input.rodeoJugadores?.length
+      ? await procesarRodeoAgenteTx(client, input.clubId, input.rodeoJugadores)
+      : { agentShareTotal: 0, clubShareTotal: 0, detalle: [] };
+
     const calc = calcularCierre({
       agentId: input.agentId,
       clubId: input.clubId,
@@ -94,6 +108,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       rakeTotal: input.rakeTotal,
       rakebackPct: input.rakebackPct,
       rebatePct: input.rebatePct,
+      rodeo: rodeoResultado.agentShareTotal,
       rateSnapshot: input.rateSnapshot ?? 1,
       specialRule,
     });
@@ -126,8 +141,10 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         );
       }
       supervisorAgentId = supRes.rows[0].id;
-      // El agente solo recibe resultado + rakeback; el rebate se desvía íntegro al supervisor.
-      montoAgente = calc.result + calc.rakeback;
+      // El agente solo recibe resultado + rakeback + rodeo; el rebate se desvía íntegro al
+      // supervisor. El Rodeo (SupremaPoker) nunca se desvía — es un bono propio del agente,
+      // no una porción del rake como el rebate.
+      montoAgente = calc.result + calc.rakeback + calc.rodeo;
       montoSupervisor = calc.rebate;
     }
 
@@ -163,8 +180,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       `INSERT INTO weekly_closings
         (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
          rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
-         rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20)`,
+         rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id, rodeo, rodeo_club_share, rodeo_detalle)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23)`,
       [
         id,
         input.agentId,
@@ -186,6 +203,17 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         rebateDestino,
         supervisorAgentId,
         supervisorMovementId,
+        calc.rodeo,
+        rodeoResultado.clubShareTotal,
+        rodeoResultado.detalle.length > 0
+          ? JSON.stringify(
+              rodeoResultado.detalle.map((d) => ({
+                playerExternalId: d.playerExternalId,
+                memoriaAnterior: d.memoriaAnterior,
+                memoriaNueva: d.memoriaNueva,
+              }))
+            )
+          : null,
       ]
     );
 
@@ -203,6 +231,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.weekEnd,
         `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
           (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
+          (calc.rodeo ? ` — incluye Rodeo: ${calc.rodeo}.` : "") +
           (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback de supervisor.` : ""),
       ]
     );
@@ -371,6 +400,21 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
       `UPDATE bancado_debts SET debt = $1, updated_at = now() WHERE agent_id = $2 AND club_id = $3`,
       [wc.bancado_debt_before, wc.agent_id, wc.club_id]
     );
+  }
+
+  // "Rodeo" (solo SupremaPoker): mismo principio que la memoria de bancados, pero por
+  // jugador — restaura la memoria de CADA jugador de este cierre al valor que tenía antes
+  // (snapshot guardado en rodeo_detalle). Misma advertencia: asume reversión en orden
+  // cronológico inverso; revertir un cierre viejo fuera de orden con cierres posteriores del
+  // mismo jugador ya aplicados dejaría su memoria inconsistente.
+  if (wc.rodeo_detalle) {
+    const detalle: { playerExternalId: string; memoriaAnterior: number }[] = wc.rodeo_detalle;
+    for (const d of detalle) {
+      await pool.query(
+        `UPDATE rodeo_player_memory SET memory = $1, updated_at = now() WHERE player_external_id = $2 AND club_id = $3`,
+        [d.memoriaAnterior, d.playerExternalId, wc.club_id]
+      );
+    }
   }
 
   return { found: true, id: closingId };

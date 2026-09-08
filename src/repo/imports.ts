@@ -12,6 +12,14 @@ export interface AgenteAgregado {
   jugadores: number;
   resultado: number;
   rakeTotal: number;
+  /** "Rodeo" (solo SupremaPoker): lista cruda por jugador (Player ID + baseRodeo del archivo,
+   * signo: + = perdió, - = ganó). NUNCA es un total pre-sumado — el monto real que le toca al
+   * agente depende de la memoria arrastrada de cada jugador individual, y esa memoria solo se
+   * puede aplicar de forma transaccional (ver repo/rodeo.ts::procesarRodeoAgenteTx), que corre
+   * recién en la vista previa/aplicación del cierre (movements.ts -> repo/closings.ts), nunca
+   * acá en esta previa de solo lectura. Este array es lo que el frontend debe reenviar tal cual
+   * como `rodeoJugadores` al pedir la previa o aplicar el cierre de este agente. */
+  rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
@@ -171,6 +179,7 @@ export async function analizarImportacionSuprema(buffer: Buffer, atDate: string 
         acc.jugadores += 1;
         acc.resultado += row.resultado;
         acc.rakeTotal += row.rake;
+        if (row.rodeo !== 0) acc.rodeoJugadores.push({ playerExternalId: row.playerId, baseRodeo: row.rodeo });
       } else {
         agentesMap.set(resolucion.agentId, {
           agentId: resolucion.agentId,
@@ -178,6 +187,7 @@ export async function analizarImportacionSuprema(buffer: Buffer, atDate: string 
           jugadores: 1,
           resultado: row.resultado,
           rakeTotal: row.rake,
+          rodeoJugadores: row.rodeo !== 0 ? [{ playerExternalId: row.playerId, baseRodeo: row.rodeo }] : [],
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,
@@ -193,6 +203,10 @@ export async function analizarImportacionSuprema(buffer: Buffer, atDate: string 
         ...acc,
         resultado: Math.round(acc.resultado * 100) / 100,
         rakeTotal: Math.round(acc.rakeTotal * 100) / 100,
+        rodeoJugadores: acc.rodeoJugadores.map((j) => ({
+          ...j,
+          baseRodeo: Math.round(j.baseRodeo * 100) / 100,
+        })),
         system: cfg.system,
         rakebackPct: cfg.rakebackPct,
         rebatePct: cfg.rebatePct,
