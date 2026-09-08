@@ -2,10 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 
-// TEMPORAL: sin contraseña, solo email, para destrabar el acceso mientras se resuelve
-// el problema de login. Hay que volver a pedir contraseña antes de usar esto fuera de tu máquina.
 export default function Login() {
-  const [email, setEmail] = useState("admin@digiplayers.local");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
@@ -15,7 +14,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const { token, role } = await api.login(email);
+      const { token, role } = await api.login(email, password);
       api.setToken(token);
       nav(role === "ADMIN" ? "/dashboard" : "/mi-cuenta");
     } catch (err: any) {
@@ -33,20 +32,17 @@ export default function Login() {
         <form onSubmit={onSubmit}>
           <div className="field">
             <label>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
+          </div>
+          <div className="field">
+            <label>Contraseña</label>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" />
           </div>
           {error && <div className="error">{error}</div>}
           <button className="btn" style={{ width: "100%" }} disabled={loading}>
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
-        <div className="hint">
-          Sin contraseña por ahora (temporal).
-          <br />
-          Admin: admin@digiplayers.local
-          <br />
-          Agente demo: prodigio@digiplayers.local
-        </div>
       </div>
     </div>
   );

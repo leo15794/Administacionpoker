@@ -16,19 +16,65 @@ async function request(path: string, opts: RequestInit = {}) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ? JSON.stringify(body.error) : `Error ${res.status}`);
+    throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
   return res.json();
 }
 
+function idempotencyKey() {
+  return `web_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const api = {
-  login: (email: string) =>
-    request("/auth/login", { method: "POST", body: JSON.stringify({ email }) }),
+  login: (email: string, password: string) =>
+    request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   resumen: () => request("/dashboard/resumen"),
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
   agentes: () => request("/dashboard/agentes"),
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
   miCuenta: () => request("/portal/mi-cuenta"),
+
+  // Catálogo (alta/edición)
+  clubes: () => request("/catalog/clubs"),
+  crearClub: (data: { name: string; unit?: string; currentRate?: number }) =>
+    request("/catalog/clubs", { method: "POST", body: JSON.stringify(data) }),
+  crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string }) =>
+    request("/catalog/agents", { method: "POST", body: JSON.stringify(data) }),
+  crearDeal: (data: {
+    agentId: string;
+    clubId: string;
+    system: "PREPAGO" | "WIN_LOSE";
+    rakebackPct: number;
+    rebatePct?: number;
+    notes?: string;
+  }) => request("/catalog/deals", { method: "POST", body: JSON.stringify(data) }),
+
+  // Movimientos y cierres (escritura sobre el ledger)
+  crearMovimiento: (data: {
+    type: string;
+    clubId: string;
+    clubDestinoId?: string;
+    agentId: string;
+    amount: number;
+    paymentMethod?: string;
+    occurredAt: string;
+    observation?: string;
+    custodian?: string;
+  }) => request("/movements", { method: "POST", body: JSON.stringify({ ...data, idempotencyKey: idempotencyKey() }) }),
+
+  aplicarCierre: (data: {
+    agentId: string;
+    clubId: string;
+    weekStart: string;
+    weekEnd: string;
+    system: "PREPAGO" | "WIN_LOSE";
+    result: number;
+    rakeTotal: number;
+    rakebackPct: number;
+    rebatePct?: number;
+    observation?: string;
+  }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
+
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),
   getToken,

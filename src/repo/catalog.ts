@@ -77,6 +77,43 @@ export async function listClubs() {
   return r.rows;
 }
 
+/**
+ * Crea una nueva versión de deal agente↔club: cierra (valid_to = now()) el deal activo
+ * anterior para ese mismo agente+club si existe, e inserta el nuevo como vigente.
+ * Así un cierre viejo siempre se puede recalcular con el % que tenía en su momento
+ * (mismo principio que rule_versions).
+ */
+export async function upsertDeal(
+  agentId: string,
+  clubId: string,
+  system: "PREPAGO" | "WIN_LOSE",
+  rakebackPct: number,
+  rebatePct: number,
+  notes?: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE agent_club_deals SET valid_to = now() WHERE agent_id=$1 AND club_id=$2 AND valid_to IS NULL`,
+      [agentId, clubId]
+    );
+    const id = newId("deal");
+    await client.query(
+      `INSERT INTO agent_club_deals (id, agent_id, club_id, system, rakeback_pct, rebate_pct, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, agentId, clubId, system, rakebackPct, rebatePct, notes ?? null]
+    );
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listDealsForAgent(agentId: string) {
   const r = await pool.query(
     `SELECT d.*, c.name as club_name FROM agent_club_deals d JOIN clubs c ON c.id = d.club_id

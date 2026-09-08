@@ -1,13 +1,13 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { pool, newId } from "../db/pool.js";
-import { signToken } from "../lib/auth.js";
+import { signToken, requireAuth, requireAdmin } from "../lib/auth.js";
 
 export const authRouter = Router();
 
-// Crea un usuario de portal para un agente existente (solo uso administrativo /
-// bootstrap; en producción esto se protege detrás de auth de admin).
-authRouter.post("/bootstrap-user", async (req, res) => {
+// Crea (o resetea la contraseña de) un usuario de portal para un agente existente.
+// Protegido: solo un ADMIN ya logueado puede crear otros usuarios.
+authRouter.post("/bootstrap-user", requireAuth, requireAdmin, async (req, res) => {
   const { agentName, email, password, role } = req.body ?? {};
   if (!agentName || !email || !password) return res.status(400).json({ error: "agentName, email y password son requeridos" });
 
@@ -28,20 +28,21 @@ authRouter.post("/bootstrap-user", async (req, res) => {
   }
 });
 
-// TEMPORAL: la verificación de contraseña está desactivada para destrabar el acceso
-// mientras se resuelve el problema de login. Alcanza con el email. Hay que reactivar
-// bcrypt.compare acá antes de exponer esto fuera de tu máquina.
 authRouter.post("/login", async (req, res) => {
   try {
-    const { email } = req.body ?? {};
-    if (!email) return res.status(400).json({ error: "email es requerido" });
+    const { email, password } = req.body ?? {};
+    if (!email || !password) return res.status(400).json({ error: "email y contraseña son requeridos" });
 
     const r = await pool.query(
       `SELECT u.*, a.name as agent_name FROM agent_users u JOIN agents a ON a.id = u.agent_id WHERE email = $1`,
       [email]
     );
     const user = r.rows[0];
-    if (!user) return res.status(401).json({ error: "No existe un usuario con ese email. Corré el seed o creá uno con /auth/bootstrap-user." });
+    // Mensaje genérico a propósito: no revelar si el email existe o no.
+    if (!user) return res.status(401).json({ error: "Email o contraseña incorrectos." });
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: "Email o contraseña incorrectos." });
 
     const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
     res.json({ token, agentName: user.agent_name, role: user.role });

@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import Shell from "./pages/Shell";
 import Resumen from "./pages/Resumen";
 import Agentes from "./pages/Agentes";
+import Movimientos from "./pages/Movimientos";
 import Cierres from "./pages/Cierres";
 import MiCuenta from "./pages/MiCuenta";
 import { api } from "./api";
@@ -28,6 +29,7 @@ export default function App() {
         >
           <Route index element={<Resumen />} />
           <Route path="agentes" element={<Agentes />} />
+          <Route path="movimientos" element={<Movimientos />} />
           <Route path="cierres" element={<Cierres />} />
         </Route>
 

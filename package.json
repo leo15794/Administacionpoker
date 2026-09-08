@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/seed.ts",
+    "set-password": "tsx src/scripts/set-password.ts",
     "test:cierre": "tsx src/engine/__test__.ts"
   },
   "dependencies": {
@@ -29,8 +30,5 @@
     "@types/pg": "^8.11.6",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
   }
 }
