@@ -23,12 +23,34 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   const clubsCount = await pool.query(`SELECT COUNT(*)::int as n FROM clubs WHERE active = true`);
   const agentsCount = await pool.query(`SELECT COUNT(*)::int as n FROM agents WHERE active = true`);
 
+  // Garantías: monto activo pendiente (amount - consumed) por agente. Se muestran aparte
+  // del saldo de fichas/saldo-pendiente (igual que en la planilla, que las separa por
+  // "Concepto") para poder comparar el total general contra la planilla sin mezclar cosas.
+  const garantias = await pool.query(
+    `SELECT COALESCE(SUM(amount - consumed), 0) as pendiente, COUNT(*)::int as cantidad
+     FROM guarantees WHERE active = true`
+  );
+
+  // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
+  // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
+  const wallet = await pool.query(
+    `SELECT COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END), 0) as neto
+     FROM (
+       SELECT direction, amount FROM treasury_entries WHERE ledger = 'WALLET_MANOS'
+       UNION ALL
+       SELECT direction, amount FROM treasury_adjustments WHERE ledger = 'WALLET_MANOS'
+     ) t`
+  );
+
   res.json({
     kpis: {
       agentesNosDeben: Math.abs(totalAFavorNuestro),
       debemosAAgentes: totalAFavorAgentes,
       clubesActivos: clubsCount.rows[0].n,
       agentesActivos: agentsCount.rows[0].n,
+      garantiasPendientes: Number(garantias.rows[0].pendiente),
+      garantiasCantidad: garantias.rows[0].cantidad,
+      saldoWallet: Number(wallet.rows[0].neto),
     },
     porClub: porClub.rows,
     balances,

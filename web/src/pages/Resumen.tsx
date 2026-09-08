@@ -46,6 +46,14 @@ export default function Resumen() {
           <div className="value pos">{usd(data.kpis.debemosAAgentes)}</div>
         </div>
         <div className="kpi-card">
+          <div className="label">Saldo Wallet</div>
+          <div className="value">{usd(data.kpis.saldoWallet)}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="label">Garantías pendientes</div>
+          <div className="value">{usd(data.kpis.garantiasPendientes)}</div>
+        </div>
+        <div className="kpi-card">
           <div className="label">Clubes activos</div>
           <div className="value">{data.kpis.clubesActivos}</div>
         </div>
@@ -53,6 +61,9 @@ export default function Resumen() {
           <div className="label">Agentes activos</div>
           <div className="value">{data.kpis.agentesActivos}</div>
         </div>
+      </div>
+      <div className="muted" style={{ marginTop: -10, marginBottom: 20, fontSize: 12 }}>
+        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club (igual que la planilla, sin mezclar garantías). Sumando además "Garantías pendientes" da el total general comparable contra la planilla.
       </div>
 
       <div className="panel">

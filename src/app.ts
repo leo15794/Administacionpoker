@@ -7,6 +7,7 @@ import { portalRouter } from "./routes/portal.js";
 import { movementsRouter } from "./routes/movements.js";
 import { catalogRouter } from "./routes/catalog.js";
 import { usersRouter } from "./routes/users.js";
+import { guaranteesRouter } from "./routes/guarantees.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
 // modo servidor local (server.ts, con app.listen) como en modo función serverless
@@ -23,6 +24,7 @@ app.use("/portal", portalRouter);
 app.use("/movements", movementsRouter);
 app.use("/catalog", catalogRouter);
 app.use("/users", usersRouter);
+app.use("/guarantees", guaranteesRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);

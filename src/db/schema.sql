@@ -137,6 +137,9 @@ CREATE TABLE IF NOT EXISTS balances (
 );
 
 -- Garantia de un agente. Separada del saldo operativo: nunca comparten clave (BIT-034).
+-- Solo puede haber UNA fila activa por agente a la vez — se actualiza in-place (nunca se
+-- inserta una fila activa nueva sin antes desactivar la anterior), así el total agregado
+-- del Resumen no cuenta la misma garantía dos veces.
 CREATE TABLE IF NOT EXISTS guarantees (
   id         TEXT PRIMARY KEY,
   agent_id   TEXT NOT NULL REFERENCES agents(id),
@@ -145,6 +148,21 @@ CREATE TABLE IF NOT EXISTS guarantees (
   active     BOOLEAN NOT NULL DEFAULT TRUE,
   notes      TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Historial de cada alta/aumento/reducción/consumo/baja de garantía, para que la pestaña
+-- de Garantías pueda mostrar "qué pasó" y no solo el número final.
+CREATE TABLE IF NOT EXISTS guarantee_movements (
+  id                  TEXT PRIMARY KEY,
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  guarantee_id        TEXT NOT NULL REFERENCES guarantees(id),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA')),
+  amount              NUMERIC(18,4) NOT NULL,
+  resulting_amount    NUMERIC(18,4) NOT NULL,
+  resulting_consumed  NUMERIC(18,4) NOT NULL,
+  notes               TEXT,
+  created_by          TEXT,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Cierre semanal por agente+club. Guarda snapshot de las reglas usadas.

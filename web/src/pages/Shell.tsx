@@ -35,6 +35,11 @@ const icon = {
       <circle cx="12" cy="12" r="9" /><path d="M12 7v10" /><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 3 6 1.5 6 4.5 0 1.4-1.3 2.5-3 2.5s-3-1.1-3-2.5" />
     </svg>
   ),
+  garantias: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4Z" /><path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
   cuenta: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -117,6 +122,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
               <NavLink to="/dashboard/movimientos" className="nav-link" title="Cargar movimiento">{icon.movimientos} {!collapsed && "Cargar movimiento"}</NavLink>
               <NavLink to="/dashboard/cierres" className="nav-link" title="Cierres semanales">{icon.cierres} {!collapsed && "Cierres semanales"}</NavLink>
               <NavLink to="/dashboard/tesoreria" className="nav-link" title="Tesorería">{icon.tesoreria} {!collapsed && "Tesorería"}</NavLink>
+              <NavLink to="/dashboard/garantias" className="nav-link" title="Garantías">{icon.garantias} {!collapsed && "Garantías"}</NavLink>
               <NavLink to="/dashboard/usuarios" className="nav-link" title="Usuarios y permisos">{icon.usuarios} {!collapsed && "Usuarios y permisos"}</NavLink>
             </>
           ) : (

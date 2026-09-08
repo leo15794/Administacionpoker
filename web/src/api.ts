@@ -61,6 +61,12 @@ export const api = {
     request("/catalog/agents", { method: "POST", body: JSON.stringify(data) }),
   editarAgente: (id: string, data: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null }) =>
     request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Garantías: alta/ajuste con historial, separadas del saldo operativo.
+  garantias: () => request("/guarantees"),
+  garantiasHistorial: (agentId?: string) => request(`/guarantees/historial${agentId ? `?agentId=${agentId}` : ""}`),
+  ajustarGarantia: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
+    request("/guarantees/ajuste", { method: "POST", body: JSON.stringify(data) }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;
