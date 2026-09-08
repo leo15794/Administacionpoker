@@ -13,6 +13,7 @@ export default function Agentes() {
   const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "deal">("lista");
   const [filtro, setFiltro] = useState("");
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
+  const [editando, setEditando] = useState<any | null>(null);
 
   function refresh() {
     api.agentes().then(setAgentes);
@@ -96,9 +97,10 @@ export default function Agentes() {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td style={{ display: "flex", gap: 6 }}>
+                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
                       <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
+                      <button className="btn secondary small" onClick={() => setEditando(a)}>Editar</button>
                     </td>
                   </tr>
                 ))}
@@ -132,7 +134,73 @@ export default function Agentes() {
           <MovimientosHistorial agentId={historialAgent.id} />
         </Modal>
       )}
+
+      {editando && (
+        <Modal title={`Editar agente — ${editando.name}`} onClose={() => setEditando(null)}>
+          <EditarAgente
+            agente={editando}
+            onSaved={() => {
+              setEditando(null);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
     </div>
+  );
+}
+
+function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void }) {
+  const [name, setName] = useState(agente.name);
+  const [defaultSystem, setDefaultSystem] = useState<"PREPAGO" | "WIN_LOSE">(agente.default_system);
+  const [supervisor, setSupervisor] = useState(agente.supervisor ?? "");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!name.trim()) return setMsg({ ok: false, text: "El nombre es obligatorio." });
+    setLoading(true);
+    try {
+      await api.editarAgente(agente.id, {
+        name: name.trim(),
+        defaultSystem,
+        supervisor: supervisor.trim() || null,
+      });
+      onSaved();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar el agente." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Corrige los datos del agente. No borra ni recalcula nada del historial — para cambiar % de rakeback/rebate usá "Asignar % a agente".
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Nombre</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Sistema por defecto</label>
+          <select value={defaultSystem} onChange={(e) => setDefaultSystem(e.target.value as any)}>
+            <option value="WIN_LOSE">Win/Lose</option>
+            <option value="PREPAGO">Prepago</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Supervisor (opcional)</label>
+          <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} />
+        </div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Guardar cambios"}</button>
+    </form>
   );
 }
 

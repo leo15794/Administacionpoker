@@ -59,6 +59,8 @@ export const api = {
     request("/catalog/clubs", { method: "POST", body: JSON.stringify(data) }),
   crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string }) =>
     request("/catalog/agents", { method: "POST", body: JSON.stringify(data) }),
+  editarAgente: (id: string, data: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null }) =>
+    request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;

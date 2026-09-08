@@ -67,6 +67,32 @@ export async function setGuarantee(agentId: string, amount: number, consumed: nu
   return id;
 }
 
+/**
+ * Edita un agente existente POR ID (a diferencia de upsertAgent, que "crea o pisa" por
+ * nombre — sirve para altas, no para corregir un agente ya creado sin arriesgarse a
+ * chocar contra otro nombre). Solo actualiza los campos que vienen definidos.
+ */
+export async function updateAgent(
+  id: string,
+  fields: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null; active?: boolean }
+) {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (fields.name !== undefined) { sets.push(`name = $${i++}`); values.push(fields.name); }
+  if (fields.defaultSystem !== undefined) { sets.push(`default_system = $${i++}`); values.push(fields.defaultSystem); }
+  if (fields.supervisor !== undefined) { sets.push(`supervisor = $${i++}`); values.push(fields.supervisor); }
+  if (fields.active !== undefined) { sets.push(`active = $${i++}`); values.push(fields.active); }
+  if (sets.length === 0) {
+    const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
+    return r.rows[0] ?? null;
+  }
+  sets.push(`updated_at = now()`);
+  values.push(id);
+  const r = await pool.query(`UPDATE agents SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`, values);
+  return r.rows[0] ?? null;
+}
+
 export async function listAgents() {
   const r = await pool.query(`SELECT * FROM agents WHERE active = true ORDER BY name`);
   return r.rows;

@@ -65,7 +65,15 @@ a { color: inherit; }
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  transition: width 0.18s ease, padding 0.18s ease;
 }
+.sidebar.collapsed {
+  width: 68px;
+  padding: 22px 10px;
+}
+.sidebar.collapsed .brand { justify-content: center; padding: 4px 0 22px; }
+.sidebar.collapsed .nav-link { justify-content: center; padding: 10px; }
+.sidebar.collapsed .nav-link svg { flex-shrink: 0; }
 
 .brand {
   display: flex;

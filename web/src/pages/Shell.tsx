@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -44,47 +45,93 @@ const icon = {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
     </svg>
   ),
+  collapse: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m14 9-2 3 2 3" />
+    </svg>
+  ),
+  expand: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m12 9 2 3-2 3" />
+    </svg>
+  ),
 };
+
+function getInitialCollapsed() {
+  try {
+    return localStorage.getItem("dp_sidebar_collapsed") === "1";
+  } catch {
+    return false;
+  }
+}
 
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
   const nav = useNavigate();
+  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
 
   function logout() {
     api.clearToken();
     nav("/login");
   }
 
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("dp_sidebar_collapsed", next ? "1" : "0");
+      } catch {
+        /* localStorage no disponible, no pasa nada */
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="app-shell">
-      <div className="sidebar">
+      <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
         <div className="brand">
           <div className="brand-mark">D</div>
-          <div>
-            <h1>DigiPlayers</h1>
-            <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>
-              {role === "ADMIN" ? "Panel administrativo" : "Portal de agente"}
+          {!collapsed && (
+            <div>
+              <h1>DigiPlayers</h1>
+              <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>
+                {role === "ADMIN" ? "Panel administrativo" : "Portal de agente"}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <nav>
           {role === "ADMIN" ? (
             <>
-              <NavLink to="/dashboard" end className="nav-link">{icon.resumen} Resumen</NavLink>
-              <NavLink to="/dashboard/agentes" className="nav-link">{icon.agentes} Agentes</NavLink>
-              <NavLink to="/dashboard/movimientos" className="nav-link">{icon.movimientos} Cargar movimiento</NavLink>
-              <NavLink to="/dashboard/cierres" className="nav-link">{icon.cierres} Cierres semanales</NavLink>
-              <NavLink to="/dashboard/tesoreria" className="nav-link">{icon.tesoreria} Tesorería</NavLink>
-              <NavLink to="/dashboard/usuarios" className="nav-link">{icon.usuarios} Usuarios y permisos</NavLink>
+              <NavLink to="/dashboard" end className="nav-link" title="Resumen">{icon.resumen} {!collapsed && "Resumen"}</NavLink>
+              <NavLink to="/dashboard/agentes" className="nav-link" title="Agentes">{icon.agentes} {!collapsed && "Agentes"}</NavLink>
+              <NavLink to="/dashboard/movimientos" className="nav-link" title="Cargar movimiento">{icon.movimientos} {!collapsed && "Cargar movimiento"}</NavLink>
+              <NavLink to="/dashboard/cierres" className="nav-link" title="Cierres semanales">{icon.cierres} {!collapsed && "Cierres semanales"}</NavLink>
+              <NavLink to="/dashboard/tesoreria" className="nav-link" title="Tesorería">{icon.tesoreria} {!collapsed && "Tesorería"}</NavLink>
+              <NavLink to="/dashboard/usuarios" className="nav-link" title="Usuarios y permisos">{icon.usuarios} {!collapsed && "Usuarios y permisos"}</NavLink>
             </>
           ) : (
-            <NavLink to="/mi-cuenta" className="nav-link">{icon.cuenta} Mi cuenta</NavLink>
+            <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
           )}
         </nav>
 
         <div className="sidebar-footer">
-          <button className="btn secondary" onClick={logout} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {icon.logout} Cerrar sesión
+          <button
+            className="btn secondary"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}
+          >
+            {collapsed ? icon.expand : icon.collapse} {!collapsed && "Contraer menú"}
+          </button>
+          <button
+            className="btn secondary"
+            onClick={logout}
+            title="Cerrar sesión"
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            {icon.logout} {!collapsed && "Cerrar sesión"}
           </button>
         </div>
       </div>

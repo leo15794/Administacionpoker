@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
-import { upsertAgent, upsertClub, upsertDeal, listAgents, listClubs, listDealsForAgent } from "../repo/catalog.js";
+import { upsertAgent, upsertClub, upsertDeal, updateAgent, listAgents, listClubs, listDealsForAgent } from "../repo/catalog.js";
 
 export const catalogRouter = Router();
 
@@ -77,4 +77,27 @@ catalogRouter.post("/deals", requireAuth, requireAdmin, async (req, res) => {
 
 catalogRouter.get("/agents/:id/deals", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listDealsForAgent(req.params.id));
+});
+
+// Editar un agente ya creado (corregir nombre mal tipeado, sistema o supervisor) sin
+// arriesgarse a chocar contra otro agente por nombre, como pasaría con el alta (upsert).
+const agentEditSchema = z.object({
+  name: z.string().min(2).optional(),
+  defaultSystem: z.enum(["PREPAGO", "WIN_LOSE"]).optional(),
+  supervisor: z.string().nullable().optional(),
+});
+catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = agentEditSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const agent = await updateAgent(req.params.id, {
+      name: parsed.data.name,
+      defaultSystem: parsed.data.defaultSystem,
+      supervisor: parsed.data.supervisor === undefined ? undefined : parsed.data.supervisor?.trim() || null,
+    });
+    if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
+    res.json(agent);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
