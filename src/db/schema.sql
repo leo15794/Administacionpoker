@@ -182,6 +182,26 @@ ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rebate_destino TEXT;
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS supervisor_agent_id TEXT REFERENCES agents(id);
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS supervisor_movement_id TEXT;
 
+-- Módulo de bancados (punto 6 del documento de rediseño, caso real Matías Fontal): la "memoria"
+-- es la deuda que el bancado arrastra con nosotros cuando el rakeback de una semana no alcanza
+-- para cubrir su pérdida en mesa. Nunca prescribe (deuda eterna): baja sola cuando una semana
+-- futura del bancado (su % de mesa + su rakeback) alcanza para cubrirla. Una sola fila activa
+-- por agente+club porque un bancado puede operar varios clubes con cajas independientes.
+CREATE TABLE IF NOT EXISTS bancado_debts (
+  id         TEXT PRIMARY KEY,
+  agent_id   TEXT NOT NULL REFERENCES agents(id),
+  club_id    TEXT NOT NULL REFERENCES clubs(id),
+  debt       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(agent_id, club_id)
+);
+
+-- Snapshot de estas cifras en el propio cierre, para poder ver el detalle en el historial y
+-- para poder restaurar la memoria exacta si el cierre se revierte (LEDGER INMUTABLE también acá).
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_digiplayers_share NUMERIC(18,4);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_debt_before NUMERIC(18,4);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bancado_debt_after NUMERIC(18,4);
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (

@@ -1,5 +1,6 @@
+import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
-import { calcularCierre, type SpecialRule } from "../engine/cierre.js";
+import { calcularCierre, calcularCierreBancado, type SpecialRule } from "../engine/cierre.js";
 import { revertirMovimiento } from "./ledger.js";
 
 export interface AplicarCierreInput {
@@ -22,6 +23,11 @@ export interface AplicarCierreInput {
  * es única en la base. Si el cierre ya existe, no se recalcula ni se vuelve a aplicar a
  * balances (esto es exactamente la regla de BIT-001: "clave única por semana + agente + club,
  * aplicar el cierre de forma atómica").
+ *
+ * Si el agente es de tipo BANCADO, este mismo endpoint (mismo formulario, mismos campos) usa
+ * el motor de cierre de bancados en vez de la fórmula genérica — ver aplicarCierreBancadoTx.
+ * "result" pasa a ser el resultado propio del bancado en la mesa, "rakebackPct" el % de rakeback
+ * (100% suyo) y "rebatePct" el % de la mesa (si fue positiva) que le corresponde a él.
  */
 export async function aplicarCierreSemanal(input: AplicarCierreInput) {
   const client = await pool.connect();
@@ -35,6 +41,13 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     if (existing.rows.length > 0) {
       await client.query("ROLLBACK");
       return { id: existing.rows[0].id, alreadyApplied: true };
+    }
+
+    const agentRes = await client.query(`SELECT account_type FROM agents WHERE id = $1`, [input.agentId]);
+    if (agentRes.rows[0]?.account_type === "BANCADO") {
+      const result = await aplicarCierreBancadoTx(client, input);
+      await client.query("COMMIT");
+      return result;
     }
 
     const calc = calcularCierre({
@@ -177,6 +190,96 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
 }
 
 /**
+ * Motor de cierre de cuentas tipo BANCADO (caso real Matías Fontal — ver calcularCierreBancado
+ * para la fórmula completa). Corre DENTRO de la misma transacción que aplicarCierreSemanal
+ * (recibe su client, no abre ni cierra conexión). La "memoria" (deuda eterna) se lee y escribe
+ * con FOR UPDATE para que dos cierres del mismo agente+club nunca puedan pisarse la deuda.
+ */
+async function aplicarCierreBancadoTx(client: PoolClient, input: AplicarCierreInput) {
+  const debtRes = await client.query(
+    `SELECT * FROM bancado_debts WHERE agent_id = $1 AND club_id = $2 FOR UPDATE`,
+    [input.agentId, input.clubId]
+  );
+  const deudaAnterior = debtRes.rows[0] ? Number(debtRes.rows[0].debt) : 0;
+
+  const calc = calcularCierreBancado({
+    mesaResult: input.result,
+    rakeTotal: input.rakeTotal,
+    rakebackPct: input.rakebackPct,
+    agentSharePct: input.rebatePct,
+    deudaAnterior,
+  });
+
+  if (debtRes.rows[0]) {
+    await client.query(`UPDATE bancado_debts SET debt = $1, updated_at = now() WHERE agent_id = $2 AND club_id = $3`, [
+      calc.deudaNueva,
+      input.agentId,
+      input.clubId,
+    ]);
+  } else {
+    await client.query(
+      `INSERT INTO bancado_debts (id, agent_id, club_id, debt) VALUES ($1,$2,$3,$4)`,
+      [newId("bdt"), input.agentId, input.clubId, calc.deudaNueva]
+    );
+  }
+
+  const id = newId("wc");
+  await client.query(
+    `INSERT INTO weekly_closings
+      (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
+       rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
+       rate_snapshot, rule_applied, status, observation, bancado_digiplayers_share, bancado_debt_before, bancado_debt_after)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'BANCADO','APLICADO',$16,$17,$18,$19)`,
+    [
+      id,
+      input.agentId,
+      input.clubId,
+      input.weekStart,
+      input.weekEnd,
+      input.system,
+      calc.mesaResult,
+      calc.rakeTotal,
+      input.rakebackPct,
+      calc.rakeback,
+      input.rebatePct,
+      calc.bancadoShareMesa,
+      calc.bancadoOwnAmount,
+      calc.finalClosing,
+      input.rateSnapshot ?? 1,
+      input.observation ?? null,
+      calc.digiplayersShare,
+      calc.deudaAnterior,
+      calc.deudaNueva,
+    ]
+  );
+
+  await client.query(
+    `INSERT INTO ledger_movements
+      (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
+     VALUES ($1,$2,'CIERRE_SEMANAL',$3,$4,$5,'APLICADO',$6,$7)`,
+    [
+      newId("mov"),
+      `cierre:${input.agentId}:${input.clubId}:${input.weekStart}`,
+      input.clubId,
+      input.agentId,
+      calc.finalClosing,
+      input.weekEnd,
+      `Cierre semanal (bancado) ${input.weekStart} al ${input.weekEnd}. Mesa: ${calc.mesaResult}, rakeback: ${calc.rakeback}, ganancia DigiPlayers (fichas en el club, informativa): ${calc.digiplayersShare}, memoria: ${calc.deudaAnterior} -> ${calc.deudaNueva}.`,
+    ]
+  );
+
+  await client.query(
+    `INSERT INTO balances (id, agent_id, club_id, amount, updated_at)
+     VALUES ($1,$2,$3,$4, now())
+     ON CONFLICT (agent_id, club_id)
+     DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+    [newId("bal"), input.agentId, input.clubId, calc.finalClosing]
+  );
+
+  return { id, alreadyApplied: false, calc, bancado: true };
+}
+
+/**
  * Revierte un cierre semanal cargado por error: LEDGER INMUTABLE, nunca se borra. Revierte
  * el efecto en el saldo a través de revertirMovimiento (que también marca REVERTIDO la fila
  * de weekly_closings asociada) y, si por algún motivo no se encuentra el movimiento del
@@ -213,6 +316,18 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
     } catch {
       // Si ya estaba revertido (o no se encuentra) no bloqueamos la reversión del cierre principal.
     }
+  }
+
+  // Módulo de bancados: la "memoria" (deuda) es un valor corrido semana a semana, no un
+  // movimiento del ledger — revertir el movimiento de arriba no la toca. Se restaura acá al
+  // valor que tenía ANTES de este cierre (bancado_debt_before). Esto asume que se revierten
+  // cierres de bancado en orden cronológico inverso (el más reciente primero); revertir uno
+  // viejo fuera de orden dejaría la memoria inconsistente con cierres posteriores no revertidos.
+  if (wc.rule_applied === "BANCADO" && wc.bancado_debt_before !== null) {
+    await pool.query(
+      `UPDATE bancado_debts SET debt = $1, updated_at = now() WHERE agent_id = $2 AND club_id = $3`,
+      [wc.bancado_debt_before, wc.agent_id, wc.club_id]
+    );
   }
 
   return { found: true, id: closingId };

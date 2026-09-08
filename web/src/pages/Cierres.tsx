@@ -7,11 +7,13 @@ export default function Cierres() {
   const [cierres, setCierres] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
+  const [bancados, setBancados] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     api.cierres().then(setCierres);
+    api.bancados().then(setBancados);
   }
 
   async function revertirCierre(c: any) {
@@ -101,6 +103,12 @@ export default function Cierres() {
                 <td>
                   {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
                   {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
+                  {c.rule_applied === "BANCADO" && (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                      Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
+                      {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
+                    </div>
+                  )}
                 </td>
                 <td>
                   {c.status !== "REVERTIDO" && (
@@ -119,6 +127,31 @@ export default function Cierres() {
           </tbody>
         </table>
       </div>
+
+      {bancados.length > 0 && (
+        <div className="panel">
+          <h3>Memoria de bancados</h3>
+          <div className="muted" style={{ marginBottom: 14 }}>
+            Deuda eterna: cuando el rakeback de una semana no alcanza para cubrir la pérdida en mesa de un bancado, la diferencia
+            queda acá y se descuenta de sus próximas semanas positivas antes de acreditarle nada.
+          </div>
+          <table>
+            <thead><tr><th>Bancado</th><th>Club</th><th>Memoria pendiente</th><th>Saldo en ese club</th></tr></thead>
+            <tbody>
+              {bancados.map((b) => (
+                <tr key={`${b.agent_id}_${b.club_id}`}>
+                  <td>{b.agent_name}</td>
+                  <td>{b.club_name}</td>
+                  <td>
+                    {Number(b.debt) > 0 ? <span className="badge neg">{usd(b.debt)}</span> : <span className="badge pos">Al día</span>}
+                  </td>
+                  <td>{usd(b.saldo_agente_club)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -142,18 +175,39 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
   const [rakebackPct, setRakebackPct] = useState("70");
   const [rebatePct, setRebatePct] = useState("0");
   const [observation, setObservation] = useState("");
-  const [preview, setPreview] = useState<{ rakeback: number; rebate: number; finalClosing: number } | null>(null);
+  const [preview, setPreview] = useState<{ rakeback: number; rebate: number; finalClosing: number; digiplayersShare?: number } | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const agenteSeleccionado = agentes.find((a) => a.id === agentId);
+  const esBancado = agenteSeleccionado?.account_type === "BANCADO";
+
+  function elegirAgente(id: string) {
+    setAgentId(id);
+    const agente = agentes.find((a) => a.id === id);
+    if (agente?.account_type === "BANCADO" && rebatePct === "0") {
+      setRebatePct("50"); // default razonable: reparto 50/50 de la mesa, ajustable
+    }
+  }
 
   function calcularPreview() {
     const rake = Number(rakeTotal) || 0;
     const rb = (Number(rakebackPct) || 0) / 100;
-    const rebate = (Number(rebatePct) || 0) / 100;
     const res = Number(result) || 0;
     const rakebackMonto = rake * rb;
-    const rebateMonto = rake * rebate;
-    setPreview({ rakeback: rakebackMonto, rebate: rebateMonto, finalClosing: res + rakebackMonto + rebateMonto });
+
+    if (esBancado) {
+      const agentSharePct = (Number(rebatePct) || 0) / 100;
+      const mesaPositiva = res >= 0;
+      const digiplayersShare = mesaPositiva ? res * (1 - agentSharePct) : 0;
+      const bancadoShareMesa = mesaPositiva ? res * agentSharePct : 0;
+      const bancadoOwnAmount = mesaPositiva ? bancadoShareMesa + rakebackMonto : res + rakebackMonto;
+      setPreview({ rakeback: rakebackMonto, rebate: bancadoShareMesa, finalClosing: bancadoOwnAmount, digiplayersShare });
+    } else {
+      const rebate = (Number(rebatePct) || 0) / 100;
+      const rebateMonto = rake * rebate;
+      setPreview({ rakeback: rakebackMonto, rebate: rebateMonto, finalClosing: res + rakebackMonto + rebateMonto });
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -176,6 +230,14 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
       });
       if (r.alreadyApplied) {
         setMsg({ ok: false, text: "Ya existe un cierre aplicado para ese agente+club+semana. No se duplicó nada (BIT-001)." });
+      } else if (r.bancado) {
+        setMsg({
+          ok: true,
+          text: `Cierre aplicado. Acreditado al bancado: ${usd(r.calc?.finalClosing ?? 0)}. Ganancia DigiPlayers (fichas en el club): ${usd(r.calc?.digiplayersShare ?? 0)}. Memoria: ${usd(r.calc?.deudaAnterior ?? 0)} → ${usd(r.calc?.deudaNueva ?? 0)}.`,
+        });
+        setResult("");
+        setObservation("");
+        onApplied();
       } else {
         setMsg({ ok: true, text: `Cierre aplicado. Cierre final: ${usd(r.calc?.finalClosing ?? 0)}` });
         setResult("");
@@ -193,13 +255,15 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
     <div className="panel">
       <h3>Aplicar cierre semanal</h3>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como movimiento al ledger.
+        {esBancado
+          ? "Cuenta tipo Bancado: la mesa se reparte 50/50 (ajustable) y el rakeback es 100% del bancado — si viene con memoria pendiente, se descuenta antes de acreditarle nada."
+          : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como movimiento al ledger."}
       </div>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <div className="field">
             <label>Agente</label>
-            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            <select value={agentId} onChange={(e) => elegirAgente(e.target.value)}>
               <option value="">Elegir...</option>
               {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -239,7 +303,7 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
             <input value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} type="date" />
           </div>
           <div className="field">
-            <label>Resultado (win/lose, USD)</label>
+            <label>{esBancado ? "Resultado en la mesa (bancado ganó/perdió, USD)" : "Resultado (win/lose, USD)"}</label>
             <input value={result} onChange={(e) => setResult(e.target.value)} onBlur={calcularPreview} type="number" step="0.01" />
           </div>
           <div className="field">
@@ -247,11 +311,11 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
             <input value={rakeTotal} onChange={(e) => setRakeTotal(e.target.value)} onBlur={calcularPreview} type="number" step="0.01" />
           </div>
           <div className="field">
-            <label>% Rakeback</label>
+            <label>{esBancado ? "% Rakeback (100% para el bancado)" : "% Rakeback"}</label>
             <input value={rakebackPct} onChange={(e) => setRakebackPct(e.target.value)} onBlur={calcularPreview} type="number" step="0.01" />
           </div>
           <div className="field">
-            <label>% Rebate</label>
+            <label>{esBancado ? "% de la mesa para el bancado (si ganó)" : "% Rebate"}</label>
             <input value={rebatePct} onChange={(e) => setRebatePct(e.target.value)} onBlur={calcularPreview} type="number" step="0.01" />
           </div>
         </div>
@@ -260,7 +324,13 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
           <input value={observation} onChange={(e) => setObservation(e.target.value)} />
         </div>
 
-        {preview && (
+        {preview && esBancado && (
+          <div className="muted" style={{ marginBottom: 12 }}>
+            Vista previa (sin contar memoria pendiente, eso lo aplica el servidor): rakeback {usd(preview.rakeback)} + mesa del bancado{" "}
+            {usd(preview.rebate)} = generado {usd(preview.finalClosing)}. Ganancia DigiPlayers (informativa): {usd(preview.digiplayersShare ?? 0)}.
+          </div>
+        )}
+        {preview && !esBancado && (
           <div className="muted" style={{ marginBottom: 12 }}>
             Vista previa: rakeback {usd(preview.rakeback)} + rebate {usd(preview.rebate)} → cierre final estimado{" "}
             <strong style={{ color: preview.finalClosing >= 0 ? "var(--green)" : "var(--red)" }}>{usd(preview.finalClosing)}</strong>

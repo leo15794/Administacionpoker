@@ -75,6 +75,65 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
   };
 }
 
+// ============ Módulo Bancado (punto 6 del documento de rediseño) ============
+// Regla real (caso Matías Fontal, relevada explícitamente): el bancado banca una mesa con una
+// caja inicial. Lo que pasa en la mesa es EXACTAMENTE al revés de un agente normal: si el
+// bancado gana en la mesa, ese resultado se reparte 50/50 con DigiPlayers (la parte de
+// DigiPlayers queda como fichas en el club, no se acredita a ningún agente del sistema). El
+// rakeback (% configurable del rake generado) es SIEMPRE 100% del bancado, nunca se reparte:
+// si la mesa dio negativa, el rakeback cubre esa pérdida primero; si no alcanza, la diferencia
+// queda como "memoria" — una deuda que NUNCA prescribe (se arrastra semana a semana) y que las
+// próximas semanas positivas del bancado (su parte de mesa + su rakeback) tienen que cubrir
+// ANTES de que se le acredite nada. Si la mesa dio negativa pero el rakeback la cubre y sobra,
+// ese sobrante es 100% del bancado (nunca se reparte con DigiPlayers — el reparto solo aplica
+// sobre una mesa que ganó, no sobre una recuperación con rakeback).
+export interface BancadoInput {
+  mesaResult: number; // resultado del bancado en la mesa esa semana (positivo = ganó, negativo = perdió)
+  rakeTotal: number;
+  rakebackPct: number; // 0..1, 100% para el bancado
+  agentSharePct: number; // 0..1, % de la mesa (si es positiva) que le corresponde al bancado; el resto es de DigiPlayers
+  deudaAnterior: number; // "memoria" arrastrada de semanas anteriores (0 si no hay)
+}
+
+export interface BancadoResult {
+  mesaResult: number;
+  rakeTotal: number;
+  rakeback: number;
+  digiplayersShare: number; // informativo: fichas que quedan en el club, no se acredita a ningún agente
+  bancadoShareMesa: number; // parte de la mesa que le toca al bancado (0 si la mesa fue negativa)
+  bancadoOwnAmount: number; // lo que generó el bancado esta semana, antes de aplicar la memoria
+  deudaAnterior: number;
+  deudaNueva: number;
+  finalClosing: number; // lo que efectivamente se acredita al saldo del bancado esta semana (0 si quedó cubierto por memoria)
+}
+
+export function calcularCierreBancado(input: BancadoInput): BancadoResult {
+  const rakeback = input.rakeTotal * input.rakebackPct;
+  const mesaPositiva = input.mesaResult >= 0;
+
+  const digiplayersShare = mesaPositiva ? input.mesaResult * (1 - input.agentSharePct) : 0;
+  const bancadoShareMesa = mesaPositiva ? input.mesaResult * input.agentSharePct : 0;
+  // Si la mesa fue negativa, el bancado "genera" (mesaResult + rakeback): el rakeback cubre la
+  // pérdida total o parcialmente. Si fue positiva, genera su parte de la mesa + el rakeback entero.
+  const bancadoOwnAmount = mesaPositiva ? bancadoShareMesa + rakeback : input.mesaResult + rakeback;
+
+  const netTrasMemoria = bancadoOwnAmount - input.deudaAnterior;
+  const finalClosing = netTrasMemoria >= 0 ? netTrasMemoria : 0;
+  const deudaNueva = netTrasMemoria >= 0 ? 0 : -netTrasMemoria;
+
+  return {
+    mesaResult: input.mesaResult,
+    rakeTotal: input.rakeTotal,
+    rakeback,
+    digiplayersShare,
+    bancadoShareMesa,
+    bancadoOwnAmount,
+    deudaAnterior: input.deudaAnterior,
+    deudaNueva,
+    finalClosing,
+  };
+}
+
 export interface CajeroCreditoInput {
   deudaAnterior: number; // deuda arrastrada (positivo = agente nos debe)
   cargas: number; // nuevas cargas a crédito de la semana (aumentan deuda)

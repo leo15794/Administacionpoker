@@ -76,6 +76,22 @@ dashboardRouter.get("/agentes", requireAuth, requireAdmin, async (_req, res) => 
   res.json(r.rows);
 });
 
+// Módulo de bancados (punto 6 del documento de rediseño): memoria (deuda eterna) pendiente por
+// agente+club, para ver de un vistazo qué bancados están "en rojo" con el rakeback.
+dashboardRouter.get("/bancados", requireAuth, requireAdmin, async (_req, res) => {
+  const r = await pool.query(
+    `SELECT bd.agent_id, bd.club_id, bd.debt, bd.updated_at, a.name as agent_name, c.name as club_name,
+            COALESCE(b.amount, 0) as saldo_agente_club
+     FROM bancado_debts bd
+     JOIN agents a ON a.id = bd.agent_id
+     JOIN clubs c ON c.id = bd.club_id
+     LEFT JOIN balances b ON b.agent_id = bd.agent_id AND b.club_id = bd.club_id
+     WHERE a.active = true
+     ORDER BY bd.debt DESC, a.name`
+  );
+  res.json(r.rows);
+});
+
 // Módulo de supervisores (punto 5 del documento de rediseño): jerarquía supervisor -> agentes
 // a cargo, con el saldo propio del supervisor (incluye el rakeback centralizado que le llega
 // vía cierres con rebate_destino=RAKEBACK_SUPERVISOR) y el detalle de cada agente a cargo.
