@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { registrarMovimiento, eliminarMovimiento } from "../repo/ledger.js";
-import { aplicarCierreSemanal, eliminarCierreSemanal } from "../repo/closings.js";
-import { requireAuth, requireAdmin } from "../lib/auth.js";
+import { registrarMovimiento, revertirMovimiento } from "../repo/ledger.js";
+import { aplicarCierreSemanal, revertirCierreSemanal } from "../repo/closings.js";
+import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
 export const movementsRouter = Router();
 
@@ -64,12 +64,14 @@ movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, r
   }
 });
 
-// Eliminar un cierre semanal cargado por error. Revierte su efecto en el saldo y borra
-// tanto el movimiento del ledger como la fila de weekly_closings (ver eliminarCierreSemanal).
+// Revierte un cierre semanal cargado por error. LEDGER INMUTABLE: no lo borra — revierte su
+// efecto en el saldo y marca REVERTIDO tanto el movimiento del ledger como la fila de
+// weekly_closings (ver revertirCierreSemanal), dejando todo visible en el historial.
 // Va antes de "/:id" para que "cierre-semanal" no se interprete como un id de movimiento.
-movementsRouter.delete("/cierre-semanal/:id", requireAuth, requireAdmin, async (req, res) => {
+movementsRouter.delete("/cierre-semanal/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
-    const result = await eliminarCierreSemanal(req.params.id);
+    const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
+    const result = await revertirCierreSemanal(req.params.id, motivo, req.user?.email ?? null);
     if (!result.found) return res.status(404).json({ error: "Cierre no encontrado" });
     res.json(result);
   } catch (err: any) {
@@ -77,11 +79,13 @@ movementsRouter.delete("/cierre-semanal/:id", requireAuth, requireAdmin, async (
   }
 });
 
-// Eliminar un movimiento cargado por error. Revierte el balance y borra su tesorería
-// asociada (ver eliminarMovimiento). Exclusivo de administrador.
-movementsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+// Revierte un movimiento cargado por error. LEDGER INMUTABLE: no lo borra — revierte el
+// balance con un movimiento AJUSTE opuesto y marca el original como REVERTIDO (ver
+// revertirMovimiento). Exclusivo de administrador.
+movementsRouter.delete("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
-    const result = await eliminarMovimiento(req.params.id);
+    const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
+    const result = await revertirMovimiento(req.params.id, motivo, req.user?.email ?? null);
     if (!result.found) return res.status(404).json({ error: "Movimiento no encontrado" });
     res.json(result);
   } catch (err: any) {

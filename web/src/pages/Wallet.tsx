@@ -4,6 +4,10 @@ import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 
+function estaRevertido(m: any) {
+  return (m.status ?? m.movimiento_status) === "REVERTIDO";
+}
+
 export default function Wallet() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -15,16 +19,17 @@ export default function Wallet() {
     api.tesoreria({ ledger: "WALLET_MANOS" }).then(setData).catch((e) => setError(e.message));
   }
 
-  async function eliminar(m: any) {
+  async function revertir(m: any) {
     const detalle = m.source === "ajuste" ? m.observation : `${m.agent_name} (${m.type})`;
-    if (!confirm(`¿Eliminar este movimiento?\n\n${detalle}\n${m.direction === "INGRESO" ? "+" : "-"}${m.amount}\n\nEsto no se puede deshacer.`)) return;
+    const motivo = prompt(`Revertir movimiento:\n\n${detalle}\n${m.direction === "INGRESO" ? "+" : "-"}${m.amount}\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
+    if (motivo === undefined) return;
     setBorrando(m.id);
     try {
-      if (m.source === "ajuste") await api.eliminarAjusteTesoreria(m.id);
-      else await api.eliminarMovimiento(m.id);
+      if (m.source === "ajuste") await api.revertirAjusteTesoreria(m.id, motivo || undefined);
+      else await api.revertirMovimiento(m.id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el movimiento.");
+      alert(err.message || "No se pudo revertir el movimiento.");
     } finally {
       setBorrando(null);
     }
@@ -100,11 +105,12 @@ export default function Wallet() {
             <thead><tr><th>Fecha</th><th>Dirección</th><th>Monto</th><th>Detalle</th><th></th></tr></thead>
             <tbody>
               {data.ultimosMovimientos.map((m: any) => (
-                <tr key={m.id}>
+                <tr key={m.id} style={estaRevertido(m) ? { opacity: 0.55 } : undefined}>
                   <td>{dateShort(m.occurred_at)}</td>
                   <td className="muted">{m.direction === "INGRESO" ? "Ingreso" : "Egreso"}</td>
                   <td><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
                   <td>
+                    {estaRevertido(m) && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
                     {m.source === "ajuste" ? (
                       <span title={m.created_by ? `Cargado por ${m.created_by}` : undefined}>
                         {String(m.created_by || "").startsWith("import:") ? (
@@ -119,14 +125,16 @@ export default function Wallet() {
                     )}
                   </td>
                   <td>
-                    <button
-                      className="btn secondary small"
-                      disabled={borrando === m.id}
-                      onClick={() => eliminar(m)}
-                      title="Eliminar este movimiento"
-                    >
-                      {borrando === m.id ? "..." : "Eliminar"}
-                    </button>
+                    {!estaRevertido(m) && (
+                      <button
+                        className="btn secondary small"
+                        disabled={borrando === m.id}
+                        onClick={() => revertir(m)}
+                        title="Revertir este movimiento (genera uno opuesto, no borra nada)"
+                      >
+                        {borrando === m.id ? "..." : "Revertir"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

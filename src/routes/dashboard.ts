@@ -3,7 +3,7 @@ import { z } from "zod";
 import { pool } from "../db/pool.js";
 import { listAllBalances } from "../repo/ledger.js";
 import { listClosings } from "../repo/closings.js";
-import { registrarAjusteTesoreria } from "../repo/treasury.js";
+import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
 export const dashboardRouter = Router();
@@ -166,7 +166,7 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
       // "[HISTÓRICO]" con la fecha real. Se oculta el automático viejo y se deja el
       // histórico, que tiene el detalle y la fecha correctos.
       `SELECT t.id, t.ledger, t.direction, t.amount, t.custodian, t.occurred_at,
-              m.type, m.observation, a.name as agent_name
+              m.type, m.observation, m.status as movimiento_status, a.name as agent_name
        FROM treasury_entries t
        JOIN ledger_movements m ON m.id = t.movement_id
        JOIN agents a ON a.id = m.agent_id
@@ -176,7 +176,7 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
       ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
     ),
     pool.query(
-      `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by
+      `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by, status
        FROM treasury_adjustments
        ${ledgerFiltro ? "WHERE ledger = $2" : ""}
        ORDER BY occurred_at DESC LIMIT $1`,
@@ -220,6 +220,21 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
     .slice(0, limiteMovimientos);
 
   res.json({ porLedger, porCustodio, ultimosMovimientos });
+});
+
+// Revierte un ajuste manual/histórico de tesorería (Wallet o Caja) cargado por error o
+// duplicado. LEDGER INMUTABLE: no lo borra — inserta un ajuste opuesto y marca el original
+// como REVERTIDO (ver revertirAjusteTesoreria). No afecta saldos de agentes (los ajustes son
+// independientes de eso). Exclusivo de administrador.
+dashboardRouter.delete("/tesoreria/ajuste/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
+    const r = await revertirAjusteTesoreria(req.params.id, motivo, req.user?.email ?? null);
+    if (!r.found) return res.status(404).json({ error: "No se encontró ese ajuste." });
+    res.json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const ajusteSchema = z.object({

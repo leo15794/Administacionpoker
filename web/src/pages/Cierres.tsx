@@ -14,14 +14,15 @@ export default function Cierres() {
     api.cierres().then(setCierres);
   }
 
-  async function eliminarCierre(c: any) {
-    if (!confirm(`¿Eliminar el cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)})?\n\nSe revierte su efecto en el saldo. Esto no se puede deshacer.`)) return;
+  async function revertirCierre(c: any) {
+    const motivo = prompt(`Revertir cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
+    if (motivo === undefined) return;
     setBorrando(c.id);
     try {
-      await api.eliminarCierre(c.id);
+      await api.revertirCierre(c.id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el cierre.");
+      alert(err.message || "No se pudo revertir el cierre.");
     } finally {
       setBorrando(null);
     }
@@ -88,7 +89,7 @@ export default function Cierres() {
           </thead>
           <tbody>
             {cierres.map((c) => (
-              <tr key={c.id}>
+              <tr key={c.id} style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                 <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
                 <td>{c.agent_name}</td>
                 <td>{c.club_name}</td>
@@ -97,16 +98,21 @@ export default function Cierres() {
                 <td>{usd(c.rake_total)}</td>
                 <td>{usd(c.rakeback)}</td>
                 <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
-                <td>{c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : "—"}</td>
                 <td>
-                  <button
-                    className="btn secondary small"
-                    disabled={borrando === c.id}
-                    onClick={() => eliminarCierre(c)}
-                    title="Eliminar cierre (revierte el saldo)"
-                  >
-                    {borrando === c.id ? "..." : "Eliminar"}
-                  </button>
+                  {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+                  {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
+                </td>
+                <td>
+                  {c.status !== "REVERTIDO" && (
+                    <button
+                      className="btn secondary small"
+                      disabled={borrando === c.id}
+                      onClick={() => revertirCierre(c)}
+                      title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
+                    >
+                      {borrando === c.id ? "..." : "Revertir"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

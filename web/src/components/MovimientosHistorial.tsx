@@ -33,14 +33,15 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
     refresh();
   }, [agentId, clubId]);
 
-  async function onEliminar(id: string) {
-    if (!confirm("¿Eliminar este movimiento? Se revierte su efecto en el saldo y no se puede deshacer.")) return;
+  async function onRevertir(id: string) {
+    const motivo = prompt("¿Por qué revertís este movimiento? (queda registrado en el historial)") ?? undefined;
+    if (motivo === undefined) return; // canceló el prompt
     setBorrando(id);
     try {
-      await api.eliminarMovimiento(id);
+      await api.revertirMovimiento(id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el movimiento.");
+      alert(err.message || "No se pudo revertir el movimiento.");
     } finally {
       setBorrando(null);
     }
@@ -82,22 +83,27 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
+            <tr key={r.id} style={r.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
               <td>{dateShort(r.occurred_at)}</td>
-              <td><span className="badge neutral">{TIPO_LABEL[r.type] ?? r.type}</span></td>
+              <td>
+                <span className="badge neutral">{TIPO_LABEL[r.type] ?? r.type}</span>
+                {r.status === "REVERTIDO" && <span className="badge neg" style={{ marginLeft: 6 }}>Revertido</span>}
+              </td>
               <td>{r.agent_name}</td>
               <td>{r.club_name}{r.club_destino_name ? ` → ${r.club_destino_name}` : ""}</td>
               <td><span className={`badge ${Number(r.amount) > 0 ? "pos" : Number(r.amount) < 0 ? "neg" : "neutral"}`}>{usd(r.amount)}</span></td>
               <td className="muted" style={{ fontSize: 12 }} title={r.observation || undefined}>{r.observation ? truncar(r.observation) : "—"}</td>
               <td>
-                <button
-                  className="btn secondary small"
-                  disabled={borrando === r.id}
-                  onClick={() => onEliminar(r.id)}
-                  title="Eliminar movimiento (revierte el saldo)"
-                >
-                  {borrando === r.id ? "..." : "Eliminar"}
-                </button>
+                {r.status !== "REVERTIDO" && (
+                  <button
+                    className="btn secondary small"
+                    disabled={borrando === r.id}
+                    onClick={() => onRevertir(r.id)}
+                    title="Revertir movimiento (genera un ajuste opuesto, no borra nada)"
+                  >
+                    {borrando === r.id ? "..." : "Revertir"}
+                  </button>
+                )}
               </td>
             </tr>
           ))}

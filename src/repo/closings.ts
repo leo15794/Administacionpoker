@@ -1,6 +1,6 @@
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre, type SpecialRule } from "../engine/cierre.js";
-import { eliminarMovimiento } from "./ledger.js";
+import { revertirMovimiento } from "./ledger.js";
 
 export interface AplicarCierreInput {
   agentId: string;
@@ -112,27 +112,31 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
 }
 
 /**
- * Elimina un cierre semanal cargado por error: revierte el efecto en el saldo (a través de
- * eliminarMovimiento, que también borra la fila de weekly_closings asociada) y, si por algún
- * motivo no se encuentra el movimiento del ledger (dato viejo/inconsistente), borra igual la
- * fila de weekly_closings para no dejarla huérfana. Exclusivo de administrador.
+ * Revierte un cierre semanal cargado por error: LEDGER INMUTABLE, nunca se borra. Revierte
+ * el efecto en el saldo a través de revertirMovimiento (que también marca REVERTIDO la fila
+ * de weekly_closings asociada) y, si por algún motivo no se encuentra el movimiento del
+ * ledger (dato viejo/inconsistente), marca igual REVERTIDO la fila de weekly_closings para
+ * que no quede activa sin respaldo. Exclusivo de administrador.
  */
-export async function eliminarCierreSemanal(closingId: string) {
+export async function revertirCierreSemanal(closingId: string, motivo?: string, revertidoPor?: string | null) {
   const wcRes = await pool.query(`SELECT * FROM weekly_closings WHERE id = $1`, [closingId]);
   const wc = wcRes.rows[0];
   if (!wc) return { found: false };
+  if (wc.status === "REVERTIDO") {
+    throw new Error("Este cierre ya fue revertido antes — no se puede revertir dos veces.");
+  }
 
   const movRes = await pool.query(
     `SELECT id FROM ledger_movements
-     WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date`,
+     WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date AND status <> 'REVERTIDO'`,
     [wc.agent_id, wc.club_id, wc.week_end]
   );
   const movId = movRes.rows[0]?.id;
 
   if (movId) {
-    await eliminarMovimiento(movId);
+    await revertirMovimiento(movId, motivo, revertidoPor);
   } else {
-    await pool.query(`DELETE FROM weekly_closings WHERE id = $1`, [closingId]);
+    await pool.query(`UPDATE weekly_closings SET status = 'REVERTIDO' WHERE id = $1`, [closingId]);
   }
   return { found: true, id: closingId };
 }

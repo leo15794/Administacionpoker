@@ -44,9 +44,14 @@ export const api = {
   },
   tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" } = {}) =>
     request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
-  eliminarMovimiento: (id: string) => request(`/movements/${id}`, { method: "DELETE" }),
-  eliminarAjusteTesoreria: (id: string) => request(`/dashboard/tesoreria/ajuste/${id}`, { method: "DELETE" }),
-  eliminarCierre: (id: string) => request(`/movements/cierre-semanal/${id}`, { method: "DELETE" }),
+  // Revierten (nunca borran) — ver nota de ledger inmutable: el original queda en el
+  // historial marcado como revertido y se genera un movimiento/ajuste opuesto.
+  revertirMovimiento: (id: string, motivo?: string) =>
+    request(`/movements/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
+  revertirAjusteTesoreria: (id: string, motivo?: string) =>
+    request(`/dashboard/tesoreria/ajuste/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
+  revertirCierre: (id: string, motivo?: string) =>
+    request(`/movements/cierre-semanal/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
   ajustarTesoreria: (data: {
     ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
     direction: "INGRESO" | "EGRESO";

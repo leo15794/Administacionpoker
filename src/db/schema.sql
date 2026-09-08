@@ -132,6 +132,20 @@ ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS treasury_adjustments_idempotency_key_idx
   ON treasury_adjustments (idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+-- Ledger inmutable (regla BIT-nueva, pedida explícitamente): nunca se borra un ajuste de
+-- tesorería. Si está mal, se revierte con un ajuste opuesto y este queda marcado como
+-- REVERTIDO — el ajuste original nunca desaparece, para poder reconstruir qué pasó.
+ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'APLICADO';
+ALTER TABLE treasury_adjustments DROP CONSTRAINT IF EXISTS treasury_adjustments_status_check;
+ALTER TABLE treasury_adjustments ADD CONSTRAINT treasury_adjustments_status_check CHECK (status IN ('APLICADO','REVERTIDO'));
+ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS reverted_by_id TEXT;
+
+-- Mismo principio para weekly_closings: la restricción de status ya definida en la tabla
+-- puede quedar vieja en bases existentes (CREATE TABLE IF NOT EXISTS no las actualiza), así
+-- que se repite acá para que también acepten 'REVERTIDO'.
+ALTER TABLE weekly_closings DROP CONSTRAINT IF EXISTS weekly_closings_status_check;
+ALTER TABLE weekly_closings ADD CONSTRAINT weekly_closings_status_check CHECK (status IN ('BORRADOR','APLICADO','CORREGIDO','REVERTIDO'));
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (
@@ -190,7 +204,7 @@ CREATE TABLE IF NOT EXISTS weekly_closings (
   final_closing   NUMERIC(18,4) NOT NULL DEFAULT 0,
   rate_snapshot   NUMERIC(18,6) NOT NULL DEFAULT 1,
   rule_applied    TEXT,
-  status          TEXT NOT NULL DEFAULT 'BORRADOR' CHECK (status IN ('BORRADOR','APLICADO','CORREGIDO')),
+  status          TEXT NOT NULL DEFAULT 'BORRADOR' CHECK (status IN ('BORRADOR','APLICADO','CORREGIDO','REVERTIDO')),
   observation     TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(agent_id, club_id, week_start)   -- clave idempotente del cierre (BIT-001)

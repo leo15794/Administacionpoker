@@ -166,13 +166,25 @@ export async function listAllBalances() {
 }
 
 /**
- * Elimina un movimiento y revierte TODO lo que generó (BIT-style: nunca dejar rastros
- * huérfanos). Reversa el/los delta(s) de balance (origen y, si es transferencia, destino),
- * borra su treasury_entry si existía, y borra el movimiento. Todo en una transacción: o se
- * revierte completo, o no se toca nada. Pensado como acción exclusiva de administrador para
- * corregir un movimiento cargado por error (histórico importado o cargado a mano).
+ * Revierte un movimiento cargado por error. LEDGER INMUTABLE: nunca se borra ni se pisa el
+ * movimiento original — queda marcado status=REVERTIDO para siempre, y se genera un
+ * movimiento AJUSTE nuevo con el efecto exactamente opuesto (mismo mecanismo con el que se
+ * reconstruye cualquier historial: original + reversa, nunca una edición silenciosa).
+ *
+ * Qué hace, todo en una transacción (todo o nada):
+ *  1) Aplica a los balances el delta opuesto al que aplicó el movimiento original (origen y,
+ *     si era transferencia, destino).
+ *  2) Si el original tenía tesorería asociada (USDT/EFECTIVO/ZELLE), crea una NUEVA
+ *     treasury_entry con la dirección invertida para el mismo ledger y custodio — nunca borra
+ *     la original, así el historial de Wallet/Caja también queda completo.
+ *  3) Inserta el movimiento de reversa en ledger_movements (type=AJUSTE, refs=[originalId]),
+ *     con su propia idempotency_key para que revertir dos veces el mismo movimiento no
+ *     duplique el efecto.
+ *  4) Marca el original status=REVERTIDO (UPDATE, no DELETE).
+ *  5) Si el original era un CIERRE_SEMANAL, también marca REVERTIDO su fila en
+ *     weekly_closings (nunca se borra esa fila tampoco).
  */
-export async function eliminarMovimiento(id: string) {
+export async function revertirMovimiento(id: string, motivo?: string, revertidoPor?: string | null) {
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -183,31 +195,69 @@ export async function eliminarMovimiento(id: string) {
       await client.query("ROLLBACK");
       return { found: false };
     }
-
-    // Revertir el delta de balance con el signo opuesto al que se aplicó al registrarlo.
-    await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaParaBalance(mov.type, Number(mov.amount), false));
-    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
-      await upsertBalanceDelta(client, mov.agent_id, mov.club_destino_id, -deltaParaBalance(mov.type, Number(mov.amount), true));
+    if (mov.status === "REVERTIDO") {
+      await client.query("ROLLBACK");
+      throw new Error("Este movimiento ya fue revertido antes — no se puede revertir dos veces.");
     }
 
-    await client.query(`DELETE FROM treasury_entries WHERE movement_id = $1`, [id]);
-    await client.query(`DELETE FROM ledger_movements WHERE id = $1`, [id]);
+    const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
+    await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaOrigen);
+    let deltaDestino: number | null = null;
+    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
+      deltaDestino = deltaParaBalance(mov.type, Number(mov.amount), true);
+      await upsertBalanceDelta(client, mov.agent_id, mov.club_destino_id, -deltaDestino);
+    }
+
+    const idReversa = newId("mov");
+    const idempotencyKeyReversa = `revert_${id}`;
+    const observacionReversa = `Reversión de movimiento ${id} (${mov.type})${motivo ? `: ${motivo}` : "."} El original queda en el historial marcado como revertido, nunca se borra.`;
+
+    await client.query(
+      `INSERT INTO ledger_movements
+        (id, idempotency_key, type, club_id, club_destino_id, agent_id, amount,
+         payment_method, status, occurred_at, observation, refs, created_by)
+       VALUES ($1,$2,'AJUSTE',$3,$4,$5,$6,$7,'APLICADO',now(),$8,$9,$10)`,
+      [
+        idReversa,
+        idempotencyKeyReversa,
+        mov.club_id,
+        mov.club_destino_id,
+        mov.agent_id,
+        -deltaOrigen,
+        mov.payment_method,
+        observacionReversa,
+        [id],
+        revertidoPor ?? null,
+      ]
+    );
+
+    // Si el original tenía tesorería asociada, la reversa también genera su propia entrada
+    // (dirección invertida) — nunca se toca ni se borra la entrada original.
+    const treOriginal = await client.query(`SELECT * FROM treasury_entries WHERE movement_id = $1`, [id]);
+    if (treOriginal.rows.length > 0) {
+      const tre = treOriginal.rows[0];
+      await client.query(
+        `INSERT INTO treasury_entries (id, movement_id, ledger, direction, amount, custodian, occurred_at)
+         VALUES ($1,$2,$3,$4,$5,$6, now())`,
+        [newId("tre"), idReversa, tre.ledger, tre.direction === "INGRESO" ? "EGRESO" : "INGRESO", tre.amount, tre.custodian]
+      );
+    }
+
+    await client.query(`UPDATE ledger_movements SET status = 'REVERTIDO' WHERE id = $1`, [id]);
 
     // Un CIERRE_SEMANAL siempre viene acompañado de su fila en weekly_closings (se insertan
-    // juntos en aplicarCierreSemanal) — si se borra el movimiento sin borrar esa fila, queda
-    // un cierre "fantasma" que se sigue mostrando en la pestaña de Cierres aunque ya no tenga
-    // efecto real en el saldo. Se borra acá también, por agente+club+semana (coincide con
-    // occurred_at, que se carga con weekEnd al aplicar el cierre).
+    // juntos en aplicarCierreSemanal) — se marca REVERTIDO ahí también, nunca se borra, para
+    // que quede visible en el historial de Cierres semanales que existió y fue anulado.
     if (mov.type === "CIERRE_SEMANAL") {
       await client.query(
-        `DELETE FROM weekly_closings
+        `UPDATE weekly_closings SET status = 'REVERTIDO'
          WHERE agent_id = $1 AND club_id = $2 AND week_end = $3::date`,
         [mov.agent_id, mov.club_id, mov.occurred_at]
       );
     }
 
     await client.query("COMMIT");
-    return { found: true, id };
+    return { found: true, id, idReversa };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

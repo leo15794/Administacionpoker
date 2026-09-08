@@ -50,3 +50,37 @@ export async function listTreasuryAdjustments(limit = 200) {
   const r = await pool.query(`SELECT * FROM treasury_adjustments ORDER BY occurred_at DESC LIMIT $1`, [limit]);
   return r.rows;
 }
+
+/**
+ * Revierte un ajuste de tesorería (manual o histórico importado) cargado por error. LEDGER
+ * INMUTABLE: nunca se borra — se inserta un ajuste nuevo con la dirección invertida (mismo
+ * ledger, mismo custodio, mismo monto) y el original queda marcado status=REVERTIDO para
+ * siempre, visible en el historial. Es seguro llamarla dos veces con el mismo id: la segunda
+ * vez tira error en vez de duplicar la reversa.
+ */
+export async function revertirAjusteTesoreria(id: string, motivo?: string, revertidoPor?: string | null) {
+  const r = await pool.query(`SELECT * FROM treasury_adjustments WHERE id = $1 FOR UPDATE`, [id]);
+  const original = r.rows[0];
+  if (!original) return { found: false };
+  if (original.status === "REVERTIDO") {
+    throw new Error("Este ajuste ya fue revertido antes — no se puede revertir dos veces.");
+  }
+
+  const idReversa = newId("tad");
+  await pool.query(
+    `INSERT INTO treasury_adjustments (id, ledger, direction, amount, custodian, reason, occurred_at, created_by, idempotency_key)
+     VALUES ($1,$2,$3,$4,$5,$6, now(), $7, $8)`,
+    [
+      idReversa,
+      original.ledger,
+      original.direction === "INGRESO" ? "EGRESO" : "INGRESO",
+      original.amount,
+      original.custodian,
+      `Reversión de ajuste ${id}${motivo ? `: ${motivo}` : "."} Original: "${original.reason}". El original queda en el historial marcado como revertido, nunca se borra.`,
+      revertidoPor ?? null,
+      `revert_${id}`,
+    ]
+  );
+  await pool.query(`UPDATE treasury_adjustments SET status = 'REVERTIDO', reverted_by_id = $2 WHERE id = $1`, [id, idReversa]);
+  return { found: true, id, idReversa };
+}
