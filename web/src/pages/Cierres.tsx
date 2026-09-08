@@ -9,6 +9,7 @@ export default function Cierres() {
   const [clubes, setClubes] = useState<any[]>([]);
   const [bancados, setBancados] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
@@ -43,8 +44,20 @@ export default function Cierres() {
           <h2>Cierres semanales</h2>
           <div className="muted">Clave idempotente (agente + club + semana) — un cierre nunca se aplica dos veces (BIT-001).</div>
         </div>
-        <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Aplicar cierre"}</button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn secondary" onClick={() => setShowImport((v) => !v)}>{showImport ? "Cerrar importador" : "Importar archivo"}</button>
+          <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Aplicar cierre"}</button>
+        </div>
       </div>
+
+      {showImport && (
+        <ImportarCierre
+          agentes={agentes}
+          onDone={() => {
+            refresh();
+          }}
+        />
+      )}
 
       {showForm && (
         <NuevoCierre
@@ -407,6 +420,344 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
           {loading ? "Aplicando..." : "Aplicar cierre"}
         </button>
       </form>
+    </div>
+  );
+}
+
+type FilaImport = {
+  key: string; // clubId|agentId
+  clubId: string;
+  clubName: string;
+  agentId: string;
+  agentName: string;
+  jugadores: number;
+  resultado: number;
+  rakeTotal: number;
+  system: "PREPAGO" | "WIN_LOSE";
+  rakebackPct: number;
+  rebatePct: number;
+  configSource: "deal" | "default_club";
+  included: boolean;
+  previewLoading: boolean;
+  previewResult: any | null;
+  previewError: string | null;
+  applyLoading: boolean;
+  applyResult: any | null;
+  applyError: string | null;
+};
+
+// Importador de cierres (hoy: formato SupremaPoker, hojas Fénix/TeamBack — ver Clubes →
+// Configurar → "Hoja de importación" para vincular cada club a su hoja). Nunca inventa el %
+// de rakeback: siempre usa la configuración ya cargada en Agentes/Clubes. Reutiliza el mismo
+// motor de vista previa/aplicar que el formulario manual, fila por fila, así nunca puede dar
+// un número distinto al que se aplicaría cargando el cierre a mano.
+function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [weekStart, setWeekStart] = useState("");
+  const [weekEnd, setWeekEnd] = useState("");
+  const [analizando, setAnalizando] = useState(false);
+  const [analisisError, setAnalisisError] = useState<string | null>(null);
+  const [hojasNoReconocidas, setHojasNoReconocidas] = useState<{ sheetName: string; motivo: string }[]>([]);
+  const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
+  const [filas, setFilas] = useState<FilaImport[]>([]);
+  const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
+  const [guardandoAsignacion, setGuardandoAsignacion] = useState<string | null>(null);
+  const [previsualizandoTodo, setPrevisualizandoTodo] = useState(false);
+  const [aplicandoTodo, setAplicandoTodo] = useState(false);
+  const [resumenAplicacion, setResumenAplicacion] = useState<string | null>(null);
+
+  async function analizar() {
+    if (!file) { setAnalisisError("Elegí un archivo primero."); return; }
+    if (!weekStart || !weekEnd) { setAnalisisError("Completá semana desde/hasta antes de analizar."); return; }
+    setAnalizando(true);
+    setAnalisisError(null);
+    setResumenAplicacion(null);
+    try {
+      const r = await api.previsualizarImportacion(file, weekEnd);
+      setHojasNoReconocidas(r.hojasNoReconocidas || []);
+      setSinAgentePorClub(
+        (r.clubes || [])
+          .filter((c: any) => c.sinAgente?.length > 0)
+          .map((c: any) => ({ clubId: c.clubId, clubName: c.clubName, items: c.sinAgente }))
+      );
+      const nuevasFilas: FilaImport[] = [];
+      for (const club of r.clubes || []) {
+        for (const a of club.agentes) {
+          nuevasFilas.push({
+            key: `${club.clubId}|${a.agentId}`,
+            clubId: club.clubId,
+            clubName: club.clubName,
+            agentId: a.agentId,
+            agentName: a.agentName,
+            jugadores: a.jugadores,
+            resultado: a.resultado,
+            rakeTotal: a.rakeTotal,
+            system: a.system,
+            rakebackPct: a.rakebackPct,
+            rebatePct: a.rebatePct,
+            configSource: a.configSource,
+            included: true,
+            previewLoading: false,
+            previewResult: null,
+            previewError: null,
+            applyLoading: false,
+            applyResult: null,
+            applyError: null,
+          });
+        }
+      }
+      nuevasFilas.sort((a, b) => a.clubName.localeCompare(b.clubName) || a.agentName.localeCompare(b.agentName));
+      setFilas(nuevasFilas);
+    } catch (err: any) {
+      setAnalisisError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setAnalizando(false);
+    }
+  }
+
+  async function asignarJugador(clubId: string, playerId: string) {
+    const claveSel = `${clubId}|${playerId}`;
+    const agentId = asignando[claveSel];
+    if (!agentId) return;
+    setGuardandoAsignacion(claveSel);
+    try {
+      await api.asignarAgenteImportado({ playerExternalId: playerId, clubId, agentId, reason: "Asignado manualmente desde el importador de cierres." });
+      await analizar(); // recalcula todo con la asignación ya guardada
+    } catch (err: any) {
+      alert(err.message || "No se pudo guardar la asignación.");
+    } finally {
+      setGuardandoAsignacion(null);
+    }
+  }
+
+  function toggleIncluded(key: string) {
+    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, included: !f.included } : f)));
+  }
+
+  async function previsualizarTodo() {
+    setPrevisualizandoTodo(true);
+    setResumenAplicacion(null);
+    setFilas((fs) => fs.map((f) => (f.included ? { ...f, previewLoading: true, previewError: null } : f)));
+    const incluidas = filas.filter((f) => f.included);
+    await Promise.all(
+      incluidas.map(async (f) => {
+        try {
+          const r = await api.previsualizarCierre({
+            agentId: f.agentId,
+            clubId: f.clubId,
+            weekStart,
+            weekEnd,
+            system: f.system,
+            result: f.resultado,
+            rakeTotal: f.rakeTotal,
+            rakebackPct: f.rakebackPct,
+            rebatePct: f.rebatePct,
+            observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
+          });
+          setFilas((fs) =>
+            fs.map((row) =>
+              row.key === f.key
+                ? {
+                    ...row,
+                    previewLoading: false,
+                    previewResult: r,
+                    previewError: r.alreadyApplied ? "Ya existe un cierre aplicado para esta semana — no se va a duplicar." : null,
+                  }
+                : row
+            )
+          );
+        } catch (err: any) {
+          setFilas((fs) =>
+            fs.map((row) => (row.key === f.key ? { ...row, previewLoading: false, previewError: err.message || "No se pudo calcular." } : row))
+          );
+        }
+      })
+    );
+    setPrevisualizandoTodo(false);
+  }
+
+  const incluidas = filas.filter((f) => f.included);
+  const todasPrevisualizadas = incluidas.length > 0 && incluidas.every((f) => f.previewResult && !f.previewError);
+  const totalCierreFinal = incluidas.reduce((sum, f) => sum + Number(f.previewResult?.calc?.finalClosing ?? 0), 0);
+
+  async function aplicarTodo() {
+    setAplicandoTodo(true);
+    let ok = 0;
+    let yaAplicados = 0;
+    let errores = 0;
+    for (const f of incluidas) {
+      setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: true } : row)));
+      try {
+        const r = await api.aplicarCierre({
+          agentId: f.agentId,
+          clubId: f.clubId,
+          weekStart,
+          weekEnd,
+          system: f.system,
+          result: f.resultado,
+          rakeTotal: f.rakeTotal,
+          rakebackPct: f.rakebackPct,
+          rebatePct: f.rebatePct,
+          observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
+        });
+        if (r.alreadyApplied) yaAplicados++; else ok++;
+        setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
+      } catch (err: any) {
+        errores++;
+        setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyError: err.message || "Error al aplicar." } : row)));
+      }
+    }
+    setAplicandoTodo(false);
+    setResumenAplicacion(
+      `Listo: ${ok} cierre(s) aplicados, ${yaAplicados} ya existían (no se duplicaron), ${errores} con error.`
+    );
+    onDone();
+  }
+
+  return (
+    <div className="panel">
+      <h3>Importar cierre desde archivo</h3>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Hoy soporta el formato SupremaPoker (hojas Fénix / TeamBack, una fila por jugador). El % de rakeback/rebate de cada
+        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. Vinculá cada club a
+        su nombre de hoja en Clubes → Configurar → "Hoja de importación" antes de usar esto.
+      </div>
+
+      <div className="form-grid">
+        <div className="field">
+          <label>Archivo (.xlsx)</label>
+          <input type="file" accept=".xlsx" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setFilas([]); setAnalisisError(null); }} />
+        </div>
+        <div className="field">
+          <label>Semana desde</label>
+          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Semana hasta</label>
+          <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
+        </div>
+      </div>
+      <button className="btn secondary" disabled={analizando} onClick={analizar}>
+        {analizando ? "Analizando..." : "Analizar archivo"}
+      </button>
+
+      {analisisError && <div className="error" style={{ marginTop: 12 }}>⚠ {analisisError}</div>}
+
+      {hojasNoReconocidas.length > 0 && (
+        <div className="error" style={{ marginTop: 12 }}>
+          {hojasNoReconocidas.map((h) => (
+            <div key={h.sheetName}>⚠ Hoja "{h.sheetName}": {h.motivo}</div>
+          ))}
+        </div>
+      )}
+
+      {sinAgentePorClub.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h4>Jugadores sin agente asignado</h4>
+          {sinAgentePorClub.map((grupo) => (
+            <div key={grupo.clubId} style={{ marginBottom: 14 }}>
+              <div className="muted">{grupo.clubName}</div>
+              <table>
+                <thead><tr><th>Jugador</th><th>Agente en el archivo</th><th>Resultado</th><th>Rake</th><th>Asignar a</th><th></th></tr></thead>
+                <tbody>
+                  {grupo.items.map((it: any) => {
+                    const claveSel = `${grupo.clubId}|${it.playerId}`;
+                    return (
+                      <tr key={it.playerId}>
+                        <td>{it.playerName} <span className="muted">#{it.playerId}</span></td>
+                        <td>{it.agentNameRaw ?? <span className="muted">(vacío)</span>}</td>
+                        <td>{usd(it.resultado)}</td>
+                        <td>{usd(it.rake)}</td>
+                        <td>
+                          <select value={asignando[claveSel] ?? ""} onChange={(e) => setAsignando((s) => ({ ...s, [claveSel]: e.target.value }))}>
+                            <option value="">Elegir agente...</option>
+                            {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <button
+                            className="btn secondary small"
+                            disabled={!asignando[claveSel] || guardandoAsignacion === claveSel}
+                            onClick={() => asignarJugador(grupo.clubId, it.playerId)}
+                          >
+                            {guardandoAsignacion === claveSel ? "..." : "Asignar"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {filas.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h4 style={{ margin: 0 }}>Cierres a aplicar ({incluidas.length} de {filas.length})</h4>
+            <button className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
+              {previsualizandoTodo ? "Calculando..." : "Calcular vista previa de todos"}
+            </button>
+          </div>
+          <table style={{ marginTop: 10 }}>
+            <thead>
+              <tr>
+                <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
+                <th>% Rakeback</th><th>Config</th><th>Cierre final (vista previa)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr key={f.key} style={!f.included ? { opacity: 0.5 } : undefined}>
+                  <td><input type="checkbox" checked={f.included} onChange={() => toggleIncluded(f.key)} /></td>
+                  <td>{f.clubName}</td>
+                  <td>{f.agentName}</td>
+                  <td>{f.jugadores}</td>
+                  <td>{usd(f.resultado)}</td>
+                  <td>{usd(f.rakeTotal)}</td>
+                  <td>{(f.rakebackPct * 100).toFixed(1)}%</td>
+                  <td>
+                    {f.configSource === "deal" ? <span className="badge pos">Deal agente</span> : <span className="badge neutral">Default club</span>}
+                  </td>
+                  <td>
+                    {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}
+                    {f.applyResult && !f.applyResult.alreadyApplied && <span className="badge pos">Aplicado: {usd(f.applyResult.calc?.finalClosing)}</span>}
+                    {!f.applyResult && f.previewLoading && "..."}
+                    {!f.applyResult && f.previewError && <span className="error">⚠ {f.previewError}</span>}
+                    {!f.applyResult && !f.previewError && f.previewResult && (
+                      <strong style={{ color: Number(f.previewResult.calc?.finalClosing) >= 0 ? "var(--green)" : "var(--red)" }}>
+                        {usd(f.previewResult.calc?.finalClosing)}
+                        {f.previewResult.calc?.ruleApplied && <> · {f.previewResult.calc.ruleApplied}</>}
+                      </strong>
+                    )}
+                    {f.applyError && <div className="error">⚠ {f.applyError}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {todasPrevisualizadas && (
+            <div className="muted" style={{ marginTop: 10 }}>
+              Total a acreditar/cobrar en estos {incluidas.length} cierres: <strong>{usd(totalCierreFinal)}</strong>
+            </div>
+          )}
+
+          {resumenAplicacion && <div className="success" style={{ marginTop: 10 }}>{resumenAplicacion}</div>}
+
+          <button
+            className="btn"
+            style={{ marginTop: 12 }}
+            disabled={!todasPrevisualizadas || aplicandoTodo}
+            title={!todasPrevisualizadas ? "Calculá la vista previa de todos los cierres primero" : undefined}
+            onClick={aplicarTodo}
+          >
+            {aplicandoTodo ? "Aplicando..." : `Aplicar ${incluidas.length} cierre(s)`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

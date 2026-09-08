@@ -620,6 +620,7 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   const [platformPct, setPlatformPct] = useState(club.platform_pct != null ? String(Number(club.platform_pct) * 100) : "");
   const [unionPct, setUnionPct] = useState(club.union_pct != null ? String(Number(club.union_pct) * 100) : "");
   const [notes, setNotes] = useState(club.notes ?? "");
+  const [importSource, setImportSource] = useState(club.import_source ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -638,6 +639,7 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         platformPct: platformPct === "" ? undefined : Number(platformPct) / 100,
         unionPct: unionPct === "" ? undefined : Number(unionPct) / 100,
         notes: notes.trim() || null,
+        importSource: importSource.trim() || null,
       });
       onSaved();
     } catch (err: any) {
@@ -695,6 +697,14 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
           <label>% Unión</label>
           <input value={unionPct} onChange={(e) => setUnionPct(e.target.value)} type="number" step="0.01" />
         </div>
+      </div>
+      <div className="field">
+        <label>Hoja de importación (para "Importar archivo" en Cierres)</label>
+        <input
+          value={importSource}
+          onChange={(e) => setImportSource(e.target.value)}
+          placeholder='Ej: "Fenix", "tb" — el nombre exacto de la hoja del .xlsx semanal'
+        />
       </div>
       <div className="field">
         <label>Notas (opcional)</label>

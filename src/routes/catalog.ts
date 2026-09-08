@@ -82,6 +82,9 @@ const clubConfigSchema = z.object({
   unionPct: z.number().min(0).max(1).optional(),
   active: z.boolean().optional(),
   notes: z.string().nullable().optional(),
+  // Nombre de hoja (.xlsx) que usa este club en el archivo semanal — ej. "Fenix", "tb".
+  // Lo usa el importador para saber a qué club corresponde cada pestaña del archivo.
+  importSource: z.string().nullable().optional(),
 });
 catalogRouter.patch("/clubs/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = clubConfigSchema.safeParse(req.body);
@@ -163,6 +166,10 @@ const agentEditSchema = z.object({
   defaultSystem: z.enum(["PREPAGO", "WIN_LOSE"]).optional(),
   supervisor: z.string().nullable().optional(),
   accountType: z.enum(ACCOUNT_TYPES).optional(),
+  // ID del agente en la plataforma de origen (ej. "Agent ID" del reporte Suprema) — permite
+  // que el importador lo reconozca aunque el nombre venga distinto. Se completa solo la
+  // primera vez que matchea por nombre, pero también se puede corregir a mano acá.
+  externalId: z.string().nullable().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -173,6 +180,7 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       defaultSystem: parsed.data.defaultSystem,
       supervisor: parsed.data.supervisor === undefined ? undefined : parsed.data.supervisor?.trim() || null,
       accountType: parsed.data.accountType,
+      externalId: parsed.data.externalId === undefined ? undefined : parsed.data.externalId?.trim() || null,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);

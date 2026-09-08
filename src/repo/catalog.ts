@@ -31,6 +31,9 @@ export async function updateClubConfig(
     unionPct?: number;
     active?: boolean;
     notes?: string | null;
+    /** Nombre de hoja (.xlsx) que el importador de cierres asocia a este club — ej. "Fenix",
+     * "tb". Sin esto el importador no sabe a qué club corresponde cada hoja del archivo. */
+    importSource?: string | null;
   }
 ) {
   const sets: string[] = [];
@@ -48,6 +51,7 @@ export async function updateClubConfig(
     union_pct: fields.unionPct,
     active: fields.active,
     notes: fields.notes,
+    import_source: fields.importSource,
   };
   for (const [col, val] of Object.entries(map)) {
     if (val !== undefined) {
@@ -197,6 +201,9 @@ export async function updateAgent(
     supervisor?: string | null;
     active?: boolean;
     accountType?: AccountType;
+    /** ID del agente en la plataforma de origen (ej. "Agent ID" del reporte Suprema). Permite
+     * que el importador lo reconozca aunque el nombre cambie o venga con espacios distintos. */
+    externalId?: string | null;
   }
 ) {
   const sets: string[] = [];
@@ -207,6 +214,7 @@ export async function updateAgent(
   if (fields.supervisor !== undefined) { sets.push(`supervisor = $${i++}`); values.push(fields.supervisor); }
   if (fields.active !== undefined) { sets.push(`active = $${i++}`); values.push(fields.active); }
   if (fields.accountType !== undefined) { sets.push(`account_type = $${i++}`); values.push(fields.accountType); }
+  if (fields.externalId !== undefined) { sets.push(`external_id = $${i++}`); values.push(fields.externalId); }
   if (sets.length === 0) {
     const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
     return r.rows[0] ?? null;
@@ -262,6 +270,38 @@ export async function upsertDeal(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Resuelve qué % de rakeback/rebate y qué sistema le corresponde a un agente en un club,
+ * a una fecha dada — usado por el importador (BIT-nueva: "usar la configuración del sistema,
+ * no que el archivo traiga su propio %"). Prioridad: deal vigente agente↔club > default del
+ * club + sistema por defecto del agente. Nunca inventa un % — si no hay deal ni default
+ * configurado, devuelve 0 y lo marca (source) para que la UI pueda avisar.
+ */
+export async function resolverConfigVigente(agentId: string, clubId: string, atDate: string | Date = new Date()) {
+  const dealRes = await pool.query(
+    `SELECT system, rakeback_pct, rebate_pct FROM agent_club_deals
+     WHERE agent_id = $1 AND club_id = $2 AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+     ORDER BY valid_from DESC LIMIT 1`,
+    [agentId, clubId, atDate]
+  );
+  if (dealRes.rows[0]) {
+    return {
+      system: dealRes.rows[0].system as "PREPAGO" | "WIN_LOSE",
+      rakebackPct: Number(dealRes.rows[0].rakeback_pct),
+      rebatePct: Number(dealRes.rows[0].rebate_pct),
+      source: "deal" as const,
+    };
+  }
+  const clubRes = await pool.query(`SELECT default_rakeback_pct, default_rebate_pct FROM clubs WHERE id = $1`, [clubId]);
+  const agentRes = await pool.query(`SELECT default_system FROM agents WHERE id = $1`, [agentId]);
+  return {
+    system: (agentRes.rows[0]?.default_system as "PREPAGO" | "WIN_LOSE") ?? "WIN_LOSE",
+    rakebackPct: Number(clubRes.rows[0]?.default_rakeback_pct ?? 0),
+    rebatePct: Number(clubRes.rows[0]?.default_rebate_pct ?? 0),
+    source: "default_club" as const,
+  };
 }
 
 export async function listDealsForAgent(agentId: string) {

@@ -23,6 +23,23 @@ async function request(path: string, opts: RequestInit = {}) {
   return res.json();
 }
 
+// Igual que request(), pero sin forzar Content-Type: application/json — lo necesita el
+// importador de cierres, que sube un archivo como multipart/form-data (el browser arma el
+// boundary del Content-Type solo; si lo pisáramos con json el multer del backend no lo lee).
+async function requestForm(path: string, form: FormData) {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
+  }
+  return res.json();
+}
+
 function idempotencyKey() {
   return `web_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -83,6 +100,7 @@ export const api = {
       unionPct?: number;
       active?: boolean;
       notes?: string | null;
+      importSource?: string | null;
     }
   ) => request(`/catalog/clubs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string; accountType?: AccountType }) =>
@@ -159,6 +177,21 @@ export const api = {
     rebatePct?: number;
     observation?: string;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
+
+  // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,
+  // hojas Fénix/TeamBack) y arma la previa por agente usando SIEMPRE la configuración de
+  // rakeback/rebate ya cargada en el sistema — el archivo nunca trae su propio %. No aplica
+  // nada; el frontend reutiliza previsualizarCierre/aplicarCierre fila por fila después.
+  previsualizarImportacion: (file: File, weekEnd?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (weekEnd) form.append("weekEnd", weekEnd);
+    return requestForm("/imports/suprema/preview", form);
+  },
+  // Asigna a mano un jugador que vino sin agente en el archivo (Agent Name vacío o agente no
+  // reconocido) — queda guardado para siempre, así no vuelve a aparecer pendiente otra semana.
+  asignarAgenteImportado: (data: { playerExternalId: string; clubId: string; agentId: string; reason?: string }) =>
+    request("/imports/suprema/asignar-agente", { method: "POST", body: JSON.stringify(data) }),
 
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),
