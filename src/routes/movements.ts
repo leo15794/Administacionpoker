@@ -64,6 +64,21 @@ movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, r
   }
 });
 
+// Vista previa: corre EXACTAMENTE la misma lógica (idempotencia, reglas especiales, supervisor,
+// memoria de bancado) pero nunca escribe nada (aplicarCierreSemanal hace ROLLBACK al final si
+// preview=true). Así el formulario puede mostrar el número real y bloquear antes de aplicar,
+// sin arriesgarse a que la vista previa muestre algo distinto de lo que después se aplicaría.
+movementsRouter.post("/cierre-semanal/preview", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = closingSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await aplicarCierreSemanal({ ...parsed.data, preview: true });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Revierte un cierre semanal cargado por error. LEDGER INMUTABLE: no lo borra — revierte su
 // efecto en el saldo y marca REVERTIDO tanto el movimiento del ledger como la fila de
 // weekly_closings (ver revertirCierreSemanal), dejando todo visible en el historial.

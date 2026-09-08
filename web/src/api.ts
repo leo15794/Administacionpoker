@@ -145,6 +145,20 @@ export const api = {
     rebatePct?: number;
     observation?: string;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
+  // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
+  // memoria de bancado) pero nunca escribe nada — para mostrar el número real antes de aplicar.
+  previsualizarCierre: (data: {
+    agentId: string;
+    clubId: string;
+    weekStart: string;
+    weekEnd: string;
+    system: "PREPAGO" | "WIN_LOSE";
+    result: number;
+    rakeTotal: number;
+    rakebackPct: number;
+    rebatePct?: number;
+    observation?: string;
+  }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),

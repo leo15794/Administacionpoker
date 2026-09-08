@@ -32,6 +32,11 @@ export interface AplicarCierreInput {
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
   specialRule?: SpecialRule | null;
   observation?: string | null;
+  /** Si es true, corre EXACTAMENTE la misma lógica (incluye validar supervisor, resolver
+   * reglas especiales, calcular memoria de bancado) pero al final hace ROLLBACK en vez de
+   * COMMIT: no se escribe nada. Así la vista previa del formulario de Cierres nunca puede
+   * mostrar un número distinto al que realmente se aplicaría. */
+  preview?: boolean;
 }
 
 /**
@@ -56,14 +61,14 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     );
     if (existing.rows.length > 0) {
       await client.query("ROLLBACK");
-      return { id: existing.rows[0].id, alreadyApplied: true };
+      return { id: existing.rows[0].id, alreadyApplied: true, preview: input.preview ?? false };
     }
 
     const agentRes = await client.query(`SELECT account_type FROM agents WHERE id = $1`, [input.agentId]);
     if (agentRes.rows[0]?.account_type === "BANCADO") {
       const result = await aplicarCierreBancadoTx(client, input);
-      await client.query("COMMIT");
-      return result;
+      await client.query(input.preview ? "ROLLBACK" : "COMMIT");
+      return { ...result, preview: input.preview ?? false };
     }
 
     // Motor de reglas configurable: la regla especial (si el agente tiene una vigente para
@@ -210,8 +215,15 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       [newId("bal"), input.agentId, input.clubId, montoAgente]
     );
 
-    await client.query("COMMIT");
-    return { id, alreadyApplied: false, calc: { ...calc, finalClosing: montoAgente }, supervisorAgentId, montoSupervisor };
+    await client.query(input.preview ? "ROLLBACK" : "COMMIT");
+    return {
+      id,
+      alreadyApplied: false,
+      calc: { ...calc, finalClosing: montoAgente },
+      supervisorAgentId,
+      montoSupervisor,
+      preview: input.preview ?? false,
+    };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
