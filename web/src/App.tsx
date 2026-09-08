@@ -8,6 +8,7 @@ import Cierres from "./pages/Cierres";
 import Usuarios from "./pages/Usuarios";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
+import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import { api } from "./api";
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="movimientos" element={<Movimientos />} />
           <Route path="cierres" element={<Cierres />} />
           <Route path="tesoreria" element={<Tesoreria />} />
+          <Route path="wallet" element={<Wallet />} />
           <Route path="garantias" element={<Garantias />} />
           <Route path="usuarios" element={<Usuarios />} />
         </Route>

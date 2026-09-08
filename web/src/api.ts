@@ -42,7 +42,8 @@ export const api = {
     const q = qs.toString();
     return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
   },
-  tesoreria: () => request("/dashboard/tesoreria"),
+  tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" } = {}) =>
+    request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
   eliminarMovimiento: (id: string) => request(`/movements/${id}`, { method: "DELETE" }),
   ajustarTesoreria: (data: {
     ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";

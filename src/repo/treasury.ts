@@ -8,6 +8,7 @@ export interface NewTreasuryAdjustment {
   reason: string;
   occurredAt?: Date;
   createdBy?: string | null;
+  idempotencyKey?: string | null; // solo la usan las importaciones masivas
 }
 
 // Ajuste manual de tesorería: para cuando entra o sale plata de la wallet/caja que NO
@@ -15,14 +16,21 @@ export interface NewTreasuryAdjustment {
 // A propósito NO toca balances ni ledger_movements: es un registro aparte que siempre
 // aparece marcado como "ajuste manual" en el historial de tesorería, nunca mezclado con
 // la proyección automática que generan los movimientos de agentes.
+//
+// Si viene idempotencyKey (lo usan los scripts de importación masiva) y ya existe una fila
+// con esa clave, es un no-op — así un import se puede volver a correr sin duplicar nada.
 export async function registrarAjusteTesoreria(input: NewTreasuryAdjustment) {
   if (input.ledger === "CAJA_EFECTIVO" && !input.custodian) {
     throw new Error("Un ajuste en efectivo requiere custodio.");
   }
+  if (input.idempotencyKey) {
+    const existing = await pool.query(`SELECT id FROM treasury_adjustments WHERE idempotency_key = $1`, [input.idempotencyKey]);
+    if (existing.rows.length > 0) return { id: existing.rows[0].id, alreadyApplied: true };
+  }
   const id = newId("tad");
   await pool.query(
-    `INSERT INTO treasury_adjustments (id, ledger, direction, amount, custodian, reason, occurred_at, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    `INSERT INTO treasury_adjustments (id, ledger, direction, amount, custodian, reason, occurred_at, created_by, idempotency_key)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       id,
       input.ledger,
@@ -32,9 +40,10 @@ export async function registrarAjusteTesoreria(input: NewTreasuryAdjustment) {
       input.reason,
       input.occurredAt ?? new Date(),
       input.createdBy ?? null,
+      input.idempotencyKey ?? null,
     ]
   );
-  return { id };
+  return { id, alreadyApplied: false };
 }
 
 export async function listTreasuryAdjustments(limit = 200) {

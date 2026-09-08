@@ -125,6 +125,13 @@ CREATE TABLE IF NOT EXISTS treasury_adjustments (
   created_by  TEXT
 );
 
+-- Clave idempotente opcional (solo la usan las importaciones masivas, ej. el historial real
+-- de Wallet Manos) — permite re-correr un import sin duplicar filas. Los ajustes manuales
+-- cargados a mano desde la pestaña de Wallet/Tesorería no la usan (quedan en NULL).
+ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS treasury_adjustments_idempotency_key_idx
+  ON treasury_adjustments (idempotency_key) WHERE idempotency_key IS NOT NULL;
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (

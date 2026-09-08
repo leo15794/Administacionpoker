@@ -1,0 +1,3849 @@
+{
+  "generadoEn": "2026-09-08",
+  "totalEsperado": 20838.432,
+  "movimientos": [
+    {
+      "idx": 3,
+      "fecha": "2025-12-27 00:00:00",
+      "concepto": "usdt Ger [fecha corregida: la planilla decía 2026, se interpretó como 2025 para que ordene antes de enero 2026]",
+      "direccion": "INGRESO",
+      "monto": 2500.0
+    },
+    {
+      "idx": 4,
+      "fecha": "2025-12-30 00:00:00",
+      "concepto": "usdt jjdd [fecha corregida: la planilla decía 2026, se interpretó como 2025 para que ordene antes de enero 2026]",
+      "direccion": "INGRESO",
+      "monto": 26.0
+    },
+    {
+      "idx": 5,
+      "fecha": "2026-01-02 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 6,
+      "fecha": "2026-01-03 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 7,
+      "fecha": "2026-01-04 00:00:00",
+      "concepto": "Fede GG",
+      "direccion": "EGRESO",
+      "monto": 403.8
+    },
+    {
+      "idx": 8,
+      "fecha": "2026-01-05 00:00:00",
+      "concepto": "Fede GG",
+      "direccion": "EGRESO",
+      "monto": 353.8
+    },
+    {
+      "idx": 9,
+      "fecha": "2026-01-06 00:00:00",
+      "concepto": "Pago Liga",
+      "direccion": "EGRESO",
+      "monto": 4768.0
+    },
+    {
+      "idx": 10,
+      "fecha": "2026-01-07 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 679.0
+    },
+    {
+      "idx": 11,
+      "fecha": "2026-01-08 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 12,
+      "fecha": "2026-01-09 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 13,
+      "fecha": "2026-01-12 00:00:00",
+      "concepto": "usdt Edwar",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 14,
+      "fecha": "2026-01-12 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 450.0
+    },
+    {
+      "idx": 15,
+      "fecha": "2026-01-14 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 16,
+      "fecha": "2026-01-14 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 17,
+      "fecha": "2026-01-16 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 442.0
+    },
+    {
+      "idx": 18,
+      "fecha": "2026-01-19 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 755.0
+    },
+    {
+      "idx": 19,
+      "fecha": "2026-01-21 00:00:00",
+      "concepto": "usdt Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 20,
+      "fecha": "2026-01-22 00:00:00",
+      "concepto": "intercambio TRX",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 21,
+      "fecha": "2026-01-22 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 22,
+      "fecha": "2026-01-22 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 23,
+      "fecha": "2026-01-24 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 24,
+      "fecha": "2026-01-24 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 25,
+      "fecha": "2026-01-25 00:00:00",
+      "concepto": "usdt Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1100.0
+    },
+    {
+      "idx": 26,
+      "fecha": "2026-01-25 00:00:00",
+      "concepto": "usdt Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 27,
+      "fecha": "2026-01-27 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 28,
+      "fecha": "2026-01-27 00:00:00",
+      "concepto": "Pago Liga",
+      "direccion": "EGRESO",
+      "monto": 5763.55
+    },
+    {
+      "idx": 29,
+      "fecha": "2026-02-03 00:00:00",
+      "concepto": "usdt Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1499.0
+    },
+    {
+      "idx": 30,
+      "fecha": "2026-02-04 00:00:00",
+      "concepto": "envio a juan",
+      "direccion": "EGRESO",
+      "monto": 2517.0
+    },
+    {
+      "idx": 31,
+      "fecha": "2026-02-04 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 1940.0
+    },
+    {
+      "idx": 32,
+      "fecha": "2026-02-16 00:00:00",
+      "concepto": "envio a chon",
+      "direccion": "EGRESO",
+      "monto": 1268.0
+    },
+    {
+      "idx": 33,
+      "fecha": "2026-02-16 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 34,
+      "fecha": "2026-02-16 00:00:00",
+      "concepto": "usdt ger",
+      "direccion": "INGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 35,
+      "fecha": "2026-02-17 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 36,
+      "fecha": "2026-02-18 00:00:00",
+      "concepto": "usdt ger",
+      "direccion": "INGRESO",
+      "monto": 1344.0
+    },
+    {
+      "idx": 37,
+      "fecha": "2026-02-19 00:00:00",
+      "concepto": "Retiro Uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 38,
+      "fecha": "2026-02-20 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1199.0
+    },
+    {
+      "idx": 39,
+      "fecha": "2026-02-21 00:00:00",
+      "concepto": "envio uriel",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 40,
+      "fecha": "2026-02-22 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1700.0
+    },
+    {
+      "idx": 41,
+      "fecha": "2026-02-23 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 560.0
+    },
+    {
+      "idx": 42,
+      "fecha": "2026-02-23 00:00:00",
+      "concepto": "envio a chon",
+      "direccion": "EGRESO",
+      "monto": 961.0
+    },
+    {
+      "idx": 43,
+      "fecha": "2026-02-23 00:00:00",
+      "concepto": "envio a chelo",
+      "direccion": "EGRESO",
+      "monto": 1325.0
+    },
+    {
+      "idx": 44,
+      "fecha": "2026-02-23 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 45,
+      "fecha": "2026-02-25 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 46,
+      "fecha": "2026-02-25 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 350.0
+    },
+    {
+      "idx": 47,
+      "fecha": "2026-02-26 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 48,
+      "fecha": "2026-02-27 00:00:00",
+      "concepto": "cambio a TRX",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 49,
+      "fecha": "2026-02-27 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 50,
+      "fecha": "2026-02-28 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1700.0
+    },
+    {
+      "idx": 51,
+      "fecha": "2026-02-28 00:00:00",
+      "concepto": "usdt Ger",
+      "direccion": "INGRESO",
+      "monto": 370.0
+    },
+    {
+      "idx": 52,
+      "fecha": "2026-03-01 00:00:00",
+      "concepto": "usdt ger",
+      "direccion": "INGRESO",
+      "monto": 60.0
+    },
+    {
+      "idx": 53,
+      "fecha": "2026-03-02 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 54,
+      "fecha": "2026-03-02 00:00:00",
+      "concepto": "chelo",
+      "direccion": "EGRESO",
+      "monto": 946.0
+    },
+    {
+      "idx": 55,
+      "fecha": "2026-03-02 00:00:00",
+      "concepto": "usdt blas",
+      "direccion": "INGRESO",
+      "monto": 4274.0
+    },
+    {
+      "idx": 56,
+      "fecha": "2026-03-03 00:00:00",
+      "concepto": "usdt roesca",
+      "direccion": "INGRESO",
+      "monto": 68.0
+    },
+    {
+      "idx": 57,
+      "fecha": "2026-03-03 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 58,
+      "fecha": "2026-03-04 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 59,
+      "fecha": "2026-03-04 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 250.0
+    },
+    {
+      "idx": 60,
+      "fecha": "2026-03-05 00:00:00",
+      "concepto": "usdt manu",
+      "direccion": "INGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 61,
+      "fecha": "2026-03-06 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 450.0
+    },
+    {
+      "idx": 62,
+      "fecha": "2026-03-06 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 63,
+      "fecha": "2026-03-06 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2200.0
+    },
+    {
+      "idx": 64,
+      "fecha": "2026-03-07 00:00:00",
+      "concepto": "usdt ger",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 65,
+      "fecha": "2026-03-08 00:00:00",
+      "concepto": "usdt a prodigio",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 66,
+      "fecha": "2026-03-09 00:00:00",
+      "concepto": "usdt a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1318.0
+    },
+    {
+      "idx": 67,
+      "fecha": "2026-03-09 00:00:00",
+      "concepto": "usdt a prodigio",
+      "direccion": "EGRESO",
+      "monto": 814.0
+    },
+    {
+      "idx": 68,
+      "fecha": "2026-03-09 00:00:00",
+      "concepto": "usdt a blas",
+      "direccion": "EGRESO",
+      "monto": 6000.0
+    },
+    {
+      "idx": 69,
+      "fecha": "2026-03-10 00:00:00",
+      "concepto": "usdt a uriel",
+      "direccion": "EGRESO",
+      "monto": 354.0
+    },
+    {
+      "idx": 70,
+      "fecha": "2026-03-10 00:00:00",
+      "concepto": "usdt Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2800.0
+    },
+    {
+      "idx": 71,
+      "fecha": "2026-03-10 00:00:00",
+      "concepto": "usdt de Juan",
+      "direccion": "INGRESO",
+      "monto": 328.0
+    },
+    {
+      "idx": 72,
+      "fecha": "2026-03-10 00:00:00",
+      "concepto": "Pago Liga",
+      "direccion": "EGRESO",
+      "monto": 3545.11
+    },
+    {
+      "idx": 73,
+      "fecha": "2026-03-11 00:00:00",
+      "concepto": "wallet juan",
+      "direccion": "INGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 74,
+      "fecha": "2026-03-11 00:00:00",
+      "concepto": "usdt a prodigio",
+      "direccion": "EGRESO",
+      "monto": 850.0
+    },
+    {
+      "idx": 75,
+      "fecha": "2026-03-14 00:00:00",
+      "concepto": "usdt juan",
+      "direccion": "INGRESO",
+      "monto": 4000.0
+    },
+    {
+      "idx": 76,
+      "fecha": "2026-03-14 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 77,
+      "fecha": "2026-03-15 00:00:00",
+      "concepto": "Envio a Prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 78,
+      "fecha": "2026-03-16 00:00:00",
+      "concepto": "cambio a TRX",
+      "direccion": "EGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 79,
+      "fecha": "2026-03-16 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 598.0
+    },
+    {
+      "idx": 80,
+      "fecha": "2026-03-16 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1275.0
+    },
+    {
+      "idx": 81,
+      "fecha": "2026-03-16 00:00:00",
+      "concepto": "usdt Lazarito",
+      "direccion": "INGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 82,
+      "fecha": "2026-03-16 00:00:00",
+      "concepto": "usdt de Manzur",
+      "direccion": "INGRESO",
+      "monto": 6415.45
+    },
+    {
+      "idx": 83,
+      "fecha": "2026-03-17 00:00:00",
+      "concepto": "Garantía inicial Unión TeamBack GG [RECLASIFICADO]",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 84,
+      "fecha": "2026-03-17 00:00:00",
+      "concepto": "Pago Liga",
+      "direccion": "EGRESO",
+      "monto": 1525.46
+    },
+    {
+      "idx": 85,
+      "fecha": "2026-03-17 00:00:00",
+      "concepto": "usdt Lazarito",
+      "direccion": "INGRESO",
+      "monto": 73.0
+    },
+    {
+      "idx": 86,
+      "fecha": "2026-03-17 00:00:00",
+      "concepto": "usdt a uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 87,
+      "fecha": "2026-03-18 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1650.0
+    },
+    {
+      "idx": 88,
+      "fecha": "2026-03-18 00:00:00",
+      "concepto": "usdt larazarito",
+      "direccion": "INGRESO",
+      "monto": 99.0
+    },
+    {
+      "idx": 89,
+      "fecha": "2026-03-19 00:00:00",
+      "concepto": "usdt German",
+      "direccion": "INGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 90,
+      "fecha": "2026-03-19 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 91,
+      "fecha": "2026-03-19 00:00:00",
+      "concepto": "usdt German",
+      "direccion": "INGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 92,
+      "fecha": "2026-03-19 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 170.0
+    },
+    {
+      "idx": 93,
+      "fecha": "2026-03-19 00:00:00",
+      "concepto": "usdt otti",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 94,
+      "fecha": "2026-03-20 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1100.0
+    },
+    {
+      "idx": 95,
+      "fecha": "2026-03-21 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2100.0
+    },
+    {
+      "idx": 96,
+      "fecha": "2026-03-22 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 350.0
+    },
+    {
+      "idx": 97,
+      "fecha": "2026-03-23 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 385.0
+    },
+    {
+      "idx": 98,
+      "fecha": "2026-03-23 00:00:00",
+      "concepto": "envio a uriel",
+      "direccion": "EGRESO",
+      "monto": 40.18
+    },
+    {
+      "idx": 99,
+      "fecha": "2026-03-24 00:00:00",
+      "concepto": "usdt rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2200.0
+    },
+    {
+      "idx": 100,
+      "fecha": "2026-03-24 00:00:00",
+      "concepto": "usdt chelo",
+      "direccion": "INGRESO",
+      "monto": 1999.0
+    },
+    {
+      "idx": 101,
+      "fecha": "2026-03-25 00:00:00",
+      "concepto": "Pago Liga",
+      "direccion": "EGRESO",
+      "monto": 4865.75
+    },
+    {
+      "idx": 102,
+      "fecha": "2026-03-25 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1078.13
+    },
+    {
+      "idx": 103,
+      "fecha": "2026-03-25 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 716.06
+    },
+    {
+      "idx": 104,
+      "fecha": "2026-03-25 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 952.0
+    },
+    {
+      "idx": 105,
+      "fecha": "2026-03-25 00:00:00",
+      "concepto": "usdt Manzur",
+      "direccion": "INGRESO",
+      "monto": 2191.61
+    },
+    {
+      "idx": 106,
+      "fecha": "2026-03-26 00:00:00",
+      "concepto": "usdt prodigio",
+      "direccion": "INGRESO",
+      "monto": 398.5
+    },
+    {
+      "idx": 107,
+      "fecha": "2026-03-26 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 108,
+      "fecha": "2026-03-26 00:00:00",
+      "concepto": "usdt jonnis",
+      "direccion": "INGRESO",
+      "monto": 260.0
+    },
+    {
+      "idx": 109,
+      "fecha": "2026-03-26 00:00:00",
+      "concepto": "usdt chelo",
+      "direccion": "INGRESO",
+      "monto": 7000.0
+    },
+    {
+      "idx": 110,
+      "fecha": "2026-03-27 00:00:00",
+      "concepto": "usdt German",
+      "direccion": "INGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 111,
+      "fecha": "2026-03-28 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 112,
+      "fecha": "2026-03-28 00:00:00",
+      "concepto": "usdt kvothel",
+      "direccion": "INGRESO",
+      "monto": 240.0
+    },
+    {
+      "idx": 113,
+      "fecha": "2026-03-29 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 114,
+      "fecha": "1907-12-12 00:00:00",
+      "concepto": "usdt uriel",
+      "direccion": "INGRESO",
+      "monto": 299.0
+    },
+    {
+      "idx": 115,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1653.0
+    },
+    {
+      "idx": 116,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 476.0
+    },
+    {
+      "idx": 117,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "liga tnt",
+      "direccion": "EGRESO",
+      "monto": 1352.0
+    },
+    {
+      "idx": 118,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "strenger",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 119,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "usdt blas",
+      "direccion": "INGRESO",
+      "monto": 2599.0
+    },
+    {
+      "idx": 120,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "chon",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 121,
+      "fecha": "2026-03-30 00:00:00",
+      "concepto": "chelo",
+      "direccion": "EGRESO",
+      "monto": 4052.0
+    },
+    {
+      "idx": 122,
+      "fecha": "2026-03-31 00:00:00",
+      "concepto": "jesus",
+      "direccion": "INGRESO",
+      "monto": 150.5
+    },
+    {
+      "idx": 123,
+      "fecha": "2026-03-31 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 495.0
+    },
+    {
+      "idx": 124,
+      "fecha": "2026-03-31 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 398.5
+    },
+    {
+      "idx": 125,
+      "fecha": "2026-03-31 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 598.5
+    },
+    {
+      "idx": 126,
+      "fecha": "2026-03-31 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 76.5
+    },
+    {
+      "idx": 127,
+      "fecha": "2026-04-01 00:00:00",
+      "concepto": "esdt german",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 128,
+      "fecha": "2026-04-01 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 498.5
+    },
+    {
+      "idx": 129,
+      "fecha": "2026-04-02 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 130,
+      "fecha": "2026-04-02 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 131,
+      "fecha": "2026-04-02 00:00:00",
+      "concepto": "uriel",
+      "direccion": "INGRESO",
+      "monto": 2001.0
+    },
+    {
+      "idx": 132,
+      "fecha": "2026-04-02 00:00:00",
+      "concepto": "uriel",
+      "direccion": "INGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 133,
+      "fecha": "2026-04-03 00:00:00",
+      "concepto": "uriel",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 134,
+      "fecha": "2026-04-03 00:00:00",
+      "concepto": "cambio a TRX",
+      "direccion": "EGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 135,
+      "fecha": "2026-04-04 00:00:00",
+      "concepto": "lazarito",
+      "direccion": "INGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 136,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "Liga TeamBack GG",
+      "direccion": "EGRESO",
+      "monto": 358.23
+    },
+    {
+      "idx": 137,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "usdt German",
+      "direccion": "INGRESO",
+      "monto": 1014.0
+    },
+    {
+      "idx": 138,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 924.0
+    },
+    {
+      "idx": 139,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "envio a chelo",
+      "direccion": "EGRESO",
+      "monto": 461.0
+    },
+    {
+      "idx": 140,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "caiman",
+      "direccion": "INGRESO",
+      "monto": 338.0
+    },
+    {
+      "idx": 141,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "erc20 de blas a Fede",
+      "direccion": "INGRESO",
+      "monto": 2737.0
+    },
+    {
+      "idx": 142,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "envia fede a sixto",
+      "direccion": "EGRESO",
+      "monto": 2737.0
+    },
+    {
+      "idx": 143,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "envio a prodigio",
+      "direccion": "EGRESO",
+      "monto": 1423.0
+    },
+    {
+      "idx": 144,
+      "fecha": "2026-04-06 00:00:00",
+      "concepto": "Mazy",
+      "direccion": "INGRESO",
+      "monto": 1999.0
+    },
+    {
+      "idx": 145,
+      "fecha": "2026-04-07 00:00:00",
+      "concepto": "Uriel",
+      "direccion": "EGRESO",
+      "monto": 350.65
+    },
+    {
+      "idx": 146,
+      "fecha": "2026-04-07 00:00:00",
+      "concepto": "sixto",
+      "direccion": "INGRESO",
+      "monto": 399.5
+    },
+    {
+      "idx": 147,
+      "fecha": "2026-04-07 00:00:00",
+      "concepto": "mar mari",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 148,
+      "fecha": "2026-04-07 00:00:00",
+      "concepto": "Mazy",
+      "direccion": "INGRESO",
+      "monto": 11999.0
+    },
+    {
+      "idx": 149,
+      "fecha": "2026-04-08 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 650.0
+    },
+    {
+      "idx": 150,
+      "fecha": "2026-04-08 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 151,
+      "fecha": "2026-04-09 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 560.0
+    },
+    {
+      "idx": 152,
+      "fecha": "2026-04-09 00:00:00",
+      "concepto": "sixto",
+      "direccion": "INGRESO",
+      "monto": 498.5
+    },
+    {
+      "idx": 153,
+      "fecha": "2026-04-09 00:00:00",
+      "concepto": "sixto",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 154,
+      "fecha": "2026-04-10 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 595.0
+    },
+    {
+      "idx": 155,
+      "fecha": "2026-04-10 00:00:00",
+      "concepto": "lazarito",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 156,
+      "fecha": "2026-04-11 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "INGRESO",
+      "monto": 215.27
+    },
+    {
+      "idx": 157,
+      "fecha": "2026-04-12 00:00:00",
+      "concepto": "Mazy",
+      "direccion": "INGRESO",
+      "monto": 4000.0
+    },
+    {
+      "idx": 158,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1900.0
+    },
+    {
+      "idx": 159,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 900.0
+    },
+    {
+      "idx": 160,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 161,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 162,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "agus",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 163,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "agus",
+      "direccion": "EGRESO",
+      "monto": 270.0
+    },
+    {
+      "idx": 164,
+      "fecha": "2026-04-13 00:00:00",
+      "concepto": "manuvolador",
+      "direccion": "EGRESO",
+      "monto": 1163.0
+    },
+    {
+      "idx": 165,
+      "fecha": "2026-04-14 00:00:00",
+      "concepto": "Blas",
+      "direccion": "EGRESO",
+      "monto": 2954.61
+    },
+    {
+      "idx": 166,
+      "fecha": "2026-04-14 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 498.5
+    },
+    {
+      "idx": 167,
+      "fecha": "2026-04-14 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 168,
+      "fecha": "2026-04-15 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 169,
+      "fecha": "2026-04-15 00:00:00",
+      "concepto": "lazarito",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 170,
+      "fecha": "2026-04-15 00:00:00",
+      "concepto": "cruce manzur",
+      "direccion": "EGRESO",
+      "monto": 2216.0
+    },
+    {
+      "idx": 171,
+      "fecha": "2026-04-15 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 377.0
+    },
+    {
+      "idx": 172,
+      "fecha": "2026-04-16 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1644.7
+    },
+    {
+      "idx": 173,
+      "fecha": "2026-04-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 174,
+      "fecha": "2026-04-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 175,
+      "fecha": "2026-04-17 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 540.0
+    },
+    {
+      "idx": 176,
+      "fecha": "2026-04-18 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 177,
+      "fecha": "2026-04-19 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 178,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 1164.0
+    },
+    {
+      "idx": 179,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1095.9
+    },
+    {
+      "idx": 180,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 181,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 2658.0
+    },
+    {
+      "idx": 182,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 592.2
+    },
+    {
+      "idx": 183,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "blas",
+      "direccion": "EGRESO",
+      "monto": 2919.0
+    },
+    {
+      "idx": 184,
+      "fecha": "2026-04-20 00:00:00",
+      "concepto": "prueba wallet",
+      "direccion": "EGRESO",
+      "monto": 20.0
+    },
+    {
+      "idx": 185,
+      "fecha": "2026-04-21 00:00:00",
+      "concepto": "envio de Juan",
+      "direccion": "INGRESO",
+      "monto": 4000.0
+    },
+    {
+      "idx": 186,
+      "fecha": "2026-04-21 00:00:00",
+      "concepto": "cambio a TRX",
+      "direccion": "EGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 187,
+      "fecha": "2026-04-21 00:00:00",
+      "concepto": "suprema",
+      "direccion": "EGRESO",
+      "monto": 1616.82
+    },
+    {
+      "idx": 188,
+      "fecha": "2026-04-22 00:00:00",
+      "concepto": "envio de Manzur",
+      "direccion": "INGRESO",
+      "monto": 6234.94
+    },
+    {
+      "idx": 189,
+      "fecha": "2026-04-23 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 460.0
+    },
+    {
+      "idx": 190,
+      "fecha": "2026-04-24 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 191,
+      "fecha": "2026-04-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 192,
+      "fecha": "2026-04-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 193,
+      "fecha": "2026-04-27 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 194,
+      "fecha": "2026-04-27 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 195,
+      "fecha": "2026-04-27 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 196,
+      "fecha": "2026-04-27 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 256.0
+    },
+    {
+      "idx": 197,
+      "fecha": "2026-04-28 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 1800.0
+    },
+    {
+      "idx": 198,
+      "fecha": "2026-04-29 00:00:00",
+      "concepto": "suprema",
+      "direccion": "EGRESO",
+      "monto": 4544.31
+    },
+    {
+      "idx": 199,
+      "fecha": "2026-04-29 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 200,
+      "fecha": "2026-04-29 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 276.8
+    },
+    {
+      "idx": 201,
+      "fecha": "2026-04-30 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 635.0
+    },
+    {
+      "idx": 202,
+      "fecha": "2026-04-30 00:00:00",
+      "concepto": "blas",
+      "direccion": "EGRESO",
+      "monto": 163.0
+    },
+    {
+      "idx": 203,
+      "fecha": "2026-04-30 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 204,
+      "fecha": "2026-05-01 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2200.0
+    },
+    {
+      "idx": 205,
+      "fecha": "2026-05-01 00:00:00",
+      "concepto": "lazarito",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 206,
+      "fecha": "2026-05-01 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 320.0
+    },
+    {
+      "idx": 207,
+      "fecha": "2026-05-01 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 208,
+      "fecha": "2026-05-04 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 209,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "liga tmt",
+      "direccion": "INGRESO",
+      "monto": 2576.84
+    },
+    {
+      "idx": 210,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1837.0
+    },
+    {
+      "idx": 211,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 212,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 250.0
+    },
+    {
+      "idx": 213,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "blas",
+      "direccion": "INGRESO",
+      "monto": 4888.0
+    },
+    {
+      "idx": 214,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "juan",
+      "direccion": "EGRESO",
+      "monto": 1.0
+    },
+    {
+      "idx": 215,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "intercambio trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 216,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1048.0
+    },
+    {
+      "idx": 217,
+      "fecha": "2026-05-05 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 2869.0
+    },
+    {
+      "idx": 218,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "manzur",
+      "direccion": "INGRESO",
+      "monto": 9999.0
+    },
+    {
+      "idx": 219,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "suprema",
+      "direccion": "EGRESO",
+      "monto": 3929.77
+    },
+    {
+      "idx": 220,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 221,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "uriel",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 222,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "gaston",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 223,
+      "fecha": "2026-05-06 00:00:00",
+      "concepto": "uriel",
+      "direccion": "INGRESO",
+      "monto": 2540.0
+    },
+    {
+      "idx": 224,
+      "fecha": "2026-05-07 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "INGRESO",
+      "monto": 2479.0
+    },
+    {
+      "idx": 225,
+      "fecha": "2026-05-08 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 226,
+      "fecha": "2026-05-08 00:00:00",
+      "concepto": "Juan",
+      "direccion": "EGRESO",
+      "monto": 6041.0
+    },
+    {
+      "idx": 227,
+      "fecha": "2026-05-08 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 228,
+      "fecha": "2026-05-08 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 229,
+      "fecha": "2026-05-08 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 392.0
+    },
+    {
+      "idx": 230,
+      "fecha": "2026-05-09 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 231,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1887.0
+    },
+    {
+      "idx": 232,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 650.0
+    },
+    {
+      "idx": 233,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "maxi",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 234,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 235,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 1700.0
+    },
+    {
+      "idx": 236,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 700.5
+    },
+    {
+      "idx": 237,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "chaboncito",
+      "direccion": "INGRESO",
+      "monto": 220.57
+    },
+    {
+      "idx": 238,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 239,
+      "fecha": "2026-05-11 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 572.0
+    },
+    {
+      "idx": 240,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 241,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "liga tmt",
+      "direccion": "INGRESO",
+      "monto": 650.27
+    },
+    {
+      "idx": 242,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "mar mari",
+      "direccion": "INGRESO",
+      "monto": 98.8
+    },
+    {
+      "idx": 243,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "mar mari",
+      "direccion": "INGRESO",
+      "monto": 1077.8
+    },
+    {
+      "idx": 244,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "lazarito",
+      "direccion": "EGRESO",
+      "monto": 48.3
+    },
+    {
+      "idx": 245,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "German",
+      "direccion": "INGRESO",
+      "monto": 67.0
+    },
+    {
+      "idx": 246,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "rodrigo",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 247,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "suprema",
+      "direccion": "EGRESO",
+      "monto": 3744.33
+    },
+    {
+      "idx": 248,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 11998.8
+    },
+    {
+      "idx": 249,
+      "fecha": "2026-05-12 00:00:00",
+      "concepto": "intercambio trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 250,
+      "fecha": "2026-05-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 800.4
+    },
+    {
+      "idx": 251,
+      "fecha": "2026-05-13 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 252,
+      "fecha": "2026-05-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 498.7
+    },
+    {
+      "idx": 253,
+      "fecha": "2026-05-14 00:00:00",
+      "concepto": "liga tmt",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 254,
+      "fecha": "2026-05-15 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 255,
+      "fecha": "2026-05-15 00:00:00",
+      "concepto": "Juan",
+      "direccion": "EGRESO",
+      "monto": 2570.0
+    },
+    {
+      "idx": 256,
+      "fecha": "2026-05-15 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 9998.7
+    },
+    {
+      "idx": 257,
+      "fecha": "2026-05-16 00:00:00",
+      "concepto": "Union tmt",
+      "direccion": "INGRESO",
+      "monto": 1922.79
+    },
+    {
+      "idx": 258,
+      "fecha": "2026-05-16 00:00:00",
+      "concepto": "kvothel uriel",
+      "direccion": "EGRESO",
+      "monto": 789.0
+    },
+    {
+      "idx": 259,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "gaston",
+      "direccion": "EGRESO",
+      "monto": 1915.0
+    },
+    {
+      "idx": 260,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1745.0
+    },
+    {
+      "idx": 261,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 574.0
+    },
+    {
+      "idx": 262,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "INGRESO",
+      "monto": 453.5
+    },
+    {
+      "idx": 263,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 2285.0
+    },
+    {
+      "idx": 264,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 188.0
+    },
+    {
+      "idx": 265,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 1013.0
+    },
+    {
+      "idx": 266,
+      "fecha": "2026-05-18 00:00:00",
+      "concepto": "Kvothel uriel",
+      "direccion": "INGRESO",
+      "monto": 750.0
+    },
+    {
+      "idx": 267,
+      "fecha": "2026-05-20 00:00:00",
+      "concepto": "Liga Suprema",
+      "direccion": "INGRESO",
+      "monto": 294.0
+    },
+    {
+      "idx": 268,
+      "fecha": "2026-05-21 00:00:00",
+      "concepto": "chelo",
+      "direccion": "INGRESO",
+      "monto": 3998.7
+    },
+    {
+      "idx": 269,
+      "fecha": "2026-05-22 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 452.0
+    },
+    {
+      "idx": 270,
+      "fecha": "2026-05-23 00:00:00",
+      "concepto": "maxi",
+      "direccion": "EGRESO",
+      "monto": 8635.0
+    },
+    {
+      "idx": 271,
+      "fecha": "2026-05-24 00:00:00",
+      "concepto": "intercambio trx",
+      "direccion": "EGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 272,
+      "fecha": "2026-05-24 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 273,
+      "fecha": "2026-05-24 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 274,
+      "fecha": "2026-05-25 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 462.5
+    },
+    {
+      "idx": 275,
+      "fecha": "2026-05-25 00:00:00",
+      "concepto": "dementus",
+      "direccion": "INGRESO",
+      "monto": 201.38
+    },
+    {
+      "idx": 276,
+      "fecha": "2026-05-25 00:00:00",
+      "concepto": "cristian",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 277,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "TeamBack",
+      "direccion": "INGRESO",
+      "monto": 2516.66
+    },
+    {
+      "idx": 278,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 838.0
+    },
+    {
+      "idx": 279,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 280,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 407.0
+    },
+    {
+      "idx": 281,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 282,
+      "fecha": "2026-07-17 00:00:00",
+      "concepto": "Cobro recibido - CAARLITOS - FÉNIX GG [SALDOS-4]",
+      "direccion": "INGRESO",
+      "monto": 799.0
+    },
+    {
+      "idx": 283,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "chon",
+      "direccion": "INGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 284,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 285,
+      "fecha": "2026-05-26 00:00:00",
+      "concepto": "gaston",
+      "direccion": "INGRESO",
+      "monto": 1915.0
+    },
+    {
+      "idx": 286,
+      "fecha": "2026-05-27 00:00:00",
+      "concepto": "suprema",
+      "direccion": "EGRESO",
+      "monto": 3401.35
+    },
+    {
+      "idx": 287,
+      "fecha": "2026-05-27 00:00:00",
+      "concepto": "blas",
+      "direccion": "EGRESO",
+      "monto": 3326.0
+    },
+    {
+      "idx": 288,
+      "fecha": "2026-05-27 00:00:00",
+      "concepto": "uriel agente",
+      "direccion": "EGRESO",
+      "monto": 507.0
+    },
+    {
+      "idx": 289,
+      "fecha": "2026-05-27 00:00:00",
+      "concepto": "uriel agente",
+      "direccion": "EGRESO",
+      "monto": 617.0
+    },
+    {
+      "idx": 290,
+      "fecha": "2026-05-28 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 291,
+      "fecha": "2026-05-28 00:00:00",
+      "concepto": "dementus",
+      "direccion": "INGRESO",
+      "monto": 162.16
+    },
+    {
+      "idx": 292,
+      "fecha": "2026-05-28 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 293,
+      "fecha": "2026-05-31 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "INGRESO",
+      "monto": 618.0
+    },
+    {
+      "idx": 294,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "tb otti",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 295,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 343.0
+    },
+    {
+      "idx": 296,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 881.0
+    },
+    {
+      "idx": 297,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 542.0
+    },
+    {
+      "idx": 298,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "chon",
+      "direccion": "EGRESO",
+      "monto": 1536.16
+    },
+    {
+      "idx": 299,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 300,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 498.5
+    },
+    {
+      "idx": 301,
+      "fecha": "2026-06-01 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 302,
+      "fecha": "2026-06-02 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 5098.7
+    },
+    {
+      "idx": 303,
+      "fecha": "2026-06-02 00:00:00",
+      "concepto": "Mar Mari",
+      "direccion": "INGRESO",
+      "monto": 866.42
+    },
+    {
+      "idx": 304,
+      "fecha": "2026-06-02 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 305,
+      "fecha": "2026-06-03 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 679.0
+    },
+    {
+      "idx": 306,
+      "fecha": "2026-06-03 00:00:00",
+      "concepto": "suprema",
+      "direccion": "INGRESO",
+      "monto": 7049.73
+    },
+    {
+      "idx": 307,
+      "fecha": "2026-06-03 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 301.0
+    },
+    {
+      "idx": 308,
+      "fecha": "2026-06-04 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 1960.0
+    },
+    {
+      "idx": 309,
+      "fecha": "2026-06-05 00:00:00",
+      "concepto": "Gonza",
+      "direccion": "INGRESO",
+      "monto": 63.0
+    },
+    {
+      "idx": 310,
+      "fecha": "2026-06-05 00:00:00",
+      "concepto": "Gonza",
+      "direccion": "INGRESO",
+      "monto": 399.6
+    },
+    {
+      "idx": 311,
+      "fecha": "2026-06-05 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 312,
+      "fecha": "2026-06-05 00:00:00",
+      "concepto": "Blas",
+      "direccion": "EGRESO",
+      "monto": 1460.7
+    },
+    {
+      "idx": 313,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 314,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 315,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 316,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "intercambio a trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 317,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 318,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 544.0
+    },
+    {
+      "idx": 319,
+      "fecha": "2026-06-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 453.0
+    },
+    {
+      "idx": 320,
+      "fecha": "2026-06-09 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 808.0
+    },
+    {
+      "idx": 321,
+      "fecha": "2026-06-09 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 500.4
+    },
+    {
+      "idx": 322,
+      "fecha": "2026-06-10 00:00:00",
+      "concepto": "EDWAR",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 323,
+      "fecha": "2026-06-10 00:00:00",
+      "concepto": "uriel",
+      "direccion": "EGRESO",
+      "monto": 136.0
+    },
+    {
+      "idx": 324,
+      "fecha": "2026-06-10 00:00:00",
+      "concepto": "suprema",
+      "direccion": "INGRESO",
+      "monto": 1997.53
+    },
+    {
+      "idx": 325,
+      "fecha": "2026-06-11 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 300.35
+    },
+    {
+      "idx": 326,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "Blas",
+      "direccion": "EGRESO",
+      "monto": 942.7
+    },
+    {
+      "idx": 327,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "Union Teamback",
+      "direccion": "INGRESO",
+      "monto": 2500.0
+    },
+    {
+      "idx": 328,
+      "fecha": "2026-06-14 00:00:00",
+      "concepto": "caiman",
+      "direccion": "INGRESO",
+      "monto": 9.6
+    },
+    {
+      "idx": 329,
+      "fecha": "2026-06-14 00:00:00",
+      "concepto": "caiman",
+      "direccion": "INGRESO",
+      "monto": 289.6
+    },
+    {
+      "idx": 330,
+      "fecha": "2026-06-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 331,
+      "fecha": "2026-06-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 915.0
+    },
+    {
+      "idx": 332,
+      "fecha": "2026-06-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 777.0
+    },
+    {
+      "idx": 333,
+      "fecha": "2026-06-16 00:00:00",
+      "concepto": "Union Teamback",
+      "direccion": "EGRESO",
+      "monto": 2458.0
+    },
+    {
+      "idx": 334,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 640.0
+    },
+    {
+      "idx": 335,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "caiman",
+      "direccion": "INGRESO",
+      "monto": 399.6
+    },
+    {
+      "idx": 336,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "chon",
+      "direccion": "EGRESO",
+      "monto": 453.24
+    },
+    {
+      "idx": 337,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "Liga suprema",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 338,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "Liga suprema",
+      "direccion": "EGRESO",
+      "monto": 2831.68
+    },
+    {
+      "idx": 339,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "Retiro Juan y Fede",
+      "direccion": "EGRESO",
+      "monto": 3500.0
+    },
+    {
+      "idx": 340,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "Blas",
+      "direccion": "INGRESO",
+      "monto": 1269.0
+    },
+    {
+      "idx": 341,
+      "fecha": "2026-06-17 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 250.0
+    },
+    {
+      "idx": 342,
+      "fecha": "2026-06-18 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 343,
+      "fecha": "2026-06-18 00:00:00",
+      "concepto": "maxi",
+      "direccion": "INGRESO",
+      "monto": 99.6
+    },
+    {
+      "idx": 344,
+      "fecha": "2026-06-18 00:00:00",
+      "concepto": "maxi",
+      "direccion": "INGRESO",
+      "monto": 12899.6
+    },
+    {
+      "idx": 345,
+      "fecha": "2026-06-19 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 346,
+      "fecha": "2026-06-19 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 347,
+      "fecha": "2026-06-19 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 348,
+      "fecha": "2026-06-19 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 349,
+      "fecha": "2026-06-20 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 350,
+      "fecha": "2026-06-20 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 351,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 1357.7
+    },
+    {
+      "idx": 352,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 353,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 354,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "intercambio a trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 355,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 819.0
+    },
+    {
+      "idx": 356,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 349.0
+    },
+    {
+      "idx": 357,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 358,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 359,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 360,
+      "fecha": "2026-06-22 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 361,
+      "fecha": "2026-06-23 00:00:00",
+      "concepto": "Liga suprema",
+      "direccion": "EGRESO",
+      "monto": 1361.43
+    },
+    {
+      "idx": 362,
+      "fecha": "2026-06-23 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 7684.54
+    },
+    {
+      "idx": 363,
+      "fecha": "2026-06-23 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 700.9
+    },
+    {
+      "idx": 364,
+      "fecha": "2026-06-25 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 365,
+      "fecha": "2026-06-25 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 366,
+      "fecha": "2026-06-25 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 367,
+      "fecha": "2026-06-25 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 2500.0
+    },
+    {
+      "idx": 368,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "chelo",
+      "direccion": "EGRESO",
+      "monto": 9560.0
+    },
+    {
+      "idx": 369,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 370,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 700.0
+    },
+    {
+      "idx": 371,
+      "fecha": "2026-06-26 00:00:00",
+      "concepto": "Juan Digi",
+      "direccion": "EGRESO",
+      "monto": 120.0
+    },
+    {
+      "idx": 372,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "TMT Liga",
+      "direccion": "INGRESO",
+      "monto": 8500.0
+    },
+    {
+      "idx": 373,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 374,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 452.0
+    },
+    {
+      "idx": 375,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1520.0
+    },
+    {
+      "idx": 376,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 430.0
+    },
+    {
+      "idx": 377,
+      "fecha": "2026-06-29 00:00:00",
+      "concepto": "carlitos",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 378,
+      "fecha": "2026-06-30 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 789.0
+    },
+    {
+      "idx": 379,
+      "fecha": "2026-06-30 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 7398.5
+    },
+    {
+      "idx": 380,
+      "fecha": "2026-06-30 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1300.0
+    },
+    {
+      "idx": 381,
+      "fecha": "2026-07-30 00:00:00",
+      "concepto": "Tincho",
+      "direccion": "INGRESO",
+      "monto": 191.0
+    },
+    {
+      "idx": 382,
+      "fecha": "2026-07-01 00:00:00",
+      "concepto": "suprema",
+      "direccion": "INGRESO",
+      "monto": 1340.28
+    },
+    {
+      "idx": 383,
+      "fecha": "2026-07-02 00:00:00",
+      "concepto": "intercambio a trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 384,
+      "fecha": "2026-07-02 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 385,
+      "fecha": "2026-07-02 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 386,
+      "fecha": "2026-07-02 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 3000.0
+    },
+    {
+      "idx": 387,
+      "fecha": "2026-07-03 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 388,
+      "fecha": "2026-07-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 850.0
+    },
+    {
+      "idx": 389,
+      "fecha": "2026-07-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 900.0
+    },
+    {
+      "idx": 390,
+      "fecha": "2026-07-06 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 800.0
+    },
+    {
+      "idx": 391,
+      "fecha": "2026-07-06 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 392,
+      "fecha": "2026-07-07 00:00:00",
+      "concepto": "german",
+      "direccion": "INGRESO",
+      "monto": 938.0
+    },
+    {
+      "idx": 393,
+      "fecha": "2026-07-08 00:00:00",
+      "concepto": "JJ DD",
+      "direccion": "EGRESO",
+      "monto": 134.0
+    },
+    {
+      "idx": 394,
+      "fecha": "2026-07-08 00:00:00",
+      "concepto": "suprema",
+      "direccion": "INGRESO",
+      "monto": 4309.16
+    },
+    {
+      "idx": 395,
+      "fecha": "2026-07-08 00:00:00",
+      "concepto": "caiman",
+      "direccion": "EGRESO",
+      "monto": 2932.0
+    },
+    {
+      "idx": 396,
+      "fecha": "2026-07-08 00:00:00",
+      "concepto": "Rodrigo",
+      "direccion": "INGRESO",
+      "monto": 450.0
+    },
+    {
+      "idx": 397,
+      "fecha": "2026-07-09 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 398,
+      "fecha": "2026-07-10 00:00:00",
+      "concepto": "Manzur",
+      "direccion": "INGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 399,
+      "fecha": "2026-07-10 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1700.0
+    },
+    {
+      "idx": 400,
+      "fecha": "2026-06-12 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "INGRESO",
+      "monto": 500.6
+    },
+    {
+      "idx": 401,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 596.0
+    },
+    {
+      "idx": 402,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 429.0
+    },
+    {
+      "idx": 403,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "Mar Mari",
+      "direccion": "INGRESO",
+      "monto": 766.77
+    },
+    {
+      "idx": 404,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "Mar Mari",
+      "direccion": "INGRESO",
+      "monto": 873.73
+    },
+    {
+      "idx": 405,
+      "fecha": "2026-06-13 00:00:00",
+      "concepto": "Nico",
+      "direccion": "EGRESO",
+      "monto": 3891.0
+    },
+    {
+      "idx": 406,
+      "fecha": "2026-07-14 00:00:00",
+      "concepto": "Juan Digi",
+      "direccion": "EGRESO",
+      "monto": 150.0
+    },
+    {
+      "idx": 407,
+      "fecha": "2026-07-14 00:00:00",
+      "concepto": "intercambio a trx",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 408,
+      "fecha": "2026-07-14 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 409,
+      "fecha": "2026-07-15 00:00:00",
+      "concepto": "Blas",
+      "direccion": "EGRESO",
+      "monto": 1580.0
+    },
+    {
+      "idx": 410,
+      "fecha": "2026-07-15 00:00:00",
+      "concepto": "suprema",
+      "direccion": "INGRESO",
+      "monto": 4675.67
+    },
+    {
+      "idx": 411,
+      "fecha": "2026-05-16 00:00:00",
+      "concepto": "prodigio",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": "corr_412",
+      "fecha": "2026-07-17 00:00:00",
+      "concepto": "Corrección de saldo (ajuste directo en la planilla, sin movimiento asociado detallado)",
+      "direccion": "EGRESO",
+      "monto": 1445.6
+    },
+    {
+      "idx": 412,
+      "fecha": "2026-07-17 00:00:00",
+      "concepto": "Cobro recibido · CAARLITOS · FÉNIX GG",
+      "direccion": "INGRESO",
+      "monto": 799.0
+    },
+    {
+      "idx": 413,
+      "fecha": "2026-07-18 00:00:00",
+      "concepto": "Cobro recibido · Manzur · saldo operativo",
+      "direccion": "INGRESO",
+      "monto": 7918.23
+    },
+    {
+      "idx": 414,
+      "fecha": "2026-07-20 00:00:00",
+      "concepto": "Pago enviado · Prodigio · saldo pendiente",
+      "direccion": "EGRESO",
+      "monto": 706.0
+    },
+    {
+      "idx": 415,
+      "fecha": "2026-07-20 00:00:00",
+      "concepto": "Pago enviado · Prodigio · saldo pendiente",
+      "direccion": "EGRESO",
+      "monto": 400.0
+    },
+    {
+      "idx": 416,
+      "fecha": "2026-07-20 00:00:00",
+      "concepto": "Pago enviado · Prodigio · descarga 310 + rakeback 119,18",
+      "direccion": "EGRESO",
+      "monto": 429.18
+    },
+    {
+      "idx": 417,
+      "fecha": "2026-07-20 00:00:00",
+      "concepto": "Cobro recibido · Rodrigo · deuda de fichas Fénix GG",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 418,
+      "fecha": "2026-07-20 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA",
+      "direccion": "INGRESO",
+      "monto": 1640.0
+    },
+    {
+      "idx": 419,
+      "fecha": "2026-07-21 00:00:00",
+      "concepto": "Pago enviado · El Latigo Loco · cierre 13/07/2026 al 19/07/2026",
+      "direccion": "EGRESO",
+      "monto": 1618.4
+    },
+    {
+      "idx": 420,
+      "fecha": "2026-07-21 00:00:00",
+      "concepto": "Cobro recibido · Mar Mari · saldo pendiente",
+      "direccion": "INGRESO",
+      "monto": 562.3
+    },
+    {
+      "idx": 421,
+      "fecha": "2026-07-21 00:00:00",
+      "concepto": "Cobro recibido · Gonza/SpiderBOO · FÉNIX GG",
+      "direccion": "INGRESO",
+      "monto": 7000.0
+    },
+    {
+      "idx": 422,
+      "fecha": "2026-07-22 00:00:00",
+      "concepto": "Pago enviado · Prodigio · descarga 500 fichas FÉNIX GG",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 423,
+      "fecha": "2026-07-22 00:00:00",
+      "concepto": "Cobro recibido · Suprema · cierre 13/07/2026 al 19/07/2026",
+      "direccion": "INGRESO",
+      "monto": 1110.32
+    },
+    {
+      "idx": 424,
+      "fecha": "2026-07-23 00:00:00",
+      "concepto": "Pago al agente - Prodigio - TEAMBACK SUPREMA [SALDOS-40]",
+      "direccion": "EGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 425,
+      "fecha": "23/07/2026",
+      "concepto": "Cobro recibido · CAARLITOS · FÉNIX GG [SALDOS-42]",
+      "direccion": "INGRESO",
+      "monto": 500.5
+    },
+    {
+      "idx": 426,
+      "fecha": "2026-07-24 00:00:00",
+      "concepto": "Cobro recibido · Manzur · saldo operativo y garantía [SALDOS-44/45]",
+      "direccion": "INGRESO",
+      "monto": 2612.13
+    },
+    {
+      "idx": 427,
+      "fecha": "2026-07-25 00:00:00",
+      "concepto": "Pago enviado · Prodigio · descarga 1.300 fichas TEAMBACK SUPREMA [SALDOS-47/48]",
+      "direccion": "EGRESO",
+      "monto": 1300.0
+    },
+    {
+      "idx": 428,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "cobro recibido · Prodigio · TEAMBACK SUPREMA",
+      "direccion": "INGRESO",
+      "monto": 1.0
+    },
+    {
+      "idx": 429,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA",
+      "direccion": "INGRESO",
+      "monto": 1522.0
+    },
+    {
+      "idx": 430,
+      "fecha": "2026-07-27 00:00:00",
+      "concepto": "adelanto en usdt · Prodigio · OTRO",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 432,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "Pago de rakeback en USDT · Prodigio · TEAMBACK SUPREMA [SALDOS-64] [CORREGIDO]",
+      "direccion": "EGRESO",
+      "monto": 436.88
+    },
+    {
+      "idx": 433,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "Pago al agente - El caiman - OTRO [SALDOS-65]",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 434,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "Cobro recibido - nico - TEAMBACK SUPREMA [SALDOS-66]",
+      "direccion": "INGRESO",
+      "monto": 4580.0
+    },
+    {
+      "idx": 435,
+      "fecha": "2026-07-28 00:00:00",
+      "concepto": "Pago enviado · Suprema · cierre 20/07/2026 al 26/07/2026",
+      "direccion": "EGRESO",
+      "monto": 2907.31
+    },
+    {
+      "idx": 436,
+      "fecha": "2026-07-29 00:00:00",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 437,
+      "fecha": "2026-07-29 17:26:32.607000",
+      "concepto": "Pago de memoria a Uriel [URIEL-PAGOS-180.00]",
+      "direccion": "EGRESO",
+      "monto": 180.0
+    },
+    {
+      "idx": 438,
+      "fecha": "2026-08-02 00:00:00",
+      "concepto": "Cobro recibido - Marcelo Mereles - FÉNIX GG [SALDOS-81]",
+      "direccion": "INGRESO",
+      "monto": 4000.0
+    },
+    {
+      "idx": 439,
+      "fecha": "2026-08-01 00:00:00",
+      "concepto": "Cobro recibido - JereStack - FÉNIX GG [SALDOS-85]",
+      "direccion": "INGRESO",
+      "monto": 499.2
+    },
+    {
+      "idx": 440,
+      "fecha": "2026-08-03 00:00:00",
+      "concepto": "Pago enviado · Prodigio · descargas 2.846,42 + cierre 1.900 [SALDOS-96]",
+      "direccion": "EGRESO",
+      "monto": 4746.42
+    },
+    {
+      "idx": 441,
+      "fecha": "2026-08-03 00:00:00",
+      "concepto": "Pago enviado · Prodigio · saldo final cierre 27/07–02/08 [SALDOS-97]",
+      "direccion": "EGRESO",
+      "monto": 458.55
+    },
+    {
+      "idx": 442,
+      "fecha": "2026-08-04 00:00:00",
+      "concepto": "Cobro recibido - El Latigo Loco - GG [SALDOS-99]",
+      "direccion": "INGRESO",
+      "monto": 745.18
+    },
+    {
+      "idx": 443,
+      "fecha": "2026-08-04 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA",
+      "direccion": "INGRESO",
+      "monto": 1968.0
+    },
+    {
+      "idx": 444,
+      "fecha": "2026-08-04 00:00:00",
+      "concepto": "Pago enviado · Suprema · cierre 27/07/2026 al 02/08/2026",
+      "direccion": "EGRESO",
+      "monto": 2337.1
+    },
+    {
+      "idx": 445,
+      "fecha": "2026-08-04 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · TEAMBACK SUPREMA [SALDOS-104] [RECLASIFICADO]",
+      "direccion": "INGRESO",
+      "monto": 500.5
+    },
+    {
+      "idx": 446,
+      "fecha": "2026-08-05 00:00:00",
+      "concepto": "adelanto en usdt · Prodigio · OTRO",
+      "direccion": "EGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 447,
+      "fecha": "2026-08-05 00:00:00",
+      "concepto": "Retiro de ganancias · Fede [CONTROL_GANANCIAS-71]",
+      "direccion": "EGRESO",
+      "monto": 1500.0
+    },
+    {
+      "idx": 448,
+      "fecha": "2026-08-05 00:00:00",
+      "concepto": "Cobro recibido - JereStack - FÉNIX GG [SALDOS-117]",
+      "direccion": "INGRESO",
+      "monto": 299.6
+    },
+    {
+      "idx": 449,
+      "fecha": "2026-08-05 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · TEAMBACK SUPREMA [SALDOS-119]",
+      "direccion": "INGRESO",
+      "monto": 450.0
+    },
+    {
+      "idx": 450,
+      "fecha": "2026-08-05 00:00:00",
+      "concepto": "Cobro recibido - Marcelo Mereles - FÉNIX GG [SALDOS-125]",
+      "direccion": "INGRESO",
+      "monto": 6980.0
+    },
+    {
+      "idx": 451,
+      "fecha": "2026-08-03 00:00:00",
+      "concepto": "Cambio a TRX · Operación · Compra de TRX para fees de envíos USDT [CONTROL_GANANCIAS-72]",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 452,
+      "fecha": "2026-08-06 00:00:00",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA [SALDOS-127]",
+      "direccion": "EGRESO",
+      "monto": 1300.0
+    },
+    {
+      "idx": 453,
+      "fecha": "2026-08-06 00:00:00",
+      "concepto": "Cobro recibido - JereStack - FÉNIX GG [SALDOS-129]",
+      "direccion": "INGRESO",
+      "monto": 300.1
+    },
+    {
+      "idx": 454,
+      "fecha": "2026-08-08 00:00:00",
+      "concepto": "Pago al agente · Prodigio · GG [SALDOS-138]",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 455,
+      "fecha": "2026-08-07 00:00:00",
+      "concepto": "Cobro recibido - Manzur - OTRO [SALDOS-133]",
+      "direccion": "INGRESO",
+      "monto": 6300.26
+    },
+    {
+      "idx": 456,
+      "fecha": "2026-08-07 00:00:00",
+      "concepto": "Cobro recibido - TB dementus22 - TEAMBACK SUPREMA [SALDOS-131]",
+      "direccion": "INGRESO",
+      "monto": 96.2
+    },
+    {
+      "idx": 457,
+      "fecha": "2026-08-10 00:00:00",
+      "concepto": "Pago enviado · Prodigio · TeamBack Suprema · primer envío descarga 700 [SALDOS-148]",
+      "direccion": "EGRESO",
+      "monto": 610.0
+    },
+    {
+      "idx": 458,
+      "fecha": "2026-08-10 00:00:00",
+      "concepto": "Pago enviado · Prodigio · 90 descarga TeamBack Suprema + 243,36 cierre [SALDOS-149]",
+      "direccion": "EGRESO",
+      "monto": 333.36
+    },
+    {
+      "idx": 459,
+      "fecha": "2026-08-10 00:00:00",
+      "concepto": "Cobro recibido · Marcelo Mereles · Fénix GG · carga 10.000 [SALDOS-150]",
+      "direccion": "INGRESO",
+      "monto": 10000.0
+    },
+    {
+      "idx": 460,
+      "fecha": "2026-08-11 00:00:00",
+      "concepto": "Adelanto rakeback USDT · Prodigio · TeamBack Suprema [SALDOS-153]",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 461,
+      "fecha": "2026-08-11 00:00:00",
+      "concepto": "Garantía inicial · Tiny [SALDOS-158]",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 462,
+      "fecha": "2026-08-11 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA [SALDOS-157]",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 463,
+      "fecha": "2026-08-11 00:00:00",
+      "concepto": "Cobro recibido · Marcelo Mereles · Fénix GG · carga 5.000 [SALDOS-159]",
+      "direccion": "INGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 464,
+      "fecha": "2026-08-11 00:00:00",
+      "concepto": "Pago enviado · Suprema · cierre 03/08/2026 al 09/08/2026",
+      "direccion": "EGRESO",
+      "monto": 1697.35
+    },
+    {
+      "idx": 465,
+      "fecha": "2026-08-12 00:00:00",
+      "concepto": "pago al agente · Prodigio · OTRO [SALDOS-162]",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 466,
+      "fecha": "2026-08-12 00:00:00",
+      "concepto": "Pago enviado · Gonza / SpiderBOO · descarga 7.000 fichas Fénix GG [SALDOS-167/168]",
+      "direccion": "EGRESO",
+      "monto": 7000.0
+    },
+    {
+      "idx": 467,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · Tiny · carga operativa 998 [SALDOS-170/171]",
+      "direccion": "INGRESO",
+      "monto": 998.0
+    },
+    {
+      "idx": 468,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido · Uriel / JereStack · Fénix GG · carga 1.000 [SALDOS-172/173]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 469,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido · Uriel / Dejodita · Fénix GG · carga 1.000 [SALDOS-174/175]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 470,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido · Uriel / Dejodita · Tiny · carga 500 [SALDOS-176/177]",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 471,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido - nico - TEAMBACK SUPREMA [SALDOS-178]",
+      "direccion": "INGRESO",
+      "monto": 955.0
+    },
+    {
+      "idx": 472,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Retiro socios para inversión en BTC · Juan 12.500 + Fede 12.500 [CONTROL_GANANCIAS-73/74]",
+      "direccion": "EGRESO",
+      "monto": 25000.0
+    },
+    {
+      "idx": 473,
+      "fecha": "2026-08-13 00:00:00",
+      "concepto": "Cobro recibido · Uriel / JereStack · TeamBack GG · carga 1.000 [SALDOS-182/183]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 474,
+      "fecha": "2026-08-14 00:00:00",
+      "concepto": "Pago enviado · Prodigio · TeamBack Suprema · descarga 750 [SALDOS-184/185]",
+      "direccion": "EGRESO",
+      "monto": 750.0
+    },
+    {
+      "idx": 475,
+      "fecha": "2026-08-15 00:00:00",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA [SALDOS-191]",
+      "direccion": "EGRESO",
+      "monto": 1300.0
+    },
+    {
+      "idx": 476,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "Cobro recibido - Rodrigo - OTRO [SALDOS-194]",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 477,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "Pago enviado · Tiny · cierre 10/08/2026 al 16/08/2026 [TINY-CIERRE-2026-08-10] [WALLET-477]",
+      "direccion": "EGRESO",
+      "monto": 540.75
+    },
+    {
+      "idx": 478,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "Pago enviado · Marcelo Mereles · Fénix GG · descarga 5.509 fichas [SALDOS-196/197] [WALLET-478]",
+      "direccion": "EGRESO",
+      "monto": 5509.0
+    },
+    {
+      "idx": 479,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "Pago enviado · eze.f23 · TeamBack Suprema · cierre neto tras descarga 1.305,64 fichas [SALDOS-202/204] [WALLET-479]",
+      "direccion": "EGRESO",
+      "monto": 985.64
+    },
+    {
+      "idx": 480,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "pago al agente · Prodigio · OTRO [SALDOS-210]",
+      "direccion": "EGRESO",
+      "monto": 930.0
+    },
+    {
+      "idx": 481,
+      "fecha": "2026-08-17 00:00:00",
+      "concepto": "pago al agente · Prodigio · OTRO [SALDOS-211]",
+      "direccion": "EGRESO",
+      "monto": 444.0
+    },
+    {
+      "idx": 482,
+      "fecha": "2026-08-18 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA",
+      "direccion": "INGRESO",
+      "monto": 1552.0
+    },
+    {
+      "idx": 483,
+      "fecha": "2026-08-18 00:00:00",
+      "concepto": "Garantía inicial · X-Poker [SALDOS-218] [WALLET-483]",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 484,
+      "fecha": "2026-08-18 00:00:00",
+      "concepto": "Tickets Tincho cantidad 3",
+      "direccion": "EGRESO",
+      "monto": 36.0
+    },
+    {
+      "idx": 485,
+      "fecha": "2026-08-18 00:00:00",
+      "concepto": "Cambio a TRX · Operación · Compra de TRX para fees de envíos USDT [CONTROL_GANANCIAS-75]",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 486,
+      "fecha": "2026-08-19 00:00:00",
+      "concepto": "Cobro recibido · El Latigo Loco · GG [SALDOS-220] [WALLET-486]",
+      "direccion": "INGRESO",
+      "monto": 1664.0
+    },
+    {
+      "idx": 487,
+      "fecha": "2026-08-19 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · GG [SALDOS-223] [WALLET-487]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 488,
+      "fecha": "2026-08-19 00:00:00",
+      "concepto": "Cobro recibido · Suprema · cierre 10/08/2026 al 16/08/2026",
+      "direccion": "INGRESO",
+      "monto": 1985.47
+    },
+    {
+      "idx": 489,
+      "fecha": "2026-08-20 00:00:00",
+      "concepto": "pago al agente · Prodigio · OTRO [SALDOS-230]",
+      "direccion": "EGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 490,
+      "fecha": "2026-08-20 00:00:00",
+      "concepto": "Carga de fichas - Marcelo Mereles - FÉNIX GG [SALDOS-232]",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 491,
+      "fecha": "2026-08-20 00:00:00",
+      "concepto": "pago al agente · Prodigio · OTRO [SALDOS-235]",
+      "direccion": "EGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 492,
+      "fecha": "2026-08-20 00:00:00",
+      "concepto": "Cobro recibido · renacapkr · FÉNIX GG [SALDOS-239]",
+      "direccion": "INGRESO",
+      "monto": 698.5
+    },
+    {
+      "idx": 493,
+      "fecha": "2026-08-21 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · X-POKER [SALDOS-240]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 494,
+      "fecha": "2026-08-21 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · TINY [SALDOS-246]",
+      "direccion": "INGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 495,
+      "fecha": "2026-08-21 00:00:00",
+      "concepto": "Cobro recibido · Prodigio · TEAMBACK SUPREMA [SALDOS-248]",
+      "direccion": "INGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 496,
+      "fecha": "2026-08-24 00:00:00",
+      "concepto": "Retiro/uso de fondos · Juan · USD 507 [CONTROL_GANANCIAS-76] [JUAN-DEUDA-507-20260824]",
+      "direccion": "EGRESO",
+      "monto": 507.0
+    },
+    {
+      "idx": 497,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Pago enviado · Suprema · cierre 17/08/2026 al 23/08/2026",
+      "direccion": "EGRESO",
+      "monto": 3055.44
+    },
+    {
+      "idx": 498,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Cobro recibido · Unión TeamBack GG · envío real USD 2.000 [COBRO-TB-WALLET-20260825-A] [SALDOS-310] [WALLET-498]",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 499,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Cobro recibido · Unión TeamBack GG · envío real USD 1.000 [COBRO-TB-WALLET-20260825-B] [SALDOS-311] [WALLET-499]",
+      "direccion": "INGRESO",
+      "monto": 1000.0
+    },
+    {
+      "idx": 500,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Pago enviado · Prodigio · USD 300 · descarga Tiny [PAGO-PRODIGIO-300-20260825] [SALDOS-313] [WALLET-500]",
+      "direccion": "EGRESO",
+      "monto": 300.0
+    },
+    {
+      "idx": 501,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Pago enviado · Prodigio · TeamBack GG · USD 473 [PRODIGIO-GG-DESCARGA-PAGO-473-20260825] [SALDOS-315] [WALLET-501]",
+      "direccion": "EGRESO",
+      "monto": 473.0
+    },
+    {
+      "idx": 502,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Pago enviado · Prodigio · saldo final Tiny · USD 611,52 [PAGO-PRODIGIO-TINY-61152-20260825] [SALDOS-316] [WALLET-502]",
+      "direccion": "EGRESO",
+      "monto": 611.52
+    },
+    {
+      "idx": 503,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Cobro recibido · Rodrigo · USD 1.440 [SALDOS-253] [WALLET-503]",
+      "direccion": "INGRESO",
+      "monto": 1440.0
+    },
+    {
+      "idx": 504,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Cobro recibido · Unión TeamBack GG · envío real USD 15.000 [COBRO-TB-WALLET-20260825-C] [SALDOS-321] [WALLET-504]",
+      "direccion": "INGRESO",
+      "monto": 15000.0
+    },
+    {
+      "idx": 505,
+      "fecha": "2026-08-25 00:00:00",
+      "concepto": "Pago enviado · Prodigio · TeamBack GG · USD 500 [PRODIGIO-GG-DESCARGA-PAGO-500-20260825] [SALDOS-323] [WALLET-505]",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 506,
+      "fecha": "2026-08-26 00:00:00",
+      "concepto": "Pago enviado · Uriel · QueDificil/JereStack · TeamBack GG · USD 2.000 [PAGO-URIEL-JERESTACK-GG-2000-20260826] [SALDOS-324] [WALLET-506]",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 507,
+      "fecha": "2026-08-26 00:00:00",
+      "concepto": "Pago enviado · Demiurge29 · FÉNIX GG · descarga neta anterior USD 10.000 [CORRECCION-DEMIURGE-13941-3941-20260826] [SALDOS-326] [WALLET-507]",
+      "direccion": "EGRESO",
+      "monto": 10000.0
+    },
+    {
+      "idx": 508,
+      "fecha": "2026-08-26 00:00:00",
+      "concepto": "Cobro recibido - Tiny - cierre 17/08/2026 al 23/08/2026 [TINY-CIERRE-2026-08-17] [HISTORIAL-TINY-3] [WALLET-508]",
+      "direccion": "INGRESO",
+      "monto": 1091.1
+    },
+    {
+      "idx": 509,
+      "fecha": "2026-08-26 00:00:00",
+      "concepto": "Pago enviado · Prodigio · Tiny + TeamBack Suprema · USD 1.126,96 [PAGO-PRODIGIO-112696-20260826] [SALDOS-330] [WALLET-509]",
+      "direccion": "EGRESO",
+      "monto": 1126.96
+    },
+    {
+      "idx": 510,
+      "fecha": "2026-08-27 00:00:00",
+      "concepto": "Pago enviado · Uriel · QueDificil/JereStack · TeamBack GG · USD 5.000 [PAGO-URIEL-JERESTACK-GG-5000-20260827] [SALDOS-334] [WALLET-510]",
+      "direccion": "EGRESO",
+      "monto": 5000.0
+    },
+    {
+      "idx": 511,
+      "fecha": "2026-08-27 00:00:00",
+      "concepto": "Cobro recibido · cajerouy · FÉNIX SUPREMA [SALDOS-337]",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 512,
+      "fecha": "2026-08-28 15:48:35.489000",
+      "concepto": "Cobro recibido - Manzur - OTRO [SALDOS-344]",
+      "direccion": "INGRESO",
+      "monto": 49.4
+    },
+    {
+      "idx": 513,
+      "fecha": "2026-08-28 16:08:51.637000",
+      "concepto": "Cobro recibido - Manzur - OTRO [SALDOS-345]",
+      "direccion": "INGRESO",
+      "monto": 2906.4
+    },
+    {
+      "idx": 514,
+      "fecha": "2026-08-28 16:11:51.518000",
+      "concepto": "Cobro recibido - Manzur - OTRO [SALDOS-346]",
+      "direccion": "INGRESO",
+      "monto": 1868.5
+    },
+    {
+      "idx": 515,
+      "fecha": "2026-08-29 20:59:56.076000",
+      "concepto": "Pago descarga de fichas · Prodigio · GG [SALDOS-348]",
+      "direccion": "EGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 516,
+      "fecha": "2026-08-29 21:04:00.654000",
+      "concepto": "Pago descarga de fichas · Prodigio · TEAMBACK SUPREMA [SALDOS-349]",
+      "direccion": "EGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 517,
+      "fecha": "2026-08-31 10:23:05.597000",
+      "concepto": "Cobro recibido - Rodrigo - FÉNIX SUPREMA [SALDOS-353]",
+      "direccion": "INGRESO",
+      "monto": 2100.0
+    },
+    {
+      "idx": 518,
+      "fecha": "2026-08-31 11:08:07.546000",
+      "concepto": "Carga de fichas - renacapkr - FÉNIX GG [SALDOS-357]",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 519,
+      "fecha": "2026-08-31 11:51:21.600000",
+      "concepto": "Carga de fichas - renacapkr - FÉNIX GG [SALDOS-360]",
+      "direccion": "INGRESO",
+      "monto": 1.0
+    },
+    {
+      "idx": 520,
+      "fecha": "2026-08-31 11:54:29.805000",
+      "concepto": "Carga de fichas - renacapkr - FÉNIX GG [SALDOS-361]",
+      "direccion": "INGRESO",
+      "monto": 1.0
+    },
+    {
+      "idx": 521,
+      "fecha": "2026-08-31 12:10:34.604000",
+      "concepto": "Carga de fichas - renacapkr - FÉNIX GG [SALDOS-362]",
+      "direccion": "INGRESO",
+      "monto": 1.0
+    },
+    {
+      "idx": 522,
+      "fecha": "2026-08-31 00:00:00",
+      "concepto": "Descarga de fichas - JereStack - FÉNIX GG [SALDOS-363]",
+      "direccion": "EGRESO",
+      "monto": 1431.0
+    },
+    {
+      "idx": 523,
+      "fecha": "2026-08-31 13:54:28.612000",
+      "concepto": "Cobro recibido - Rodrigo - FÉNIX SUPREMA [SALDOS-370]",
+      "direccion": "INGRESO",
+      "monto": 2700.0
+    },
+    {
+      "idx": 524,
+      "fecha": "2026-09-01 00:00:00",
+      "concepto": "Cobro recibido - Tiny - cierre 24/08/2026 al 30/08/2026 [TINY-CIERRE-2026-08-24] [HISTORIAL-TINY-4] [WALLET-524]",
+      "direccion": "INGRESO",
+      "monto": 1139.56
+    },
+    {
+      "idx": 525,
+      "fecha": "2026-09-01 00:00:00",
+      "concepto": "Pago enviado · Suprema · cierre 24/08/2026 al 30/08/2026",
+      "direccion": "EGRESO",
+      "monto": 4809.99
+    },
+    {
+      "idx": 526,
+      "fecha": "2026-09-02 11:14:08.281000",
+      "concepto": "Pago descarga de fichas · Prodigio · GG [SALDOS-374]",
+      "direccion": "EGRESO",
+      "monto": 2005.0
+    },
+    {
+      "idx": 527,
+      "fecha": "2026-09-02 11:17:45.925000",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA [SALDOS-375]",
+      "direccion": "EGRESO",
+      "monto": 657.0
+    },
+    {
+      "idx": 528,
+      "fecha": "2026-09-02 11:30:20.836000",
+      "concepto": "Pago descarga de fichas · Prodigio · TINY [SALDOS-376]",
+      "direccion": "EGRESO",
+      "monto": 448.29
+    },
+    {
+      "idx": 529,
+      "fecha": "2026-09-02 11:33:14.487000",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA [SALDOS-377]",
+      "direccion": "EGRESO",
+      "monto": 157.0
+    },
+    {
+      "idx": 530,
+      "fecha": "2026-09-02 00:00:00",
+      "concepto": "Cambio a TRX · Operación · Compra de TRX para fees de envíos USDT [CONTROL_GANANCIAS-77]",
+      "direccion": "EGRESO",
+      "monto": 50.0
+    },
+    {
+      "idx": 531,
+      "fecha": "2026-08-31 00:00:00",
+      "concepto": "Pago enviado · Uriel · QueDificil/JereStack · TeamBack GG · USD 2.000 [PAGO-URIEL-2000-20260831-B] [SALDOS-378] [WALLET-531]",
+      "direccion": "EGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 532,
+      "fecha": "2026-09-02 00:00:00",
+      "concepto": "Carga de fichas cobrada · Quintero100 · TeamBack GG [SALDOS-381] [WALLET-532]",
+      "direccion": "INGRESO",
+      "monto": 2000.0
+    },
+    {
+      "idx": 533,
+      "fecha": "2026-09-02 12:47:31.145000",
+      "concepto": "pago al agente · Prodigio · TEAMBACK SUPREMA [SALDOS-382]",
+      "direccion": "EGRESO",
+      "monto": 595.89
+    },
+    {
+      "idx": 534,
+      "fecha": "2026-09-02 17:37:31.551000",
+      "concepto": "Pago al agente · Uriel · saldo general supervisor [SALDOS-388] [WALLET-534]",
+      "direccion": "EGRESO",
+      "monto": 804.0
+    },
+    {
+      "idx": 535,
+      "fecha": "02/09/2026",
+      "concepto": "Pago recibido · JJ DD · reducción de deuda [SALDOS-395] [WALLET-535]",
+      "direccion": "INGRESO",
+      "monto": 23.5
+    },
+    {
+      "idx": 536,
+      "fecha": "2026-09-04 12:29:18.033000",
+      "concepto": "Pago de memoria a Uriel [URIEL-PAGOS-1195.00]",
+      "direccion": "EGRESO",
+      "monto": 1195.0
+    },
+    {
+      "idx": 537,
+      "fecha": "2026-09-04 12:33:53.289000",
+      "concepto": "Carga de fichas - JereStack - FÉNIX GG [SALDOS-397]",
+      "direccion": "INGRESO",
+      "monto": 200.0
+    },
+    {
+      "idx": 538,
+      "fecha": "2026-09-04 12:35:29.759000",
+      "concepto": "Descarga de fichas - JereStack - FÉNIX GG [SALDOS-398]",
+      "direccion": "EGRESO",
+      "monto": 102.9
+    },
+    {
+      "idx": 539,
+      "fecha": "2026-09-04 12:37:34.014000",
+      "concepto": "Descarga de fichas - JereStack - GG [SALDOS-399]",
+      "direccion": "EGRESO",
+      "monto": 276.6
+    },
+    {
+      "idx": 540,
+      "fecha": "2026-09-04 12:40:35.174000",
+      "concepto": "Cobro recibido · Prodigio · TEAMBACK SUPREMA [SALDOS-401]",
+      "direccion": "INGRESO",
+      "monto": 500.0
+    },
+    {
+      "idx": 541,
+      "fecha": "2026-09-04 12:41:40.948000",
+      "concepto": "Cobro recibido · Prodigio · TEAMBACK SUPREMA [SALDOS-402]",
+      "direccion": "INGRESO",
+      "monto": 600.0
+    },
+    {
+      "idx": 542,
+      "fecha": "2026-09-04 12:43:15.340000",
+      "concepto": "Carga de fichas - TB dementus22 - TEAMBACK SUPREMA [SALDOS-403]",
+      "direccion": "INGRESO",
+      "monto": 107.47
+    },
+    {
+      "idx": 543,
+      "fecha": "2026-09-04 00:00:00",
+      "concepto": "Pago descarga total · Prodigio · X-POKER · 657,473333 fichas = USD 788,968 [SALDOS-405] [WALLET-543]",
+      "direccion": "EGRESO",
+      "monto": 788.968
+    },
+    {
+      "idx": 544,
+      "fecha": "2026-08-31 10:46:49.809000",
+      "concepto": "Cobro recibido - renacapkr - FÉNIX GG [SALDOS-356]",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 545,
+      "fecha": "2026-08-31 11:11:23.966000",
+      "concepto": "Carga de fichas - renacapkr - FÉNIX GG [SALDOS-359]",
+      "direccion": "INGRESO",
+      "monto": 100.0
+    },
+    {
+      "idx": 546,
+      "fecha": "2026-09-05 00:00:00",
+      "concepto": "Adelanto en USDT - JereStack - GG [SALDOS-419]",
+      "direccion": "EGRESO",
+      "monto": 1400.0
+    },
+    {
+      "idx": 548,
+      "fecha": "2026-09-05 00:00:00",
+      "concepto": "Cobro recibido - Demiurge29 - FÉNIX GG [SALDOS-423]",
+      "direccion": "INGRESO",
+      "monto": 4000.0
+    },
+    {
+      "idx": 549,
+      "fecha": "2026-09-04 00:00:00",
+      "concepto": "Cobro recibido - MrBadBeats - TEAMBACK SUPREMA [SALDOS-426]",
+      "direccion": "INGRESO",
+      "monto": 373.01
+    },
+    {
+      "idx": 550,
+      "fecha": "2026-09-06 00:00:00",
+      "concepto": "Cobro recibido · yAtt0r0 · FÉNIX GG [SALDOS-430]",
+      "direccion": "INGRESO",
+      "monto": 1298.0
+    },
+    {
+      "idx": 551,
+      "fecha": "2026-09-07 00:00:00",
+      "concepto": "Cobro recibido · yAtt0r0 · FÉNIX GG [SALDOS-431]",
+      "direccion": "INGRESO",
+      "monto": 598.0
+    },
+    {
+      "idx": 552,
+      "fecha": "2026-09-07 00:00:00",
+      "concepto": "Carga de fichas - JereStack - FÉNIX GG [SALDOS-432]",
+      "direccion": "INGRESO",
+      "monto": 299.7
+    }
+  ]
+}

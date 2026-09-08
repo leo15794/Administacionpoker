@@ -124,7 +124,12 @@ dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) 
 // Tesorería real: agrega treasury_entries (automáticas, generadas por movimientos de
 // agentes) + treasury_adjustments (manuales, cargadas a mano acá) por ledger y por
 // custodio, para saber cuánto hay circulando y con quién sin tener que buscarlo a mano.
-dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (_req, res) => {
+dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) => {
+  // Filtro opcional por ledger (ej. ?ledger=WALLET_MANOS para la pestaña de Wallet, que
+  // necesita ver todo el historial real importado y no solo los últimos 150 de golpe).
+  const ledgerFiltro = req.query.ledger === "WALLET_MANOS" || req.query.ledger === "CAJA_EFECTIVO" ? req.query.ledger : null;
+  const limiteMovimientos = ledgerFiltro ? 600 : 150;
+
   const [porLedgerAuto, porLedgerAjuste, porCustodioAuto, porCustodioAjuste, movsAuto, ajustes] = await Promise.all([
     pool.query(
       `SELECT ledger,
@@ -156,11 +161,16 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (_req, res) =
        FROM treasury_entries t
        JOIN ledger_movements m ON m.id = t.movement_id
        JOIN agents a ON a.id = m.agent_id
-       ORDER BY t.occurred_at DESC LIMIT 150`
+       ${ledgerFiltro ? "WHERE t.ledger = $2" : ""}
+       ORDER BY t.occurred_at DESC LIMIT $1`,
+      ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
     ),
     pool.query(
       `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by
-       FROM treasury_adjustments ORDER BY occurred_at DESC LIMIT 150`
+       FROM treasury_adjustments
+       ${ledgerFiltro ? "WHERE ledger = $2" : ""}
+       ORDER BY occurred_at DESC LIMIT $1`,
+      ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
     ),
   ]);
 
@@ -197,7 +207,7 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (_req, res) =
     })),
   ]
     .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
-    .slice(0, 150);
+    .slice(0, limiteMovimientos);
 
   res.json({ porLedger, porCustodio, ultimosMovimientos });
 });
