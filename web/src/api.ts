@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
+export type AccountType = "PREPAGO" | "WIN_LOSE" | "BANCADO" | "INTERNO" | "SUPERVISOR" | "UNION";
+
 function getToken() {
   return localStorage.getItem("dp_token");
 }
@@ -65,10 +67,28 @@ export const api = {
   clubes: () => request("/catalog/clubs"),
   crearClub: (data: { name: string; unit?: string; currentRate?: number }) =>
     request("/catalog/clubs", { method: "POST", body: JSON.stringify(data) }),
-  crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string }) =>
+  configurarClub: (
+    id: string,
+    data: {
+      name?: string;
+      unit?: string;
+      currentRate?: number;
+      defaultRakebackPct?: number;
+      defaultRebatePct?: number;
+      rebateDestino?: "SALDO_OPERATIVO" | "RAKEBACK_SUPERVISOR";
+      feePct?: number;
+      platformPct?: number;
+      unionPct?: number;
+      active?: boolean;
+      notes?: string | null;
+    }
+  ) => request(`/catalog/clubs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string; accountType?: AccountType }) =>
     request("/catalog/agents", { method: "POST", body: JSON.stringify(data) }),
-  editarAgente: (id: string, data: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null }) =>
-    request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  editarAgente: (
+    id: string,
+    data: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null; accountType?: AccountType }
+  ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),

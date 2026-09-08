@@ -1,5 +1,7 @@
 import { pool, newId } from "../db/pool.js";
 
+export type AccountType = "PREPAGO" | "WIN_LOSE" | "BANCADO" | "INTERNO" | "SUPERVISOR" | "UNION";
+
 export async function upsertClub(name: string, unit = "USD", currentRate = 1) {
   const id = newId("club");
   const r = await pool.query(
@@ -11,13 +13,72 @@ export async function upsertClub(name: string, unit = "USD", currentRate = 1) {
   return r.rows[0];
 }
 
-export async function upsertAgent(name: string, defaultSystem: "PREPAGO" | "WIN_LOSE", supervisor?: string | null) {
+/**
+ * Configuración por defecto del club (punto 8 del documento de rediseño): lo que hereda
+ * cualquier deal agente↔club que no defina su propio %. Solo actualiza los campos definidos.
+ */
+export async function updateClubConfig(
+  id: string,
+  fields: {
+    name?: string;
+    unit?: string;
+    currentRate?: number;
+    defaultRakebackPct?: number;
+    defaultRebatePct?: number;
+    rebateDestino?: "SALDO_OPERATIVO" | "RAKEBACK_SUPERVISOR";
+    feePct?: number;
+    platformPct?: number;
+    unionPct?: number;
+    active?: boolean;
+    notes?: string | null;
+  }
+) {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  const map: Record<string, any> = {
+    name: fields.name,
+    unit: fields.unit,
+    current_rate: fields.currentRate,
+    default_rakeback_pct: fields.defaultRakebackPct,
+    default_rebate_pct: fields.defaultRebatePct,
+    rebate_destino: fields.rebateDestino,
+    fee_pct: fields.feePct,
+    platform_pct: fields.platformPct,
+    union_pct: fields.unionPct,
+    active: fields.active,
+    notes: fields.notes,
+  };
+  for (const [col, val] of Object.entries(map)) {
+    if (val !== undefined) {
+      sets.push(`${col} = $${i++}`);
+      values.push(val);
+    }
+  }
+  if (sets.length === 0) {
+    const r = await pool.query(`SELECT * FROM clubs WHERE id = $1`, [id]);
+    return r.rows[0] ?? null;
+  }
+  sets.push(`updated_at = now()`);
+  values.push(id);
+  const r = await pool.query(`UPDATE clubs SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`, values);
+  return r.rows[0] ?? null;
+}
+
+export async function upsertAgent(
+  name: string,
+  defaultSystem: "PREPAGO" | "WIN_LOSE",
+  supervisor?: string | null,
+  accountType?: AccountType
+) {
   const id = newId("agent");
   const r = await pool.query(
-    `INSERT INTO agents (id, name, default_system, supervisor) VALUES ($1,$2,$3,$4)
-     ON CONFLICT (name) DO UPDATE SET default_system=EXCLUDED.default_system, supervisor=EXCLUDED.supervisor, updated_at=now()
+    `INSERT INTO agents (id, name, default_system, supervisor, account_type)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (name) DO UPDATE SET default_system=EXCLUDED.default_system, supervisor=EXCLUDED.supervisor,
+       account_type=EXCLUDED.account_type, updated_at=now()
      RETURNING *`,
-    [id, name, defaultSystem, supervisor ?? null]
+    [id, name, defaultSystem, supervisor ?? null, accountType ?? defaultSystem]
   );
   return r.rows[0];
 }
@@ -74,7 +135,13 @@ export async function setGuarantee(agentId: string, amount: number, consumed: nu
  */
 export async function updateAgent(
   id: string,
-  fields: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null; active?: boolean }
+  fields: {
+    name?: string;
+    defaultSystem?: "PREPAGO" | "WIN_LOSE";
+    supervisor?: string | null;
+    active?: boolean;
+    accountType?: AccountType;
+  }
 ) {
   const sets: string[] = [];
   const values: any[] = [];
@@ -83,6 +150,7 @@ export async function updateAgent(
   if (fields.defaultSystem !== undefined) { sets.push(`default_system = $${i++}`); values.push(fields.defaultSystem); }
   if (fields.supervisor !== undefined) { sets.push(`supervisor = $${i++}`); values.push(fields.supervisor); }
   if (fields.active !== undefined) { sets.push(`active = $${i++}`); values.push(fields.active); }
+  if (fields.accountType !== undefined) { sets.push(`account_type = $${i++}`); values.push(fields.accountType); }
   if (sets.length === 0) {
     const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
     return r.rows[0] ?? null;

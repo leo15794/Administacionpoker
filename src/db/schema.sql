@@ -12,6 +12,22 @@ CREATE TABLE IF NOT EXISTS clubs (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Configuración por defecto del club (pantalla "Configuración → Clubes" pedida
+-- explícitamente): un deal agente↔club que no especifica su propio % hereda esto. El
+-- rebate tiene destino configurable porque no todos los clubes lo liquidan igual (algunos
+-- lo suman al saldo operativo del agente, otros lo acumulan al rakeback pendiente de un
+-- supervisor — ver agent_club_deals.rebate_destino más abajo).
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS default_rakeback_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS default_rebate_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS rebate_destino TEXT NOT NULL DEFAULT 'SALDO_OPERATIVO';
+ALTER TABLE clubs DROP CONSTRAINT IF EXISTS clubs_rebate_destino_check;
+ALTER TABLE clubs ADD CONSTRAINT clubs_rebate_destino_check CHECK (rebate_destino IN ('SALDO_OPERATIVO','RAKEBACK_SUPERVISOR'));
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS fee_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS platform_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS union_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS import_source TEXT;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS notes TEXT;
+
 CREATE TABLE IF NOT EXISTS agents (
   id             TEXT PRIMARY KEY,
   name           TEXT UNIQUE NOT NULL,
@@ -23,6 +39,16 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Tipo de cuenta (punto 4 del documento de rediseño): catálogo CERRADO, nunca texto libre.
+-- Distinto de default_system (que sigue siendo el motor de cálculo de cierre semanal, y solo
+-- aplica cuando el tipo de cuenta es PREPAGO o WIN_LOSE). Los otros tipos (bancado, interno,
+-- supervisor, unión) tienen su propio modelo, todavía por construir — esto solo deja
+-- clasificada la cuenta desde ya para no tener que migrar de nuevo cuando se construyan.
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'WIN_LOSE';
+ALTER TABLE agents DROP CONSTRAINT IF EXISTS agents_account_type_check;
+ALTER TABLE agents ADD CONSTRAINT agents_account_type_check
+  CHECK (account_type IN ('PREPAGO','WIN_LOSE','BANCADO','INTERNO','SUPERVISOR','UNION'));
 
 -- Configuracion comercial agente<->club. NUNCA es un permiso de acceso (BIT-050):
 -- cualquier agente puede operar en cualquier club activo. Solo define % y sistema, versionado.

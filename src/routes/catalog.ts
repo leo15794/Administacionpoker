@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
-import { upsertAgent, upsertClub, upsertDeal, updateAgent, listAgents, listClubs, listDealsForAgent } from "../repo/catalog.js";
+import { upsertAgent, upsertClub, upsertDeal, updateAgent, updateClubConfig, listAgents, listClubs, listDealsForAgent } from "../repo/catalog.js";
+
+const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
 
 export const catalogRouter = Router();
 
@@ -36,13 +38,41 @@ const agentSchema = z.object({
   name: z.string().min(2),
   defaultSystem: z.enum(["PREPAGO", "WIN_LOSE"]),
   supervisor: z.string().optional(),
+  accountType: z.enum(ACCOUNT_TYPES).optional(),
 });
 catalogRouter.post("/agents", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    const agent = await upsertAgent(parsed.data.name, parsed.data.defaultSystem, parsed.data.supervisor ?? null);
+    const agent = await upsertAgent(parsed.data.name, parsed.data.defaultSystem, parsed.data.supervisor ?? null, parsed.data.accountType);
     res.status(201).json(agent);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Configuración por defecto de un club ya creado (punto 8: rakeback/rebate/fee que heredan
+// los deals agente↔club que no definan el suyo propio).
+const clubConfigSchema = z.object({
+  name: z.string().min(2).optional(),
+  unit: z.enum(["USD", "USDT", "FICHAS"]).optional(),
+  currentRate: z.number().positive().optional(),
+  defaultRakebackPct: z.number().min(0).max(1).optional(),
+  defaultRebatePct: z.number().min(0).max(1).optional(),
+  rebateDestino: z.enum(["SALDO_OPERATIVO", "RAKEBACK_SUPERVISOR"]).optional(),
+  feePct: z.number().min(0).max(1).optional(),
+  platformPct: z.number().min(0).max(1).optional(),
+  unionPct: z.number().min(0).max(1).optional(),
+  active: z.boolean().optional(),
+  notes: z.string().nullable().optional(),
+});
+catalogRouter.patch("/clubs/:id", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = clubConfigSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const club = await updateClubConfig(req.params.id, parsed.data);
+    if (!club) return res.status(404).json({ error: "Club no encontrado" });
+    res.json(club);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -85,6 +115,7 @@ const agentEditSchema = z.object({
   name: z.string().min(2).optional(),
   defaultSystem: z.enum(["PREPAGO", "WIN_LOSE"]).optional(),
   supervisor: z.string().nullable().optional(),
+  accountType: z.enum(ACCOUNT_TYPES).optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -94,6 +125,7 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       name: parsed.data.name,
       defaultSystem: parsed.data.defaultSystem,
       supervisor: parsed.data.supervisor === undefined ? undefined : parsed.data.supervisor?.trim() || null,
+      accountType: parsed.data.accountType,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);
