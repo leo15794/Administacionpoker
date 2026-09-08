@@ -1,9 +1,26 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
-import { upsertAgent, upsertClub, upsertDeal, updateAgent, updateClubConfig, listAgents, listClubs, listDealsForAgent } from "../repo/catalog.js";
+import {
+  upsertAgent,
+  upsertClub,
+  upsertDeal,
+  updateAgent,
+  updateClubConfig,
+  listAgents,
+  listClubs,
+  listDealsForAgent,
+  addRuleVersion,
+  endRuleVersion,
+  listRulesForAgent,
+} from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
+// Catálogo cerrado de reglas especiales que el motor de cierre sabe interpretar (ver
+// resolverSpecialRule en repo/closings.ts). Agregar una regla nueva a este catálogo requiere
+// código (la fórmula en sí), pero asignarla a un agente y cambiar sus parámetros NUNCA — eso
+// es justamente lo que este módulo saca del código y pone en la base, versionado.
+const RULE_KEYS = ["MANZUR_75_RAKE"] as const;
 
 export const catalogRouter = Router();
 
@@ -107,6 +124,36 @@ catalogRouter.post("/deals", requireAuth, requireAdmin, async (req, res) => {
 
 catalogRouter.get("/agents/:id/deals", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listDealsForAgent(req.params.id));
+});
+
+// Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
+catalogRouter.get("/agents/:id/rules", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listRulesForAgent(req.params.id));
+});
+
+const ruleSchema = z.object({
+  ruleKey: z.enum(RULE_KEYS),
+  params: z.record(z.string(), z.number()),
+  description: z.string().min(3),
+  clubId: z.string().nullable().optional(), // null/omitido = regla global del agente
+});
+catalogRouter.post("/agents/:id/rules", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = ruleSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const id = await addRuleVersion(req.params.id, parsed.data.ruleKey, parsed.data.params, parsed.data.description, parsed.data.clubId ?? null);
+    res.status(201).json({ id });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Termina una regla vigente (el agente vuelve a la fórmula genérica desde ahora). No la borra:
+// queda en el historial con valid_to seteado, para poder recalcular cierres viejos.
+catalogRouter.delete("/rules/:ruleId", requireAuth, requireAdmin, async (req, res) => {
+  const rule = await endRuleVersion(req.params.ruleId);
+  if (!rule) return res.status(404).json({ error: "Regla no encontrada o ya terminada." });
+  res.json(rule);
 });
 
 // Editar un agente ya creado (corregir nombre mal tipeado, sistema o supervisor) sin

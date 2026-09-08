@@ -106,6 +106,13 @@ export const api = {
     notes?: string;
   }) => request("/catalog/deals", { method: "POST", body: JSON.stringify(data) }),
 
+  // Motor de reglas configurable: reglas especiales versionadas por agente (ej. Manzur = 75%
+  // del rake), en vez de "if agente === X" hardcodeado en el motor de cierre.
+  agentRules: (agentId: string) => request(`/catalog/agents/${agentId}/rules`),
+  crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
+    request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
+  terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),
+
   // Movimientos y cierres (escritura sobre el ledger)
   crearMovimiento: (data: {
     type: string;

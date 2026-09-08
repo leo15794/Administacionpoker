@@ -25,6 +25,7 @@ export default function Agentes() {
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
+  const [reglasAgent, setReglasAgent] = useState<{ id: string; name: string } | null>(null);
 
   function refresh() {
     api.agentes().then(setAgentes);
@@ -115,6 +116,7 @@ export default function Agentes() {
                     </td>
                     <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
+                      <button className="btn secondary small" onClick={() => setReglasAgent({ id: a.id, name: a.name })}>Reglas especiales</button>
                       <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
                       <button className="btn secondary small" onClick={() => setEditando(a)}>Editar</button>
                     </td>
@@ -165,6 +167,12 @@ export default function Agentes() {
               refresh();
             }}
           />
+        </Modal>
+      )}
+
+      {reglasAgent && (
+        <Modal title={`Reglas especiales — ${reglasAgent.name}`} onClose={() => setReglasAgent(null)} wide>
+          <ReglasAgente agentId={reglasAgent.id} clubes={clubes} />
         </Modal>
       )}
 
@@ -364,6 +372,142 @@ function NuevoClub({ onCreated }: { onCreated: () => void }) {
         <button className="btn" disabled={loading}>{loading ? "Creando..." : "Crear club"}</button>
       </form>
     </div>
+  );
+}
+
+const RULE_LABELS: Record<string, string> = {
+  MANZUR_75_RAKE: "75% del rake total (ignora el rakeback genérico)",
+};
+
+function ReglasAgente({ agentId, clubes }: { agentId: string; clubes: any[] }) {
+  const [reglas, setReglas] = useState<any[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [terminando, setTerminando] = useState<string | null>(null);
+
+  function refresh() {
+    api.agentRules(agentId).then(setReglas);
+  }
+
+  useEffect(() => {
+    refresh();
+  }, [agentId]);
+
+  async function terminar(regla: any) {
+    if (!confirm(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}"? El agente vuelve a la fórmula genérica desde ahora (no borra el historial).`)) return;
+    setTerminando(regla.id);
+    try {
+      await api.terminarRegla(regla.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo terminar la regla.");
+    } finally {
+      setTerminando(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Reglas especiales versionadas: reemplazan la fórmula genérica de cierre para este agente (en un club específico, o global). Nunca
+        se hardcodea en el código — esto es exactamente lo que hace que el cierre de Manzur (75% del rake) se aplique solo, sin que nadie
+        tenga que calcularlo a mano.
+      </div>
+      <div className="topbar" style={{ marginBottom: 12 }}>
+        <h4 style={{ margin: 0 }}>Historial de reglas</h4>
+        <button className="btn secondary small" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar" : "+ Nueva regla"}</button>
+      </div>
+
+      {showForm && <NuevaRegla agentId={agentId} clubes={clubes} onCreated={() => { setShowForm(false); refresh(); }} />}
+
+      {reglas.length === 0 ? (
+        <div className="muted">Este agente no tiene reglas especiales — se liquida siempre con la fórmula genérica.</div>
+      ) : (
+        <table>
+          <thead><tr><th>Regla</th><th>Alcance</th><th>Vigencia</th><th>Descripción</th><th></th></tr></thead>
+          <tbody>
+            {reglas.map((r) => {
+              const vigente = !r.valid_to;
+              return (
+                <tr key={r.id} style={vigente ? undefined : { opacity: 0.55 }}>
+                  <td>{RULE_LABELS[r.rule_key] ?? r.rule_key}</td>
+                  <td>{r.club_name ?? "Global (todos los clubes)"}</td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>
+                    {new Date(r.valid_from).toLocaleDateString("es-AR")} — {vigente ? <strong>vigente</strong> : new Date(r.valid_to).toLocaleDateString("es-AR")}
+                  </td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>{r.description}</td>
+                  <td>
+                    {vigente && (
+                      <button className="btn secondary small" disabled={terminando === r.id} onClick={() => terminar(r)}>
+                        {terminando === r.id ? "..." : "Terminar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function NuevaRegla({ agentId, clubes, onCreated }: { agentId: string; clubes: any[]; onCreated: () => void }) {
+  const [ruleKey, setRuleKey] = useState<"MANZUR_75_RAKE">("MANZUR_75_RAKE");
+  const [clubId, setClubId] = useState("");
+  const [pctRake, setPctRake] = useState("75");
+  const [description, setDescription] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!description.trim()) return setMsg({ ok: false, text: "Contá brevemente por qué existe esta regla (para el historial)." });
+    setLoading(true);
+    try {
+      await api.crearRegla(agentId, {
+        ruleKey,
+        params: { pctRake: (Number(pctRake) || 0) / 100 },
+        description: description.trim(),
+        clubId: clubId || null,
+      });
+      onCreated();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar la regla." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="panel" style={{ marginBottom: 16 }}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Regla</label>
+          <select value={ruleKey} onChange={(e) => setRuleKey(e.target.value as any)}>
+            <option value="MANZUR_75_RAKE">{RULE_LABELS.MANZUR_75_RAKE}</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Club (opcional)</label>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+            <option value="">Global (todos los clubes)</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>% del rake</label>
+          <input value={pctRake} onChange={(e) => setPctRake(e.target.value)} type="number" step="0.01" />
+        </div>
+      </div>
+      <div className="field">
+        <label>Descripción (por qué existe esta regla)</label>
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej: acuerdo especial con el agente en Fénix GG" />
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Activar regla"}</button>
+    </form>
   );
 }
 

@@ -110,13 +110,69 @@ export async function addDeal(
   return id;
 }
 
+// Motor de reglas configurable (punto final del documento de rediseño): reemplaza el patrón
+// "if (agente === 'Manzur') ..." por una tabla versionada. Igual que upsertDeal, cierra
+// (valid_to = now()) la regla activa anterior para ese mismo agente+club antes de insertar la
+// nueva vigente, así un cierre viejo siempre se puede recalcular con la regla que tenía en su
+// momento. club_id NULL = regla global del agente (aplica en cualquier club que no tenga una
+// regla más específica propia).
 export async function addRuleVersion(agentId: string, ruleKey: string, params: object, description: string, clubId?: string | null) {
-  const id = newId("rule");
-  await pool.query(
-    `INSERT INTO rule_versions (id, agent_id, club_id, rule_key, params, description) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, agentId, clubId ?? null, ruleKey, JSON.stringify(params), description]
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE rule_versions SET valid_to = now()
+       WHERE agent_id = $1 AND valid_to IS NULL AND club_id IS NOT DISTINCT FROM $2`,
+      [agentId, clubId ?? null]
+    );
+    const id = newId("rule");
+    await client.query(
+      `INSERT INTO rule_versions (id, agent_id, club_id, rule_key, params, description) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, agentId, clubId ?? null, ruleKey, JSON.stringify(params), description]
+    );
+    await client.query("COMMIT");
+    return id;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Termina (valid_to = now()) una regla especial vigente sin reemplazarla por otra: el agente
+// vuelve a liquidarse con la fórmula genérica desde ahora. No borra la fila (queda en el
+// historial para poder recalcular cierres viejos con la regla que tenían en su momento).
+export async function endRuleVersion(ruleId: string) {
+  const r = await pool.query(
+    `UPDATE rule_versions SET valid_to = now() WHERE id = $1 AND valid_to IS NULL RETURNING *`,
+    [ruleId]
   );
-  return id;
+  return r.rows[0] ?? null;
+}
+
+export async function listRulesForAgent(agentId: string) {
+  const r = await pool.query(
+    `SELECT rv.*, c.name as club_name FROM rule_versions rv LEFT JOIN clubs c ON c.id = rv.club_id
+     WHERE rv.agent_id = $1 ORDER BY rv.valid_from DESC`,
+    [agentId]
+  );
+  return r.rows;
+}
+
+// Resuelve la regla especial vigente para un agente en un club a una fecha dada (por defecto
+// ahora). Prioriza una regla específica del club por sobre una regla global del agente
+// (club_id NULL) si ambas están vigentes al mismo tiempo.
+export async function getActiveRule(agentId: string, clubId: string, atDate: string | Date = new Date()) {
+  const r = await pool.query(
+    `SELECT * FROM rule_versions
+     WHERE agent_id = $1 AND (club_id = $2 OR club_id IS NULL)
+       AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+     ORDER BY (club_id IS NULL) ASC, valid_from DESC
+     LIMIT 1`,
+    [agentId, clubId, atDate]
+  );
+  return r.rows[0] ?? null;
 }
 
 export async function setGuarantee(agentId: string, amount: number, consumed: number, notes?: string) {

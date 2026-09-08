@@ -3,6 +3,20 @@ import { pool, newId } from "../db/pool.js";
 import { calcularCierre, calcularCierreBancado, type SpecialRule } from "../engine/cierre.js";
 import { revertirMovimiento } from "./ledger.js";
 
+// Traduce una fila de rule_versions al SpecialRule que entiende el motor de cierre genérico.
+// Motor de reglas configurable: nunca "if (agente === 'Manzur')" en el código de negocio — la
+// regla vive en la base, versionada, y acá solo se resuelve el rule_key a la forma que espera
+// calcularCierre. Un rule_key que no aplica a un cierre semanal (ej. CAJERO_CREDITO, que es
+// para cargas a crédito, no para el cierre) simplemente no genera un SpecialRule acá.
+function resolverSpecialRule(rule: { rule_key: string; params: any } | null): SpecialRule | null {
+  if (!rule) return null;
+  if (rule.rule_key === "MANZUR_75_RAKE") {
+    const pctRake = Number(rule.params?.pctRake);
+    return { key: "MANZUR_75_RAKE", pctRake: Number.isFinite(pctRake) ? pctRake : 0.75 };
+  }
+  return null;
+}
+
 export interface AplicarCierreInput {
   agentId: string;
   clubId: string;
@@ -14,6 +28,8 @@ export interface AplicarCierreInput {
   rakebackPct: number;
   rebatePct: number;
   rateSnapshot?: number;
+  /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
+   * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
   specialRule?: SpecialRule | null;
   observation?: string | null;
 }
@@ -50,6 +66,21 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       return result;
     }
 
+    // Motor de reglas configurable: la regla especial (si el agente tiene una vigente para
+    // este club, o global) se resuelve SOLA desde rule_versions — nunca depende de que quien
+    // carga el cierre la tipee a mano. Esto es lo que hoy faltaba: la regla de Manzur (75% del
+    // rake) existe en el motor y está testeada, pero nada la disparaba en producción porque el
+    // formulario de Cierres no tenía forma de pasarla.
+    const ruleRow = await client.query(
+      `SELECT rule_key, params FROM rule_versions
+       WHERE agent_id = $1 AND (club_id = $2 OR club_id IS NULL)
+         AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+       ORDER BY (club_id IS NULL) ASC, valid_from DESC
+       LIMIT 1`,
+      [input.agentId, input.clubId, input.weekEnd]
+    );
+    const specialRule = resolverSpecialRule(ruleRow.rows[0] ?? null);
+
     const calc = calcularCierre({
       agentId: input.agentId,
       clubId: input.clubId,
@@ -59,7 +90,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       rakebackPct: input.rakebackPct,
       rebatePct: input.rebatePct,
       rateSnapshot: input.rateSnapshot ?? 1,
-      specialRule: input.specialRule ?? null,
+      specialRule,
     });
 
     // Módulo de supervisores (punto 5 del documento): si el club de este deal tiene
