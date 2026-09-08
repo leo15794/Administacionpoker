@@ -411,3 +411,75 @@ tbody tr:last-child td { border-bottom: none; }
   color: white;
   box-shadow: 0 4px 12px -4px rgba(99, 102, 241, 0.55);
 }
+
+/* ---------- modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.72);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  width: 620px;
+  max-width: 100%;
+  max-height: 82vh;
+  overflow: auto;
+  box-shadow: var(--shadow-lift);
+}
+.modal-box.wide { width: 820px; }
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.modal-close:hover { color: var(--text); background: var(--panel-2); }
+.modal-body { padding: 16px 20px 22px; }
+
+/* ---------- clickable rows / search ---------- */
+
+.row-click { cursor: pointer; }
+.row-click:hover td { background: rgba(99, 102, 241, 0.08) !important; }
+
+.search-input {
+  width: 100%;
+  max-width: 280px;
+  padding: 9px 13px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}

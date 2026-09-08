@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct } from "../fmt";
+import { exportCsv } from "../csv";
+import Modal from "../components/Modal";
+import MovimientosHistorial from "../components/MovimientosHistorial";
 
 export default function Agentes() {
   const [agentes, setAgentes] = useState<any[]>([]);
@@ -8,6 +11,8 @@ export default function Agentes() {
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "deal">("lista");
+  const [filtro, setFiltro] = useState("");
+  const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
 
   function refresh() {
     api.agentes().then(setAgentes);
@@ -23,6 +28,8 @@ export default function Agentes() {
     setDeals(await api.agentDeals(agent.id));
     setTab("lista");
   }
+
+  const agentesFiltrados = agentes.filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()));
 
   return (
     <div>
@@ -47,18 +54,52 @@ export default function Agentes() {
       {tab === "lista" && (
         <div style={{ display: "flex", gap: 20 }}>
           <div className="panel" style={{ flex: 1 }}>
-            <h3>Todos los agentes ({agentes.length})</h3>
+            <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Todos los agentes ({agentesFiltrados.length})</h3>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input className="search-input" placeholder="Buscar agente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+                <button
+                  className="btn secondary small"
+                  onClick={() =>
+                    exportCsv(
+                      "agentes.csv",
+                      agentesFiltrados.map((a) => ({
+                        nombre: a.name,
+                        sistema: a.default_system,
+                        saldo_total: a.saldo_total,
+                        garantia_monto: a.garantia_monto ?? "",
+                        garantia_consumida: a.garantia_consumida ?? "",
+                      }))
+                    )
+                  }
+                >
+                  Exportar CSV
+                </button>
+              </div>
+            </div>
             <table>
               <thead>
-                <tr><th>Nombre</th><th>Sistema</th><th>Saldo total</th><th></th></tr>
+                <tr><th>Nombre</th><th>Sistema</th><th>Saldo total</th><th>Garantía</th><th></th></tr>
               </thead>
               <tbody>
-                {agentes.map((a) => (
+                {agentesFiltrados.map((a) => (
                   <tr key={a.id}>
                     <td>{a.name}</td>
                     <td>{a.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                     <td><span className={`badge ${Number(a.saldo_total) > 0 ? "pos" : Number(a.saldo_total) < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
-                    <td><button className="btn secondary small" onClick={() => open(a)}>Ver deals</button></td>
+                    <td>
+                      {a.garantia_monto != null ? (
+                        <span className="muted" style={{ fontSize: 12.5 }}>
+                          {usd(a.garantia_consumida)} / {usd(a.garantia_monto)}
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
+                      <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -84,6 +125,12 @@ export default function Agentes() {
             </div>
           )}
         </div>
+      )}
+
+      {historialAgent && (
+        <Modal title={`Historial — ${historialAgent.name}`} onClose={() => setHistorialAgent(null)} wide>
+          <MovimientosHistorial agentId={historialAgent.id} />
+        </Modal>
       )}
     </div>
   );

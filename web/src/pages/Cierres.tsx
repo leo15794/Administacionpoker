@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import { exportCsv } from "../csv";
 
 export default function Cierres() {
   const [cierres, setCierres] = useState<any[]>([]);
@@ -39,6 +40,31 @@ export default function Cierres() {
       )}
 
       <div className="panel">
+        <div className="topbar" style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: 0 }}>Historial de cierres</h3>
+          <button
+            className="btn secondary small"
+            onClick={() =>
+              exportCsv(
+                "cierres_semanales.csv",
+                cierres.map((c) => ({
+                  semana_desde: c.week_start,
+                  semana_hasta: c.week_end,
+                  agente: c.agent_name,
+                  club: c.club_name,
+                  sistema: c.system,
+                  resultado: c.result,
+                  rake: c.rake_total,
+                  rakeback: c.rakeback,
+                  cierre_final: c.final_closing,
+                  regla: c.rule_applied ?? "",
+                }))
+              )
+            }
+          >
+            Exportar CSV
+          </button>
+        </div>
         <table>
           <thead>
             <tr>

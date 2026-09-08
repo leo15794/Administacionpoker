@@ -34,6 +34,16 @@ export const api = {
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
   miCuenta: () => request("/portal/mi-cuenta"),
 
+  // Drill-down de movimientos y tesorería
+  movimientos: (params: { agentId?: string; clubId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.agentId) qs.set("agentId", params.agentId);
+    if (params.clubId) qs.set("clubId", params.clubId);
+    const q = qs.toString();
+    return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
+  },
+  tesoreria: () => request("/dashboard/tesoreria"),
+
   // Catálogo (alta/edición)
   clubes: () => request("/catalog/clubs"),
   crearClub: (data: { name: string; unit?: string; currentRate?: number }) =>

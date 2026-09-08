@@ -6,6 +6,7 @@ import Agentes from "./pages/Agentes";
 import Movimientos from "./pages/Movimientos";
 import Cierres from "./pages/Cierres";
 import Usuarios from "./pages/Usuarios";
+import Tesoreria from "./pages/Tesoreria";
 import MiCuenta from "./pages/MiCuenta";
 import { api } from "./api";
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="agentes" element={<Agentes />} />
           <Route path="movimientos" element={<Movimientos />} />
           <Route path="cierres" element={<Cierres />} />
+          <Route path="tesoreria" element={<Tesoreria />} />
           <Route path="usuarios" element={<Usuarios />} />
         </Route>
 

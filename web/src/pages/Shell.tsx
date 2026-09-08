@@ -29,6 +29,11 @@ const icon = {
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
     </svg>
   ),
+  tesoreria: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v10" /><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 3 6 1.5 6 4.5 0 1.4-1.3 2.5-3 2.5s-3-1.1-3-2.5" />
+    </svg>
+  ),
   cuenta: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -69,6 +74,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
               <NavLink to="/dashboard/agentes" className="nav-link">{icon.agentes} Agentes</NavLink>
               <NavLink to="/dashboard/movimientos" className="nav-link">{icon.movimientos} Cargar movimiento</NavLink>
               <NavLink to="/dashboard/cierres" className="nav-link">{icon.cierres} Cierres semanales</NavLink>
+              <NavLink to="/dashboard/tesoreria" className="nav-link">{icon.tesoreria} Tesorería</NavLink>
               <NavLink to="/dashboard/usuarios" className="nav-link">{icon.usuarios} Usuarios y permisos</NavLink>
             </>
           ) : (
