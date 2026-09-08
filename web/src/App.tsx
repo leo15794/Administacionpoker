@@ -1,0 +1,49 @@
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/Login";
+import Shell from "./pages/Shell";
+import Resumen from "./pages/Resumen";
+import Agentes from "./pages/Agentes";
+import Cierres from "./pages/Cierres";
+import MiCuenta from "./pages/MiCuenta";
+import { api } from "./api";
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  if (!api.getToken()) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <Shell role="ADMIN" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<Resumen />} />
+          <Route path="agentes" element={<Agentes />} />
+          <Route path="cierres" element={<Cierres />} />
+        </Route>
+
+        <Route
+          path="/mi-cuenta"
+          element={
+            <RequireAuth>
+              <Shell role="AGENT" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MiCuenta />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

@@ -1,0 +1,160 @@
+:root {
+  --bg: #0f1420;
+  --panel: #161d2e;
+  --panel-2: #1d2740;
+  --border: #2a3452;
+  --text: #e8ecf6;
+  --text-dim: #9aa5c0;
+  --accent: #4f7cff;
+  --green: #34c77b;
+  --red: #ef5a6f;
+  --amber: #f2b84b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a { color: inherit; }
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 20px 14px;
+  flex-shrink: 0;
+}
+
+.sidebar h1 {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+.sidebar .sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 24px;
+}
+
+.nav-link {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-dim);
+  text-decoration: none;
+  margin-bottom: 2px;
+}
+.nav-link.active, .nav-link:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.main {
+  flex: 1;
+  padding: 28px 32px;
+  max-width: 1200px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+h2 { margin: 0 0 4px; font-size: 22px; }
+.muted { color: var(--text-dim); font-size: 13px; }
+
+.btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.kpi-card .label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.kpi-card .value { font-size: 24px; font-weight: 600; }
+.kpi-card .value.pos { color: var(--green); }
+.kpi-card .value.neg { color: var(--red); }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+.panel h3 { margin: 0 0 14px; font-size: 15px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-dim); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+tr:hover td { background: rgba(255,255,255,0.02); }
+
+.badge { padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge.pos { background: rgba(52,199,123,0.15); color: var(--green); }
+.badge.neg { background: rgba(239,90,111,0.15); color: var(--red); }
+.badge.neutral { background: rgba(154,165,192,0.15); color: var(--text-dim); }
+
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 36px;
+  width: 340px;
+}
+.login-box h1 { margin: 0 0 4px; font-size: 20px; }
+.login-box .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 22px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+.error { color: var(--red); font-size: 13px; margin-bottom: 12px; }
+.hint { margin-top: 16px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
