@@ -32,16 +32,21 @@ authRouter.post("/bootstrap-user", async (req, res) => {
 // mientras se resuelve el problema de login. Alcanza con el email. Hay que reactivar
 // bcrypt.compare acá antes de exponer esto fuera de tu máquina.
 authRouter.post("/login", async (req, res) => {
-  const { email } = req.body ?? {};
-  if (!email) return res.status(400).json({ error: "email es requerido" });
+  try {
+    const { email } = req.body ?? {};
+    if (!email) return res.status(400).json({ error: "email es requerido" });
 
-  const r = await pool.query(
-    `SELECT u.*, a.name as agent_name FROM agent_users u JOIN agents a ON a.id = u.agent_id WHERE email = $1`,
-    [email]
-  );
-  const user = r.rows[0];
-  if (!user) return res.status(401).json({ error: "No existe un usuario con ese email. Corré el seed o creá uno con /auth/bootstrap-user." });
+    const r = await pool.query(
+      `SELECT u.*, a.name as agent_name FROM agent_users u JOIN agents a ON a.id = u.agent_id WHERE email = $1`,
+      [email]
+    );
+    const user = r.rows[0];
+    if (!user) return res.status(401).json({ error: "No existe un usuario con ese email. Corré el seed o creá uno con /auth/bootstrap-user." });
 
-  const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
-  res.json({ token, agentName: user.agent_name, role: user.role });
+    const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
+    res.json({ token, agentName: user.agent_name, role: user.role });
+  } catch (err: any) {
+    console.error("Error en /auth/login:", err);
+    res.status(500).json({ error: "Error interno en login", detail: String(err?.message ?? err) });
+  }
 });

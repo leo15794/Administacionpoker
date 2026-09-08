@@ -9,6 +9,13 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: isLocal ? undefined : { rejectUnauthorized: false },
   max: isLocal ? 10 : 3, // en serverless conviene un pool chico por invocación
+  connectionTimeoutMillis: 8000, // si no puede conectar en 8s, tira error en vez de colgarse
+});
+
+pool.on("error", (err) => {
+  // Sin esto, un error en una conexión idle del pool puede tirar abajo el proceso
+  // sin dejar rastro en los logs.
+  console.error("Error inesperado en el pool de Postgres:", err);
 });
 
 export function newId(prefix: string): string {
