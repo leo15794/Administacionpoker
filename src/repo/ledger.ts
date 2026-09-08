@@ -193,6 +193,19 @@ export async function eliminarMovimiento(id: string) {
     await client.query(`DELETE FROM treasury_entries WHERE movement_id = $1`, [id]);
     await client.query(`DELETE FROM ledger_movements WHERE id = $1`, [id]);
 
+    // Un CIERRE_SEMANAL siempre viene acompañado de su fila en weekly_closings (se insertan
+    // juntos en aplicarCierreSemanal) — si se borra el movimiento sin borrar esa fila, queda
+    // un cierre "fantasma" que se sigue mostrando en la pestaña de Cierres aunque ya no tenga
+    // efecto real en el saldo. Se borra acá también, por agente+club+semana (coincide con
+    // occurred_at, que se carga con weekEnd al aplicar el cierre).
+    if (mov.type === "CIERRE_SEMANAL") {
+      await client.query(
+        `DELETE FROM weekly_closings
+         WHERE agent_id = $1 AND club_id = $2 AND week_end = $3::date`,
+        [mov.agent_id, mov.club_id, mov.occurred_at]
+      );
+    }
+
     await client.query("COMMIT");
     return { found: true, id };
   } catch (err) {

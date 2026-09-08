@@ -8,9 +8,23 @@ export default function Cierres() {
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     api.cierres().then(setCierres);
+  }
+
+  async function eliminarCierre(c: any) {
+    if (!confirm(`¿Eliminar el cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)})?\n\nSe revierte su efecto en el saldo. Esto no se puede deshacer.`)) return;
+    setBorrando(c.id);
+    try {
+      await api.eliminarCierre(c.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el cierre.");
+    } finally {
+      setBorrando(null);
+    }
   }
 
   useEffect(() => {
@@ -69,7 +83,7 @@ export default function Cierres() {
           <thead>
             <tr>
               <th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
-              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Cierre final</th><th>Regla</th>
+              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Cierre final</th><th>Regla</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -84,6 +98,16 @@ export default function Cierres() {
                 <td>{usd(c.rakeback)}</td>
                 <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
                 <td>{c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : "—"}</td>
+                <td>
+                  <button
+                    className="btn secondary small"
+                    disabled={borrando === c.id}
+                    onClick={() => eliminarCierre(c)}
+                    title="Eliminar cierre (revierte el saldo)"
+                  >
+                    {borrando === c.id ? "..." : "Eliminar"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

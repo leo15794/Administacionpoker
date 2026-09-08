@@ -1,5 +1,6 @@
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre, type SpecialRule } from "../engine/cierre.js";
+import { eliminarMovimiento } from "./ledger.js";
 
 export interface AplicarCierreInput {
   agentId: string;
@@ -108,6 +109,32 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
   } finally {
     client.release();
   }
+}
+
+/**
+ * Elimina un cierre semanal cargado por error: revierte el efecto en el saldo (a través de
+ * eliminarMovimiento, que también borra la fila de weekly_closings asociada) y, si por algún
+ * motivo no se encuentra el movimiento del ledger (dato viejo/inconsistente), borra igual la
+ * fila de weekly_closings para no dejarla huérfana. Exclusivo de administrador.
+ */
+export async function eliminarCierreSemanal(closingId: string) {
+  const wcRes = await pool.query(`SELECT * FROM weekly_closings WHERE id = $1`, [closingId]);
+  const wc = wcRes.rows[0];
+  if (!wc) return { found: false };
+
+  const movRes = await pool.query(
+    `SELECT id FROM ledger_movements
+     WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date`,
+    [wc.agent_id, wc.club_id, wc.week_end]
+  );
+  const movId = movRes.rows[0]?.id;
+
+  if (movId) {
+    await eliminarMovimiento(movId);
+  } else {
+    await pool.query(`DELETE FROM weekly_closings WHERE id = $1`, [closingId]);
+  }
+  return { found: true, id: closingId };
 }
 
 export async function listClosings(weekStart?: string) {

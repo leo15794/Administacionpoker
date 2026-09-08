@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { registrarMovimiento, eliminarMovimiento } from "../repo/ledger.js";
-import { aplicarCierreSemanal } from "../repo/closings.js";
+import { aplicarCierreSemanal, eliminarCierreSemanal } from "../repo/closings.js";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
 
 export const movementsRouter = Router();
@@ -59,6 +59,19 @@ movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, r
   try {
     const result = await aplicarCierreSemanal(parsed.data);
     res.status(result.alreadyApplied ? 200 : 201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Eliminar un cierre semanal cargado por error. Revierte su efecto en el saldo y borra
+// tanto el movimiento del ledger como la fila de weekly_closings (ver eliminarCierreSemanal).
+// Va antes de "/:id" para que "cierre-semanal" no se interprete como un id de movimiento.
+movementsRouter.delete("/cierre-semanal/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await eliminarCierreSemanal(req.params.id);
+    if (!result.found) return res.status(404).json({ error: "Cierre no encontrado" });
+    res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

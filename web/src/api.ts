@@ -46,6 +46,7 @@ export const api = {
     request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
   eliminarMovimiento: (id: string) => request(`/movements/${id}`, { method: "DELETE" }),
   eliminarAjusteTesoreria: (id: string) => request(`/dashboard/tesoreria/ajuste/${id}`, { method: "DELETE" }),
+  eliminarCierre: (id: string) => request(`/movements/cierre-semanal/${id}`, { method: "DELETE" }),
   ajustarTesoreria: (data: {
     ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
     direction: "INGRESO" | "EGRESO";
