@@ -1,8 +1,10 @@
 import { Router } from "express";
+import { z } from "zod";
 import { pool } from "../db/pool.js";
 import { listAllBalances } from "../repo/ledger.js";
 import { listClosings } from "../repo/closings.js";
-import { requireAuth, requireAdmin } from "../lib/auth.js";
+import { registrarAjusteTesoreria } from "../repo/treasury.js";
+import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
 export const dashboardRouter = Router();
 
@@ -97,39 +99,115 @@ dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) 
   res.json(r.rows);
 });
 
-// Tesorería real: agrega treasury_entries por ledger (wallet USDT / caja efectivo) y
-// por custodio, para saber cuánto hay circulando y con quién sin tener que buscarlo a mano.
+// Tesorería real: agrega treasury_entries (automáticas, generadas por movimientos de
+// agentes) + treasury_adjustments (manuales, cargadas a mano acá) por ledger y por
+// custodio, para saber cuánto hay circulando y con quién sin tener que buscarlo a mano.
 dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (_req, res) => {
-  const porLedger = await pool.query(
-    `SELECT ledger,
-            COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
-            COUNT(*)::int as movimientos
-     FROM treasury_entries
-     GROUP BY ledger`
+  const [porLedgerAuto, porLedgerAjuste, porCustodioAuto, porCustodioAjuste, movsAuto, ajustes] = await Promise.all([
+    pool.query(
+      `SELECT ledger,
+              COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
+              COUNT(*)::int as movimientos
+       FROM treasury_entries GROUP BY ledger`
+    ),
+    pool.query(
+      `SELECT ledger,
+              COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
+              COUNT(*)::int as movimientos
+       FROM treasury_adjustments GROUP BY ledger`
+    ),
+    pool.query(
+      `SELECT COALESCE(custodian, '(sin asignar)') as custodio, ledger,
+              COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
+              COUNT(*)::int as movimientos
+       FROM treasury_entries WHERE ledger = 'CAJA_EFECTIVO' GROUP BY custodian, ledger`
+    ),
+    pool.query(
+      `SELECT COALESCE(custodian, '(sin asignar)') as custodio, ledger,
+              COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
+              COUNT(*)::int as movimientos
+       FROM treasury_adjustments WHERE ledger = 'CAJA_EFECTIVO' GROUP BY custodian, ledger`
+    ),
+    pool.query(
+      `SELECT t.id, t.ledger, t.direction, t.amount, t.custodian, t.occurred_at,
+              m.type, m.observation, a.name as agent_name
+       FROM treasury_entries t
+       JOIN ledger_movements m ON m.id = t.movement_id
+       JOIN agents a ON a.id = m.agent_id
+       ORDER BY t.occurred_at DESC LIMIT 150`
+    ),
+    pool.query(
+      `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by
+       FROM treasury_adjustments ORDER BY occurred_at DESC LIMIT 150`
+    ),
+  ]);
+
+  // Combina automático + manual por clave (ledger, o custodio+ledger).
+  function merge(auto: any[], manual: any[], key: (r: any) => string) {
+    const map = new Map<string, any>();
+    for (const r of auto) map.set(key(r), { ...r, neto: Number(r.neto), movimientos: Number(r.movimientos) });
+    for (const r of manual) {
+      const k = key(r);
+      const prev = map.get(k);
+      if (prev) {
+        prev.neto += Number(r.neto);
+        prev.movimientos += Number(r.movimientos);
+      } else {
+        map.set(k, { ...r, neto: Number(r.neto), movimientos: Number(r.movimientos) });
+      }
+    }
+    return [...map.values()];
+  }
+
+  const porLedger = merge(porLedgerAuto.rows, porLedgerAjuste.rows, (r) => r.ledger);
+  const porCustodio = merge(porCustodioAuto.rows, porCustodioAjuste.rows, (r) => `${r.custodio}|${r.ledger}`).sort(
+    (a, b) => b.neto - a.neto
   );
 
-  const porCustodio = await pool.query(
-    `SELECT COALESCE(custodian, '(sin asignar)') as custodio, ledger,
-            COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END),0) as neto,
-            COUNT(*)::int as movimientos
-     FROM treasury_entries
-     WHERE ledger = 'CAJA_EFECTIVO'
-     GROUP BY custodian, ledger
-     ORDER BY neto DESC`
-  );
+  const ultimosMovimientos = [
+    ...movsAuto.rows.map((m) => ({ ...m, source: "movimiento" as const })),
+    ...ajustes.rows.map((a) => ({
+      ...a,
+      type: "AJUSTE_TESORERIA",
+      observation: a.reason,
+      agent_name: null,
+      source: "ajuste" as const,
+    })),
+  ]
+    .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
+    .slice(0, 150);
 
-  const ultimosMovimientos = await pool.query(
-    `SELECT t.*, m.type, m.observation, a.name as agent_name
-     FROM treasury_entries t
-     JOIN ledger_movements m ON m.id = t.movement_id
-     JOIN agents a ON a.id = m.agent_id
-     ORDER BY t.occurred_at DESC
-     LIMIT 100`
-  );
+  res.json({ porLedger, porCustodio, ultimosMovimientos });
+});
 
-  res.json({
-    porLedger: porLedger.rows,
-    porCustodio: porCustodio.rows,
-    ultimosMovimientos: ultimosMovimientos.rows,
-  });
+const ajusteSchema = z.object({
+  ledger: z.enum(["WALLET_MANOS", "CAJA_EFECTIVO"]),
+  direction: z.enum(["INGRESO", "EGRESO"]),
+  amount: z.number().positive(),
+  custodian: z.string().optional(),
+  reason: z.string().min(3, "Contá brevemente el motivo del ajuste."),
+  occurredAt: z.string().optional(),
+});
+
+// Ajuste manual de tesorería: plata que entra o sale de la wallet/caja SIN venir de un
+// movimiento de agente (aporte propio, retiro de socio, diferencia de arqueo). Queda
+// registrado en treasury_adjustments, separado de los movimientos automáticos, y siempre
+// visible como "ajuste manual" en /tesoreria — nunca se pierde ni se confunde con un cobro
+// o pago real de un agente.
+dashboardRouter.post("/tesoreria/ajuste", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = ajusteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (parsed.data.ledger === "CAJA_EFECTIVO" && !parsed.data.custodian) {
+    return res.status(400).json({ error: "Un ajuste en efectivo requiere custodio." });
+  }
+  try {
+    const r = await registrarAjusteTesoreria({
+      ...parsed.data,
+      occurredAt: parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : undefined,
+      createdBy: req.user?.email ?? null,
+    });
+    res.status(201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });

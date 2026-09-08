@@ -10,6 +10,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/seed.ts",
     "set-password": "tsx src/scripts/set-password.ts",
+    "import:historial": "tsx src/scripts/importHistorialAutomatizacion.ts",
     "test:cierre": "tsx src/engine/__test__.ts"
   },
   "dependencies": {

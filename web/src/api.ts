@@ -43,6 +43,15 @@ export const api = {
     return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
   },
   tesoreria: () => request("/dashboard/tesoreria"),
+  eliminarMovimiento: (id: string) => request(`/movements/${id}`, { method: "DELETE" }),
+  ajustarTesoreria: (data: {
+    ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
+    direction: "INGRESO" | "EGRESO";
+    amount: number;
+    custodian?: string;
+    reason: string;
+    occurredAt?: string;
+  }) => request("/dashboard/tesoreria/ajuste", { method: "POST", body: JSON.stringify(data) }),
 
   // Catálogo (alta/edición)
   clubes: () => request("/catalog/clubs"),

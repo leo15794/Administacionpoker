@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { registrarMovimiento } from "../repo/ledger.js";
+import { registrarMovimiento, eliminarMovimiento } from "../repo/ledger.js";
 import { aplicarCierreSemanal } from "../repo/closings.js";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
 
@@ -59,6 +59,18 @@ movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, r
   try {
     const result = await aplicarCierreSemanal(parsed.data);
     res.status(result.alreadyApplied ? 200 : 201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Eliminar un movimiento cargado por error. Revierte el balance y borra su tesorería
+// asociada (ver eliminarMovimiento). Exclusivo de administrador.
+movementsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await eliminarMovimiento(req.params.id);
+    if (!result.found) return res.status(404).json({ error: "Movimiento no encontrado" });
+    res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

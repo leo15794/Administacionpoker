@@ -109,6 +109,22 @@ CREATE TABLE IF NOT EXISTS treasury_entries (
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Ajuste manual de tesoreria: plata que entra o sale de la wallet/caja SIN venir de un
+-- movimiento de agente (aporte propio, retiro de socio, diferencia de arqueo, etc).
+-- Deliberadamente separado de treasury_entries/ledger_movements: no toca balances de
+-- agentes y siempre queda identificado como ajuste manual en el historial, nunca mezclado
+-- con la proyección automática.
+CREATE TABLE IF NOT EXISTS treasury_adjustments (
+  id          TEXT PRIMARY KEY,
+  ledger      TEXT NOT NULL CHECK (ledger IN ('WALLET_MANOS','CAJA_EFECTIVO')),
+  direction   TEXT NOT NULL CHECK (direction IN ('INGRESO','EGRESO')),
+  amount      NUMERIC(18,4) NOT NULL,
+  custodian   TEXT,                       -- obligatorio si ledger = CAJA_EFECTIVO
+  reason      TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by  TEXT
+);
+
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).
 CREATE TABLE IF NOT EXISTS balances (
@@ -174,6 +190,6 @@ CREATE TABLE IF NOT EXISTS agent_users (
   active        BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Columna agregada despues del primer despliegue: en una base ya existente, CREATE TABLE
--- IF NOT EXISTS no la crea, asi que se agrega aca de forma idempotente.
+-- Columna agregada después del primer despliegue: en una base ya existente, CREATE TABLE
+-- IF NOT EXISTS no la crea, así que se agrega acá de forma idempotente.
 ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;

@@ -165,6 +165,44 @@ export async function listAllBalances() {
   return r.rows;
 }
 
+/**
+ * Elimina un movimiento y revierte TODO lo que generó (BIT-style: nunca dejar rastros
+ * huérfanos). Reversa el/los delta(s) de balance (origen y, si es transferencia, destino),
+ * borra su treasury_entry si existía, y borra el movimiento. Todo en una transacción: o se
+ * revierte completo, o no se toca nada. Pensado como acción exclusiva de administrador para
+ * corregir un movimiento cargado por error (histórico importado o cargado a mano).
+ */
+export async function eliminarMovimiento(id: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const r = await client.query(`SELECT * FROM ledger_movements WHERE id = $1 FOR UPDATE`, [id]);
+    const mov = r.rows[0];
+    if (!mov) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+
+    // Revertir el delta de balance con el signo opuesto al que se aplicó al registrarlo.
+    await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaParaBalance(mov.type, Number(mov.amount), false));
+    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
+      await upsertBalanceDelta(client, mov.agent_id, mov.club_destino_id, -deltaParaBalance(mov.type, Number(mov.amount), true));
+    }
+
+    await client.query(`DELETE FROM treasury_entries WHERE movement_id = $1`, [id]);
+    await client.query(`DELETE FROM ledger_movements WHERE id = $1`, [id]);
+
+    await client.query("COMMIT");
+    return { found: true, id };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listMovementsByAgent(agentId: string, limit = 200) {
   const r = await pool.query(
     `SELECT m.*, c.name as club_name FROM ledger_movements m JOIN clubs c ON c.id = m.club_id
