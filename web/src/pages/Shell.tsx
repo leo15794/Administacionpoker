@@ -89,6 +89,14 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
   return (
     <div className="app-shell">
       <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+        <button
+          className="sidebar-toggle"
+          onClick={toggleCollapsed}
+          title={collapsed ? "Expandir menú" : "Contraer menú"}
+        >
+          {collapsed ? icon.expand : icon.collapse}
+        </button>
+
         <div className="brand">
           <div className="brand-mark">D</div>
           {!collapsed && (
@@ -117,14 +125,6 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
         </nav>
 
         <div className="sidebar-footer">
-          <button
-            className="btn secondary"
-            onClick={toggleCollapsed}
-            title={collapsed ? "Expandir menú" : "Contraer menú"}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}
-          >
-            {collapsed ? icon.expand : icon.collapse} {!collapsed && "Contraer menú"}
-          </button>
           <button
             className="btn secondary"
             onClick={logout}
