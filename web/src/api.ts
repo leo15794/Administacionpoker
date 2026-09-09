@@ -139,6 +139,9 @@ export const api = {
   // Vista global: todas las reglas especiales de todos los agentes en un solo listado (evita
   // tener que entrar agente por agente a buscar cuáles tienen algo activo).
   todasLasReglas: () => request(`/catalog/rules`),
+  // Árbol Club -> Agentes (con % vigente) para la pestaña "Árbol de clubes" en Administración.
+  arbolClubes: () => request(`/catalog/arbol`),
+  jugadoresDeAgenteEnClub: (clubId: string, agentId: string) => request(`/catalog/clubs/${clubId}/agents/${agentId}/players`),
   crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
     request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
   terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, type AccountType } from "../api";
 import { usd, pct } from "../fmt";
 import { exportCsv } from "../csv";
@@ -21,7 +21,7 @@ export default function Agentes() {
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
-  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas">("lista");
+  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas" | "arbol">("lista");
   const [filtro, setFiltro] = useState("");
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
@@ -85,6 +85,7 @@ export default function Agentes() {
         <button className={tab === "supervisores" ? "active" : ""} onClick={() => setTab("supervisores")}>Supervisores</button>
         <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
         <button className={tab === "reglas" ? "active" : ""} onClick={() => setTab("reglas")}>Reglas especiales</button>
+        <button className={tab === "arbol" ? "active" : ""} onClick={() => setTab("arbol")}>Árbol de clubes</button>
       </div>
 
       {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} />}
@@ -93,6 +94,7 @@ export default function Agentes() {
       {tab === "supervisores" && <SupervisoresView />}
       {tab === "deal" && <NuevoDeal agentes={agentes} clubes={clubes} onCreated={refresh} />}
       {tab === "reglas" && <ReglasGlobal agentes={agentes} clubes={clubes} />}
+      {tab === "arbol" && <ArbolClubes agentes={agentes} clubes={clubes} />}
 
       {tab === "lista" && (
         <div style={{ display: "flex", gap: 20 }}>
@@ -711,6 +713,144 @@ function NuevaReglaGlobal({ agentes, clubes, onCreated }: { agentes: any[]; club
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Activar regla"}</button>
     </form>
+  );
+}
+
+// Árbol Club -> Agentes -> Jugadores. Los jugadores no tienen % propio (cobran siempre vía su
+// agente) así que solo el agente es editable acá — mismo upsertDeal de siempre (versiona, nunca
+// pisa en el lugar). Los jugadores se piden on-demand al expandir cada agente, para no traer de
+// una una lista gigante que capaz nadie abre.
+function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
+  const [arbol, setArbol] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [clubesAbiertos, setClubesAbiertos] = useState<Record<string, boolean>>({});
+  const [agentesAbiertos, setAgentesAbiertos] = useState<Record<string, boolean>>({}); // `${clubId}|${agentId}`
+  const [jugadoresPorAgente, setJugadoresPorAgente] = useState<Record<string, any[]>>({});
+  const [cargandoJugadores, setCargandoJugadores] = useState<string | null>(null);
+  const [editando, setEditando] = useState<{ clubId: string; agentId: string; agentName: string } | null>(null);
+
+  function refresh() {
+    setCargando(true);
+    api.arbolClubes().then(setArbol).finally(() => setCargando(false));
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function toggleAgente(clubId: string, agentId: string) {
+    const clave = `${clubId}|${agentId}`;
+    setAgentesAbiertos((s) => ({ ...s, [clave]: !s[clave] }));
+    if (!jugadoresPorAgente[clave] && !agentesAbiertos[clave]) {
+      setCargandoJugadores(clave);
+      try {
+        const jugadores = await api.jugadoresDeAgenteEnClub(clubId, agentId);
+        setJugadoresPorAgente((s) => ({ ...s, [clave]: jugadores }));
+      } finally {
+        setCargandoJugadores(null);
+      }
+    }
+  }
+
+  const editandoAgente = editando ? agentes.find((a) => a.id === editando.agentId) : null;
+  const editandoClub = editando ? clubes.find((c) => c.id === editando.clubId) : null;
+  const dealActualParaEditar =
+    editando && editandoClub
+      ? (() => {
+          const nodo = arbol.find((c) => c.clubId === editando.clubId)?.agentes.find((a: any) => a.agentId === editando.agentId);
+          return nodo ? { club_id: editando.clubId, system: nodo.system, rakeback_pct: nodo.rakebackPct, rebate_pct: nodo.rebatePct } : undefined;
+        })()
+      : undefined;
+
+  return (
+    <div>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Todos los clubes activos con los agentes que ya tienen jugadores cargados ahí (por import o carga manual) y su %
+        vigente. El % es editable por acá mismo — versiona el deal anterior, igual que en "Ver deals". Los jugadores son
+        de solo lectura: no tienen % propio, siempre cobran a través de su agente.
+      </div>
+
+      {editando && editandoAgente && (
+        <div style={{ marginBottom: 16 }}>
+          <NuevoDeal
+            agentes={agentes}
+            clubes={clubes}
+            fixedAgentId={editando.agentId}
+            initial={dealActualParaEditar}
+            onCreated={() => { setEditando(null); refresh(); }}
+          />
+          <button className="btn secondary small" style={{ marginTop: 6 }} onClick={() => setEditando(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {cargando ? (
+        <div className="muted">Cargando...</div>
+      ) : (
+        arbol.map((club) => {
+          const abierto = !!clubesAbiertos[club.clubId];
+          return (
+            <div key={club.clubId} className="panel" style={{ marginBottom: 10 }}>
+              <div
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                onClick={() => setClubesAbiertos((s) => ({ ...s, [club.clubId]: !s[club.clubId] }))}
+              >
+                <h4 style={{ margin: 0 }}>{abierto ? "▾" : "▸"} {club.clubName}</h4>
+                <span className="muted" style={{ fontSize: 12.5 }}>{club.agentes.length} agente(s)</span>
+              </div>
+
+              {abierto && (
+                club.agentes.length === 0 ? (
+                  <div className="muted" style={{ marginTop: 10 }}>Todavía no tiene ningún agente con jugadores cargados.</div>
+                ) : (
+                  <table style={{ marginTop: 10 }}>
+                    <thead><tr><th></th><th>Agente</th><th>Jugadores</th><th>% Rakeback</th><th>% Rebate</th><th>Config</th><th></th></tr></thead>
+                    <tbody>
+                      {club.agentes.map((ag: any) => {
+                        const clave = `${club.clubId}|${ag.agentId}`;
+                        const agAbierto = !!agentesAbiertos[clave];
+                        return (
+                          <Fragment key={clave}>
+                            <tr>
+                              <td style={{ cursor: "pointer" }} onClick={() => toggleAgente(club.clubId, ag.agentId)}>{agAbierto ? "▾" : "▸"}</td>
+                              <td>{ag.agentName}</td>
+                              <td>{ag.jugadores}</td>
+                              <td>{pct(ag.rakebackPct)}</td>
+                              <td>{pct(ag.rebatePct)}</td>
+                              <td className="muted" style={{ fontSize: 11.5 }}>{ag.configSource === "deal" ? "propio" : "default club"}</td>
+                              <td>
+                                <button className="btn secondary small" onClick={() => setEditando({ clubId: club.clubId, agentId: ag.agentId, agentName: ag.agentName })}>
+                                  Editar %
+                                </button>
+                              </td>
+                            </tr>
+                            {agAbierto && (
+                              <tr>
+                                <td></td>
+                                <td colSpan={6}>
+                                  {cargandoJugadores === clave ? (
+                                    <span className="muted">Cargando jugadores...</span>
+                                  ) : (
+                                    <div className="muted" style={{ fontSize: 12.5, display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
+                                      {(jugadoresPorAgente[clave] ?? []).map((j: any) => (
+                                        <span key={j.external_id}>{j.display_name ?? j.external_id}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }
 

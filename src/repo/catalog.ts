@@ -182,6 +182,49 @@ export async function listAllRules() {
   return r.rows;
 }
 
+// Árbol Club -> Agentes: para cada club activo, los agentes que YA tienen al menos un jugador
+// cargado ahí (vía import o carga manual), con su % vigente (deal propio o default del club,
+// mismo resolverConfigVigente que usa el importador — nunca inventa un número acá tampoco). Los
+// jugadores de cada agente se piden aparte (getJugadoresDeAgenteEnClub) para no traer una lista
+// gigante de una si nadie la va a abrir.
+export async function getArbolClubes() {
+  const clubesRes = await pool.query(`SELECT id, name FROM clubs WHERE active = true ORDER BY name`);
+  const arbol = [];
+  for (const club of clubesRes.rows) {
+    const agentesRes = await pool.query(
+      `SELECT p.agent_id, a.name as agent_name, COUNT(*) as jugadores
+       FROM players p JOIN agents a ON a.id = p.agent_id
+       WHERE p.club_id = $1 AND p.agent_id IS NOT NULL
+       GROUP BY p.agent_id, a.name
+       ORDER BY a.name`,
+      [club.id]
+    );
+    const agentes = [];
+    for (const ag of agentesRes.rows) {
+      const config = await resolverConfigVigente(ag.agent_id, club.id);
+      agentes.push({
+        agentId: ag.agent_id,
+        agentName: ag.agent_name,
+        jugadores: Number(ag.jugadores),
+        system: config.system,
+        rakebackPct: config.rakebackPct,
+        rebatePct: config.rebatePct,
+        configSource: config.source,
+      });
+    }
+    arbol.push({ clubId: club.id, clubName: club.name, agentes });
+  }
+  return arbol;
+}
+
+export async function getJugadoresDeAgenteEnClub(clubId: string, agentId: string) {
+  const r = await pool.query(
+    `SELECT external_id, display_name FROM players WHERE club_id = $1 AND agent_id = $2 ORDER BY display_name`,
+    [clubId, agentId]
+  );
+  return r.rows;
+}
+
 // Resuelve la regla especial vigente para un agente en un club a una fecha dada (por defecto
 // ahora). Prioriza una regla específica del club por sobre una regla global del agente
 // (club_id NULL) si ambas están vigentes al mismo tiempo.

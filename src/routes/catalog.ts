@@ -14,6 +14,8 @@ import {
   endRuleVersion,
   listRulesForAgent,
   listAllRules,
+  getArbolClubes,
+  getJugadoresDeAgenteEnClub,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -142,6 +144,16 @@ catalogRouter.get("/agents/:id/rules", requireAuth, requireAdmin, async (req, re
 // entrar agente por agente a buscar cuáles están activas.
 catalogRouter.get("/rules", requireAuth, requireAdmin, async (_req, res) => {
   res.json(await listAllRules());
+});
+
+// Árbol Club -> Agentes (con % vigente) para la vista de administración. Los jugadores de cada
+// agente se piden aparte, on-demand, al expandir.
+catalogRouter.get("/arbol", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await getArbolClubes());
+});
+
+catalogRouter.get("/clubs/:clubId/agents/:agentId/players", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await getJugadoresDeAgenteEnClub(req.params.clubId, req.params.agentId));
 });
 
 const ruleSchema = z.object({
