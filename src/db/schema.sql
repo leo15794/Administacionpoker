@@ -319,3 +319,14 @@ CREATE TABLE IF NOT EXISTS agent_users (
 -- Columna agregada después del primer despliegue: en una base ya existente, CREATE TABLE
 -- IF NOT EXISTS no la crea, así que se agrega acá de forma idempotente.
 ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- BIT-nueva: el UNIQUE(agent_id, club_id, week_start) original bloqueaba para siempre volver a
+-- cerrar la misma semana de un agente+club una vez revertida, porque la fila REVERTIDO nunca se
+-- borra (principio de inmutabilidad del ledger) y seguía ocupando la clave. Se reemplaza por un
+-- índice único parcial que ignora las filas REVERTIDO: la clave idempotente (BIT-001) sigue
+-- vigente para cierres activos, pero un revert abre la puerta a re-cerrar esa semana bien.
+ALTER TABLE weekly_closings DROP CONSTRAINT IF EXISTS weekly_closings_agent_id_club_id_week_start_key;
+DROP INDEX IF EXISTS weekly_closings_agent_id_club_id_week_start_key;
+CREATE UNIQUE INDEX IF NOT EXISTS weekly_closings_agent_club_week_active_key
+  ON weekly_closings(agent_id, club_id, week_start)
+  WHERE status <> 'REVERTIDO';

@@ -62,8 +62,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
   try {
     await client.query("BEGIN");
 
+    // Una fila REVERTIDO no cuenta como "ya aplicado": el revert existe justamente para poder
+    // volver a cerrar bien esa semana (ver índice único parcial en schema.sql, que ahora ignora
+    // status REVERTIDO por la misma razón).
     const existing = await client.query(
-      `SELECT id FROM weekly_closings WHERE agent_id=$1 AND club_id=$2 AND week_start=$3`,
+      `SELECT id FROM weekly_closings WHERE agent_id=$1 AND club_id=$2 AND week_start=$3 AND status <> 'REVERTIDO'`,
       [input.agentId, input.clubId, input.weekStart]
     );
     if (existing.rows.length > 0) {

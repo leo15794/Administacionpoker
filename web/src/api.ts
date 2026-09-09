@@ -145,6 +145,9 @@ export const api = {
   // Borra una fila de jugador mal asignada a un club (ej. por el bug viejo del import_source),
   // para poder recargarla a mano en el club correcto. No toca cierres ni ledger.
   eliminarJugador: (playerId: string) => request(`/catalog/players/${playerId}`, { method: "DELETE" }),
+  // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
+  // importación cuyo % pudo haber cambiado después de analizar el archivo.
+  configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),
   crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
     request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
   terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),

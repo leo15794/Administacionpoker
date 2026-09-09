@@ -17,6 +17,7 @@ import {
   getArbolClubes,
   getJugadoresDeAgenteEnClub,
   eliminarJugador,
+  resolverConfigVigente,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -155,6 +156,15 @@ catalogRouter.get("/arbol", requireAuth, requireAdmin, async (_req, res) => {
 
 catalogRouter.get("/clubs/:clubId/agents/:agentId/players", requireAuth, requireAdmin, async (req, res) => {
   res.json(await getJugadoresDeAgenteEnClub(req.params.clubId, req.params.agentId));
+});
+
+// Config vigente (deal propio o default del club) de un agente en un club, AHORA MISMO. Se usa
+// para refrescar la vista previa de un cierre importado si el deal se creó/editó DESPUÉS de
+// analizar el archivo (BIT: la previa de importación quedaba con el % viejo hasta resubir el
+// excel entero, porque previsualizarCierre nunca vuelve a resolver el % — solo hace la cuenta
+// con lo que le mandan).
+catalogRouter.get("/agents/:agentId/clubs/:clubId/config-vigente", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await resolverConfigVigente(req.params.agentId, req.params.clubId));
 });
 
 // Borra una fila de jugador mal asignada (ej. quedó en el club equivocado por el bug del

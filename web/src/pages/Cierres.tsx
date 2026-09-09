@@ -623,16 +623,31 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     await Promise.all(
       incluidas.map(async (f) => {
         try {
+          // Refresca el % vigente justo antes de calcular: si el deal se creó o editó DESPUÉS
+          // de analizar el archivo (caso típico: subís el excel, ves que falta el %, lo cargás
+          // en "Ver deals"/Árbol, y volvés acá a calcular), la fila traía el % viejo del momento
+          // del análisis y nunca se actualizaba sola — quedaba en 0%/default para siempre hasta
+          // resubir el excel entero. Ahora se vuelve a pedir la config vigente en cada cálculo.
+          let { system, rakebackPct, rebatePct, configSource } = f;
+          try {
+            const cfg = await api.configVigente(f.agentId, f.clubId);
+            system = cfg.system;
+            rakebackPct = cfg.rakebackPct;
+            rebatePct = cfg.rebatePct;
+            configSource = cfg.source;
+          } catch {
+            // si falla el refresco, seguimos con lo que ya teníamos en la fila
+          }
           const r = await api.previsualizarCierre({
             agentId: f.agentId,
             clubId: f.clubId,
             weekStart,
             weekEnd,
-            system: f.system,
+            system,
             result: f.resultado,
             rakeTotal: f.rakeTotal,
-            rakebackPct: f.rakebackPct,
-            rebatePct: f.rebatePct,
+            rakebackPct,
+            rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
           });
@@ -641,6 +656,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
               row.key === f.key
                 ? {
                     ...row,
+                    system,
+                    rakebackPct,
+                    rebatePct,
+                    configSource,
                     previewLoading: false,
                     previewResult: r,
                     previewError: r.alreadyApplied ? "Ya existe un cierre aplicado para esta semana — no se va a duplicar." : null,
