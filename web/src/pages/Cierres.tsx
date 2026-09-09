@@ -475,9 +475,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [previsualizandoTodo, setPrevisualizandoTodo] = useState(false);
   const [aplicandoTodo, setAplicandoTodo] = useState(false);
   const [resumenAplicacion, setResumenAplicacion] = useState<string | null>(null);
-  // Clubes elegibles para el selector de esta hoja — solo los marcados como plataforma
-  // SupremaPoker (nunca mezclar acá un club de otra red, ej. "Fénix GG").
+  // Clubes elegibles para el selector de esta hoja — TODOS los clubes activos, nunca filtrados
+  // (la plataforma no bloquea nada, ver repo/imports.ts).
   const [clubesSuprema, setClubesSuprema] = useState<{ id: string; name: string }[]>([]);
+  // Plataforma elegida arriba (pestañas) — SUPREMA es la única con parser hoy; GG y X-Poker
+  // muestran un aviso de "todavía no soportado" en vez del importador.
+  const [plataforma, setPlataforma] = useState<"SUPREMA" | "GG" | "XPOKER">("SUPREMA");
 
   useEffect(() => {
     api.clubesImportacionSuprema().then(setClubesSuprema).catch(() => setClubesSuprema([]));
@@ -675,18 +678,53 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     onDone();
   }
 
+  const PLATAFORMAS: { key: "SUPREMA" | "GG" | "XPOKER"; label: string }[] = [
+    { key: "SUPREMA", label: "SupremaPoker" },
+    { key: "GG", label: "GG Poker" },
+    { key: "XPOKER", label: "X-Poker" },
+  ];
+
   return (
     <div className="panel">
       <h3>Importar cierre desde archivo</h3>
-      <div className="muted" style={{ marginBottom: 6 }}>
-        <strong>Plataforma: SupremaPoker.</strong> Este importador solo entiende archivos con el formato de SupremaPoker —
-        para GG Poker o X Poker vas a subir un archivo distinto (cuando esté soportado), no esta misma pantalla.
+      <div className="muted" style={{ marginBottom: 10 }}>
+        Cada plataforma tiene su propio archivo y su propia liquidación — elegí primero la plataforma del archivo que vas
+        a subir.
       </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {PLATAFORMAS.map((p) => (
+          <button
+            key={p.key}
+            className={plataforma === p.key ? "btn" : "btn secondary"}
+            onClick={() => {
+              setPlataforma(p.key);
+              setFile(null);
+              setFilas([]);
+              setHojasDetectadas([]);
+              setConfirmado(false);
+              setAnalisisError(null);
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {plataforma !== "SUPREMA" && (
+        <div className="muted" style={{ marginBottom: 14 }}>
+          Todavía no tenemos el importador de {plataforma === "GG" ? "GG Poker" : "X-Poker"} armado — falta construir el
+          parser para el formato de esa plataforma (y su liquidación, que también está pendiente). Mandame un archivo de
+          ejemplo y un cierre de esa semana ya calculado a mano, y lo armamos igual que se hizo con Suprema.
+        </div>
+      )}
+
+      {plataforma === "SUPREMA" && (
+      <>
       <div className="muted" style={{ marginBottom: 14 }}>
         Un mismo archivo de Suprema puede traer varios clubes juntos, cada uno en su propia pestaña de Excel (ej. "Fenix",
         "tb") — esa pestaña NO es el club, es solo cómo está armado el archivo que exporta Suprema. Vos elegís abajo a qué
-        club de tu sistema corresponde cada pestaña. El % de rakeback/rebate de cada agente sale SIEMPRE de la
-        configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae.
+        club de tu sistema (de SupremaPoker) corresponde cada pestaña. El % de rakeback/rebate de cada agente sale SIEMPRE
+        de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae.
       </div>
 
       <div className="form-grid">
@@ -902,6 +940,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             {aplicandoTodo ? "Aplicando..." : `Aplicar ${incluidas.length} cierre(s)`}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
