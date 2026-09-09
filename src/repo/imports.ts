@@ -6,6 +6,14 @@ import { pool, newId } from "../db/pool.js";
 import { parseSupremaWorkbook, type SupremaPlayerRow } from "../engine/importSuprema.js";
 import { resolverConfigVigente, upsertAgent, updateAgent } from "./catalog.js";
 
+/** Type= "manual" | "auto" - el motivo por el que se creó, para que el frontend pueda avisar
+ * cuáles fueron auto-creados esta corrida (a diferencia de los que ya existían de antes). */
+export interface AgenteAutoCreado {
+  agentId: string;
+  agentName: string;
+  agentIdRaw: string | null;
+}
+
 export interface AgenteAgregado {
   agentId: string;
   agentName: string;
@@ -52,6 +60,12 @@ export interface ResultadoImportacion {
   // `resolvable` ausente/false = la hoja no tiene el formato Suprema esperado (le faltan
   // columnas) — no hay club que elegir, no es una hoja de datos de club.
   hojasNoReconocidas: { sheetName: string; motivo: string; resolvable?: boolean }[];
+  // Superagentes que no existían en el catálogo y se crearon solos esta corrida porque el
+  // archivo traía su nombre (ver resolvePlayerAgent) — se informa para que quede claro que no
+  // fue "magia": el frontend puede mostrar la lista y, si algún nombre es en realidad un typo
+  // de un agente que ya existía, el usuario lo corrige a mano (moverAgenteDeClub / eliminar
+  // desde el Árbol de clubes) en vez de que quede colado en silencio.
+  agentesAutoCreados: AgenteAutoCreado[];
 }
 
 /** Clubes elegibles como destino de una hoja de este importador — TODOS los clubes activos,
@@ -68,8 +82,11 @@ export async function listClubesImportacionSuprema() {
 interface ResolucionAgente {
   agentId: string | null;
   agentName: string | null;
-  resolvedBy: "override" | "external_id" | "name" | null;
+  resolvedBy: "override" | "external_id" | "name" | "auto_creado" | null;
   motivo?: string;
+  /** Solo seteado cuando resolvedBy === "auto_creado": el Agent ID crudo del archivo (si traía
+   * uno), para poder informarlo en agentesAutoCreados sin tener que volver a mirar la fila. */
+  agentIdRawCreado?: string | null;
 }
 
 /**
@@ -78,12 +95,21 @@ interface ResolucionAgente {
  *      archivo esta semana SÍ trae Agent Name (por si el reporte vuelve a venir mal).
  *   2) Agent ID del archivo vs agents.external_id (match robusto, no depende del nombre).
  *   3) Agent Name del archivo vs agents.name (comparación case-insensitive, con trim).
- * Si nada matchea, se reporta como pendiente de asignación manual (BIT-069): nunca se
- * inventa ni se descarta en silencio la plata de un jugador sin agente claro.
+ *   4) Si nada matchea pero el archivo SÍ trae un nombre de agente, se crea automáticamente
+ *      (BIT-nueva: "que se cargue solo con el excel") — nunca queda plata de un jugador sin
+ *      agente por el solo hecho de que el superagente todavía no existía en el catálogo. Solo
+ *      se sigue reportando "sin agente" cuando el archivo directamente no trae Agent Name (no
+ *      hay ningún nombre con el que crear nada).
+ *
+ * `autoCreadosCache` vive por corrida de análisis (una entrada por Agent ID/Name crudo): evita
+ * crear el mismo agente nuevo dos veces si varios jugadores del archivo comparten el mismo
+ * superagente todavía no creado — igual sería seguro (upsertAgent es ON CONFLICT(name) DO
+ * UPDATE), pero así no se pega a la base una vez por cada jugador del grupo.
  */
 async function resolvePlayerAgent(
   clubId: string,
-  row: SupremaPlayerRow
+  row: SupremaPlayerRow,
+  autoCreadosCache: Map<string, ResolucionAgente>
 ): Promise<ResolucionAgente> {
   const overrideRes = await pool.query(
     `SELECT agent_id FROM player_agent_overrides WHERE player_external_id = $1 AND club_id = $2`,
@@ -117,15 +143,31 @@ async function resolvePlayerAgent(
       }
       return { agentId: a.rows[0].id, agentName: a.rows[0].name, resolvedBy: "name" };
     }
+
+    // Nada matcheó: el archivo trae un nombre de agente que no existe en el catálogo. Se crea
+    // solo (cacheado por esta corrida) en vez de reportarlo como "sin agente" — el % de
+    // rakeback/rebate queda en el default del club hasta que se cargue un deal específico,
+    // igual que cualquier agente nuevo (ver resolverConfigVigente).
+    const clave = row.agentIdRaw ?? row.agentNameRaw;
+    const cacheado = autoCreadosCache.get(clave);
+    if (cacheado) return cacheado;
+
+    const nuevo = await crearAgenteDesdeImportacion(row.agentNameRaw, row.agentIdRaw);
+    const resolucion: ResolucionAgente = {
+      agentId: nuevo.id,
+      agentName: nuevo.name,
+      resolvedBy: "auto_creado",
+      agentIdRawCreado: row.agentIdRaw,
+    };
+    autoCreadosCache.set(clave, resolucion);
+    return resolucion;
   }
 
   return {
     agentId: null,
     agentName: null,
     resolvedBy: null,
-    motivo: row.agentNameRaw
-      ? `El agente "${row.agentNameRaw}" del archivo no existe en el catálogo — creálo o asigná este jugador a otro agente.`
-      : `El archivo no trae agente para este jugador (Agent Name vacío) — asignalo manualmente.`,
+    motivo: `El archivo no trae agente para este jugador (Agent Name vacío) — asignalo manualmente.`,
   };
 }
 
@@ -168,6 +210,9 @@ export async function analizarImportacionSuprema(
     motivo: h.reason,
   }));
   const ignoradasSet = new Set(sheetsIgnoradas ?? []);
+  // Vive para TODA la corrida (no por hoja/club): si el mismo superagente nuevo aparece en más
+  // de una hoja/club del mismo archivo, se crea una sola vez.
+  const autoCreadosCache = new Map<string, ResolucionAgente>();
 
   for (const sheet of parsed.sheets) {
     if (ignoradasSet.has(sheet.sheetName)) continue;
@@ -211,7 +256,7 @@ export async function analizarImportacionSuprema(
     const sinAgente: JugadorSinAgente[] = [];
 
     for (const row of sheet.rows) {
-      const resolucion = await resolvePlayerAgent(club.id, row);
+      const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
       await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
@@ -271,7 +316,13 @@ export async function analizarImportacionSuprema(
     clubes.push({ clubId: club.id, clubName: club.name, sheetName: sheet.sheetName, agentes, sinAgente });
   }
 
-  return { clubes, hojasNoReconocidas };
+  const agentesAutoCreados: AgenteAutoCreado[] = [...autoCreadosCache.values()].map((r) => ({
+    agentId: r.agentId!,
+    agentName: r.agentName!,
+    agentIdRaw: r.agentIdRawCreado ?? null,
+  }));
+
+  return { clubes, hojasNoReconocidas, agentesAutoCreados };
 }
 
 /**

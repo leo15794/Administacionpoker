@@ -470,6 +470,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [hojaIgnorada, setHojaIgnorada] = useState<Record<string, boolean>>({}); // sheetName -> se saltea esta semana
   const [confirmado, setConfirmado] = useState(false); // true = ya se eligió club para cada hoja y se procesó
   const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
+  // Superagentes que no existían en el catálogo y se crearon SOLOS en esta corrida porque el
+  // archivo traía su nombre (ver repo/imports.ts::resolvePlayerAgent). Se muestra para que quede
+  // claro que no fue "magia" — si algún nombre es en realidad un typo de un agente que ya
+  // existía, se corrige a mano desde el Árbol de clubes (mover jugadores / eliminar el duplicado).
+  const [agentesAutoCreados, setAgentesAutoCreados] = useState<{ agentId: string; agentName: string; agentIdRaw: string | null }[]>([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
   const [guardandoAsignacion, setGuardandoAsignacion] = useState<string | null>(null);
@@ -499,6 +504,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     setConfirmado(false);
     setFilas([]);
     setSinAgentePorClub([]);
+    setAgentesAutoCreados([]);
     setHojaIgnorada({});
     try {
       const r = await api.previsualizarImportacion(file, weekEnd);
@@ -542,6 +548,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           .filter((c: any) => c.sinAgente?.length > 0)
           .map((c: any) => ({ clubId: c.clubId, clubName: c.clubName, items: c.sinAgente }))
       );
+      setAgentesAutoCreados(r.agentesAutoCreados || []);
       const nuevasFilas: FilaImport[] = [];
       for (const club of r.clubes || []) {
         for (const a of club.agentes) {
@@ -851,6 +858,15 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           >
             {analizando ? "Procesando..." : "Confirmar clubes y procesar"}
           </button>
+        </div>
+      )}
+
+      {agentesAutoCreados.length > 0 && (
+        <div className="muted" style={{ marginTop: 16 }}>
+          Se crearon automáticamente {agentesAutoCreados.length === 1 ? "1 agente nuevo" : `${agentesAutoCreados.length} agentes nuevos`} que
+          venían en el archivo y no existían en el catálogo: {agentesAutoCreados.map((a) => a.agentName).join(", ")}.
+          Si alguno es en realidad un agente que ya tenías con otro nombre (typo del archivo), corregilo
+          desde el Árbol de clubes (mover los jugadores al agente correcto y eliminar el duplicado).
         </div>
       )}
 
