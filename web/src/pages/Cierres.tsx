@@ -31,6 +31,24 @@ export default function Cierres() {
     }
   }
 
+  // BORRADO REAL — solo para limpiar datos de PRUEBA. Sobre plata real siempre "Revertir"
+  // (arriba), nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
+  async function borrarDefinitivo(c: any) {
+    const confirmacion = prompt(
+      `Esto BORRA DEL TODO el cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)}) — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
+    );
+    if (confirmacion !== "BORRAR") return;
+    setBorrando(c.id);
+    try {
+      await api.eliminarCierreDefinitivo(c.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo borrar el cierre.");
+    } finally {
+      setBorrando(null);
+    }
+  }
+
   useEffect(() => {
     refresh();
     api.agentes().then(setAgentes);
@@ -123,7 +141,7 @@ export default function Cierres() {
                     </div>
                   )}
                 </td>
-                <td>
+                <td style={{ display: "flex", gap: 6 }}>
                   {c.status !== "REVERTIDO" && (
                     <button
                       className="btn secondary small"
@@ -134,6 +152,15 @@ export default function Cierres() {
                       {borrando === c.id ? "..." : "Revertir"}
                     </button>
                   )}
+                  <button
+                    className="btn secondary small"
+                    disabled={borrando === c.id}
+                    onClick={() => borrarDefinitivo(c)}
+                    title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                    style={{ color: "var(--danger, #e5484d)" }}
+                  >
+                    {borrando === c.id ? "..." : "Borrar"}
+                  </button>
                 </td>
               </tr>
             ))}

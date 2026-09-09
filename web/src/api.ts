@@ -73,6 +73,10 @@ export const api = {
     request(`/dashboard/tesoreria/ajuste/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
   revertirCierre: (id: string, motivo?: string) =>
     request(`/movements/cierre-semanal/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
+  // BORRADO REAL, no reversión — solo para limpiar datos de prueba (ver eliminarCierreSemanalDefinitivo).
+  // Nunca usar sobre plata real ya operada: para eso está revertirCierre de arriba.
+  eliminarCierreDefinitivo: (id: string) =>
+    request(`/movements/cierre-semanal/${id}/definitivo`, { method: "DELETE" }),
   ajustarTesoreria: (data: {
     ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
     direction: "INGRESO" | "EGRESO";

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { registrarMovimiento, revertirMovimiento } from "../repo/ledger.js";
-import { aplicarCierreSemanal, revertirCierreSemanal } from "../repo/closings.js";
+import { aplicarCierreSemanal, revertirCierreSemanal, eliminarCierreSemanalDefinitivo } from "../repo/closings.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
 export const movementsRouter = Router();
@@ -96,6 +96,20 @@ movementsRouter.delete("/cierre-semanal/:id", requireAuth, requireAdmin, async (
   try {
     const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
     const result = await revertirCierreSemanal(req.params.id, motivo, req.user?.email ?? null);
+    if (!result.found) return res.status(404).json({ error: "Cierre no encontrado" });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// BORRADO REAL (no revierte, elimina) — SOLO para limpiar datos de prueba mientras se prueba
+// el sistema (pedido explícito del usuario). Nunca usar sobre un cierre de plata real ya
+// operada: para eso siempre el DELETE de arriba ("Revertir"), que mantiene el ledger auditable.
+// Ver eliminarCierreSemanalDefinitivo para el detalle de qué hace en cada caso.
+movementsRouter.delete("/cierre-semanal/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await eliminarCierreSemanalDefinitivo(req.params.id);
     if (!result.found) return res.status(404).json({ error: "Cierre no encontrado" });
     res.json(result);
   } catch (err: any) {

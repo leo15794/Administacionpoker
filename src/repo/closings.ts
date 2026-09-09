@@ -416,6 +416,110 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
   return { found: true, id: closingId };
 }
 
+/**
+ * BORRADO REAL de un cierre semanal — a diferencia de revertirCierreSemanal, esto NO deja
+ * rastro en el historial. Existe únicamente para limpiar datos de PRUEBA cargados por error
+ * mientras se prueba el sistema (pedido explícito del usuario) — nunca usar sobre un cierre de
+ * plata real ya operada: para eso siempre "Revertir", que es lo que mantiene el ledger
+ * auditable (ver nota de ledger inmutable en todo este archivo).
+ *
+ * Funciona sobre un cierre en cualquier estado:
+ *  - Si todavía está ACTIVO: primero deshace su efecto en los saldos (agente y, si el rebate
+ *    se había desviado, supervisor) y restaura memoria de bancado/rodeo al valor de antes —
+ *    el mismo cálculo que revertirCierreSemanal, pero aplicado directo a balances en vez de
+ *    generar un movimiento AJUSTE de reversa (no tendría sentido crear un rastro para borrarlo
+ *    en el siguiente paso).
+ *  - Si ya estaba REVERTIDO: los saldos ya están corregidos por esa reversión anterior — acá
+ *    solo se borra el rastro (el movimiento original + su reversa) para limpiar el historial.
+ *
+ * Localiza el/los movimiento(s) de ledger de ESTE cierre por (agente, club, tipo, fecha) — si
+ * ese agente+club+semana se cerró/revirtió más de una vez, puede haber más de un movimiento
+ * REVERTIDO que matchea; en ese caso se aborta en vez de adivinar cuál borrar (ver mismo
+ * comentario en revertirCierreSemanal sobre por qué la clave no alcanza para desambiguar).
+ */
+export async function eliminarCierreSemanalDefinitivo(closingId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const wcRes = await client.query(`SELECT * FROM weekly_closings WHERE id = $1 FOR UPDATE`, [closingId]);
+    const wc = wcRes.rows[0];
+    if (!wc) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+
+    const yaRevertido = wc.status === "REVERTIDO";
+
+    const movRes = await client.query(
+      `SELECT id FROM ledger_movements
+       WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date
+         AND status ${yaRevertido ? "= 'REVERTIDO'" : "<> 'REVERTIDO'"}`,
+      [wc.agent_id, wc.club_id, wc.week_end]
+    );
+    if (movRes.rows.length > 1) {
+      await client.query("ROLLBACK");
+      throw new Error(
+        "Hay más de un movimiento de ledger que podría corresponder a este cierre (mismo agente+club+semana cerrado/revertido varias veces) — no se puede borrar automáticamente sin riesgo de borrar el que no es. Avisá para hacerlo a mano."
+      );
+    }
+    const movId: string | null = movRes.rows[0]?.id ?? null;
+
+    // Si todavía está activo, deshace su efecto en el saldo ANTES de borrar nada — mismo delta
+    // que sumó aplicarCierreSemanal, con el signo invertido, aplicado directo (sin generar
+    // ningún movimiento de reversa: se está por borrar todo, no tiene sentido dejar un rastro).
+    if (!yaRevertido) {
+      await client.query(
+        `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
+         ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+        [newId("bal"), wc.agent_id, wc.club_id, -Number(wc.final_closing)]
+      );
+      if (wc.supervisor_agent_id) {
+        await client.query(
+          `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
+           ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+          [newId("bal"), wc.supervisor_agent_id, wc.club_id, -Number(wc.rebate)]
+        );
+      }
+      if (wc.rule_applied === "BANCADO" && wc.bancado_debt_before !== null) {
+        await client.query(
+          `UPDATE bancado_debts SET debt = $1, updated_at = now() WHERE agent_id = $2 AND club_id = $3`,
+          [wc.bancado_debt_before, wc.agent_id, wc.club_id]
+        );
+      }
+      if (wc.rodeo_detalle?.memoriaAnterior !== undefined) {
+        await restaurarMemoriaRodeoTx(wc.agent_id, wc.club_id, Number(wc.rodeo_detalle.memoriaAnterior));
+      }
+    }
+
+    // IDs de movimientos a borrar del todo: el de este cierre, el del supervisor (si tenía), y
+    // — solo si ya estaba revertido — sus respectivas reversas (que si no, no existen: en la
+    // rama de arriba nunca se generó ninguna).
+    const idsBase = [movId, wc.supervisor_movement_id].filter((x): x is string => !!x);
+    const idsABorrar = new Set(idsBase);
+    if (yaRevertido && idsBase.length > 0) {
+      const reversasRes = await client.query(`SELECT id FROM ledger_movements WHERE refs && $1::text[]`, [idsBase]);
+      for (const r of reversasRes.rows) idsABorrar.add(r.id);
+    }
+
+    if (idsABorrar.size > 0) {
+      const ids = [...idsABorrar];
+      await client.query(`DELETE FROM treasury_entries WHERE movement_id = ANY($1::text[])`, [ids]);
+      await client.query(`DELETE FROM ledger_movements WHERE id = ANY($1::text[])`, [ids]);
+    }
+
+    await client.query(`DELETE FROM weekly_closings WHERE id = $1`, [closingId]);
+
+    await client.query("COMMIT");
+    return { found: true, id: closingId };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listClosings(weekStart?: string) {
   const r = weekStart
     ? await pool.query(
