@@ -734,6 +734,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [cargandoJugadores, setCargandoJugadores] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ clubId: string; agentId: string; agentName: string } | null>(null);
   const [eliminandoJugador, setEliminandoJugador] = useState<string | null>(null);
+  const [cambiandoPlataforma, setCambiandoPlataforma] = useState<string | null>(null);
 
   function refresh() {
     setCargando(true);
@@ -767,6 +768,16 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       refresh(); // recalcula el conteo de jugadores del agente (y puede desaparecer si quedó en 0)
     } finally {
       setEliminandoJugador(null);
+    }
+  }
+
+  async function cambiarPlataforma(clubId: string, platform: string) {
+    setCambiandoPlataforma(clubId);
+    try {
+      await api.configurarClub(clubId, { importPlatform: platform || null });
+      refresh();
+    } finally {
+      setCambiandoPlataforma(null);
     }
   }
 
@@ -823,7 +834,21 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                 onClick={() => setClubesAbiertos((s) => ({ ...s, [club.clubId]: !s[club.clubId] }))}
               >
                 <h4 style={{ margin: 0 }}>{abierto ? "▾" : "▸"} {club.clubName}</h4>
-                <span className="muted" style={{ fontSize: 12.5 }}>{club.agentes.length} agente(s)</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }} onClick={(e) => e.stopPropagation()}>
+                  <span className="muted" style={{ fontSize: 12.5 }}>{club.agentes.length} agente(s)</span>
+                  <select
+                    value={club.platform ?? ""}
+                    disabled={cambiandoPlataforma === club.clubId}
+                    title="Mover este club a otra plataforma (o sacarlo de todas)"
+                    onChange={(e) => cambiarPlataforma(club.clubId, e.target.value)}
+                    style={{ fontSize: 11.5 }}
+                  >
+                    <option value="">Sin plataforma</option>
+                    {PLATFORM_ORDER.map((key) => (
+                      <option key={key} value={key}>{PLATFORM_LABELS[key]}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {abierto && (
