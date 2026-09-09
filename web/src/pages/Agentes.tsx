@@ -735,6 +735,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [editando, setEditando] = useState<{ clubId: string; agentId: string; agentName: string } | null>(null);
   const [eliminandoJugador, setEliminandoJugador] = useState<string | null>(null);
   const [cambiandoPlataforma, setCambiandoPlataforma] = useState<string | null>(null);
+  const [moviendoAgente, setMoviendoAgente] = useState<string | null>(null);
 
   function refresh() {
     setCargando(true);
@@ -768,6 +769,22 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       refresh(); // recalcula el conteo de jugadores del agente (y puede desaparecer si quedó en 0)
     } finally {
       setEliminandoJugador(null);
+    }
+  }
+
+  async function moverAgente(clubId: string, agentId: string, agentName: string, toClubId: string) {
+    if (!toClubId) return;
+    const clubDestino = clubes.find((c) => c.id === toClubId)?.name ?? toClubId;
+    if (!confirm(`¿Mover TODOS los jugadores de "${agentName}" a "${clubDestino}"? No toca ningún cierre ni movimiento del ledger, solo el club del jugador en el catálogo.`)) return;
+    setMoviendoAgente(`${clubId}|${agentId}`);
+    try {
+      const r = await api.moverAgenteDeClub(clubId, agentId, toClubId);
+      if (r.saltados > 0) {
+        alert(`Se movieron ${r.movidos} de ${r.total} jugadores. ${r.saltados} se saltearon porque ya existía un jugador con ese mismo ID en "${clubDestino}" — revisalos a mano.`);
+      }
+      refresh();
+    } finally {
+      setMoviendoAgente(null);
     }
   }
 
@@ -856,7 +873,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                   <div className="muted" style={{ marginTop: 10 }}>Todavía no tiene ningún agente con jugadores cargados.</div>
                 ) : (
                   <table style={{ marginTop: 10 }}>
-                    <thead><tr><th></th><th>Agente</th><th>Jugadores</th><th>% Rakeback</th><th>% Rebate</th><th>Config</th><th></th></tr></thead>
+                    <thead><tr><th></th><th>Agente</th><th>Jugadores</th><th>% Rakeback</th><th>% Rebate</th><th>Config</th><th></th><th></th></tr></thead>
                     <tbody>
                       {club.agentes.map((ag: any) => {
                         const clave = `${club.clubId}|${ag.agentId}`;
@@ -875,11 +892,25 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                                   Editar %
                                 </button>
                               </td>
+                              <td>
+                                <select
+                                  value=""
+                                  disabled={moviendoAgente === clave}
+                                  title="Mover TODOS los jugadores de este agente a otro club"
+                                  onChange={(e) => moverAgente(club.clubId, ag.agentId, ag.agentName, e.target.value)}
+                                  style={{ fontSize: 11.5 }}
+                                >
+                                  <option value="">{moviendoAgente === clave ? "Moviendo..." : "Mover a..."}</option>
+                                  {clubes.filter((c) => c.id !== club.clubId).map((c) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                              </td>
                             </tr>
                             {agAbierto && (
                               <tr>
                                 <td></td>
-                                <td colSpan={6}>
+                                <td colSpan={7}>
                                   {cargandoJugadores === clave ? (
                                     <span className="muted">Cargando jugadores...</span>
                                   ) : (

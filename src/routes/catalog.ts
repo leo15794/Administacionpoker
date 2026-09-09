@@ -18,6 +18,7 @@ import {
   getJugadoresDeAgenteEnClub,
   eliminarJugador,
   resolverConfigVigente,
+  moverAgenteDeClub,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -174,6 +175,20 @@ catalogRouter.delete("/players/:id", requireAuth, requireAdmin, async (req, res)
   const ok = await eliminarJugador(req.params.id);
   if (!ok) return res.status(404).json({ error: "Jugador no encontrado" });
   res.status(204).send();
+});
+
+const moverAgenteSchema = z.object({ toClubId: z.string().min(1) });
+// Mueve de una todos los jugadores de un agente, de un club al club correcto — para arreglar
+// de un click el caso de un agente entero mal cargado en el club equivocado (ver árbol de clubes).
+catalogRouter.post("/clubs/:clubId/agents/:agentId/move", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = moverAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const r = await moverAgenteDeClub(req.params.clubId, req.params.agentId, parsed.data.toClubId);
+    res.json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const ruleSchema = z.object({

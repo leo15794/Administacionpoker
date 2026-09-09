@@ -240,6 +240,32 @@ export async function eliminarJugador(playerId: string) {
   return r.rowCount ? r.rowCount > 0 : false;
 }
 
+// Mueve TODOS los jugadores de un agente en un club a otro club de una — para el caso típico de
+// contaminación (un agente quedó entero bajo el club equivocado por el bug viejo de
+// import_source). Igual que eliminarJugador, esto es un cambio de catálogo puro: no toca
+// weekly_closings/ledger_movements. Fila por fila (no un UPDATE masivo) porque el destino puede
+// ya tener una fila con el mismo external_id (UNIQUE(club_id, external_id)) — en ese caso esa
+// fila puntual se salta en vez de romper todo el movimiento, y se informa cuántas se saltearon
+// para que el usuario las revise a mano (probablemente ya está bien cargada del lado correcto).
+export async function moverAgenteDeClub(fromClubId: string, agentId: string, toClubId: string) {
+  const jugadores = await pool.query(
+    `SELECT id FROM players WHERE club_id = $1 AND agent_id = $2`,
+    [fromClubId, agentId]
+  );
+  let movidos = 0;
+  let saltados = 0;
+  for (const j of jugadores.rows) {
+    try {
+      await pool.query(`UPDATE players SET club_id = $1 WHERE id = $2`, [toClubId, j.id]);
+      movidos++;
+    } catch (err: any) {
+      if (err.code === "23505") saltados++; // ya existe ese external_id en el club destino
+      else throw err;
+    }
+  }
+  return { movidos, saltados, total: jugadores.rows.length };
+}
+
 // Resuelve la regla especial vigente para un agente en un club a una fecha dada (por defecto
 // ahora). Prioriza una regla específica del club por sobre una regla global del agente
 // (club_id NULL) si ambas están vigentes al mismo tiempo.

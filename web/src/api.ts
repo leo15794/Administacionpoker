@@ -148,6 +148,10 @@ export const api = {
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),
+  // Mueve TODOS los jugadores de un agente de un club a otro de una — para arreglar un agente
+  // entero mal cargado (ver árbol de clubes). No toca cierres ni ledger.
+  moverAgenteDeClub: (clubId: string, agentId: string, toClubId: string) =>
+    request(`/catalog/clubs/${clubId}/agents/${agentId}/move`, { method: "POST", body: JSON.stringify({ toClubId }) }),
   crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
     request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
   terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),
