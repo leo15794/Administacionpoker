@@ -18,6 +18,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export default function Agentes() {
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
+  // Todos los deals vigentes, agrupados por agente — para pintar el % en la lista principal
+  // (BIT-nueva: "así sabés de un vistazo cuáles tienen % asignado y cuáles no").
+  const [dealsPorAgente, setDealsPorAgente] = useState<Record<string, any[]>>({});
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
@@ -35,6 +38,13 @@ export default function Agentes() {
   function refresh() {
     api.agentes(verDadosDeBaja).then(setAgentes);
     api.clubes().then(setClubes);
+    api.todosLosDeals().then((deals: any[]) => {
+      const map: Record<string, any[]> = {};
+      for (const d of deals) {
+        (map[d.agent_id] ??= []).push(d);
+      }
+      setDealsPorAgente(map);
+    });
   }
 
   useEffect(() => {
@@ -154,7 +164,7 @@ export default function Agentes() {
             </div>
             <table>
               <thead>
-                <tr><th>Nombre</th><th>Sistema</th><th>Tipo de cuenta</th><th>Saldo total</th><th>Garantía</th><th></th></tr>
+                <tr><th>Nombre</th><th>Sistema</th><th>Tipo de cuenta</th><th>% Rakeback / Rebate</th><th>Saldo total</th><th>Garantía</th><th></th></tr>
               </thead>
               <tbody>
                 {agentesFiltrados.map((a) => (
@@ -165,6 +175,30 @@ export default function Agentes() {
                     </td>
                     <td>{a.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                     <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[(a.account_type as AccountType) ?? a.default_system] ?? a.account_type}</span></td>
+                    <td>
+                      {(dealsPorAgente[a.id]?.length ?? 0) > 0 ? (
+                        <div
+                          style={{ display: "flex", flexWrap: "wrap", gap: 4, cursor: "pointer" }}
+                          onClick={() => open(a)}
+                          title="Ver/editar los deals de este agente"
+                        >
+                          {dealsPorAgente[a.id].map((d) => (
+                            <span key={d.id} className="badge pos" style={{ fontSize: 11.5 }}>
+                              {d.club_name}: {pct(d.rakeback_pct)} / {pct(d.rebate_pct)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span
+                          className="muted"
+                          style={{ cursor: "pointer", textDecoration: "underline dotted" }}
+                          onClick={() => open(a)}
+                          title="Sin deal propio en ningún club — usa el default de cada club. Click para asignarle uno."
+                        >
+                          Sin deal (default club)
+                        </span>
+                      )}
+                    </td>
                     <td><span className={`badge ${Number(a.saldo_total) > 0 ? "pos" : Number(a.saldo_total) < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
                     <td>
                       {a.garantia_monto != null ? (

@@ -20,6 +20,7 @@ import {
   resolverConfigVigente,
   moverAgenteDeClub,
   eliminarAgenteDefinitivo,
+  listAllDeals,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -117,6 +118,12 @@ const dealSchema = z.object({
   rebatePct: z.number().min(0).max(1).default(0),
   notes: z.string().optional(),
 });
+// Todos los deals vigentes de todos los agentes, para pintar el % en la lista principal de
+// agentes de un vistazo (ver quién tiene deal propio y quién todavía no) sin pedir uno por uno.
+catalogRouter.get("/deals", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listAllDeals());
+});
+
 catalogRouter.post("/deals", requireAuth, requireAdmin, async (req, res) => {
   const parsed = dealSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

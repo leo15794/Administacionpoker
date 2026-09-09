@@ -463,3 +463,18 @@ export async function listDealsForAgent(agentId: string) {
   );
   return r.rows;
 }
+
+// Todos los deals vigentes de TODOS los agentes, en una sola consulta — para que la lista de
+// agentes pueda mostrar el % de cada uno de un vistazo (qué tiene deal propio y qué agente
+// todavía no tiene nada cargado) sin pedir uno por uno (N+1) al backend.
+export async function listAllDeals() {
+  const r = await pool.query(
+    `SELECT d.*, a.name as agent_name, c.name as club_name
+     FROM agent_club_deals d
+     JOIN agents a ON a.id = d.agent_id
+     JOIN clubs c ON c.id = d.club_id
+     WHERE d.valid_to IS NULL
+     ORDER BY a.name, c.name`
+  );
+  return r.rows;
+}
