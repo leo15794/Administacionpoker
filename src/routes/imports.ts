@@ -2,9 +2,16 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
-import { analizarImportacionSuprema, asignarAgenteJugador } from "../repo/imports.js";
+import { analizarImportacionSuprema, asignarAgenteJugador, listClubesImportacionSuprema } from "../repo/imports.js";
 
 export const importsRouter = Router();
+
+// Clubes elegibles para el selector "a qué club corresponde esta hoja" del importador de
+// Suprema — filtrados por plataforma (import_platform = 'SUPREMA') para que no aparezcan
+// clubes de otras redes (ej. "Fénix GG", que es el mismo club real pero en otra plataforma).
+importsRouter.get("/suprema/clubs", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listClubesImportacionSuprema());
+});
 
 // En memoria (no a disco): son archivos chicos (un cierre semanal) y no necesitamos
 // conservarlos — la previa se recalcula subiendo el archivo de nuevo si hace falta.
@@ -33,7 +40,18 @@ importsRouter.post("/suprema/preview", requireAuth, requireAdmin, upload.single(
         return res.status(400).json({ error: "sheetClubOverrides no es JSON válido." });
       }
     }
-    const result = await analizarImportacionSuprema(req.file.buffer, atDate, sheetClubOverrides);
+    // Hojas que el usuario decide no procesar esta semana (ej. una que no le interesa
+    // importar) — se ignoran silenciosamente, ni se les pide club ni aparecen como error.
+    let sheetsIgnoradas: string[] | undefined;
+    if (typeof req.body?.sheetsIgnoradas === "string" && req.body.sheetsIgnoradas) {
+      try {
+        const parsed = JSON.parse(req.body.sheetsIgnoradas);
+        if (Array.isArray(parsed)) sheetsIgnoradas = parsed.filter((x) => typeof x === "string");
+      } catch {
+        return res.status(400).json({ error: "sheetsIgnoradas no es JSON válido." });
+      }
+    }
+    const result = await analizarImportacionSuprema(req.file.buffer, atDate, sheetClubOverrides, sheetsIgnoradas);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo leer el archivo." });

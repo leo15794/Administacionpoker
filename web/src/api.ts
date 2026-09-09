@@ -101,6 +101,7 @@ export const api = {
       active?: boolean;
       notes?: string | null;
       importSource?: string | null;
+      importPlatform?: string | null;
     }
   ) => request(`/catalog/clubs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   crearAgente: (data: { name: string; defaultSystem: "PREPAGO" | "WIN_LOSE"; supervisor?: string; accountType?: AccountType }) =>
@@ -188,18 +189,29 @@ export const api = {
   // hojas Fénix/TeamBack) y arma la previa por agente usando SIEMPRE la configuración de
   // rakeback/rebate ya cargada en el sistema — el archivo nunca trae su propio %. No aplica
   // nada; el frontend reutiliza previsualizarCierre/aplicarCierre fila por fila después.
-  // sheetClubOverrides: cuando una hoja del archivo no coincide con ningún club configurado,
-  // el usuario elige a mano a qué club corresponde (en vez de tener que configurar "Hoja de
-  // importación" de antemano) — el archivo se vuelve a mandar entero junto con la elección.
-  previsualizarImportacion: (file: File, weekEnd?: string, sheetClubOverrides?: Record<string, string>) => {
+  // sheetClubOverrides: elección explícita del club para cada hoja (siempre gana sobre
+  // cualquier auto-match por nombre). sheetsIgnoradas: hojas que el usuario decide no procesar
+  // esta semana (no hace falta elegirles club) — el archivo se vuelve a mandar entero cada vez.
+  previsualizarImportacion: (
+    file: File,
+    weekEnd?: string,
+    sheetClubOverrides?: Record<string, string>,
+    sheetsIgnoradas?: string[]
+  ) => {
     const form = new FormData();
     form.append("file", file);
     if (weekEnd) form.append("weekEnd", weekEnd);
     if (sheetClubOverrides && Object.keys(sheetClubOverrides).length > 0) {
       form.append("sheetClubOverrides", JSON.stringify(sheetClubOverrides));
     }
+    if (sheetsIgnoradas && sheetsIgnoradas.length > 0) {
+      form.append("sheetsIgnoradas", JSON.stringify(sheetsIgnoradas));
+    }
     return requestForm("/imports/suprema/preview", form);
   },
+  // Clubes elegibles en el selector "a qué club corresponde esta hoja" del importador —
+  // filtrados por plataforma, para no mezclar clubes de otras redes (ej. Fénix GG).
+  clubesImportacionSuprema: () => request("/imports/suprema/clubs"),
   // Asigna a mano un jugador que vino sin agente en el archivo (Agent Name vacío o agente no
   // reconocido) — queda guardado para siempre, así no vuelve a aparecer pendiente otra semana.
   asignarAgenteImportado: (data: { playerExternalId: string; clubId: string; agentId: string; reason?: string }) =>

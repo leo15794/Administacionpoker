@@ -83,8 +83,11 @@ const clubConfigSchema = z.object({
   active: z.boolean().optional(),
   notes: z.string().nullable().optional(),
   // Nombre de hoja (.xlsx) que usa este club en el archivo semanal — ej. "Fenix", "tb".
-  // Lo usa el importador para saber a qué club corresponde cada pestaña del archivo.
+  // Es solo una sugerencia para precargar el selector del importador, nunca un requisito.
   importSource: z.string().nullable().optional(),
+  // Plataforma/red de origen para el importador (ej. "SUPREMA") — determina en qué selector
+  // de club aparece este club al importar un archivo de esa plataforma.
+  importPlatform: z.string().nullable().optional(),
 });
 catalogRouter.patch("/clubs/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = clubConfigSchema.safeParse(req.body);

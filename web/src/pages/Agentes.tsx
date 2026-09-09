@@ -621,6 +621,7 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   const [unionPct, setUnionPct] = useState(club.union_pct != null ? String(Number(club.union_pct) * 100) : "");
   const [notes, setNotes] = useState(club.notes ?? "");
   const [importSource, setImportSource] = useState(club.import_source ?? "");
+  const [importPlatform, setImportPlatform] = useState<string>(club.import_platform ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -640,6 +641,7 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         unionPct: unionPct === "" ? undefined : Number(unionPct) / 100,
         notes: notes.trim() || null,
         importSource: importSource.trim() || null,
+        importPlatform: importPlatform || null,
       });
       onSaved();
     } catch (err: any) {
@@ -699,11 +701,22 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         </div>
       </div>
       <div className="field">
-        <label>Hoja de importación (para "Importar archivo" en Cierres)</label>
+        <label>Plataforma de importación (para "Importar archivo" en Cierres)</label>
+        <select value={importPlatform} onChange={(e) => setImportPlatform(e.target.value)}>
+          <option value="">Ninguna (este club no se carga por importador de archivo)</option>
+          <option value="SUPREMA">SupremaPoker</option>
+        </select>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          Un mismo club real que opera en más de una red (ej. "Fénix" en GG y en Suprema) tiene un registro de club
+          separado por plataforma — así el importador nunca mezcla cierres de redes distintas.
+        </div>
+      </div>
+      <div className="field">
+        <label>Hoja de importación (sugerencia, no obligatoria)</label>
         <input
           value={importSource}
           onChange={(e) => setImportSource(e.target.value)}
-          placeholder='Ej: "Fenix", "tb" — el nombre exacto de la hoja del .xlsx semanal'
+          placeholder='Ej: "Fenix", "tb" — se precarga sola la primera vez que elijas este club para una hoja'
         />
       </div>
       <div className="field">

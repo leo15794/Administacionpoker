@@ -55,11 +55,21 @@ export interface ResultadoImportacion {
 
 async function resolveClubBySheet(sheetName: string) {
   const r = await pool.query(
-    `SELECT id, name FROM clubs WHERE active = true AND import_source IS NOT NULL
-       AND lower(trim(import_source)) = lower(trim($1)) LIMIT 1`,
+    `SELECT id, name FROM clubs WHERE active = true AND import_platform = 'SUPREMA'
+       AND import_source IS NOT NULL AND lower(trim(import_source)) = lower(trim($1)) LIMIT 1`,
     [sheetName]
   );
   return r.rows[0] as { id: string; name: string } | undefined;
+}
+
+/** Clubes elegibles como destino de una hoja de este importador (solo SupremaPoker) — nunca
+ * mezclar acá un club de otra plataforma/red (ej. "Fénix GG"), aunque el nombre del club real
+ * sea el mismo: los cierres de cada plataforma se liquidan por separado. */
+export async function listClubesImportacionSuprema() {
+  const r = await pool.query(
+    `SELECT id, name FROM clubs WHERE active = true AND import_platform = 'SUPREMA' ORDER BY name`
+  );
+  return r.rows as { id: string; name: string }[];
 }
 
 interface ResolucionAgente {
@@ -142,16 +152,20 @@ async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: stri
  * ya existente de vista previa/aplicar cierre (movements.ts), reutilizado por el frontend
  * fila por fila una vez que esta previa está limpia.
  *
- * `sheetClubOverrides` (sheetName -> clubId): elección manual del usuario cuando ninguna
- * configuración de club coincide con el nombre de la hoja (en vez de forzarlo a configurar
- * "Hoja de importación" de antemano en Clubes → Configurar). Si se resuelve por acá, queda
- * grabado como el import_source de ese club (solo si todavía no tenía uno) — así la semana
- * que viene, con el mismo nombre de hoja, se reconoce solo sin volver a preguntar.
+ * `sheetClubOverrides` (sheetName -> clubId): elección manual del usuario, SIEMPRE explícita
+ * (nunca depende de que el nombre de la hoja coincida con algo configurado). Si se resuelve
+ * por acá y ningún otro club ya tenía ese nombre de hoja tomado, queda grabado como el
+ * import_source de ese club — así la semana que viene, con el mismo nombre, viene precargado
+ * como sugerencia (pero sigue siendo editable).
+ *
+ * `sheetsIgnoradas`: nombres de hoja que el usuario decide no procesar esta semana — se
+ * saltean por completo (ni se les pide club ni aparecen como pendientes/error).
  */
 export async function analizarImportacionSuprema(
   buffer: Buffer,
   atDate: string | Date = new Date(),
-  sheetClubOverrides?: Record<string, string>
+  sheetClubOverrides?: Record<string, string>,
+  sheetsIgnoradas?: string[]
 ): Promise<ResultadoImportacion> {
   const parsed = await parseSupremaWorkbook(buffer);
   const clubes: ClubImportado[] = [];
@@ -159,8 +173,11 @@ export async function analizarImportacionSuprema(
     sheetName: h.sheetName,
     motivo: h.reason,
   }));
+  const ignoradasSet = new Set(sheetsIgnoradas ?? []);
 
   for (const sheet of parsed.sheets) {
+    if (ignoradasSet.has(sheet.sheetName)) continue;
+
     // La elección explícita del usuario SIEMPRE gana — el nombre de la hoja es solo una
     // sugerencia/atajo (si hay un club ya configurado con ese import_source), nunca un
     // requisito: el archivo es independiente del nombre de sus hojas.
@@ -169,7 +186,10 @@ export async function analizarImportacionSuprema(
 
     const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
     if (overrideClubId) {
-      const r = await pool.query(`SELECT id, name FROM clubs WHERE id = $1 AND active = true`, [overrideClubId]);
+      const r = await pool.query(
+        `SELECT id, name FROM clubs WHERE id = $1 AND active = true AND import_platform = 'SUPREMA'`,
+        [overrideClubId]
+      );
       const overrideClub = r.rows[0] as { id: string; name: string } | undefined;
       if (overrideClub) {
         club = overrideClub;

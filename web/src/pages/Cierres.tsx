@@ -53,7 +53,6 @@ export default function Cierres() {
       {showImport && (
         <ImportarCierre
           agentes={agentes}
-          clubes={clubes}
           onDone={() => {
             refresh();
           }}
@@ -455,7 +454,7 @@ type FilaImport = {
 // de rakeback: siempre usa la configuración ya cargada en Agentes/Clubes. Reutiliza el mismo
 // motor de vista previa/aplicar que el formulario manual, fila por fila, así nunca puede dar
 // un número distinto al que se aplicaría cargando el cierre a mano.
-function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; onDone: () => void }) {
+function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
@@ -467,6 +466,7 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
   // hay una configuración que matchea, viene precargada como sugerencia, pero se puede cambiar.
   const [hojasDetectadas, setHojasDetectadas] = useState<{ sheetName: string; clubIdSugerido: string | null }[]>([]);
   const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({}); // sheetName -> clubId
+  const [hojaIgnorada, setHojaIgnorada] = useState<Record<string, boolean>>({}); // sheetName -> se saltea esta semana
   const [confirmado, setConfirmado] = useState(false); // true = ya se eligió club para cada hoja y se procesó
   const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
@@ -475,6 +475,13 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
   const [previsualizandoTodo, setPrevisualizandoTodo] = useState(false);
   const [aplicandoTodo, setAplicandoTodo] = useState(false);
   const [resumenAplicacion, setResumenAplicacion] = useState<string | null>(null);
+  // Clubes elegibles para el selector de esta hoja — solo los marcados como plataforma
+  // SupremaPoker (nunca mezclar acá un club de otra red, ej. "Fénix GG").
+  const [clubesSuprema, setClubesSuprema] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    api.clubesImportacionSuprema().then(setClubesSuprema).catch(() => setClubesSuprema([]));
+  }, []);
 
   // Paso 1: solo lee el archivo y arma la lista de hojas con formato válido (con una sugerencia
   // de club si el nombre matchea algo ya configurado). Todavía no calcula nada por agente — eso
@@ -488,6 +495,7 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
     setConfirmado(false);
     setFilas([]);
     setSinAgentePorClub([]);
+    setHojaIgnorada({});
     try {
       const r = await api.previsualizarImportacion(file, weekEnd);
       setHojasFormatoInvalido((r.hojasNoReconocidas || []).filter((h: any) => !h.resolvable));
@@ -517,7 +525,13 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
     setAnalizando(true);
     setAnalisisError(null);
     try {
-      const r = await api.previsualizarImportacion(file, weekEnd, clubElegidoPorHoja);
+      const hojasAProcesar = hojasDetectadas.filter((h) => !hojaIgnorada[h.sheetName]);
+      const overrides: Record<string, string> = {};
+      for (const h of hojasAProcesar) {
+        if (clubElegidoPorHoja[h.sheetName]) overrides[h.sheetName] = clubElegidoPorHoja[h.sheetName];
+      }
+      const ignoradas = hojasDetectadas.filter((h) => hojaIgnorada[h.sheetName]).map((h) => h.sheetName);
+      const r = await api.previsualizarImportacion(file, weekEnd, overrides, ignoradas);
       setConfirmado(true);
       setSinAgentePorClub(
         (r.clubes || [])
@@ -715,28 +729,46 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
             Elegí el club de cada hoja del archivo (el nombre de la hoja es solo una ayuda para sugerir, nunca un requisito).
           </div>
           <table>
-            <thead><tr><th>Hoja del archivo</th><th>Club</th></tr></thead>
+            <thead><tr><th>Hoja del archivo</th><th>Club</th><th>Ignorar</th></tr></thead>
             <tbody>
-              {hojasDetectadas.map((h) => (
-                <tr key={h.sheetName}>
-                  <td>{h.sheetName}</td>
-                  <td>
-                    <select
-                      value={clubElegidoPorHoja[h.sheetName] ?? ""}
-                      onChange={(e) => setClubElegidoPorHoja((s) => ({ ...s, [h.sheetName]: e.target.value }))}
-                    >
-                      <option value="">Elegir club...</option>
-                      {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {hojasDetectadas.map((h) => {
+                const ignorada = !!hojaIgnorada[h.sheetName];
+                return (
+                  <tr key={h.sheetName} style={ignorada ? { opacity: 0.5 } : undefined}>
+                    <td>{h.sheetName}</td>
+                    <td>
+                      <select
+                        value={clubElegidoPorHoja[h.sheetName] ?? ""}
+                        disabled={ignorada}
+                        onChange={(e) => setClubElegidoPorHoja((s) => ({ ...s, [h.sheetName]: e.target.value }))}
+                      >
+                        <option value="">Elegir club...</option>
+                        {clubesSuprema.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={ignorada}
+                        onChange={(e) => setHojaIgnorada((s) => ({ ...s, [h.sheetName]: e.target.checked }))}
+                        title="No procesar esta hoja esta semana"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {clubesSuprema.length === 0 && (
+            <div className="muted" style={{ marginTop: 6 }}>
+              No hay ningún club marcado como plataforma "SupremaPoker" todavía — configuralo en Clubes → Configurar
+              → "Plataforma de importación" antes de poder elegir club acá.
+            </div>
+          )}
           <button
             className="btn secondary"
             style={{ marginTop: 8 }}
-            disabled={analizando || hojasDetectadas.some((h) => !clubElegidoPorHoja[h.sheetName])}
+            disabled={analizando || hojasDetectadas.some((h) => !hojaIgnorada[h.sheetName] && !clubElegidoPorHoja[h.sheetName])}
             onClick={confirmarClubesYProcesar}
           >
             {analizando ? "Procesando..." : "Confirmar clubes y procesar"}

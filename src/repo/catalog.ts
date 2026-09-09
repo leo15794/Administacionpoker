@@ -32,8 +32,12 @@ export async function updateClubConfig(
     active?: boolean;
     notes?: string | null;
     /** Nombre de hoja (.xlsx) que el importador de cierres asocia a este club — ej. "Fenix",
-     * "tb". Sin esto el importador no sabe a qué club corresponde cada hoja del archivo. */
+     * "tb". Es solo una sugerencia para precargar el selector, nunca un requisito. */
     importSource?: string | null;
+    /** Plataforma/red de origen para el importador (ej. "SUPREMA") — filtra qué clubes
+     * aparecen como opción al elegir club para una hoja de ESE formato de archivo. NULL =
+     * este club no se carga por importador de archivo. */
+    importPlatform?: string | null;
   }
 ) {
   const sets: string[] = [];
@@ -52,6 +56,7 @@ export async function updateClubConfig(
     active: fields.active,
     notes: fields.notes,
     import_source: fields.importSource,
+    import_platform: fields.importPlatform,
   };
   for (const [col, val] of Object.entries(map)) {
     if (val !== undefined) {

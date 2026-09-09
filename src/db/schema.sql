@@ -27,6 +27,13 @@ ALTER TABLE clubs ADD COLUMN IF NOT EXISTS platform_pct NUMERIC(6,4) NOT NULL DE
 ALTER TABLE clubs ADD COLUMN IF NOT EXISTS union_pct NUMERIC(6,4) NOT NULL DEFAULT 0;
 ALTER TABLE clubs ADD COLUMN IF NOT EXISTS import_source TEXT;
 ALTER TABLE clubs ADD COLUMN IF NOT EXISTS notes TEXT;
+-- Plataforma/red de origen para el importador de cierres (ej. "SUPREMA") — un mismo club real
+-- (ej. "Fénix") puede operar en más de una red (Suprema, GG), y cada una es un registro de
+-- club separado porque los cierres se liquidan por separado. Sin esto, el selector de club del
+-- importador mostraría TODOS los clubes activos mezclados, incluyendo los de otras plataformas
+-- que no tiene sentido elegir ahí (ej. "Fénix GG" al importar un archivo de SupremaPoker).
+-- NULL = club sin importador de archivo asociado (se sigue cargando el cierre a mano).
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS import_platform TEXT;
 
 CREATE TABLE IF NOT EXISTS agents (
   id             TEXT PRIMARY KEY,
