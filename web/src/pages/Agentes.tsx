@@ -1282,18 +1282,33 @@ function NuevoDeal({
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [usandoDefault, setUsandoDefault] = useState(false);
+  // "deal" = este agente YA tiene un % propio cargado para este club (se está mostrando su
+  // valor real, no un default) — "default_club" = todavía no tiene nada propio, se está
+  // mostrando el default del club nada más como punto de partida.
+  const [configSource, setConfigSource] = useState<"deal" | "default_club" | null>(null);
+
+  // Antes esto solo miraba el default DEL CLUB al elegir club, nunca si el agente ya tenía un
+  // deal propio cargado — por eso, al reabrir "Asignar % a agente" para un agente que ya tenía
+  // su % puesto, la pantalla mostraba 0/el default del club en vez de lo que ya tenía guardado,
+  // y parecía que la carga anterior "había desaparecido". Ahora, apenas hay agente Y club
+  // elegidos, se pide la config vigente real (deal propio si existe, si no el default) y se
+  // precarga eso — nunca se vuelve a mostrar un formulario "vacío" para algo que ya está cargado.
+  useEffect(() => {
+    if (initial) return; // editando un deal puntual ya elegido — no pisar con la vigente
+    if (!agentId || !clubId) { setConfigSource(null); return; }
+    let cancelado = false;
+    api.configVigente(agentId, clubId).then((cfg) => {
+      if (cancelado) return;
+      setSystem(cfg.system);
+      setRakebackPct(String(Number(cfg.rakebackPct) * 100));
+      setRebatePct(String(Number(cfg.rebatePct) * 100));
+      setConfigSource(cfg.source);
+    }).catch(() => { if (!cancelado) setConfigSource(null); });
+    return () => { cancelado = true; };
+  }, [agentId, clubId, initial]);
 
   function elegirClub(id: string) {
     setClubId(id);
-    const club = clubes.find((c) => c.id === id);
-    if (club && club.default_rakeback_pct != null) {
-      setRakebackPct(String(Number(club.default_rakeback_pct) * 100));
-      setRebatePct(club.default_rebate_pct != null ? String(Number(club.default_rebate_pct) * 100) : "0");
-      setUsandoDefault(true);
-    } else {
-      setUsandoDefault(false);
-    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -1351,19 +1366,23 @@ function NuevoDeal({
             </select>
           </div>
           <div className="field">
-            <label>% Rakeback {usandoDefault && <span className="muted">(default del club)</span>}</label>
+            <label>
+              % Rakeback{" "}
+              {configSource === "deal" && <span className="badge pos" style={{ fontSize: 11 }}>Deal propio ya cargado</span>}
+              {configSource === "default_club" && <span className="badge neutral" style={{ fontSize: 11 }}>Sin deal propio — mostrando default del club</span>}
+            </label>
             <input
               value={rakebackPct}
-              onChange={(e) => { setRakebackPct(e.target.value); setUsandoDefault(false); }}
+              onChange={(e) => { setRakebackPct(e.target.value); setConfigSource(null); }}
               type="number"
               step="0.01"
             />
           </div>
           <div className="field">
-            <label>% Rebate {usandoDefault && <span className="muted">(default del club)</span>}</label>
+            <label>% Rebate</label>
             <input
               value={rebatePct}
-              onChange={(e) => { setRebatePct(e.target.value); setUsandoDefault(false); }}
+              onChange={(e) => { setRebatePct(e.target.value); setConfigSource(null); }}
               type="number"
               step="0.01"
               placeholder="Ej: -10 (negativo si se resta)"
