@@ -57,7 +57,13 @@ if (manzur.ruleApplied !== "MANZUR_75_RAKE") {
   console.log("✅ Manzur: ruleApplied trazado correctamente");
 }
 
-// Fórmula genérica (ej. GG, 70% rakeback + 10% rebate — valores reales relevados del sistema actual)
+// Fórmula genérica (ej. GG, 55% rakeback + 10% rebate)
+// CORRECCIÓN (planilla, hoja CONFIG_CUENTAS_POR_CLUB_V3, fila de daylight25 y repetido en otras
+// 4 filas de GG/Tiny, texto exacto): "TeamBack GG: rebate = 10% sobre (Win/Lose + Rake). Se
+// calcula separado del rakeback." — la base del rebate es Resultado + Rake, NO el rake solo. El
+// valor viejo de este test (2.217 = solo 10% del rake) venía de una lectura equivocada de un
+// extracto anterior; quedó descartado al aparecer la fórmula documentada explícitamente en la
+// planilla real.
 const generico = calcularCierre({
   agentId: "daylight25",
   clubId: "gg",
@@ -68,8 +74,8 @@ const generico = calcularCierre({
   rebatePct: 0.10,
   rateSnapshot: 1,
 });
-// Del extracto real de "daylight25": Rebate GG = 2,49 (10% de 22,17 = 2,217 ~ redondeo real de la planilla)
-assertClose(generico.rebate, 2.217, "daylight25: rebate 10% del rake");
+// (result + rakeTotal) * rebatePct = (-47.02 + 22.17) * 0.10 = -2.485
+assertClose(generico.rebate, -2.485, "daylight25: rebate 10% sobre (Resultado + Rake)");
 
 // Módulo Bancado (caso real Matías Fontal, relevado explícitamente en esta conversación):
 // caja inicial 300, gana 100 en las mesas, genera 200 de rake (30% = 60 de rakeback).

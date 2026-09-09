@@ -69,8 +69,13 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
   }
 
   // Fórmula genérica: resultado ajustado = resultado + rakeback + rebate
+  // El rebate NO se calcula solo sobre el rake: la planilla original (CONFIG_CUENTAS_POR_CLUB_V3,
+  // confirmado también en RESUMEN_TINY!D2 = Resultado+Rake = "Base Rebate Agente") define la base
+  // del rebate como Resultado + Rake Total, no el rake solo. Usar solo rakeTotal (como estaba
+  // antes) le pagaba de menos al agente cuando el resultado es negativo (lo normal, porque un
+  // resultado negativo del jugador es lo que genera rake) y de más cuando es muy positivo.
   const rakeback = input.rakeTotal * input.rakebackPct;
-  const rebate = input.rakeTotal * input.rebatePct;
+  const rebate = (input.result + input.rakeTotal) * input.rebatePct;
   const adjustedResult = input.result + rakeback + rebate;
 
   return {
