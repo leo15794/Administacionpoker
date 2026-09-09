@@ -104,6 +104,7 @@ export default function Cierres() {
                   resultado: c.result,
                   rake: c.rake_total,
                   rakeback: c.rakeback,
+                  rodeo: c.rodeo,
                   cierre_final: c.final_closing,
                   regla: c.rule_applied ?? "",
                 }))
@@ -117,7 +118,7 @@ export default function Cierres() {
           <thead>
             <tr>
               <th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
-              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Cierre final</th><th>Regla</th><th></th>
+              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Rodeo</th><th>Cierre final</th><th>Regla</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -130,6 +131,11 @@ export default function Cierres() {
                 <td>{usd(c.result)}</td>
                 <td>{usd(c.rake_total)}</td>
                 <td>{usd(c.rakeback)}</td>
+                <td>
+                  {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
+                      para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
+                  {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
+                </td>
                 <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
                 <td>
                   {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
