@@ -19,6 +19,7 @@ import {
   eliminarJugador,
   resolverConfigVigente,
   moverAgenteDeClub,
+  eliminarAgenteDefinitivo,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -35,8 +36,8 @@ catalogRouter.get("/clubs", requireAuth, requireAdmin, async (_req, res) => {
   res.json(await listClubs());
 });
 
-catalogRouter.get("/agents", requireAuth, requireAdmin, async (_req, res) => {
-  res.json(await listAgents());
+catalogRouter.get("/agents", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listAgents(req.query.includeInactive === "true"));
 });
 
 // Alta / edición de club (upsert por nombre)
@@ -245,6 +246,19 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real (no "dar de baja") — solo funciona si el agente no tiene ningún rastro real
+// (ver eliminarAgenteDefinitivo). Pensado para limpiar duplicados de prueba/auto-creados por
+// error, nunca para un agente con historial real (ese se da de baja, no se borra).
+catalogRouter.delete("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const r = await eliminarAgenteDefinitivo(req.params.id);
+    if (!r.found) return res.status(404).json({ error: "Agente no encontrado" });
+    res.json(r);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

@@ -327,9 +327,58 @@ export async function updateAgent(
   return r.rows[0] ?? null;
 }
 
-export async function listAgents() {
-  const r = await pool.query(`SELECT * FROM agents WHERE active = true ORDER BY name`);
+// `includeInactive`: "Dar de baja" nunca borra nada, pero listAgents() solo devolvía activos —
+// una vez dado de baja, el agente desaparecía de la lista sin ninguna forma de volver a verlo,
+// reactivarlo o (si era un duplicado de prueba) borrarlo de verdad. Con este flag el frontend
+// puede pedir "también los dados de baja" y mostrarlos aparte (atenuados, con Reactivar/Eliminar).
+export async function listAgents(includeInactive = false) {
+  const r = await pool.query(
+    includeInactive
+      ? `SELECT * FROM agents ORDER BY active DESC, name`
+      : `SELECT * FROM agents WHERE active = true ORDER BY name`
+  );
   return r.rows;
+}
+
+/**
+ * Borrado real de un agente (a diferencia de "dar de baja", que solo lo desactiva). Mismo
+ * espíritu que eliminarCierreSemanalDefinitivo (closings.ts): pensado para limpiar agentes
+ * creados por error o por el auto-create del importador (BIT-nueva) que nunca tuvieron
+ * movimiento real — NUNCA para un agente con historial de plata real, aunque esté dado de baja.
+ * Por eso se rechaza en bloque si tiene CUALQUIER rastro en otra tabla, en vez de intentar
+ * despegarlo prolijamente — un agente con historial real no se borra, se da de baja.
+ */
+export async function eliminarAgenteDefinitivo(agentId: string) {
+  const agentRes = await pool.query(`SELECT id, name FROM agents WHERE id = $1`, [agentId]);
+  const agent = agentRes.rows[0];
+  if (!agent) return { found: false as const };
+
+  const checks: { label: string; sql: string; params: any[] }[] = [
+    { label: "jugadores asignados", sql: `SELECT 1 FROM players WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "movimientos en el ledger", sql: `SELECT 1 FROM ledger_movements WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "cierres semanales", sql: `SELECT 1 FROM weekly_closings WHERE agent_id = $1 OR supervisor_agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "deals (% rakeback/rebate) cargados", sql: `SELECT 1 FROM agent_club_deals WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "reglas especiales", sql: `SELECT 1 FROM rule_versions WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "garantías", sql: `SELECT 1 FROM guarantees WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "movimientos de garantía", sql: `SELECT 1 FROM guarantee_movements WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "deuda de bancado", sql: `SELECT 1 FROM bancado_debts WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "memoria de Rodeo", sql: `SELECT 1 FROM rodeo_agent_memory WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "saldo en balances", sql: `SELECT 1 FROM balances WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "asignaciones manuales de jugador (overrides)", sql: `SELECT 1 FROM player_agent_overrides WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "usuarios de login vinculados", sql: `SELECT 1 FROM agent_users WHERE agent_id = $1 LIMIT 1`, params: [agentId] },
+    { label: "otro agente lo tiene cargado como supervisor", sql: `SELECT 1 FROM agents WHERE supervisor = $1 AND id <> $2 LIMIT 1`, params: [agent.name, agentId] },
+  ];
+  for (const check of checks) {
+    const r = await pool.query(check.sql, check.params);
+    if (r.rows.length > 0) {
+      throw new Error(
+        `No se puede borrar "${agent.name}": todavía tiene ${check.label}. Si es un agente real, dalo de baja en vez de borrarlo — el borrado definitivo es solo para agentes de prueba/duplicados sin ningún rastro.`
+      );
+    }
+  }
+
+  await pool.query(`DELETE FROM agents WHERE id = $1`, [agentId]);
+  return { found: true as const, id: agentId };
 }
 
 export async function listClubs() {

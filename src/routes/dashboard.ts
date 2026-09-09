@@ -62,16 +62,20 @@ dashboardRouter.get("/cierres", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listClosings(week));
 });
 
-dashboardRouter.get("/agentes", requireAuth, requireAdmin, async (_req, res) => {
+// includeInactive=true: también trae los dados de baja (atenuados en la UI) — "dar de baja"
+// nunca borra nada, pero sin este flag el agente desaparecía de la lista sin forma de volver a
+// verlo, reactivarlo o borrarlo de verdad si era un duplicado de prueba.
+dashboardRouter.get("/agentes", requireAuth, requireAdmin, async (req, res) => {
+  const includeInactive = req.query.includeInactive === "true";
   const r = await pool.query(
     `SELECT a.*, COALESCE(SUM(b.amount),0) as saldo_total,
             (SELECT amount FROM guarantees g WHERE g.agent_id = a.id AND g.active = true ORDER BY g.updated_at DESC LIMIT 1) as garantia_monto,
             (SELECT consumed FROM guarantees g WHERE g.agent_id = a.id AND g.active = true ORDER BY g.updated_at DESC LIMIT 1) as garantia_consumida
      FROM agents a
      LEFT JOIN balances b ON b.agent_id = a.id
-     WHERE a.active = true
+     ${includeInactive ? "" : "WHERE a.active = true"}
      GROUP BY a.id
-     ORDER BY a.name`
+     ORDER BY a.active DESC, a.name`
   );
   res.json(r.rows);
 });

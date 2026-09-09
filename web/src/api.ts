@@ -49,7 +49,7 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   resumen: () => request("/dashboard/resumen"),
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
-  agentes: () => request("/dashboard/agentes"),
+  agentes: (includeInactive?: boolean) => request(`/dashboard/agentes${includeInactive ? "?includeInactive=true" : ""}`),
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
   supervisores: () => request("/dashboard/supervisores"),
   bancados: () => request("/dashboard/bancados"),
@@ -122,6 +122,10 @@ export const api = {
       active?: boolean;
     }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // BORRADO REAL (no "dar de baja") — solo funciona si el agente no tiene ningún rastro
+  // (players/ledger/deals/etc, ver eliminarAgenteDefinitivo). Para duplicados de prueba o
+  // auto-creados por error del importador; un agente con historial real se da de baja, no se borra.
+  eliminarAgente: (id: string) => request(`/catalog/agents/${id}`, { method: "DELETE" }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),

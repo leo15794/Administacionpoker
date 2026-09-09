@@ -23,19 +23,45 @@ export default function Agentes() {
   const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
   const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas" | "arbol">("lista");
   const [filtro, setFiltro] = useState("");
+  // "Dar de baja" nunca borra nada, pero antes desaparecían de la lista sin forma de volver a
+  // verlos, reactivarlos o borrarlos de verdad si eran duplicados de prueba — este toggle los
+  // trae de vuelta (atenuados) con esas dos acciones.
+  const [verDadosDeBaja, setVerDadosDeBaja] = useState(false);
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
   const [reglasAgent, setReglasAgent] = useState<{ id: string; name: string } | null>(null);
 
   function refresh() {
-    api.agentes().then(setAgentes);
+    api.agentes(verDadosDeBaja).then(setAgentes);
     api.clubes().then(setClubes);
   }
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [verDadosDeBaja]);
+
+  async function reactivarAgente(a: any) {
+    try {
+      await api.editarAgente(a.id, { active: true });
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo reactivar al agente.");
+    }
+  }
+
+  // Borrado real — el backend lo rechaza si tiene cualquier rastro (jugadores, movimientos,
+  // deals, etc.), así que este botón nunca puede tirar abajo un agente con historial real; el
+  // confirm es solo para evitar un click accidental sobre un agente que sí se puede borrar.
+  async function eliminarAgente(a: any) {
+    if (!confirm(`¿Borrar definitivamente a "${a.name}"? Esto NO se puede deshacer. Solo funciona si el agente no tiene ningún historial real (si lo tiene, el sistema va a rechazar el borrado y te va a decir por qué).`)) return;
+    try {
+      await api.eliminarAgente(a.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo borrar al agente.");
+    }
+  }
 
   async function open(agent: any) {
     setSelected(agent);
@@ -101,7 +127,11 @@ export default function Agentes() {
           <div className="panel" style={{ flex: 1 }}>
             <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
               <h3 style={{ margin: 0 }}>Todos los agentes ({agentesFiltrados.length})</h3>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, whiteSpace: "nowrap" }}>
+                  <input type="checkbox" checked={verDadosDeBaja} onChange={(e) => setVerDadosDeBaja(e.target.checked)} />
+                  Ver dados de baja
+                </label>
                 <input className="search-input" placeholder="Buscar agente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
                 <button
                   className="btn secondary small"
@@ -128,8 +158,11 @@ export default function Agentes() {
               </thead>
               <tbody>
                 {agentesFiltrados.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.name}</td>
+                  <tr key={a.id} style={a.active === false ? { opacity: 0.55 } : undefined}>
+                    <td>
+                      {a.name}
+                      {a.active === false && <span className="badge neutral" style={{ marginLeft: 8 }}>Dado de baja</span>}
+                    </td>
                     <td>{a.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                     <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[(a.account_type as AccountType) ?? a.default_system] ?? a.account_type}</span></td>
                     <td><span className={`badge ${Number(a.saldo_total) > 0 ? "pos" : Number(a.saldo_total) < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
@@ -147,7 +180,16 @@ export default function Agentes() {
                       <button className="btn secondary small" onClick={() => setReglasAgent({ id: a.id, name: a.name })}>Reglas especiales</button>
                       <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
                       <button className="btn secondary small" onClick={() => setEditando(a)}>Editar</button>
-                      <button className="btn secondary small" onClick={() => darDeBajaAgente(a)}>Dar de baja</button>
+                      {a.active === false ? (
+                        <>
+                          <button className="btn secondary small" onClick={() => reactivarAgente(a)}>Reactivar</button>
+                          <button className="btn secondary small" style={{ color: "var(--danger, #e5484d)" }} onClick={() => eliminarAgente(a)} title="Borrado real — solo funciona si no tiene ningún historial (jugadores, movimientos, deals, etc).">
+                            Eliminar
+                          </button>
+                        </>
+                      ) : (
+                        <button className="btn secondary small" onClick={() => darDeBajaAgente(a)}>Dar de baja</button>
+                      )}
                     </td>
                   </tr>
                 ))}
