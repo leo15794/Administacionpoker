@@ -461,8 +461,13 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
   const [weekEnd, setWeekEnd] = useState("");
   const [analizando, setAnalizando] = useState(false);
   const [analisisError, setAnalisisError] = useState<string | null>(null);
-  const [hojasNoReconocidas, setHojasNoReconocidas] = useState<{ sheetName: string; motivo: string; resolvable?: boolean }[]>([]);
+  const [hojasFormatoInvalido, setHojasFormatoInvalido] = useState<{ sheetName: string; motivo: string }[]>([]);
+  // Una fila por cada hoja del archivo con formato válido — el club es SIEMPRE una elección
+  // explícita (nunca depende de que el nombre de la hoja coincida con algo configurado): si ya
+  // hay una configuración que matchea, viene precargada como sugerencia, pero se puede cambiar.
+  const [hojasDetectadas, setHojasDetectadas] = useState<{ sheetName: string; clubIdSugerido: string | null }[]>([]);
   const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({}); // sheetName -> clubId
+  const [confirmado, setConfirmado] = useState(false); // true = ya se eligió club para cada hoja y se procesó
   const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
@@ -471,21 +476,49 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
   const [aplicandoTodo, setAplicandoTodo] = useState(false);
   const [resumenAplicacion, setResumenAplicacion] = useState<string | null>(null);
 
-  // Hojas con formato Suprema correcto pero sin club configurado — se pueden resolver eligiendo
-  // el club a mano (a diferencia de una hoja que directamente no es de este formato).
-  const hojasSinClub = hojasNoReconocidas.filter((h) => h.resolvable);
-  const hojasFormatoInvalido = hojasNoReconocidas.filter((h) => !h.resolvable);
-
-  async function analizar(overrides?: Record<string, string>) {
+  // Paso 1: solo lee el archivo y arma la lista de hojas con formato válido (con una sugerencia
+  // de club si el nombre matchea algo ya configurado). Todavía no calcula nada por agente — eso
+  // recién pasa cuando se confirma a qué club corresponde cada hoja (paso 2).
+  async function analizar() {
     if (!file) { setAnalisisError("Elegí un archivo primero."); return; }
     if (!weekStart || !weekEnd) { setAnalisisError("Completá semana desde/hasta antes de analizar."); return; }
     setAnalizando(true);
     setAnalisisError(null);
     setResumenAplicacion(null);
+    setConfirmado(false);
+    setFilas([]);
+    setSinAgentePorClub([]);
     try {
-      const r = await api.previsualizarImportacion(file, weekEnd, overrides);
-      setHojasNoReconocidas(r.hojasNoReconocidas || []);
-      if (overrides) setClubElegidoPorHoja({}); // ya se aplicaron, empezamos de nuevo por si queda otra
+      const r = await api.previsualizarImportacion(file, weekEnd);
+      setHojasFormatoInvalido((r.hojasNoReconocidas || []).filter((h: any) => !h.resolvable));
+      const sugerencias: Record<string, string> = {};
+      const detectadas: { sheetName: string; clubIdSugerido: string | null }[] = [];
+      for (const club of r.clubes || []) {
+        detectadas.push({ sheetName: club.sheetName, clubIdSugerido: club.clubId });
+        sugerencias[club.sheetName] = club.clubId;
+      }
+      for (const h of (r.hojasNoReconocidas || []).filter((h: any) => h.resolvable)) {
+        detectadas.push({ sheetName: h.sheetName, clubIdSugerido: null });
+      }
+      setHojasDetectadas(detectadas);
+      setClubElegidoPorHoja(sugerencias);
+    } catch (err: any) {
+      setAnalisisError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setAnalizando(false);
+    }
+  }
+
+  // Paso 2: con el club ya elegido para cada hoja (sugerido o cambiado a mano), vuelve a mandar
+  // el mismo archivo con esa elección explícita — el backend la usa siempre, sin importar si el
+  // nombre de la hoja coincide o no con algo configurado.
+  async function confirmarClubesYProcesar() {
+    if (!file) return;
+    setAnalizando(true);
+    setAnalisisError(null);
+    try {
+      const r = await api.previsualizarImportacion(file, weekEnd, clubElegidoPorHoja);
+      setConfirmado(true);
       setSinAgentePorClub(
         (r.clubes || [])
           .filter((c: any) => c.sinAgente?.length > 0)
@@ -521,19 +554,10 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
       nuevasFilas.sort((a, b) => a.clubName.localeCompare(b.clubName) || a.agentName.localeCompare(b.agentName));
       setFilas(nuevasFilas);
     } catch (err: any) {
-      setAnalisisError(err.message || "No se pudo leer el archivo.");
+      setAnalisisError(err.message || "No se pudo procesar el archivo.");
     } finally {
       setAnalizando(false);
     }
-  }
-
-  async function confirmarClubesYReanalizar() {
-    const overrides: Record<string, string> = {};
-    for (const h of hojasSinClub) {
-      if (clubElegidoPorHoja[h.sheetName]) overrides[h.sheetName] = clubElegidoPorHoja[h.sheetName];
-    }
-    if (Object.keys(overrides).length === 0) return;
-    await analizar(overrides);
   }
 
   async function asignarJugador(clubId: string, playerId: string) {
@@ -543,7 +567,7 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
     setGuardandoAsignacion(claveSel);
     try {
       await api.asignarAgenteImportado({ playerExternalId: playerId, clubId, agentId, reason: "Asignado manualmente desde el importador de cierres." });
-      await analizar(); // recalcula todo con la asignación ya guardada
+      await confirmarClubesYProcesar(); // recalcula todo con la asignación ya guardada
     } catch (err: any) {
       alert(err.message || "No se pudo guardar la asignación.");
     } finally {
@@ -642,14 +666,24 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
       <h3>Importar cierre desde archivo</h3>
       <div className="muted" style={{ marginBottom: 14 }}>
         Hoy soporta el formato SupremaPoker (hojas Fénix / TeamBack, una fila por jugador). El % de rakeback/rebate de cada
-        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. Si una hoja no se
-        reconoce, te va a dejar elegir el club a mano y lo recuerda para la próxima vez.
+        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. El club de cada hoja
+        se elige acá (si coincide con algo ya usado antes, viene precargado, pero siempre lo podés cambiar).
       </div>
 
       <div className="form-grid">
         <div className="field">
           <label>Archivo (.xlsx)</label>
-          <input type="file" accept=".xlsx" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setFilas([]); setAnalisisError(null); }} />
+          <input
+            type="file"
+            accept=".xlsx"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setFilas([]);
+              setHojasDetectadas([]);
+              setConfirmado(false);
+              setAnalisisError(null);
+            }}
+          />
         </div>
         <div className="field">
           <label>Semana desde</label>
@@ -674,17 +708,16 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
         </div>
       )}
 
-      {hojasSinClub.length > 0 && (
+      {hojasDetectadas.length > 0 && !confirmado && (
         <div style={{ marginTop: 12 }}>
           <h4>¿A qué club corresponde cada hoja?</h4>
           <div className="muted" style={{ marginBottom: 8 }}>
-            Estas hojas tienen el formato correcto pero ningún club las tiene configuradas todavía.
-            Elegí el club una vez — la próxima semana, con el mismo nombre de hoja, se reconoce solo.
+            Elegí el club de cada hoja del archivo (el nombre de la hoja es solo una ayuda para sugerir, nunca un requisito).
           </div>
           <table>
             <thead><tr><th>Hoja del archivo</th><th>Club</th></tr></thead>
             <tbody>
-              {hojasSinClub.map((h) => (
+              {hojasDetectadas.map((h) => (
                 <tr key={h.sheetName}>
                   <td>{h.sheetName}</td>
                   <td>
@@ -703,10 +736,10 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
           <button
             className="btn secondary"
             style={{ marginTop: 8 }}
-            disabled={analizando || hojasSinClub.some((h) => !clubElegidoPorHoja[h.sheetName])}
-            onClick={confirmarClubesYReanalizar}
+            disabled={analizando || hojasDetectadas.some((h) => !clubElegidoPorHoja[h.sheetName])}
+            onClick={confirmarClubesYProcesar}
           >
-            {analizando ? "Analizando..." : "Confirmar clubes y reanalizar"}
+            {analizando ? "Procesando..." : "Confirmar clubes y procesar"}
           </button>
         </div>
       )}
@@ -753,13 +786,16 @@ function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: a
         </div>
       )}
 
-      {filas.length > 0 && (
+      {confirmado && filas.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h4 style={{ margin: 0 }}>Cierres a aplicar ({incluidas.length} de {filas.length})</h4>
-            <button className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
-              {previsualizandoTodo ? "Calculando..." : "Calcular vista previa de todos"}
-            </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn secondary small" onClick={() => setConfirmado(false)}>Cambiar clubes</button>
+              <button className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
+                {previsualizandoTodo ? "Calculando..." : "Calcular vista previa de todos"}
+              </button>
+            </div>
           </div>
           <table style={{ marginTop: 10 }}>
             <thead>

@@ -161,19 +161,26 @@ export async function analizarImportacionSuprema(
   }));
 
   for (const sheet of parsed.sheets) {
-    let club = await resolveClubBySheet(sheet.sheetName);
+    // La elección explícita del usuario SIEMPRE gana — el nombre de la hoja es solo una
+    // sugerencia/atajo (si hay un club ya configurado con ese import_source), nunca un
+    // requisito: el archivo es independiente del nombre de sus hojas.
+    const autoMatched = await resolveClubBySheet(sheet.sheetName);
+    let club: { id: string; name: string } | undefined = autoMatched;
 
-    if (!club) {
-      const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
-      if (overrideClubId) {
-        const r = await pool.query(`SELECT id, name FROM clubs WHERE id = $1 AND active = true`, [overrideClubId]);
-        club = r.rows[0] as { id: string; name: string } | undefined;
-        if (club) {
-          // Recién grabamos el nombre de hoja si el club todavía no tenía uno configurado —
-          // nunca pisamos en silencio una configuración existente por una elección manual.
+    const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
+    if (overrideClubId) {
+      const r = await pool.query(`SELECT id, name FROM clubs WHERE id = $1 AND active = true`, [overrideClubId]);
+      const overrideClub = r.rows[0] as { id: string; name: string } | undefined;
+      if (overrideClub) {
+        club = overrideClub;
+        // Recién grabamos el nombre de hoja como import_source si NINGÚN club (ni siquiera
+        // otro distinto al elegido) ya lo tiene tomado — si ya había un auto-match, la elección
+        // manual de esta vez pisa el resultado para este archivo pero nunca la configuración
+        // guardada, para que dos clubes no terminen compitiendo por el mismo nombre de hoja.
+        if (!autoMatched) {
           await pool.query(
             `UPDATE clubs SET import_source = $1 WHERE id = $2 AND import_source IS NULL`,
-            [sheet.sheetName, club.id]
+            [sheet.sheetName, overrideClub.id]
           );
         }
       }
