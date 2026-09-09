@@ -999,7 +999,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             <thead>
               <tr>
                 <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
-                <th>% Rakeback</th><th>Config</th><th>Rodeo</th><th>Cierre final (vista previa)</th>
+                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
             <tbody>
@@ -1012,6 +1012,15 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td>{usd(f.resultado)}</td>
                   <td>{usd(f.rakeTotal)}</td>
                   <td>{(f.rakebackPct * 100).toFixed(1)}%</td>
+                  <td>
+                    {(f.rebatePct * 100).toFixed(1)}%
+                    {(() => {
+                      const rebate = f.applyResult?.calc?.rebate ?? f.previewResult?.calc?.rebate;
+                      return rebate != null ? (
+                        <span className="muted"> · {usd(rebate)}</span>
+                      ) : null;
+                    })()}
+                  </td>
                   <td>
                     {f.configSource === "deal" ? <span className="badge pos">Deal agente</span> : <span className="badge neutral">Default club</span>}
                   </td>
