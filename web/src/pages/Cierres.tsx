@@ -721,10 +721,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       {plataforma === "SUPREMA" && (
       <>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Un mismo archivo de Suprema puede traer varios clubes juntos, cada uno en su propia pestaña de Excel (ej. "Fenix",
-        "tb") — esa pestaña NO es el club, es solo cómo está armado el archivo que exporta Suprema. Vos elegís abajo a qué
-        club de tu sistema (de SupremaPoker) corresponde cada pestaña. El % de rakeback/rebate de cada agente sale SIEMPRE
-        de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae.
+        El % de rakeback/rebate de cada agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo
+        nunca lo trae.
       </div>
 
       <div className="form-grid">
@@ -767,19 +765,18 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
       {hojasDetectadas.length > 0 && !confirmado && (
         <div style={{ marginTop: 12 }}>
-          <h4>¿A qué club corresponde cada pestaña del excel?</h4>
+          <h4>Elegí el club</h4>
           <div className="muted" style={{ marginBottom: 8 }}>
-            Elegí el club de cada pestaña del archivo (el nombre de la pestaña es solo una ayuda para sugerir, nunca un
-            requisito — no confundir el nombre de la pestaña con el club: elegís vos siempre).
+            El archivo trae {hojasDetectadas.length === 1 ? "1 grupo de datos" : `${hojasDetectadas.length} grupos de datos`} — elegí a qué club corresponde cada uno (o tildá "Ignorar" para no procesarlo esta semana).
           </div>
           <table>
-            <thead><tr><th>Pestaña del excel</th><th>Club</th><th>Ignorar</th></tr></thead>
+            <thead><tr><th>{hojasDetectadas.length > 1 ? "Grupo" : ""}</th><th>Club</th><th>Ignorar</th></tr></thead>
             <tbody>
-              {hojasDetectadas.map((h) => {
+              {hojasDetectadas.map((h, idx) => {
                 const ignorada = !!hojaIgnorada[h.sheetName];
                 return (
                   <tr key={h.sheetName} style={ignorada ? { opacity: 0.5 } : undefined}>
-                    <td>{h.sheetName}</td>
+                    <td>{hojasDetectadas.length > 1 ? idx + 1 : ""}</td>
                     <td>
                       <select
                         value={clubElegidoPorHoja[h.sheetName] ?? ""}
