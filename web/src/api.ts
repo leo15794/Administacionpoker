@@ -142,6 +142,9 @@ export const api = {
   // Árbol Club -> Agentes (con % vigente) para la pestaña "Árbol de clubes" en Administración.
   arbolClubes: () => request(`/catalog/arbol`),
   jugadoresDeAgenteEnClub: (clubId: string, agentId: string) => request(`/catalog/clubs/${clubId}/agents/${agentId}/players`),
+  // Borra una fila de jugador mal asignada a un club (ej. por el bug viejo del import_source),
+  // para poder recargarla a mano en el club correcto. No toca cierres ni ledger.
+  eliminarJugador: (playerId: string) => request(`/catalog/players/${playerId}`, { method: "DELETE" }),
   crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
     request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
   terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),

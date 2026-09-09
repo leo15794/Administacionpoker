@@ -219,10 +219,20 @@ export async function getArbolClubes() {
 
 export async function getJugadoresDeAgenteEnClub(clubId: string, agentId: string) {
   const r = await pool.query(
-    `SELECT external_id, display_name FROM players WHERE club_id = $1 AND agent_id = $2 ORDER BY display_name`,
+    `SELECT id, external_id, display_name FROM players WHERE club_id = $1 AND agent_id = $2 ORDER BY display_name`,
     [clubId, agentId]
   );
   return r.rows;
+}
+
+// Borra una fila de "players" (catálogo/roster: club+agente asignado a un jugador). Esto NUNCA
+// toca el ledger: weekly_closings y ledger_movements se referencian por agent_id+club_id, no por
+// player_id, así que borrar acá no revierte ni afecta ningún cierre ya aplicado (ver schema.sql).
+// Se usa para limpiar jugadores que quedaron mal asignados a un club por error de carga, para
+// después recargarlos manualmente en el club correcto.
+export async function eliminarJugador(playerId: string) {
+  const r = await pool.query(`DELETE FROM players WHERE id = $1 RETURNING id`, [playerId]);
+  return r.rowCount ? r.rowCount > 0 : false;
 }
 
 // Resuelve la regla especial vigente para un agente en un club a una fecha dada (por defecto

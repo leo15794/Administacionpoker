@@ -728,6 +728,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [jugadoresPorAgente, setJugadoresPorAgente] = useState<Record<string, any[]>>({});
   const [cargandoJugadores, setCargandoJugadores] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ clubId: string; agentId: string; agentName: string } | null>(null);
+  const [eliminandoJugador, setEliminandoJugador] = useState<string | null>(null);
 
   function refresh() {
     setCargando(true);
@@ -749,6 +750,18 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       } finally {
         setCargandoJugadores(null);
       }
+    }
+  }
+
+  async function eliminarJugador(clave: string, playerId: string, nombre: string) {
+    if (!confirm(`¿Eliminar a "${nombre}" de este club? No borra ningún cierre ni movimiento, solo la ficha del jugador — se puede recargar a mano después.`)) return;
+    setEliminandoJugador(playerId);
+    try {
+      await api.eliminarJugador(playerId);
+      setJugadoresPorAgente((s) => ({ ...s, [clave]: (s[clave] ?? []).filter((j: any) => j.id !== playerId) }));
+      refresh(); // recalcula el conteo de jugadores del agente (y puede desaparecer si quedó en 0)
+    } finally {
+      setEliminandoJugador(null);
     }
   }
 
@@ -832,7 +845,18 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                                   ) : (
                                     <div className="muted" style={{ fontSize: 12.5, display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
                                       {(jugadoresPorAgente[clave] ?? []).map((j: any) => (
-                                        <span key={j.external_id}>{j.display_name ?? j.external_id}</span>
+                                        <span key={j.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                          {j.display_name ?? j.external_id}
+                                          <button
+                                            className="btn secondary small"
+                                            style={{ padding: "0 6px", fontSize: 11 }}
+                                            disabled={eliminandoJugador === j.id}
+                                            title="Eliminar este jugador de este club (para recargarlo a mano en el club correcto)"
+                                            onClick={() => eliminarJugador(clave, j.id, j.display_name ?? j.external_id)}
+                                          >
+                                            {eliminandoJugador === j.id ? "..." : "✕"}
+                                          </button>
+                                        </span>
                                       ))}
                                     </div>
                                   )}

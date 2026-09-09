@@ -16,6 +16,7 @@ import {
   listAllRules,
   getArbolClubes,
   getJugadoresDeAgenteEnClub,
+  eliminarJugador,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -154,6 +155,15 @@ catalogRouter.get("/arbol", requireAuth, requireAdmin, async (_req, res) => {
 
 catalogRouter.get("/clubs/:clubId/agents/:agentId/players", requireAuth, requireAdmin, async (req, res) => {
   res.json(await getJugadoresDeAgenteEnClub(req.params.clubId, req.params.agentId));
+});
+
+// Borra una fila de jugador mal asignada (ej. quedó en el club equivocado por el bug del
+// import_source viejo). No toca weekly_closings/ledger_movements — ver nota en repo/catalog.ts.
+// Después de borrar, el jugador se vuelve a cargar a mano en el club correcto.
+catalogRouter.delete("/players/:id", requireAuth, requireAdmin, async (req, res) => {
+  const ok = await eliminarJugador(req.params.id);
+  if (!ok) return res.status(404).json({ error: "Jugador no encontrado" });
+  res.status(204).send();
 });
 
 const ruleSchema = z.object({
