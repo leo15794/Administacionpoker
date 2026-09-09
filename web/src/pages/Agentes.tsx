@@ -1138,6 +1138,7 @@ function ClubesConfig({
 }
 
 function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
+  const [name, setName] = useState(club.name ?? "");
   const [unit, setUnit] = useState<"USD" | "USDT" | "FICHAS">(club.unit ?? "USD");
   const [currentRate, setCurrentRate] = useState(String(club.current_rate ?? 1));
   const [defaultRakebackPct, setDefaultRakebackPct] = useState(club.default_rakeback_pct != null ? String(Number(club.default_rakeback_pct) * 100) : "");
@@ -1154,9 +1155,11 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (!name.trim()) return setMsg({ ok: false, text: "El nombre es obligatorio." });
     setLoading(true);
     try {
       await api.configurarClub(club.id, {
+        name: name.trim(),
         unit,
         currentRate: Number(currentRate) || 1,
         defaultRakebackPct: defaultRakebackPct === "" ? undefined : Number(defaultRakebackPct) / 100,
@@ -1183,6 +1186,10 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
       </div>
       <div className="form-grid">
         <div className="field">
+          <label>Nombre</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
           <label>Unidad</label>
           <select value={unit} onChange={(e) => setUnit(e.target.value as any)}>
             <option value="USD">USD</option>
@@ -1202,7 +1209,10 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         </div>
         <div className="field">
           <label>% Rebate default</label>
-          <input value={defaultRebatePct} onChange={(e) => setDefaultRebatePct(e.target.value)} type="number" step="0.01" placeholder="Ej: 0" />
+          <input value={defaultRebatePct} onChange={(e) => setDefaultRebatePct(e.target.value)} type="number" step="0.01" placeholder="Ej: -10 (negativo si se resta)" />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Puede ser negativo (ej. -10 en TeamBack GG: se resta del resultado+rake) o positivo si en ese club el rebate se suma.
+          </div>
         </div>
         <div className="field">
           <label>Destino del rebate</label>
@@ -1356,6 +1366,7 @@ function NuevoDeal({
               onChange={(e) => { setRebatePct(e.target.value); setUsandoDefault(false); }}
               type="number"
               step="0.01"
+              placeholder="Ej: -10 (negativo si se resta)"
             />
           </div>
         </div>

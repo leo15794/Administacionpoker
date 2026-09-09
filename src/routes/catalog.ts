@@ -83,7 +83,10 @@ const clubConfigSchema = z.object({
   unit: z.enum(["USD", "USDT", "FICHAS"]).optional(),
   currentRate: z.number().positive().optional(),
   defaultRakebackPct: z.number().min(0).max(1).optional(),
-  defaultRebatePct: z.number().min(0).max(1).optional(),
+  // El rebate puede ser negativo (ej. TeamBack GG: -10%, se RESTA del resultado+rake — ver
+  // engine/cierre.ts) — antes esto estaba acotado a [0,1] igual que rakeback, lo que hacía
+  // imposible cargar un rebate negativo desde la UI y forzaba a cargarlo con el signo al revés.
+  defaultRebatePct: z.number().min(-1).max(1).optional(),
   rebateDestino: z.enum(["SALDO_OPERATIVO", "RAKEBACK_SUPERVISOR"]).optional(),
   feePct: z.number().min(0).max(1).optional(),
   platformPct: z.number().min(0).max(1).optional(),
@@ -115,7 +118,9 @@ const dealSchema = z.object({
   clubId: z.string(),
   system: z.enum(["PREPAGO", "WIN_LOSE"]),
   rakebackPct: z.number().min(0).max(1),
-  rebatePct: z.number().min(0).max(1).default(0),
+  // Mismo motivo que en clubConfigSchema.defaultRebatePct: un rebate negativo (ej. -10% en
+  // TeamBack GG) es un caso real y válido, no un error de carga.
+  rebatePct: z.number().min(-1).max(1).default(0),
   notes: z.string().optional(),
 });
 // Todos los deals vigentes de todos los agentes, para pintar el % en la lista principal de
