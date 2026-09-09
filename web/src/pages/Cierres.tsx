@@ -462,8 +462,9 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [analisisError, setAnalisisError] = useState<string | null>(null);
   const [hojasFormatoInvalido, setHojasFormatoInvalido] = useState<{ sheetName: string; motivo: string }[]>([]);
   // Una fila por cada hoja del archivo con formato válido — el club es SIEMPRE una elección
-  // explícita (nunca depende de que el nombre de la hoja coincida con algo configurado): si ya
-  // hay una configuración que matchea, viene precargada como sugerencia, pero se puede cambiar.
+  // explícita del usuario, sin ningún auto-match ni precarga por nombre de hoja (se sacó: dos
+  // clubes reales pueden compartir el mismo nombre de pestaña entre semanas, y guardar esa
+  // asociación como default mezcló datos de un club con los de otro).
   const [hojasDetectadas, setHojasDetectadas] = useState<{ sheetName: string; clubIdSugerido: string | null }[]>([]);
   const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({}); // sheetName -> clubId
   const [hojaIgnorada, setHojaIgnorada] = useState<Record<string, boolean>>({}); // sheetName -> se saltea esta semana

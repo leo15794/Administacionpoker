@@ -974,7 +974,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   const [platformPct, setPlatformPct] = useState(club.platform_pct != null ? String(Number(club.platform_pct) * 100) : "");
   const [unionPct, setUnionPct] = useState(club.union_pct != null ? String(Number(club.union_pct) * 100) : "");
   const [notes, setNotes] = useState(club.notes ?? "");
-  const [importSource, setImportSource] = useState(club.import_source ?? "");
   const [importPlatform, setImportPlatform] = useState<string>(club.import_platform ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -994,7 +993,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         platformPct: platformPct === "" ? undefined : Number(platformPct) / 100,
         unionPct: unionPct === "" ? undefined : Number(unionPct) / 100,
         notes: notes.trim() || null,
-        importSource: importSource.trim() || null,
         importPlatform: importPlatform || null,
       });
       onSaved();
@@ -1066,14 +1064,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
           club separado por plataforma, así el importador nunca mezcla cierres de redes distintas. Se completa solo
           cuando elegís este club en el importador de Suprema.
         </div>
-      </div>
-      <div className="field">
-        <label>Hoja de importación (sugerencia, no obligatoria)</label>
-        <input
-          value={importSource}
-          onChange={(e) => setImportSource(e.target.value)}
-          placeholder='Ej: "Fenix", "tb" — se precarga sola la primera vez que elijas este club para una hoja'
-        />
       </div>
       <div className="field">
         <label>Notas (opcional)</label>

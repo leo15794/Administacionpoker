@@ -54,15 +54,6 @@ export interface ResultadoImportacion {
   hojasNoReconocidas: { sheetName: string; motivo: string; resolvable?: boolean }[];
 }
 
-async function resolveClubBySheet(sheetName: string) {
-  const r = await pool.query(
-    `SELECT id, name FROM clubs WHERE active = true
-       AND import_source IS NOT NULL AND lower(trim(import_source)) = lower(trim($1)) LIMIT 1`,
-    [sheetName]
-  );
-  return r.rows[0] as { id: string; name: string } | undefined;
-}
-
 /** Clubes elegibles como destino de una hoja de este importador — TODOS los clubes activos,
  * sin filtrar por plataforma: nunca bloquear al usuario por no tener un club "marcado" de
  * antemano, la elección de club para cada hoja es siempre suya y siempre libre. La plataforma
@@ -154,11 +145,12 @@ async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: stri
  * ya existente de vista previa/aplicar cierre (movements.ts), reutilizado por el frontend
  * fila por fila una vez que esta previa está limpia.
  *
- * `sheetClubOverrides` (sheetName -> clubId): elección manual del usuario, SIEMPRE explícita
- * (nunca depende de que el nombre de la hoja coincida con algo configurado). Si se resuelve
- * por acá y ningún otro club ya tenía ese nombre de hoja tomado, queda grabado como el
- * import_source de ese club — así la semana que viene, con el mismo nombre, viene precargado
- * como sugerencia (pero sigue siendo editable).
+ * `sheetClubOverrides` (sheetName -> clubId): elección manual del usuario para cada hoja, SIEMPRE
+ * explícita — no hay ningún auto-match ni sugerencia por nombre de hoja (se sacó adrede: dos
+ * clubes reales pueden compartir el mismo nombre de pestaña entre semanas distintas, ej. "Fenix"
+ * en un archivo de Suprema, y guardar esa asociación como default hizo que un club de otra
+ * plataforma quedara mezclado con datos de Suprema). El nombre de la hoja no se usa para nada
+ * más que mostrarlo en pantalla.
  *
  * `sheetsIgnoradas`: nombres de hoja que el usuario decide no procesar esta semana — se
  * saltean por completo (ni se les pide club ni aparecen como pendientes/error).
@@ -180,11 +172,9 @@ export async function analizarImportacionSuprema(
   for (const sheet of parsed.sheets) {
     if (ignoradasSet.has(sheet.sheetName)) continue;
 
-    // La elección explícita del usuario SIEMPRE gana — el nombre de la hoja es solo una
-    // sugerencia/atajo (si hay un club ya configurado con ese import_source), nunca un
-    // requisito: el archivo es independiente del nombre de sus hojas.
-    const autoMatched = await resolveClubBySheet(sheet.sheetName);
-    let club: { id: string; name: string } | undefined = autoMatched;
+    // El club de esta hoja es SIEMPRE la elección explícita del usuario — no hay ningún
+    // auto-match por nombre de hoja (ver nota arriba de por qué se sacó).
+    let club: { id: string; name: string } | undefined;
 
     const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
     if (overrideClubId) {
@@ -198,16 +188,6 @@ export async function analizarImportacionSuprema(
       const overrideClub = r.rows[0] as { id: string; name: string } | undefined;
       if (overrideClub) {
         club = overrideClub;
-        // Recién grabamos el nombre de hoja como import_source si NINGÚN club (ni siquiera
-        // otro distinto al elegido) ya lo tiene tomado — si ya había un auto-match, la elección
-        // manual de esta vez pisa el resultado para este archivo pero nunca la configuración
-        // guardada, para que dos clubes no terminen compitiendo por el mismo nombre de hoja.
-        if (!autoMatched) {
-          await pool.query(
-            `UPDATE clubs SET import_source = $1 WHERE id = $2 AND import_source IS NULL`,
-            [sheet.sheetName, overrideClub.id]
-          );
-        }
         // Anotamos la plataforma en segundo plano (solo si no tenía ninguna todavía) — es
         // memoria interna para el día que haya más de un formato de importador, nunca un
         // requisito ni un filtro para poder usar este.
@@ -216,12 +196,6 @@ export async function analizarImportacionSuprema(
           [overrideClub.id]
         );
       }
-    } else if (autoMatched) {
-      // Mismo bookkeeping silencioso cuando el club se resolvió solo por nombre de hoja.
-      await pool.query(
-        `UPDATE clubs SET import_platform = COALESCE(import_platform, 'SUPREMA') WHERE id = $1`,
-        [autoMatched.id]
-      );
     }
 
     if (!club) {
