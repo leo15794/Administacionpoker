@@ -55,20 +55,21 @@ export interface ResultadoImportacion {
 
 async function resolveClubBySheet(sheetName: string) {
   const r = await pool.query(
-    `SELECT id, name FROM clubs WHERE active = true AND import_platform = 'SUPREMA'
+    `SELECT id, name FROM clubs WHERE active = true
        AND import_source IS NOT NULL AND lower(trim(import_source)) = lower(trim($1)) LIMIT 1`,
     [sheetName]
   );
   return r.rows[0] as { id: string; name: string } | undefined;
 }
 
-/** Clubes elegibles como destino de una hoja de este importador (solo SupremaPoker) — nunca
- * mezclar acá un club de otra plataforma/red (ej. "Fénix GG"), aunque el nombre del club real
- * sea el mismo: los cierres de cada plataforma se liquidan por separado. */
+/** Clubes elegibles como destino de una hoja de este importador — TODOS los clubes activos,
+ * sin filtrar por plataforma: nunca bloquear al usuario por no tener un club "marcado" de
+ * antemano, la elección de club para cada hoja es siempre suya y siempre libre. La plataforma
+ * (import_platform) se anota sola en segundo plano cuando resuelve una hoja acá (ver más abajo)
+ * — es memoria interna para el día que haya más de un formato de importador, nunca un requisito
+ * para poder usar este. */
 export async function listClubesImportacionSuprema() {
-  const r = await pool.query(
-    `SELECT id, name FROM clubs WHERE active = true AND import_platform = 'SUPREMA' ORDER BY name`
-  );
+  const r = await pool.query(`SELECT id, name FROM clubs WHERE active = true ORDER BY name`);
   return r.rows as { id: string; name: string }[];
 }
 
@@ -186,8 +187,11 @@ export async function analizarImportacionSuprema(
 
     const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
     if (overrideClubId) {
+      // Sin filtro de plataforma acá: cualquier club activo es un destino válido para la
+      // elección manual del usuario, tenga o no ya una plataforma anotada. La plataforma
+      // nunca es un requisito para poder elegir un club.
       const r = await pool.query(
-        `SELECT id, name FROM clubs WHERE id = $1 AND active = true AND import_platform = 'SUPREMA'`,
+        `SELECT id, name FROM clubs WHERE id = $1 AND active = true`,
         [overrideClubId]
       );
       const overrideClub = r.rows[0] as { id: string; name: string } | undefined;
@@ -203,7 +207,20 @@ export async function analizarImportacionSuprema(
             [sheet.sheetName, overrideClub.id]
           );
         }
+        // Anotamos la plataforma en segundo plano (solo si no tenía ninguna todavía) — es
+        // memoria interna para el día que haya más de un formato de importador, nunca un
+        // requisito ni un filtro para poder usar este.
+        await pool.query(
+          `UPDATE clubs SET import_platform = COALESCE(import_platform, 'SUPREMA') WHERE id = $1`,
+          [overrideClub.id]
+        );
       }
+    } else if (autoMatched) {
+      // Mismo bookkeeping silencioso cuando el club se resolvió solo por nombre de hoja.
+      await pool.query(
+        `UPDATE clubs SET import_platform = COALESCE(import_platform, 'SUPREMA') WHERE id = $1`,
+        [autoMatched.id]
+      );
     }
 
     if (!club) {

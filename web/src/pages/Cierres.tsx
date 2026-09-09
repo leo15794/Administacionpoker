@@ -761,8 +761,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           </table>
           {clubesSuprema.length === 0 && (
             <div className="muted" style={{ marginTop: 6 }}>
-              No hay ningún club marcado como plataforma "SupremaPoker" todavía — configuralo en Clubes → Configurar
-              → "Plataforma de importación" antes de poder elegir club acá.
+              No hay ningún club activo todavía — creá uno en Administración → Clubes antes de poder elegir club acá.
             </div>
           )}
           <button

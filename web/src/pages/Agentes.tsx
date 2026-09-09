@@ -735,14 +735,16 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         </div>
       </div>
       <div className="field">
-        <label>Plataforma de importación (para "Importar archivo" en Cierres)</label>
+        <label>Plataforma de origen (informativo, opcional)</label>
         <select value={importPlatform} onChange={(e) => setImportPlatform(e.target.value)}>
-          <option value="">Ninguna (este club no se carga por importador de archivo)</option>
+          <option value="">Sin especificar</option>
           <option value="SUPREMA">SupremaPoker</option>
         </select>
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          Un mismo club real que opera en más de una red (ej. "Fénix" en GG y en Suprema) tiene un registro de club
-          separado por plataforma — así el importador nunca mezcla cierres de redes distintas.
+          Solo a modo de referencia — no hace falta completarlo para poder elegir este club al importar un archivo.
+          Un mismo club real que opera en más de una red (ej. "Fénix" en GG y en Suprema) se maneja como un registro de
+          club separado por plataforma, así el importador nunca mezcla cierres de redes distintas. Se completa solo
+          cuando elegís este club en el importador de Suprema.
         </div>
       </div>
       <div className="field">
