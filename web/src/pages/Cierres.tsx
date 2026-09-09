@@ -592,6 +592,24 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     }
   }
 
+  // Crea el agente que faltaba (un superagente nuevo del archivo, todavía no en el catálogo) y
+  // reprocesa el archivo entero — no hace falta asignar jugador por jugador: al quedar creado
+  // con su external_id, resolvePlayerAgent lo matchea solo para TODOS los jugadores que le
+  // correspondan, no solo el que disparó el alta.
+  const [creandoAgente, setCreandoAgente] = useState<string | null>(null);
+  async function crearAgenteYReprocesar(agentIdRaw: string | null, agentNameRaw: string) {
+    const clave = agentIdRaw ?? agentNameRaw;
+    setCreandoAgente(clave);
+    try {
+      await api.crearAgenteImportado({ name: agentNameRaw, agentIdRaw });
+      await confirmarClubesYProcesar();
+    } catch (err: any) {
+      alert(err.message || "No se pudo crear el agente.");
+    } finally {
+      setCreandoAgente(null);
+    }
+  }
+
   function toggleIncluded(key: string) {
     setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, included: !f.included } : f)));
   }
@@ -819,9 +837,36 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       {sinAgentePorClub.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <h4>Jugadores sin agente asignado</h4>
-          {sinAgentePorClub.map((grupo) => (
+          {sinAgentePorClub.map((grupo) => {
+            // Agrupa por agente crudo del archivo (agentIdRaw||agentNameRaw) — varios jugadores
+            // suelen compartir el mismo superagente todavía no creado; un solo clic lo crea y
+            // reprocesa TODOS los que le correspondan, no solo el jugador que lo disparó.
+            const faltantes = new Map<string, { agentIdRaw: string | null; agentNameRaw: string; count: number }>();
+            for (const it of grupo.items) {
+              if (!it.agentNameRaw) continue;
+              const clave = it.agentIdRaw ?? it.agentNameRaw;
+              const existente = faltantes.get(clave);
+              if (existente) existente.count += 1;
+              else faltantes.set(clave, { agentIdRaw: it.agentIdRaw, agentNameRaw: it.agentNameRaw, count: 1 });
+            }
+            return (
             <div key={grupo.clubId} style={{ marginBottom: 14 }}>
               <div className="muted">{grupo.clubName}</div>
+              {faltantes.size > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "8px 0" }}>
+                  {[...faltantes.entries()].map(([clave, f]) => (
+                    <button
+                      key={clave}
+                      className="btn secondary small"
+                      disabled={creandoAgente === clave}
+                      onClick={() => crearAgenteYReprocesar(f.agentIdRaw, f.agentNameRaw)}
+                      title={`Crea el agente y asigna automáticamente a los ${f.count} jugador(es) que le corresponden`}
+                    >
+                      {creandoAgente === clave ? "Creando..." : `+ Crear agente "${f.agentNameRaw}" (${f.count})`}
+                    </button>
+                  ))}
+                </div>
+              )}
               <table>
                 <thead><tr><th>Jugador</th><th>Agente en el archivo</th><th>Resultado</th><th>Rake</th><th>Asignar a</th><th></th></tr></thead>
                 <tbody>
@@ -854,7 +899,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                 </tbody>
               </table>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

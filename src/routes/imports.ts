@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
-import { analizarImportacionSuprema, asignarAgenteJugador, listClubesImportacionSuprema } from "../repo/imports.js";
+import { analizarImportacionSuprema, asignarAgenteJugador, listClubesImportacionSuprema, crearAgenteDesdeImportacion } from "../repo/imports.js";
 
 export const importsRouter = Router();
 
@@ -79,6 +79,27 @@ importsRouter.post("/suprema/asignar-agente", requireAuth, requireAdmin, async (
       parsed.data.reason
     );
     res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const crearAgenteSchema = z.object({
+  name: z.string().min(2),
+  agentIdRaw: z.string().nullable().optional(),
+  defaultSystem: z.enum(["PREPAGO", "WIN_LOSE"]).optional(),
+});
+
+// Crea de un clic el agente que faltaba (un superagente nuevo del archivo que todavía no
+// existía en el catálogo) en vez de mandar al usuario a "Nuevo agente" aparte. Queda con
+// external_id = agentIdRaw, así que vuelve a analizar el archivo (o la próxima semana) y ya
+// matchea solo — sin asignación manual jugador por jugador.
+importsRouter.post("/suprema/crear-agente", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = crearAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const agent = await crearAgenteDesdeImportacion(parsed.data.name, parsed.data.agentIdRaw ?? null, parsed.data.defaultSystem);
+    res.status(201).json(agent);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

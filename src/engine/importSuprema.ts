@@ -9,6 +9,12 @@
 //                       + "SPIN Total(Local)" + "TLT Total(Local)" de sus jugadores.
 // Verificado centavo a centavo contra el resumen real de esa semana (Fénix: 1.997,61 de rake;
 // TeamBack: 4.191,60 de rake). No inventar otra fórmula sin volver a verificar así.
+//
+// "Rodeo" (solo SupremaPoker, pedido explícito del usuario): columna "Total Profit Rodeo(Local)"
+// del mismo reporte — un bono de ganancia por jugador que la plataforma ya calcula. Se acredita
+// 100% al agente (nunca se multiplica por ningún % ni se desvía a un supervisor). Verificado
+// contra dos filas reales del histórico (REPORTE ACTUAL DE MANZUR / DETALLE DE JUGADORES):
+// Cierre = Resultado ajustado + Rakeback + Rodeo + Ventas — encaja centavo a centavo.
 import ExcelJS from "exceljs";
 
 const REQUIRED_HEADERS = [
@@ -22,7 +28,15 @@ const REQUIRED_HEADERS = [
   "SNG Total(Local)",
   "SPIN Total(Local)",
   "TLT Total(Local)",
+  "Total Profit Rodeo(Local)",
 ] as const;
+
+// Opcionales: no bloquean la hoja si faltan (una variante del reporte de Suprema podría no
+// traerlas), pero cuando están se usan para enriquecer la resolución de agente y para mostrar
+// la jerarquía real (Role/Sub Agent) — NUNCA para reagrupar el resultado de un jugador: el
+// resultado siempre se suma por "Agent Name" (el superagente), confirmado explícitamente por el
+// usuario — el Sub Agent es solo información de a quién le reporta puertas adentro.
+const OPTIONAL_HEADERS = ["Role", "Sub Agent ID", "Sub Agent Name"] as const;
 
 const RAKE_HEADERS = [
   "Ring Game Total(Local)",
@@ -39,6 +53,12 @@ export interface SupremaPlayerRow {
   agentNameRaw: string | null;
   resultado: number;
   rake: number;
+  rodeo: number;
+  // Informativos (columnas opcionales) — no afectan el cálculo de plata, ver nota en
+  // OPTIONAL_HEADERS. role: "MEMBER" | "AGENT" | "SUPERAGENT" tal cual lo manda Suprema.
+  role: string | null;
+  subAgentIdRaw: string | null;
+  subAgentNameRaw: string | null;
 }
 
 export interface SupremaSheetParseError {
@@ -90,10 +110,14 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       if (text) headerByCol.set(colNumber, text);
     });
 
-    // Mapea cada encabezado requerido a su número de columna (primera ocurrencia).
+    // Mapea cada encabezado requerido (y los opcionales, si están) a su número de columna
+    // (primera ocurrencia).
     const colIndex: Record<string, number> = {};
     for (const [col, text] of headerByCol) {
-      if ((REQUIRED_HEADERS as readonly string[]).includes(text) && colIndex[text] === undefined) {
+      if (
+        ((REQUIRED_HEADERS as readonly string[]).includes(text) || (OPTIONAL_HEADERS as readonly string[]).includes(text)) &&
+        colIndex[text] === undefined
+      ) {
         colIndex[text] = col;
       }
     }
@@ -116,7 +140,11 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       const agentNameRaw = normText(row.getCell(colIndex["Agent Name"]).value);
       const resultado = toNumber(row.getCell(colIndex["Total(Local)"]).value);
       const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0);
-      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake });
+      const rodeo = toNumber(row.getCell(colIndex["Total Profit Rodeo(Local)"]).value);
+      const role = colIndex["Role"] !== undefined ? normText(row.getCell(colIndex["Role"]).value) : null;
+      const subAgentIdRaw = colIndex["Sub Agent ID"] !== undefined ? normText(row.getCell(colIndex["Sub Agent ID"]).value) : null;
+      const subAgentNameRaw = colIndex["Sub Agent Name"] !== undefined ? normText(row.getCell(colIndex["Sub Agent Name"]).value) : null;
+      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake, rodeo, role, subAgentIdRaw, subAgentNameRaw });
     });
 
     sheets.push({ sheetName: ws.name, rows });

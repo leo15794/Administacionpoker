@@ -4,7 +4,7 @@
 // nunca desde el archivo — así lo pidió el usuario).
 import { pool, newId } from "../db/pool.js";
 import { parseSupremaWorkbook, type SupremaPlayerRow } from "../engine/importSuprema.js";
-import { resolverConfigVigente } from "./catalog.js";
+import { resolverConfigVigente, upsertAgent, updateAgent } from "./catalog.js";
 
 export interface AgenteAgregado {
   agentId: string;
@@ -29,6 +29,7 @@ export interface AgenteAgregado {
 export interface JugadorSinAgente {
   playerId: string;
   playerName: string;
+  agentIdRaw: string | null;
   agentNameRaw: string | null;
   resultado: number;
   rake: number;
@@ -243,6 +244,7 @@ export async function analizarImportacionSuprema(
         sinAgente.push({
           playerId: row.playerId,
           playerName: row.playerName,
+          agentIdRaw: row.agentIdRaw,
           agentNameRaw: row.agentNameRaw,
           resultado: row.resultado,
           rake: row.rake,
@@ -313,4 +315,24 @@ export async function asignarAgenteJugador(playerExternalId: string, clubId: str
   );
   await pool.query(`UPDATE players SET agent_id = $1 WHERE club_id = $2 AND external_id = $3`, [agentId, clubId, playerExternalId]);
   return { id };
+}
+
+/**
+ * Crea un agente nuevo directamente desde un jugador "sin agente" del importador (el
+ * superagente todavía no existía en el catálogo) y lo deja resuelto para SIEMPRE: se graba
+ * external_id = agentIdRaw, así que la próxima semana (y esta misma, si se vuelve a analizar el
+ * archivo) ese superagente matchea solo por resolvePlayerAgent, sin tocar nada más a mano. El %
+ * de rakeback/rebate queda en el default del club hasta que se configure uno específico (mismo
+ * fallback que cualquier agente sin deal propio, ver resolverConfigVigente) — nunca se inventa
+ * un % al crear.
+ */
+export async function crearAgenteDesdeImportacion(name: string, agentIdRaw: string | null, defaultSystem: "PREPAGO" | "WIN_LOSE" = "WIN_LOSE") {
+  const agent = await upsertAgent(name, defaultSystem, null);
+  if (agentIdRaw) {
+    await updateAgent(agent.id, { externalId: agentIdRaw }).catch(() => {
+      // Si external_id ya está usado por otro agente (raro), no bloquea la creación — el
+      // matcheo por nombre igual va a funcionar de acá en adelante.
+    });
+  }
+  return { id: agent.id, name: agent.name };
 }

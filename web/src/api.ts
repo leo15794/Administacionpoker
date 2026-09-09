@@ -227,6 +227,10 @@ export const api = {
   // reconocido) — queda guardado para siempre, así no vuelve a aparecer pendiente otra semana.
   asignarAgenteImportado: (data: { playerExternalId: string; clubId: string; agentId: string; reason?: string }) =>
     request("/imports/suprema/asignar-agente", { method: "POST", body: JSON.stringify(data) }),
+  // Crea de un clic el agente que faltaba (superagente nuevo del archivo, todavía no existía en
+  // el catálogo) — queda con external_id = agentIdRaw, matchea solo en la próxima vuelta.
+  crearAgenteImportado: (data: { name: string; agentIdRaw?: string | null; defaultSystem?: "PREPAGO" | "WIN_LOSE" }) =>
+    request("/imports/suprema/crear-agente", { method: "POST", body: JSON.stringify(data) }),
 
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),
