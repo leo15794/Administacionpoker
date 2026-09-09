@@ -237,9 +237,30 @@ export const api = {
     }
     return requestForm("/imports/suprema/preview", form);
   },
+  // Mismo endpoint que arriba pero para la plataforma "GG Poker / TeamBack GG" (club "TeamBack
+  // GG" en el catálogo) — mismo formato de respuesta (ResultadoImportacion), reutilizado tal
+  // cual por toda la UI de "Jugadores sin agente"/"Cierres a aplicar".
+  previsualizarImportacionTeamBackGG: (
+    file: File,
+    weekEnd?: string,
+    sheetClubOverrides?: Record<string, string>,
+    sheetsIgnoradas?: string[]
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (weekEnd) form.append("weekEnd", weekEnd);
+    if (sheetClubOverrides && Object.keys(sheetClubOverrides).length > 0) {
+      form.append("sheetClubOverrides", JSON.stringify(sheetClubOverrides));
+    }
+    if (sheetsIgnoradas && sheetsIgnoradas.length > 0) {
+      form.append("sheetsIgnoradas", JSON.stringify(sheetsIgnoradas));
+    }
+    return requestForm("/imports/teamback-gg/preview", form);
+  },
   // Clubes elegibles en el selector "a qué club corresponde esta hoja" del importador —
   // filtrados por plataforma, para no mezclar clubes de otras redes (ej. Fénix GG).
   clubesImportacionSuprema: () => request("/imports/suprema/clubs"),
+  clubesImportacionTeamBackGG: () => request("/imports/teamback-gg/clubs"),
   // Asigna a mano un jugador que vino sin agente en el archivo (Agent Name vacío o agente no
   // reconocido) — queda guardado para siempre, así no vuelve a aparecer pendiente otra semana.
   asignarAgenteImportado: (data: { playerExternalId: string; clubId: string; agentId: string; reason?: string }) =>

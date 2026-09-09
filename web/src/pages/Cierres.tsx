@@ -511,13 +511,17 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // Clubes elegibles para el selector de esta hoja — TODOS los clubes activos, nunca filtrados
   // (la plataforma no bloquea nada, ver repo/imports.ts).
   const [clubesSuprema, setClubesSuprema] = useState<{ id: string; name: string }[]>([]);
-  // Plataforma elegida arriba (pestañas) — SUPREMA es la única con parser hoy; GG y X-Poker
-  // muestran un aviso de "todavía no soportado" en vez del importador.
+  // Plataforma elegida arriba (pestañas) — SUPREMA y GG ya tienen parser propio; X-Poker
+  // todavía muestra un aviso de "todavía no soportado" en vez del importador.
   const [plataforma, setPlataforma] = useState<"SUPREMA" | "GG" | "XPOKER">("SUPREMA");
 
   useEffect(() => {
-    api.clubesImportacionSuprema().then(setClubesSuprema).catch(() => setClubesSuprema([]));
-  }, []);
+    // Misma lista de "todos los clubes activos" para cualquier plataforma (ver nota en
+    // repo/imports.ts sobre por qué nunca se filtra por plataforma acá) — se vuelve a pedir al
+    // cambiar de pestaña solo por si se creó un club nuevo mientras tanto.
+    const fetchClubes = plataforma === "GG" ? api.clubesImportacionTeamBackGG() : api.clubesImportacionSuprema();
+    fetchClubes.then(setClubesSuprema).catch(() => setClubesSuprema([]));
+  }, [plataforma]);
 
   // Paso 1: solo lee el archivo y arma la lista de hojas con formato válido (con una sugerencia
   // de club si el nombre matchea algo ya configurado). Todavía no calcula nada por agente — eso
@@ -534,7 +538,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     setAgentesAutoCreados([]);
     setHojaIgnorada({});
     try {
-      const r = await api.previsualizarImportacion(file, weekEnd);
+      const r =
+        plataforma === "GG"
+          ? await api.previsualizarImportacionTeamBackGG(file, weekEnd)
+          : await api.previsualizarImportacion(file, weekEnd);
       setHojasFormatoInvalido((r.hojasNoReconocidas || []).filter((h: any) => !h.resolvable));
       const sugerencias: Record<string, string> = {};
       const detectadas: { sheetName: string; clubIdSugerido: string | null }[] = [];
@@ -568,7 +575,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         if (clubElegidoPorHoja[h.sheetName]) overrides[h.sheetName] = clubElegidoPorHoja[h.sheetName];
       }
       const ignoradas = hojasDetectadas.filter((h) => hojaIgnorada[h.sheetName]).map((h) => h.sheetName);
-      const r = await api.previsualizarImportacion(file, weekEnd, overrides, ignoradas);
+      const r =
+        plataforma === "GG"
+          ? await api.previsualizarImportacionTeamBackGG(file, weekEnd, overrides, ignoradas)
+          : await api.previsualizarImportacion(file, weekEnd, overrides, ignoradas);
       setConfirmado(true);
       setSinAgentePorClub(
         (r.clubes || [])
@@ -782,19 +792,20 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         ))}
       </div>
 
-      {plataforma !== "SUPREMA" && (
+      {plataforma === "XPOKER" && (
         <div className="muted" style={{ marginBottom: 14 }}>
-          Todavía no tenemos el importador de {plataforma === "GG" ? "GG Poker" : "X-Poker"} armado — falta construir el
-          parser para el formato de esa plataforma (y su liquidación, que también está pendiente). Mandame un archivo de
-          ejemplo y un cierre de esa semana ya calculado a mano, y lo armamos igual que se hizo con Suprema.
+          Todavía no tenemos el importador de X-Poker armado — falta construir el parser para el formato de esa
+          plataforma (y su liquidación, que también está pendiente). Mandame un archivo de ejemplo y un cierre de esa
+          semana ya calculado a mano, y lo armamos igual que se hizo con Suprema y GG.
         </div>
       )}
 
-      {plataforma === "SUPREMA" && (
+      {(plataforma === "SUPREMA" || plataforma === "GG") && (
       <>
       <div className="muted" style={{ marginBottom: 14 }}>
         El % de rakeback/rebate de cada agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo
         nunca lo trae.
+        {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
       </div>
 
       <div className="form-grid">
