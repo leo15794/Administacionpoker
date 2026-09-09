@@ -36,8 +36,11 @@ export async function registrarMovimiento(input: NewMovement) {
   try {
     await client.query("BEGIN");
 
+    // Un movimiento REVERTIDO no cuenta como "ya aplicado" (mismo principio que weekly_closings
+    // — ver schema.sql, índice único parcial): si se revirtió, la misma idempotency_key tiene
+    // que poder generarse de nuevo para volver a aplicar esa operación correctamente.
     const existing = await client.query(
-      `SELECT id FROM ledger_movements WHERE idempotency_key = $1`,
+      `SELECT id FROM ledger_movements WHERE idempotency_key = $1 AND status <> 'REVERTIDO'`,
       [input.idempotencyKey]
     );
     if (existing.rows.length > 0) {

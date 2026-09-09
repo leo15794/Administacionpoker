@@ -358,3 +358,16 @@ DROP INDEX IF EXISTS weekly_closings_agent_id_club_id_week_start_key;
 CREATE UNIQUE INDEX IF NOT EXISTS weekly_closings_agent_club_week_active_key
   ON weekly_closings(agent_id, club_id, week_start)
   WHERE status <> 'REVERTIDO';
+
+-- Mismo bug, mismo arreglo, en ledger_movements: el UNIQUE(idempotency_key) original también
+-- bloqueaba para siempre volver a generar el movimiento CIERRE_SEMANAL de un agente+club+semana
+-- una vez revertido, porque revertirMovimiento nunca borra ni cambia la idempotency_key del
+-- movimiento original REVERTIDO — solo le cambia el status (inmutabilidad del ledger). Al
+-- reaplicar la semana (ya permitido desde el fix de arriba), el INSERT nuevo usaba la misma
+-- clave "cierre:agentId:clubId:weekStart" y chocaba contra la fila vieja REVERTIDO. Se reemplaza
+-- por un índice único parcial que ignora las filas REVERTIDO, igual que arriba.
+ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_idempotency_key_key;
+DROP INDEX IF EXISTS ledger_movements_idempotency_key_key;
+CREATE UNIQUE INDEX IF NOT EXISTS ledger_movements_idempotency_key_active_key
+  ON ledger_movements(idempotency_key)
+  WHERE status <> 'REVERTIDO';
