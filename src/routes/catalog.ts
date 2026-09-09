@@ -173,6 +173,9 @@ const agentEditSchema = z.object({
   // que el importador lo reconozca aunque el nombre venga distinto. Se completa solo la
   // primera vez que matchea por nombre, pero también se puede corregir a mano acá.
   externalId: z.string().nullable().optional(),
+  // Dar de baja: el agente deja de listarse como activo (no puede recibir cierres/movimientos
+  // nuevos), pero su historial ya cargado queda intacto — nunca se borra nada.
+  active: z.boolean().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -184,6 +187,7 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       supervisor: parsed.data.supervisor === undefined ? undefined : parsed.data.supervisor?.trim() || null,
       accountType: parsed.data.accountType,
       externalId: parsed.data.externalId === undefined ? undefined : parsed.data.externalId?.trim() || null,
+      active: parsed.data.active,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);

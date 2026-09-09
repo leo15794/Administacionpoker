@@ -123,7 +123,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
           {role === "ADMIN" ? (
             <>
               <NavLink to="/dashboard" end className="nav-link" title="Resumen">{icon.resumen} {!collapsed && "Resumen"}</NavLink>
-              <NavLink to="/dashboard/agentes" className="nav-link" title="Agentes">{icon.agentes} {!collapsed && "Agentes"}</NavLink>
+              <NavLink to="/dashboard/agentes" className="nav-link" title="Administración">{icon.agentes} {!collapsed && "Administración"}</NavLink>
               <NavLink to="/dashboard/movimientos" className="nav-link" title="Cargar movimiento">{icon.movimientos} {!collapsed && "Cargar movimiento"}</NavLink>
               <NavLink to="/dashboard/cierres" className="nav-link" title="Cierres semanales">{icon.cierres} {!collapsed && "Cierres semanales"}</NavLink>
               <NavLink to="/dashboard/wallet" className="nav-link" title="Wallet">{icon.wallet} {!collapsed && "Wallet"}</NavLink>

@@ -42,13 +42,35 @@ export default function Agentes() {
     setTab("lista");
   }
 
+  // Dar de baja: NUNCA borra nada — el agente/club deja de listarse como activo (no puede
+  // recibir cierres/movimientos nuevos), pero su historial ya cargado queda intacto.
+  async function darDeBajaAgente(a: any) {
+    if (!confirm(`¿Dar de baja a "${a.name}"? Deja de aparecer para cargar cierres nuevos, pero su historial se conserva igual.`)) return;
+    try {
+      await api.editarAgente(a.id, { active: false });
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo dar de baja al agente.");
+    }
+  }
+
+  async function darDeBajaClub(c: any) {
+    if (!confirm(`¿Dar de baja el club "${c.name}"? Deja de estar disponible para cargar cierres nuevos, pero su historial se conserva igual.`)) return;
+    try {
+      await api.configurarClub(c.id, { active: false });
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo dar de baja al club.");
+    }
+  }
+
   const agentesFiltrados = agentes.filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()));
 
   return (
     <div>
       <div className="topbar">
         <div>
-          <h2>Agentes</h2>
+          <h2>Administración</h2>
           <div className="muted">Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050).</div>
         </div>
       </div>
@@ -64,7 +86,7 @@ export default function Agentes() {
 
       {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} />}
       {tab === "nuevo-club" && <NuevoClub onCreated={refresh} />}
-      {tab === "clubes" && <ClubesConfig clubes={clubes} onEdit={setConfigurandoClub} />}
+      {tab === "clubes" && <ClubesConfig clubes={clubes} onEdit={setConfigurandoClub} onDarDeBaja={darDeBajaClub} />}
       {tab === "supervisores" && <SupervisoresView />}
       {tab === "deal" && <NuevoDeal agentes={agentes} clubes={clubes} onCreated={refresh} />}
 
@@ -119,6 +141,7 @@ export default function Agentes() {
                       <button className="btn secondary small" onClick={() => setReglasAgent({ id: a.id, name: a.name })}>Reglas especiales</button>
                       <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
                       <button className="btn secondary small" onClick={() => setEditando(a)}>Editar</button>
+                      <button className="btn secondary small" onClick={() => darDeBajaAgente(a)}>Dar de baja</button>
                     </td>
                   </tr>
                 ))}
@@ -582,7 +605,15 @@ function SupervisoresView() {
   );
 }
 
-function ClubesConfig({ clubes, onEdit }: { clubes: any[]; onEdit: (club: any) => void }) {
+function ClubesConfig({
+  clubes,
+  onEdit,
+  onDarDeBaja,
+}: {
+  clubes: any[];
+  onEdit: (club: any) => void;
+  onDarDeBaja: (club: any) => void;
+}) {
   return (
     <div className="panel">
       <h3>Configuración por club ({clubes.length})</h3>
@@ -601,7 +632,10 @@ function ClubesConfig({ clubes, onEdit }: { clubes: any[]; onEdit: (club: any) =
               <td>{c.default_rakeback_pct != null ? pct(c.default_rakeback_pct) : "—"}</td>
               <td>{c.default_rebate_pct != null ? pct(c.default_rebate_pct) : "—"}</td>
               <td>{c.rebate_destino === "RAKEBACK_SUPERVISOR" ? "Rakeback supervisor" : c.rebate_destino === "SALDO_OPERATIVO" ? "Saldo operativo" : "—"}</td>
-              <td><button className="btn secondary small" onClick={() => onEdit(c)}>Configurar</button></td>
+              <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button className="btn secondary small" onClick={() => onEdit(c)}>Configurar</button>
+                <button className="btn secondary small" onClick={() => onDarDeBaja(c)}>Dar de baja</button>
+              </td>
             </tr>
           ))}
         </tbody>

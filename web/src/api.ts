@@ -108,7 +108,15 @@ export const api = {
     request("/catalog/agents", { method: "POST", body: JSON.stringify(data) }),
   editarAgente: (
     id: string,
-    data: { name?: string; defaultSystem?: "PREPAGO" | "WIN_LOSE"; supervisor?: string | null; accountType?: AccountType }
+    data: {
+      name?: string;
+      defaultSystem?: "PREPAGO" | "WIN_LOSE";
+      supervisor?: string | null;
+      accountType?: AccountType;
+      // Dar de baja (no borra nada: el agente deja de aparecer para cargar cierres nuevos,
+      // pero su historial de movimientos/cierres queda intacto).
+      active?: boolean;
+    }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
