@@ -20,7 +20,7 @@ export default function Agentes() {
   const [clubes, setClubes] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
-  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal">("lista");
+  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas">("lista");
   const [filtro, setFiltro] = useState("");
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
@@ -82,6 +82,7 @@ export default function Agentes() {
         <button className={tab === "clubes" ? "active" : ""} onClick={() => setTab("clubes")}>Configurar clubes</button>
         <button className={tab === "supervisores" ? "active" : ""} onClick={() => setTab("supervisores")}>Supervisores</button>
         <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
+        <button className={tab === "reglas" ? "active" : ""} onClick={() => setTab("reglas")}>Reglas especiales</button>
       </div>
 
       {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} />}
@@ -89,6 +90,7 @@ export default function Agentes() {
       {tab === "clubes" && <ClubesConfig clubes={clubes} onEdit={setConfigurandoClub} onDarDeBaja={darDeBajaClub} />}
       {tab === "supervisores" && <SupervisoresView />}
       {tab === "deal" && <NuevoDeal agentes={agentes} clubes={clubes} onCreated={refresh} />}
+      {tab === "reglas" && <ReglasGlobal agentes={agentes} clubes={clubes} />}
 
       {tab === "lista" && (
         <div style={{ display: "flex", gap: 20 }}>
@@ -506,6 +508,161 @@ function NuevaRegla({ agentId, clubes, onCreated }: { agentId: string; clubes: a
   return (
     <form onSubmit={onSubmit} className="panel" style={{ marginBottom: 16 }}>
       <div className="form-grid">
+        <div className="field">
+          <label>Regla</label>
+          <select value={ruleKey} onChange={(e) => setRuleKey(e.target.value as any)}>
+            <option value="MANZUR_75_RAKE">{RULE_LABELS.MANZUR_75_RAKE}</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Club (opcional)</label>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+            <option value="">Global (todos los clubes)</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>% del rake</label>
+          <input value={pctRake} onChange={(e) => setPctRake(e.target.value)} type="number" step="0.01" />
+        </div>
+      </div>
+      <div className="field">
+        <label>Descripción (por qué existe esta regla)</label>
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej: acuerdo especial con el agente en Fénix GG" />
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Activar regla"}</button>
+    </form>
+  );
+}
+
+// Vista global de reglas especiales: todos los agentes juntos, sin tener que entrar uno por uno
+// a buscar cuáles tienen algo activo. Misma lógica que ReglasAgente/NuevaRegla (versionado,
+// nunca se edita en el lugar), solo que acá el agente también se elige en el formulario.
+function ReglasGlobal({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
+  const [reglas, setReglas] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [terminando, setTerminando] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<"todas" | "vigentes">("vigentes");
+
+  function refresh() {
+    setCargando(true);
+    api.todasLasReglas().then(setReglas).finally(() => setCargando(false));
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function terminar(regla: any) {
+    if (!confirm(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}" de ${regla.agent_name}? Vuelve a la fórmula genérica desde ahora (no borra el historial).`)) return;
+    setTerminando(regla.id);
+    try {
+      await api.terminarRegla(regla.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo terminar la regla.");
+    } finally {
+      setTerminando(null);
+    }
+  }
+
+  const visibles = filtro === "vigentes" ? reglas.filter((r) => !r.valid_to) : reglas;
+
+  return (
+    <div>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Todas las reglas especiales de todos los agentes en un solo lugar — versionadas igual que desde "Reglas
+        especiales" en cada agente (nunca se edita en el lugar: terminar una regla la cierra y una nueva queda vigente
+        desde ese momento, sin perder el historial para recalcular cierres viejos).
+      </div>
+      <div className="topbar" style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className={filtro === "vigentes" ? "btn small" : "btn secondary small"} onClick={() => setFiltro("vigentes")}>Vigentes</button>
+          <button className={filtro === "todas" ? "btn small" : "btn secondary small"} onClick={() => setFiltro("todas")}>Todas (con historial)</button>
+        </div>
+        <button className="btn secondary small" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar" : "+ Nueva regla"}</button>
+      </div>
+
+      {showForm && <NuevaReglaGlobal agentes={agentes} clubes={clubes} onCreated={() => { setShowForm(false); refresh(); }} />}
+
+      {cargando ? (
+        <div className="muted">Cargando...</div>
+      ) : visibles.length === 0 ? (
+        <div className="muted">{filtro === "vigentes" ? "Ningún agente tiene una regla especial vigente." : "No hay reglas cargadas todavía."}</div>
+      ) : (
+        <table>
+          <thead><tr><th>Agente</th><th>Regla</th><th>Alcance</th><th>Vigencia</th><th>Descripción</th><th></th></tr></thead>
+          <tbody>
+            {visibles.map((r) => {
+              const vigente = !r.valid_to;
+              return (
+                <tr key={r.id} style={vigente ? undefined : { opacity: 0.55 }}>
+                  <td>{r.agent_name}</td>
+                  <td>{RULE_LABELS[r.rule_key] ?? r.rule_key}</td>
+                  <td>{r.club_name ?? "Global (todos los clubes)"}</td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>
+                    {new Date(r.valid_from).toLocaleDateString("es-AR")} — {vigente ? <strong>vigente</strong> : new Date(r.valid_to).toLocaleDateString("es-AR")}
+                  </td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>{r.description}</td>
+                  <td>
+                    {vigente && (
+                      <button className="btn secondary small" disabled={terminando === r.id} onClick={() => terminar(r)}>
+                        {terminando === r.id ? "..." : "Terminar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function NuevaReglaGlobal({ agentes, clubes, onCreated }: { agentes: any[]; clubes: any[]; onCreated: () => void }) {
+  const [agentId, setAgentId] = useState("");
+  const [ruleKey, setRuleKey] = useState<"MANZUR_75_RAKE">("MANZUR_75_RAKE");
+  const [clubId, setClubId] = useState("");
+  const [pctRake, setPctRake] = useState("75");
+  const [description, setDescription] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!agentId) return setMsg({ ok: false, text: "Elegí a qué agente corresponde esta regla." });
+    if (!description.trim()) return setMsg({ ok: false, text: "Contá brevemente por qué existe esta regla (para el historial)." });
+    setLoading(true);
+    try {
+      await api.crearRegla(agentId, {
+        ruleKey,
+        params: { pctRake: (Number(pctRake) || 0) / 100 },
+        description: description.trim(),
+        clubId: clubId || null,
+      });
+      onCreated();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar la regla." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="panel" style={{ marginBottom: 16 }}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Agente</label>
+          <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            <option value="">Elegir agente...</option>
+            {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
         <div className="field">
           <label>Regla</label>
           <select value={ruleKey} onChange={(e) => setRuleKey(e.target.value as any)}>

@@ -136,6 +136,9 @@ export const api = {
   // Motor de reglas configurable: reglas especiales versionadas por agente (ej. Manzur = 75%
   // del rake), en vez de "if agente === X" hardcodeado en el motor de cierre.
   agentRules: (agentId: string) => request(`/catalog/agents/${agentId}/rules`),
+  // Vista global: todas las reglas especiales de todos los agentes en un solo listado (evita
+  // tener que entrar agente por agente a buscar cuáles tienen algo activo).
+  todasLasReglas: () => request(`/catalog/rules`),
   crearRegla: (agentId: string, data: { ruleKey: "MANZUR_75_RAKE"; params: Record<string, number>; description: string; clubId?: string | null }) =>
     request(`/catalog/agents/${agentId}/rules`, { method: "POST", body: JSON.stringify(data) }),
   terminarRegla: (ruleId: string) => request(`/catalog/rules/${ruleId}`, { method: "DELETE" }),

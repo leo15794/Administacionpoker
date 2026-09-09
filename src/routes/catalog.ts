@@ -13,6 +13,7 @@ import {
   addRuleVersion,
   endRuleVersion,
   listRulesForAgent,
+  listAllRules,
 } from "../repo/catalog.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -135,6 +136,12 @@ catalogRouter.get("/agents/:id/deals", requireAuth, requireAdmin, async (req, re
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
 catalogRouter.get("/agents/:id/rules", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listRulesForAgent(req.params.id));
+});
+
+// Vista global: todas las reglas especiales de todos los agentes juntas, para no tener que
+// entrar agente por agente a buscar cuáles están activas.
+catalogRouter.get("/rules", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listAllRules());
 });
 
 const ruleSchema = z.object({

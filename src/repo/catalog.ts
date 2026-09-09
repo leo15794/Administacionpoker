@@ -169,6 +169,19 @@ export async function listRulesForAgent(agentId: string) {
   return r.rows;
 }
 
+// Vista global (todas las reglas de todos los agentes en un solo listado) — para no tener que
+// entrar agente por agente a buscar cuáles tienen reglas especiales activas.
+export async function listAllRules() {
+  const r = await pool.query(
+    `SELECT rv.*, a.name as agent_name, c.name as club_name
+     FROM rule_versions rv
+     JOIN agents a ON a.id = rv.agent_id
+     LEFT JOIN clubs c ON c.id = rv.club_id
+     ORDER BY (rv.valid_to IS NULL) DESC, rv.valid_from DESC`
+  );
+  return r.rows;
+}
+
 // Resuelve la regla especial vigente para un agente en un club a una fecha dada (por defecto
 // ahora). Prioriza una regla específica del club por sobre una regla global del agente
 // (club_id NULL) si ambas están vigentes al mismo tiempo.
