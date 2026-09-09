@@ -3,6 +3,7 @@ import multer from "multer";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
 import { analizarImportacionSuprema, asignarAgenteJugador, listClubesImportacionSuprema, crearAgenteDesdeImportacion } from "../repo/imports.js";
+import { analizarImportacionTeamBackGG, listClubesImportacionTeamBackGG } from "../repo/importsTeamBackGG.js";
 
 export const importsRouter = Router();
 
@@ -52,6 +53,43 @@ importsRouter.post("/suprema/preview", requireAuth, requireAdmin, upload.single(
       }
     }
     const result = await analizarImportacionSuprema(req.file.buffer, atDate, sheetClubOverrides, sheetsIgnoradas);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo leer el archivo." });
+  }
+});
+
+// Mismo par de endpoints que Suprema, para la plataforma "GG Poker / TeamBack GG" (club
+// "TeamBack GG" en el catálogo). "asignar-agente" y "crear-agente" de arriba son genéricos
+// (no dependen del formato de archivo) — se reusan tal cual desde el frontend para esta
+// plataforma también, no hace falta duplicarlos.
+importsRouter.get("/teamback-gg/clubs", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listClubesImportacionTeamBackGG());
+});
+
+importsRouter.post("/teamback-gg/preview", requireAuth, requireAdmin, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Falta el archivo (campo 'file')." });
+  try {
+    const atDate = typeof req.body?.weekEnd === "string" && req.body.weekEnd ? req.body.weekEnd : new Date();
+    let sheetClubOverrides: Record<string, string> | undefined;
+    if (typeof req.body?.sheetClubOverrides === "string" && req.body.sheetClubOverrides) {
+      try {
+        const parsed = JSON.parse(req.body.sheetClubOverrides);
+        if (parsed && typeof parsed === "object") sheetClubOverrides = parsed;
+      } catch {
+        return res.status(400).json({ error: "sheetClubOverrides no es JSON válido." });
+      }
+    }
+    let sheetsIgnoradas: string[] | undefined;
+    if (typeof req.body?.sheetsIgnoradas === "string" && req.body.sheetsIgnoradas) {
+      try {
+        const parsed = JSON.parse(req.body.sheetsIgnoradas);
+        if (Array.isArray(parsed)) sheetsIgnoradas = parsed.filter((x) => typeof x === "string");
+      } catch {
+        return res.status(400).json({ error: "sheetsIgnoradas no es JSON válido." });
+      }
+    }
+    const result = await analizarImportacionTeamBackGG(req.file.buffer, atDate, sheetClubOverrides, sheetsIgnoradas);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo leer el archivo." });

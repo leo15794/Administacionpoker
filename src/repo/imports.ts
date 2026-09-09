@@ -79,7 +79,11 @@ export async function listClubesImportacionSuprema() {
   return r.rows as { id: string; name: string }[];
 }
 
-interface ResolucionAgente {
+/** Exportado para que otros parsers de plataforma (ej. repo/importsTeamBackGG.ts) puedan
+ * reusar exactamente la misma resolución de agente (override > external_id > nombre >
+ * auto-creación) sin duplicarla — la lógica es genérica sobre "un archivo trae un agente
+ * crudo para un jugador", no específica de Suprema. */
+export interface ResolucionAgente {
   agentId: string | null;
   agentName: string | null;
   resolvedBy: "override" | "external_id" | "name" | "auto_creado" | null;
@@ -106,7 +110,7 @@ interface ResolucionAgente {
  * superagente todavía no creado — igual sería seguro (upsertAgent es ON CONFLICT(name) DO
  * UPDATE), pero así no se pega a la base una vez por cada jugador del grupo.
  */
-async function resolvePlayerAgent(
+export async function resolvePlayerAgent(
   clubId: string,
   row: SupremaPlayerRow,
   autoCreadosCache: Map<string, ResolucionAgente>
@@ -171,7 +175,7 @@ async function resolvePlayerAgent(
   };
 }
 
-async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: string | null) {
+export async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: string | null) {
   await pool.query(
     `INSERT INTO players (id, external_id, display_name, club_id, agent_id)
      VALUES ($1,$2,$3,$4,$5)
