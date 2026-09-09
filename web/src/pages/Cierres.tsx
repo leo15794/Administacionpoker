@@ -678,10 +678,15 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   return (
     <div className="panel">
       <h3>Importar cierre desde archivo</h3>
+      <div className="muted" style={{ marginBottom: 6 }}>
+        <strong>Plataforma: SupremaPoker.</strong> Este importador solo entiende archivos con el formato de SupremaPoker —
+        para GG Poker o X Poker vas a subir un archivo distinto (cuando esté soportado), no esta misma pantalla.
+      </div>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Hoy soporta el formato SupremaPoker (hojas Fénix / TeamBack, una fila por jugador). El % de rakeback/rebate de cada
-        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. El club de cada hoja
-        se elige acá (si coincide con algo ya usado antes, viene precargado, pero siempre lo podés cambiar).
+        Un mismo archivo de Suprema puede traer varios clubes juntos, cada uno en su propia pestaña de Excel (ej. "Fenix",
+        "tb") — esa pestaña NO es el club, es solo cómo está armado el archivo que exporta Suprema. Vos elegís abajo a qué
+        club de tu sistema corresponde cada pestaña. El % de rakeback/rebate de cada agente sale SIEMPRE de la
+        configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae.
       </div>
 
       <div className="form-grid">
@@ -724,12 +729,13 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
       {hojasDetectadas.length > 0 && !confirmado && (
         <div style={{ marginTop: 12 }}>
-          <h4>¿A qué club corresponde cada hoja?</h4>
+          <h4>¿A qué club corresponde cada pestaña del excel?</h4>
           <div className="muted" style={{ marginBottom: 8 }}>
-            Elegí el club de cada hoja del archivo (el nombre de la hoja es solo una ayuda para sugerir, nunca un requisito).
+            Elegí el club de cada pestaña del archivo (el nombre de la pestaña es solo una ayuda para sugerir, nunca un
+            requisito — no confundir el nombre de la pestaña con el club: elegís vos siempre).
           </div>
           <table>
-            <thead><tr><th>Hoja del archivo</th><th>Club</th><th>Ignorar</th></tr></thead>
+            <thead><tr><th>Pestaña del excel</th><th>Club</th><th>Ignorar</th></tr></thead>
             <tbody>
               {hojasDetectadas.map((h) => {
                 const ignorada = !!hojaIgnorada[h.sheetName];
