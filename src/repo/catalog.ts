@@ -182,13 +182,18 @@ export async function listAllRules() {
   return r.rows;
 }
 
-// Árbol Club -> Agentes: para cada club activo, los agentes que YA tienen al menos un jugador
-// cargado ahí (vía import o carga manual), con su % vigente (deal propio o default del club,
-// mismo resolverConfigVigente que usa el importador — nunca inventa un número acá tampoco). Los
-// jugadores de cada agente se piden aparte (getJugadoresDeAgenteEnClub) para no traer una lista
-// gigante de una si nadie la va a abrir.
+// Árbol Plataforma -> Club -> Agentes: para cada club activo, los agentes que YA tienen al
+// menos un jugador cargado ahí (vía import o carga manual), con su % vigente (deal propio o
+// default del club, mismo resolverConfigVigente que usa el importador — nunca inventa un número
+// acá tampoco). Cada club lleva su import_platform (SUPREMA/GG/XPOKER/null) para que el frontend
+// agrupe primero por plataforma — un mismo club real puede tener actividad en más de una
+// plataforma a la vez (ver nota de negocio: "Teamback puede estar en Suprema, GG y X-Poker").
+// Los jugadores de cada agente se piden aparte (getJugadoresDeAgenteEnClub) para no traer una
+// lista gigante de una si nadie la va a abrir.
 export async function getArbolClubes() {
-  const clubesRes = await pool.query(`SELECT id, name FROM clubs WHERE active = true ORDER BY name`);
+  const clubesRes = await pool.query(
+    `SELECT id, name, import_platform FROM clubs WHERE active = true ORDER BY name`
+  );
   const arbol = [];
   for (const club of clubesRes.rows) {
     const agentesRes = await pool.query(
@@ -212,7 +217,7 @@ export async function getArbolClubes() {
         configSource: config.source,
       });
     }
-    arbol.push({ clubId: club.id, clubName: club.name, agentes });
+    arbol.push({ clubId: club.id, clubName: club.name, platform: club.import_platform ?? null, agentes });
   }
   return arbol;
 }

@@ -720,6 +720,11 @@ function NuevaReglaGlobal({ agentes, clubes, onCreated }: { agentes: any[]; club
 // agente) así que solo el agente es editable acá — mismo upsertDeal de siempre (versiona, nunca
 // pisa en el lugar). Los jugadores se piden on-demand al expandir cada agente, para no traer de
 // una una lista gigante que capaz nadie abre.
+// Mismas claves/labels que la pestaña de plataforma del importador (Cierres.tsx) — un club
+// puede aparecer bajo más de una si ya se importó desde más de una plataforma.
+const PLATFORM_LABELS: Record<string, string> = { SUPREMA: "SupremaPoker", GG: "GG Poker", XPOKER: "X-Poker" };
+const PLATFORM_ORDER = ["SUPREMA", "GG", "XPOKER"];
+
 function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [arbol, setArbol] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -775,12 +780,19 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
         })()
       : undefined;
 
+  // Primero por plataforma (un mismo club real puede tener actividad en más de una a la vez,
+  // ej. TeamBack en Suprema y en GG), y adentro de cada una, por club como ya se venía haciendo.
+  const grupos = [...PLATFORM_ORDER.map((key) => ({ key, label: PLATFORM_LABELS[key], clubes: arbol.filter((c) => c.platform === key) })),
+    { key: "SIN_PLATAFORMA", label: "Sin plataforma asignada", clubes: arbol.filter((c) => !c.platform || !PLATFORM_ORDER.includes(c.platform)) },
+  ].filter((g) => g.clubes.length > 0);
+
   return (
     <div>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Todos los clubes activos con los agentes que ya tienen jugadores cargados ahí (por import o carga manual) y su %
-        vigente. El % es editable por acá mismo — versiona el deal anterior, igual que en "Ver deals". Los jugadores son
-        de solo lectura: no tienen % propio, siempre cobran a través de su agente.
+        Primero por plataforma (Suprema / GG Poker / X-Poker) y adentro los clubes activos con los agentes que ya tienen
+        jugadores cargados ahí (por import o carga manual) y su % vigente. El % es editable por acá mismo — versiona el
+        deal anterior, igual que en "Ver deals". Los jugadores son de solo lectura: no tienen % propio, siempre cobran a
+        través de su agente. "Sin plataforma asignada" son clubes que todavía no se cargaron desde ningún importador.
       </div>
 
       {editando && editandoAgente && (
@@ -799,7 +811,10 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       {cargando ? (
         <div className="muted">Cargando...</div>
       ) : (
-        arbol.map((club) => {
+        grupos.map((grupo) => (
+          <div key={grupo.key} style={{ marginBottom: 22 }}>
+            <h3 style={{ marginBottom: 8 }}>{grupo.label}</h3>
+            {grupo.clubes.map((club) => {
           const abierto = !!clubesAbiertos[club.clubId];
           return (
             <div key={club.clubId} className="panel" style={{ marginBottom: 10 }}>
@@ -872,7 +887,9 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
               )}
             </div>
           );
-        })
+            })}
+          </div>
+        ))
       )}
     </div>
   );
