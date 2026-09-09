@@ -228,10 +228,38 @@ CREATE TABLE IF NOT EXISTS rodeo_player_memory (
 );
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo NUMERIC(18,4) NOT NULL DEFAULT 0;
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_club_share NUMERIC(18,4) NOT NULL DEFAULT 0;
--- Snapshot por jugador (playerExternalId, memoriaAnterior, memoriaNueva) para poder restaurar
--- la memoria exacta de CADA jugador si este cierre se revierte (mismo principio que
--- bancado_debt_before/after, pero acá son muchas filas por cierre en vez de una sola).
+-- Snapshot (memoriaAnterior/memoriaNueva del agente + desglose informativo por jugador) para
+-- poder restaurar la memoria exacta si este cierre se revierte (mismo principio que
+-- bancado_debt_before/after).
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_detalle JSONB;
+
+-- CORRECCIÓN (auditoría vs. planilla real, hoja MEMORIA_RODEO, BIT-nueva): la memoria de rodeo
+-- es por AGENTE+CLUB, no por jugador — la planilla agrega el rodeo bruto de todos los jugadores
+-- de un agente antes de netear contra la memoria arrastrada, así un jugador que gana esa semana
+-- se compensa contra lo que generan los OTROS jugadores del mismo agente, no queda aislado. La
+-- tabla rodeo_player_memory NO se borra (queda como historial), pero deja de usarse: la memoria
+-- vigente vive acá desde ahora.
+CREATE TABLE IF NOT EXISTS rodeo_agent_memory (
+  id          TEXT PRIMARY KEY,
+  agent_id    TEXT NOT NULL REFERENCES agents(id),
+  club_id     TEXT NOT NULL REFERENCES clubs(id),
+  memory      NUMERIC(18,4) NOT NULL DEFAULT 0,   -- deuda pendiente del agente, siempre >= 0
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(agent_id, club_id)
+);
+-- Migración única de consolidación: suma la memoria vieja de rodeo_player_memory por agente,
+-- usando el agente al que está asignado HOY cada jugador en ese club (decisión explícita del
+-- usuario: no se pierde deuda/crédito pendiente al pasar a memoria por agente). El
+-- ON CONFLICT DO NOTHING hace que esto corra una sola vez de verdad — si se vuelve a correr la
+-- migración después, la fila ya existe y no se vuelve a sumar.
+INSERT INTO rodeo_agent_memory (id, agent_id, club_id, memory)
+SELECT 'rodeoagentmem_migrado_' || p.agent_id || '_' || p.club_id,
+       p.agent_id, p.club_id, SUM(rpm.memory)
+FROM rodeo_player_memory rpm
+JOIN players p ON p.external_id = rpm.player_external_id AND p.club_id = rpm.club_id
+WHERE p.agent_id IS NOT NULL
+GROUP BY p.agent_id, p.club_id
+ON CONFLICT (agent_id, club_id) DO NOTHING;
 
 -- Vista materializada de saldo por agente y club. Se recalcula desde ledger_movements,
 -- nunca se edita a mano (elimina la clase de bug de BIT-002/013/029).

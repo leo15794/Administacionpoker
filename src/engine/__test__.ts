@@ -2,7 +2,7 @@
 // bitácora de la planilla (para asegurarnos de que el motor nuevo reproduce
 // exactamente los mismos números que el sistema viejo antes de confiar en él).
 import { calcularCierre, calcularCajeroCredito, calcularCierreBancado } from "./cierre.js";
-import { calcularRodeoJugador } from "./rodeo.js";
+import { calcularRodeoAgente } from "./rodeo.js";
 
 function assertClose(actual: number, expected: number, label: string) {
   const diff = Math.abs(actual - expected);
@@ -130,11 +130,11 @@ const bancadoConMemoriaParcial = calcularCierreBancado({
 assertClose(bancadoConMemoriaParcial.finalClosing, 0, "Bancado (memoria parcial): nada acreditado, sigue debiendo");
 assertClose(bancadoConMemoriaParcial.deudaNueva, 20, "Bancado (memoria parcial): memoria baja de 70 a 20");
 
-// Módulo Rodeo (solo SupremaPoker — reglas verbatim dadas explícitamente por el usuario):
-// ejemplo simple: jugador pierde USD 1.000, sin agente -> USD 350 de rodeo para el club.
-const rodeoPierdeSinAgente = calcularRodeoJugador({
-  playerExternalId: "p1",
-  baseRodeo: 1000,
+// Módulo Rodeo (solo SupremaPoker — reglas verbatim dadas explícitamente por el usuario, memoria
+// CORREGIDA a nivel agente+club tras auditoría contra la planilla real, hoja MEMORIA_RODEO):
+// ejemplo simple: un jugador pierde USD 1.000, sin agente -> USD 350 de rodeo para el club.
+const rodeoPierdeSinAgente = calcularRodeoAgente({
+  jugadores: [{ playerExternalId: "p1", baseRodeo: 1000 }],
   memoriaAnterior: 0,
   tieneAgente: false,
 });
@@ -144,9 +144,8 @@ assertClose(rodeoPierdeSinAgente.agentShare, 0, "Rodeo (pierde, sin agente): sin
 assertClose(rodeoPierdeSinAgente.memoriaNueva, 0, "Rodeo (pierde, sin agente): sin memoria nueva");
 
 // Si pertenece a un agente: USD 200 para el club + USD 150 para el agente.
-const rodeoPierdeConAgente = calcularRodeoJugador({
-  playerExternalId: "p2",
-  baseRodeo: 1000,
+const rodeoPierdeConAgente = calcularRodeoAgente({
+  jugadores: [{ playerExternalId: "p2", baseRodeo: 1000 }],
   memoriaAnterior: 0,
   tieneAgente: true,
 });
@@ -155,9 +154,8 @@ assertClose(rodeoPierdeConAgente.agentShare, 150, "Rodeo (pierde, con agente): 1
 assertClose(rodeoPierdeConAgente.memoriaNueva, 0, "Rodeo (pierde, con agente): sin memoria nueva");
 
 // Si la semana siguiente el jugador gana USD 600, esos USD 600 pasan a la memoria (nada se reparte).
-const rodeoGana = calcularRodeoJugador({
-  playerExternalId: "p2",
-  baseRodeo: -600,
+const rodeoGana = calcularRodeoAgente({
+  jugadores: [{ playerExternalId: "p2", baseRodeo: -600 }],
   memoriaAnterior: 0,
   tieneAgente: true,
 });
@@ -168,9 +166,8 @@ assertClose(rodeoGana.memoriaNueva, 600, "Rodeo (gana): USD 600 pasan a memoria"
 
 // La memoria se compensa antes de volver a generar rodeo positivo: si después pierde 1000 de
 // nuevo pero arrastra 600 de memoria, el neto payable es solo 400 (no 1000).
-const rodeoCompensaMemoria = calcularRodeoJugador({
-  playerExternalId: "p2",
-  baseRodeo: 1000,
+const rodeoCompensaMemoria = calcularRodeoAgente({
+  jugadores: [{ playerExternalId: "p2", baseRodeo: 1000 }],
   memoriaAnterior: 600,
   tieneAgente: true,
 });
@@ -180,13 +177,28 @@ assertClose(rodeoCompensaMemoria.agentShare, 60, "Rodeo (compensa memoria): 15% 
 assertClose(rodeoCompensaMemoria.memoriaNueva, 0, "Rodeo (compensa memoria): memoria queda saldada");
 
 // Memoria parcial: si pierde menos de lo que debe, la memoria baja pero no llega a repartir nada.
-const rodeoMemoriaParcial = calcularRodeoJugador({
-  playerExternalId: "p2",
-  baseRodeo: 200,
+const rodeoMemoriaParcial = calcularRodeoAgente({
+  jugadores: [{ playerExternalId: "p2", baseRodeo: 200 }],
   memoriaAnterior: 600,
   tieneAgente: true,
 });
 assertClose(rodeoMemoriaParcial.payable, 0, "Rodeo (memoria parcial): nada para repartir");
 assertClose(rodeoMemoriaParcial.memoriaNueva, 400, "Rodeo (memoria parcial): memoria baja de 600 a 400");
+
+// EL FIX EN SÍ: un agente con dos jugadores la misma semana — uno pierde 1000 (rodeo a favor),
+// otro gana 400 (memoria en contra). Antes (por jugador) el que perdía generaba 1000 de payable
+// completo sin enterarse del que ganó; ahora (por agente, como la planilla) se netean juntos:
+// 1000 - 400 = 600 netos antes de repartir.
+const rodeoAgenteMixto = calcularRodeoAgente({
+  jugadores: [
+    { playerExternalId: "gana200", baseRodeo: 1000 },
+    { playerExternalId: "pierde", baseRodeo: -400 },
+  ],
+  memoriaAnterior: 0,
+  tieneAgente: true,
+});
+assertClose(rodeoAgenteMixto.baseRodeoTotal, 600, "Rodeo (agente mixto): rodeo bruto neto entre jugadores = 600");
+assertClose(rodeoAgenteMixto.payable, 600, "Rodeo (agente mixto): payable = 600 (no 1000, se netea entre jugadores del mismo agente)");
+assertClose(rodeoAgenteMixto.agentShare, 90, "Rodeo (agente mixto): 15% de 600 = 90 Agente");
 
 console.log("\nTest de motor de cierre finalizado.");

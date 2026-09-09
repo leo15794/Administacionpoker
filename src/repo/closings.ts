@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre, calcularCierreBancado, type SpecialRule } from "../engine/cierre.js";
 import { revertirMovimiento } from "./ledger.js";
-import { procesarRodeoAgenteTx, type RodeoJugadorEntrada } from "./rodeo.js";
+import { procesarRodeoAgenteTx, restaurarMemoriaRodeoTx, type RodeoJugadorEntrada } from "./rodeo.js";
 
 // Traduce una fila de rule_versions al SpecialRule que entiende el motor de cierre genérico.
 // Motor de reglas configurable: nunca "if (agente === 'Manzur')" en el código de negocio — la
@@ -96,12 +96,12 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     );
     const specialRule = resolverSpecialRule(ruleRow.rows[0] ?? null);
 
-    // "Rodeo" (solo SupremaPoker): procesa la memoria por jugador DENTRO de esta misma
-    // transacción — si más abajo se hace ROLLBACK (vista previa), esta actualización de
-    // memoria se revierte sola, exactamente igual que la memoria de bancados.
+    // "Rodeo" (solo SupremaPoker): procesa la memoria del AGENTE (agregada, no por jugador —
+    // ver engine/rodeo.ts) DENTRO de esta misma transacción — si más abajo se hace ROLLBACK
+    // (vista previa), esta actualización de memoria se revierte sola, igual que bancados.
     const rodeoResultado = input.rodeoJugadores?.length
-      ? await procesarRodeoAgenteTx(client, input.clubId, input.rodeoJugadores)
-      : { agentShareTotal: 0, clubShareTotal: 0, detalle: [] };
+      ? await procesarRodeoAgenteTx(client, input.agentId, input.clubId, input.rodeoJugadores)
+      : { baseRodeoTotal: 0, jugadores: [], memoriaAnterior: 0, payable: 0, memoriaNueva: 0, clubShare: 0, agentShare: 0 };
 
     const calc = calcularCierre({
       agentId: input.agentId,
@@ -111,7 +111,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       rakeTotal: input.rakeTotal,
       rakebackPct: input.rakebackPct,
       rebatePct: input.rebatePct,
-      rodeo: rodeoResultado.agentShareTotal,
+      rodeo: rodeoResultado.agentShare,
       rateSnapshot: input.rateSnapshot ?? 1,
       specialRule,
     });
@@ -207,15 +207,13 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         supervisorAgentId,
         supervisorMovementId,
         calc.rodeo,
-        rodeoResultado.clubShareTotal,
-        rodeoResultado.detalle.length > 0
-          ? JSON.stringify(
-              rodeoResultado.detalle.map((d) => ({
-                playerExternalId: d.playerExternalId,
-                memoriaAnterior: d.memoriaAnterior,
-                memoriaNueva: d.memoriaNueva,
-              }))
-            )
+        rodeoResultado.clubShare,
+        input.rodeoJugadores?.length
+          ? JSON.stringify({
+              memoriaAnterior: rodeoResultado.memoriaAnterior,
+              memoriaNueva: rodeoResultado.memoriaNueva,
+              jugadores: rodeoResultado.jugadores, // desglose informativo: cuánto aportó cada jugador
+            })
           : null,
       ]
     );
@@ -405,19 +403,14 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
     );
   }
 
-  // "Rodeo" (solo SupremaPoker): mismo principio que la memoria de bancados, pero por
-  // jugador — restaura la memoria de CADA jugador de este cierre al valor que tenía antes
-  // (snapshot guardado en rodeo_detalle). Misma advertencia: asume reversión en orden
-  // cronológico inverso; revertir un cierre viejo fuera de orden con cierres posteriores del
-  // mismo jugador ya aplicados dejaría su memoria inconsistente.
-  if (wc.rodeo_detalle) {
-    const detalle: { playerExternalId: string; memoriaAnterior: number }[] = wc.rodeo_detalle;
-    for (const d of detalle) {
-      await pool.query(
-        `UPDATE rodeo_player_memory SET memory = $1, updated_at = now() WHERE player_external_id = $2 AND club_id = $3`,
-        [d.memoriaAnterior, d.playerExternalId, wc.club_id]
-      );
-    }
+  // "Rodeo" (solo SupremaPoker): mismo principio que la memoria de bancados, pero de la
+  // memoria del AGENTE (agregada, no por jugador — ver engine/rodeo.ts) — restaura la memoria
+  // al valor que tenía antes de este cierre (snapshot guardado en rodeo_detalle.memoriaAnterior).
+  // Misma advertencia: asume reversión en orden cronológico inverso; revertir un cierre viejo
+  // fuera de orden con cierres posteriores del mismo agente ya aplicados dejaría su memoria
+  // inconsistente.
+  if (wc.rodeo_detalle?.memoriaAnterior !== undefined) {
+    await restaurarMemoriaRodeoTx(wc.agent_id, wc.club_id, Number(wc.rodeo_detalle.memoriaAnterior));
   }
 
   return { found: true, id: closingId };
