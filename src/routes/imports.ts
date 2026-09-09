@@ -22,7 +22,18 @@ importsRouter.post("/suprema/preview", requireAuth, requireAdmin, upload.single(
   if (!req.file) return res.status(400).json({ error: "Falta el archivo (campo 'file')." });
   try {
     const atDate = typeof req.body?.weekEnd === "string" && req.body.weekEnd ? req.body.weekEnd : new Date();
-    const result = await analizarImportacionSuprema(req.file.buffer, atDate);
+    // Elección manual de club por hoja (cuando ninguna configuración de club coincide con el
+    // nombre de la hoja) — llega como JSON serializado porque el resto del body es multipart.
+    let sheetClubOverrides: Record<string, string> | undefined;
+    if (typeof req.body?.sheetClubOverrides === "string" && req.body.sheetClubOverrides) {
+      try {
+        const parsed = JSON.parse(req.body.sheetClubOverrides);
+        if (parsed && typeof parsed === "object") sheetClubOverrides = parsed;
+      } catch {
+        return res.status(400).json({ error: "sheetClubOverrides no es JSON válido." });
+      }
+    }
+    const result = await analizarImportacionSuprema(req.file.buffer, atDate, sheetClubOverrides);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo leer el archivo." });

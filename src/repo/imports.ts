@@ -45,7 +45,12 @@ export interface ClubImportado {
 
 export interface ResultadoImportacion {
   clubes: ClubImportado[];
-  hojasNoReconocidas: { sheetName: string; motivo: string }[];
+  // `resolvable: true` = la hoja tiene el formato Suprema correcto pero ningún club activo
+  // tiene esa hoja configurada como "Hoja de importación" — el frontend puede ofrecer elegir
+  // el club a mano (ver sheetClubOverrides) en vez de tratarlo como un error sin salida.
+  // `resolvable` ausente/false = la hoja no tiene el formato Suprema esperado (le faltan
+  // columnas) — no hay club que elegir, no es una hoja de datos de club.
+  hojasNoReconocidas: { sheetName: string; motivo: string; resolvable?: boolean }[];
 }
 
 async function resolveClubBySheet(sheetName: string) {
@@ -136,21 +141,49 @@ async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: stri
  * Es de solo lectura sobre weekly_closings/balances — no aplica nada, eso lo hace el flujo
  * ya existente de vista previa/aplicar cierre (movements.ts), reutilizado por el frontend
  * fila por fila una vez que esta previa está limpia.
+ *
+ * `sheetClubOverrides` (sheetName -> clubId): elección manual del usuario cuando ninguna
+ * configuración de club coincide con el nombre de la hoja (en vez de forzarlo a configurar
+ * "Hoja de importación" de antemano en Clubes → Configurar). Si se resuelve por acá, queda
+ * grabado como el import_source de ese club (solo si todavía no tenía uno) — así la semana
+ * que viene, con el mismo nombre de hoja, se reconoce solo sin volver a preguntar.
  */
-export async function analizarImportacionSuprema(buffer: Buffer, atDate: string | Date = new Date()): Promise<ResultadoImportacion> {
+export async function analizarImportacionSuprema(
+  buffer: Buffer,
+  atDate: string | Date = new Date(),
+  sheetClubOverrides?: Record<string, string>
+): Promise<ResultadoImportacion> {
   const parsed = await parseSupremaWorkbook(buffer);
   const clubes: ClubImportado[] = [];
-  const hojasNoReconocidas: { sheetName: string; motivo: string }[] = parsed.hojasIgnoradas.map((h) => ({
+  const hojasNoReconocidas: { sheetName: string; motivo: string; resolvable?: boolean }[] = parsed.hojasIgnoradas.map((h) => ({
     sheetName: h.sheetName,
     motivo: h.reason,
   }));
 
   for (const sheet of parsed.sheets) {
-    const club = await resolveClubBySheet(sheet.sheetName);
+    let club = await resolveClubBySheet(sheet.sheetName);
+
+    if (!club) {
+      const overrideClubId = sheetClubOverrides?.[sheet.sheetName];
+      if (overrideClubId) {
+        const r = await pool.query(`SELECT id, name FROM clubs WHERE id = $1 AND active = true`, [overrideClubId]);
+        club = r.rows[0] as { id: string; name: string } | undefined;
+        if (club) {
+          // Recién grabamos el nombre de hoja si el club todavía no tenía uno configurado —
+          // nunca pisamos en silencio una configuración existente por una elección manual.
+          await pool.query(
+            `UPDATE clubs SET import_source = $1 WHERE id = $2 AND import_source IS NULL`,
+            [sheet.sheetName, club.id]
+          );
+        }
+      }
+    }
+
     if (!club) {
       hojasNoReconocidas.push({
         sheetName: sheet.sheetName,
-        motivo: `Ninguna configuración de club tiene "${sheet.sheetName}" como nombre de hoja de importación — configuralo en Clubes → Configurar (campo "Hoja de importación").`,
+        motivo: `Ninguna configuración de club tiene "${sheet.sheetName}" como nombre de hoja de importación — elegí a qué club corresponde esta hoja.`,
+        resolvable: true,
       });
       continue;
     }

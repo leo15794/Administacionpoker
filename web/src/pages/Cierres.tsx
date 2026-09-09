@@ -53,6 +53,7 @@ export default function Cierres() {
       {showImport && (
         <ImportarCierre
           agentes={agentes}
+          clubes={clubes}
           onDone={() => {
             refresh();
           }}
@@ -454,13 +455,14 @@ type FilaImport = {
 // de rakeback: siempre usa la configuración ya cargada en Agentes/Clubes. Reutiliza el mismo
 // motor de vista previa/aplicar que el formulario manual, fila por fila, así nunca puede dar
 // un número distinto al que se aplicaría cargando el cierre a mano.
-function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => void }) {
+function ImportarCierre({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
   const [analizando, setAnalizando] = useState(false);
   const [analisisError, setAnalisisError] = useState<string | null>(null);
-  const [hojasNoReconocidas, setHojasNoReconocidas] = useState<{ sheetName: string; motivo: string }[]>([]);
+  const [hojasNoReconocidas, setHojasNoReconocidas] = useState<{ sheetName: string; motivo: string; resolvable?: boolean }[]>([]);
+  const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({}); // sheetName -> clubId
   const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
@@ -469,15 +471,21 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [aplicandoTodo, setAplicandoTodo] = useState(false);
   const [resumenAplicacion, setResumenAplicacion] = useState<string | null>(null);
 
-  async function analizar() {
+  // Hojas con formato Suprema correcto pero sin club configurado — se pueden resolver eligiendo
+  // el club a mano (a diferencia de una hoja que directamente no es de este formato).
+  const hojasSinClub = hojasNoReconocidas.filter((h) => h.resolvable);
+  const hojasFormatoInvalido = hojasNoReconocidas.filter((h) => !h.resolvable);
+
+  async function analizar(overrides?: Record<string, string>) {
     if (!file) { setAnalisisError("Elegí un archivo primero."); return; }
     if (!weekStart || !weekEnd) { setAnalisisError("Completá semana desde/hasta antes de analizar."); return; }
     setAnalizando(true);
     setAnalisisError(null);
     setResumenAplicacion(null);
     try {
-      const r = await api.previsualizarImportacion(file, weekEnd);
+      const r = await api.previsualizarImportacion(file, weekEnd, overrides);
       setHojasNoReconocidas(r.hojasNoReconocidas || []);
+      if (overrides) setClubElegidoPorHoja({}); // ya se aplicaron, empezamos de nuevo por si queda otra
       setSinAgentePorClub(
         (r.clubes || [])
           .filter((c: any) => c.sinAgente?.length > 0)
@@ -517,6 +525,15 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     } finally {
       setAnalizando(false);
     }
+  }
+
+  async function confirmarClubesYReanalizar() {
+    const overrides: Record<string, string> = {};
+    for (const h of hojasSinClub) {
+      if (clubElegidoPorHoja[h.sheetName]) overrides[h.sheetName] = clubElegidoPorHoja[h.sheetName];
+    }
+    if (Object.keys(overrides).length === 0) return;
+    await analizar(overrides);
   }
 
   async function asignarJugador(clubId: string, playerId: string) {
@@ -625,8 +642,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       <h3>Importar cierre desde archivo</h3>
       <div className="muted" style={{ marginBottom: 14 }}>
         Hoy soporta el formato SupremaPoker (hojas Fénix / TeamBack, una fila por jugador). El % de rakeback/rebate de cada
-        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. Vinculá cada club a
-        su nombre de hoja en Clubes → Configurar → "Hoja de importación" antes de usar esto.
+        agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo nunca lo trae. Si una hoja no se
+        reconoce, te va a dejar elegir el club a mano y lo recuerda para la próxima vez.
       </div>
 
       <div className="form-grid">
@@ -649,11 +666,48 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
       {analisisError && <div className="error" style={{ marginTop: 12 }}>⚠ {analisisError}</div>}
 
-      {hojasNoReconocidas.length > 0 && (
+      {hojasFormatoInvalido.length > 0 && (
         <div className="error" style={{ marginTop: 12 }}>
-          {hojasNoReconocidas.map((h) => (
+          {hojasFormatoInvalido.map((h) => (
             <div key={h.sheetName}>⚠ Hoja "{h.sheetName}": {h.motivo}</div>
           ))}
+        </div>
+      )}
+
+      {hojasSinClub.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <h4>¿A qué club corresponde cada hoja?</h4>
+          <div className="muted" style={{ marginBottom: 8 }}>
+            Estas hojas tienen el formato correcto pero ningún club las tiene configuradas todavía.
+            Elegí el club una vez — la próxima semana, con el mismo nombre de hoja, se reconoce solo.
+          </div>
+          <table>
+            <thead><tr><th>Hoja del archivo</th><th>Club</th></tr></thead>
+            <tbody>
+              {hojasSinClub.map((h) => (
+                <tr key={h.sheetName}>
+                  <td>{h.sheetName}</td>
+                  <td>
+                    <select
+                      value={clubElegidoPorHoja[h.sheetName] ?? ""}
+                      onChange={(e) => setClubElegidoPorHoja((s) => ({ ...s, [h.sheetName]: e.target.value }))}
+                    >
+                      <option value="">Elegir club...</option>
+                      {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            className="btn secondary"
+            style={{ marginTop: 8 }}
+            disabled={analizando || hojasSinClub.some((h) => !clubElegidoPorHoja[h.sheetName])}
+            onClick={confirmarClubesYReanalizar}
+          >
+            {analizando ? "Analizando..." : "Confirmar clubes y reanalizar"}
+          </button>
         </div>
       )}
 

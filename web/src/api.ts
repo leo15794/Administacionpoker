@@ -188,10 +188,16 @@ export const api = {
   // hojas Fénix/TeamBack) y arma la previa por agente usando SIEMPRE la configuración de
   // rakeback/rebate ya cargada en el sistema — el archivo nunca trae su propio %. No aplica
   // nada; el frontend reutiliza previsualizarCierre/aplicarCierre fila por fila después.
-  previsualizarImportacion: (file: File, weekEnd?: string) => {
+  // sheetClubOverrides: cuando una hoja del archivo no coincide con ningún club configurado,
+  // el usuario elige a mano a qué club corresponde (en vez de tener que configurar "Hoja de
+  // importación" de antemano) — el archivo se vuelve a mandar entero junto con la elección.
+  previsualizarImportacion: (file: File, weekEnd?: string, sheetClubOverrides?: Record<string, string>) => {
     const form = new FormData();
     form.append("file", file);
     if (weekEnd) form.append("weekEnd", weekEnd);
+    if (sheetClubOverrides && Object.keys(sheetClubOverrides).length > 0) {
+      form.append("sheetClubOverrides", JSON.stringify(sheetClubOverrides));
+    }
     return requestForm("/imports/suprema/preview", form);
   },
   // Asigna a mano un jugador que vino sin agente en el archivo (Agent Name vacío o agente no
