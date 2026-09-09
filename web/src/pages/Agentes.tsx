@@ -20,6 +20,7 @@ export default function Agentes() {
   const [clubes, setClubes] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
+  const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
   const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas">("lista");
   const [filtro, setFiltro] = useState("");
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
@@ -38,6 +39,7 @@ export default function Agentes() {
 
   async function open(agent: any) {
     setSelected(agent);
+    setEditandoDeal(null);
     setDeals(await api.agentDeals(agent.id));
     setTab("lista");
   }
@@ -152,10 +154,25 @@ export default function Agentes() {
           </div>
 
           {selected && (
-            <div className="panel" style={{ width: 360 }}>
-              <h3>Deals de {selected.name}</h3>
+            <div className="panel" style={{ width: 420 }}>
+              <div className="topbar" style={{ marginBottom: 10 }}>
+                <h3 style={{ margin: 0 }}>Deals de {selected.name}</h3>
+                <button className="btn secondary small" onClick={() => setEditandoDeal("new")}>+ Agregar deal</button>
+              </div>
+              {editandoDeal && (
+                <div style={{ marginBottom: 14 }}>
+                  <NuevoDeal
+                    agentes={agentes}
+                    clubes={clubes}
+                    fixedAgentId={selected.id}
+                    initial={editandoDeal === "new" ? undefined : editandoDeal}
+                    onCreated={async () => { setEditandoDeal(null); setDeals(await api.agentDeals(selected.id)); }}
+                  />
+                  <button className="btn secondary small" style={{ marginTop: 6 }} onClick={() => setEditandoDeal(null)}>Cancelar</button>
+                </div>
+              )}
               <table>
-                <thead><tr><th>Club</th><th>% RB</th><th>% Rebate</th></tr></thead>
+                <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th></th></tr></thead>
                 <tbody>
                   {deals.map((d) => {
                     const club = clubes.find((c) => c.id === d.club_id);
@@ -164,14 +181,20 @@ export default function Agentes() {
                     return (
                       <tr key={d.id}>
                         <td>{d.club_name}</td>
+                        <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                         <td>{pct(d.rakeback_pct)} {rbEsDefault && <span className="muted" style={{ fontSize: 11 }}>(default)</span>}</td>
                         <td>{pct(d.rebate_pct)} {rebateEsDefault && <span className="muted" style={{ fontSize: 11 }}>(default)</span>}</td>
+                        <td><button className="btn secondary small" onClick={() => setEditandoDeal(d)}>Editar</button></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {deals[0]?.notes && <div className="muted" style={{ marginTop: 10 }}>{deals[0].notes}</div>}
+              {deals.some((d) => d.notes) && (
+                <div className="muted" style={{ marginTop: 10, fontSize: 12.5 }}>
+                  {deals.filter((d) => d.notes).map((d) => <div key={d.id}>{d.club_name}: {d.notes}</div>)}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -922,13 +945,28 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   );
 }
 
-function NuevoDeal({ agentes, clubes, onCreated }: { agentes: any[]; clubes: any[]; onCreated: () => void }) {
-  const [agentId, setAgentId] = useState("");
-  const [clubId, setClubId] = useState("");
-  const [system, setSystem] = useState<"PREPAGO" | "WIN_LOSE">("WIN_LOSE");
-  const [rakebackPct, setRakebackPct] = useState("70");
-  const [rebatePct, setRebatePct] = useState("0");
-  const [notes, setNotes] = useState("");
+// fixedAgentId: cuando se usa desde el panel "Deals de {agente}" el agente ya está elegido y no
+// hace falta mostrar el selector. initial: para editar un deal existente (precarga club/sistema/%,
+// el submit sigue siendo un upsertDeal normal — versiona el anterior, nunca lo pisa en el lugar).
+function NuevoDeal({
+  agentes,
+  clubes,
+  onCreated,
+  fixedAgentId,
+  initial,
+}: {
+  agentes: any[];
+  clubes: any[];
+  onCreated: () => void;
+  fixedAgentId?: string;
+  initial?: { club_id: string; system: "PREPAGO" | "WIN_LOSE"; rakeback_pct: number; rebate_pct: number; notes?: string | null };
+}) {
+  const [agentId, setAgentId] = useState(fixedAgentId ?? "");
+  const [clubId, setClubId] = useState(initial?.club_id ?? "");
+  const [system, setSystem] = useState<"PREPAGO" | "WIN_LOSE">(initial?.system ?? "WIN_LOSE");
+  const [rakebackPct, setRakebackPct] = useState(initial ? String(Number(initial.rakeback_pct) * 100) : "70");
+  const [rebatePct, setRebatePct] = useState(initial ? String(Number(initial.rebate_pct) * 100) : "0");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [usandoDefault, setUsandoDefault] = useState(false);
@@ -959,7 +997,7 @@ function NuevoDeal({ agentes, clubes, onCreated }: { agentes: any[]; clubes: any
         rebatePct: Number(rebatePct) / 100,
         notes: notes.trim() || undefined,
       });
-      setMsg({ ok: true, text: "Deal guardado. Reemplaza cualquier % anterior para ese agente+club a partir de ahora." });
+      setMsg({ ok: true, text: initial ? "Deal actualizado desde ahora (el anterior queda en el historial)." : "Deal guardado. Reemplaza cualquier % anterior para ese agente+club a partir de ahora." });
       onCreated();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo guardar el deal." });
@@ -970,19 +1008,21 @@ function NuevoDeal({ agentes, clubes, onCreated }: { agentes: any[]; clubes: any
 
   return (
     <div className="panel">
-      <h3>Asignar % de rakeback/rebate a un agente en un club</h3>
+      <h3>{initial ? "Editar deal" : "Asignar % de rakeback/rebate a un agente en un club"}</h3>
       <div className="muted" style={{ marginBottom: 14 }}>
         Esto no borra el historial: versiona el deal anterior (queda con fecha de fin) y crea uno nuevo vigente.
       </div>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
-          <div className="field">
-            <label>Agente</label>
-            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">Elegir...</option>
-              {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
+          {!fixedAgentId && (
+            <div className="field">
+              <label>Agente</label>
+              <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                <option value="">Elegir...</option>
+                {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="field">
             <label>Club</label>
             <select value={clubId} onChange={(e) => elegirClub(e.target.value)}>
