@@ -13,6 +13,8 @@
     "import:historial": "tsx src/scripts/importHistorialAutomatizacion.ts",
     "sync:saldos": "tsx src/scripts/syncSaldosPlanilla.ts",
     "sync:saldos:apply": "tsx src/scripts/syncSaldosPlanilla.ts --apply",
+    "ajuste:colgados": "tsx src/scripts/ajustePlanillaColgados.ts",
+    "ajuste:colgados:apply": "tsx src/scripts/ajustePlanillaColgados.ts --apply",
     "import:wallet": "tsx src/scripts/importWalletHistorial.ts",
     "test:cierre": "tsx src/engine/__test__.ts"
   },
