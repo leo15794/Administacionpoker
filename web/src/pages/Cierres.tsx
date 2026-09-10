@@ -147,7 +147,7 @@ export default function Cierres() {
                     </div>
                   )}
                 </td>
-                <td style={{ display: "flex", gap: 6 }}>
+                <td className="row-actions">
                   {c.status !== "REVERTIDO" && (
                     <button
                       className="btn secondary small"

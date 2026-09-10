@@ -1132,7 +1132,7 @@ function ClubesConfig({
               <td>{c.default_rakeback_pct != null ? pct(c.default_rakeback_pct) : "—"}</td>
               <td>{c.default_rebate_pct != null ? pct(c.default_rebate_pct) : "—"}</td>
               <td>{c.rebate_destino === "RAKEBACK_SUPERVISOR" ? "Rakeback supervisor" : c.rebate_destino === "SALDO_OPERATIVO" ? "Saldo operativo" : "—"}</td>
-              <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <td className="row-actions">
                 <button className="btn secondary small" onClick={() => onEdit(c)}>Configurar</button>
                 <button className="btn secondary small" onClick={() => onDarDeBaja(c)}>Dar de baja</button>
               </td>

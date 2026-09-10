@@ -49,7 +49,7 @@ export default function Usuarios() {
                 <td>{u.agent_name}</td>
                 <td><span className={`badge ${u.role === "ADMIN" ? "pos" : "neutral"}`}>{u.role}</span></td>
                 <td><span className={`badge ${u.active ? "pos" : "neg"}`}>{u.active ? "Activo" : "Desactivado"}</span></td>
-                <td style={{ display: "flex", gap: 6 }}>
+                <td className="row-actions">
                   <button className="btn secondary small" onClick={() => toggleRole(u)}>
                     Hacer {u.role === "ADMIN" ? "agente" : "admin"}
                   </button>
