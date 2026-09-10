@@ -2,7 +2,7 @@
   "generadoEn": "2026-09-10",
   "saldos": [
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "CAARLITOS",
       "saldoPlanilla": -2105.5,
       "filas": [
@@ -19,7 +19,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Dejodita",
       "saldoPlanilla": 868.97,
       "filas": [
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Demiurge29",
       "saldoPlanilla": 8698.63,
       "filas": [
@@ -48,7 +48,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Gonza",
       "saldoPlanilla": 0.0,
       "filas": [
@@ -60,7 +60,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "JereStack",
       "saldoPlanilla": 580.76,
       "filas": [
@@ -72,7 +72,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Marcelo Mereles",
       "saldoPlanilla": 12311.96,
       "filas": [
@@ -84,7 +84,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Prodigio",
       "saldoPlanilla": 2396.0,
       "filas": [
@@ -101,7 +101,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "Rodrigo",
       "saldoPlanilla": -1551.79,
       "filas": [
@@ -113,7 +113,7 @@
       ]
     },
     {
-      "club": "FÉNIX GG",
+      "club": "Fénix GG",
       "agente": "renacapkr",
       "saldoPlanilla": -76.87,
       "filas": [
@@ -130,7 +130,7 @@
       ]
     },
     {
-      "club": "FÉNIX SUPREMA",
+      "club": "Fénix Suprema",
       "agente": "F Roesca17",
       "saldoPlanilla": 0.1,
       "filas": [
@@ -142,7 +142,7 @@
       ]
     },
     {
-      "club": "FÉNIX SUPREMA",
+      "club": "Fénix Suprema",
       "agente": "Prodigio",
       "saldoPlanilla": 0.0,
       "filas": [
@@ -154,7 +154,7 @@
       ]
     },
     {
-      "club": "FÉNIX SUPREMA",
+      "club": "Fénix Suprema",
       "agente": "Rodrigo",
       "saldoPlanilla": 6000.0,
       "filas": [
@@ -171,7 +171,7 @@
       ]
     },
     {
-      "club": "FÉNIX SUPREMA",
+      "club": "Fénix Suprema",
       "agente": "TB OTTI",
       "saldoPlanilla": -9.06,
       "filas": [
@@ -188,7 +188,7 @@
       ]
     },
     {
-      "club": "FÉNIX SUPREMA",
+      "club": "Fénix Suprema",
       "agente": "cajerouy",
       "saldoPlanilla": 95.92,
       "filas": [
@@ -201,160 +201,6 @@
           "concepto": "Saldo pendiente",
           "situacion": "Nos debe",
           "monto": 1723.97
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "BestiaPop!",
-      "saldoPlanilla": 907.6,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 907.6
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "El Latigo Loco",
-      "saldoPlanilla": 2495.95,
-      "filas": [
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Debemos",
-          "monto": 2495.95
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "El caiman",
-      "saldoPlanilla": 0.0,
-      "filas": [
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Debemos",
-          "monto": 0.0
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "JereStack",
-      "saldoPlanilla": 2894.39,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 2894.39
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "MacT-GG",
-      "saldoPlanilla": 116.96,
-      "filas": [
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Debemos",
-          "monto": 116.96
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "Marcelo Mereles",
-      "saldoPlanilla": -650.42,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 351.59
-        },
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Nos debe",
-          "monto": 1002.01
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "Prodigio",
-      "saldoPlanilla": 495.68,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 495.68
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "QueDificil",
-      "saldoPlanilla": -2718.19,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 0.0
-        },
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Nos debe",
-          "monto": 2718.19
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "Quintero100",
-      "saldoPlanilla": 2000.0,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 2000.0
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "Unión TeamBack GG",
-      "saldoPlanilla": -2.45,
-      "filas": [
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Nos debe",
-          "monto": 2.45
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "Uriel",
-      "saldoPlanilla": 0.01,
-      "filas": [
-        {
-          "concepto": "Saldo pendiente",
-          "situacion": "Debemos",
-          "monto": 0.01
-        }
-      ]
-    },
-    {
-      "club": "GG",
-      "agente": "daylight25",
-      "saldoPlanilla": 2274.06,
-      "filas": [
-        {
-          "concepto": "Fichas",
-          "situacion": "Debemos",
-          "monto": 2274.06
         }
       ]
     },
@@ -407,19 +253,161 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
-      "agente": "DigiPlayers",
-      "saldoPlanilla": -3.75,
+      "club": "TeamBack GG",
+      "agente": "BestiaPop!",
+      "saldoPlanilla": 907.6,
       "filas": [
         {
-          "concepto": "Saldo pendiente",
-          "situacion": "Nos debe",
-          "monto": 3.75
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 907.6
         }
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack GG",
+      "agente": "El Latigo Loco",
+      "saldoPlanilla": 2495.95,
+      "filas": [
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Debemos",
+          "monto": 2495.95
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "El caiman",
+      "saldoPlanilla": 0.0,
+      "filas": [
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Debemos",
+          "monto": 0.0
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "JereStack",
+      "saldoPlanilla": 2894.39,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 2894.39
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "MacT-GG",
+      "saldoPlanilla": 116.96,
+      "filas": [
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Debemos",
+          "monto": 116.96
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "Marcelo Mereles",
+      "saldoPlanilla": -650.42,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 351.59
+        },
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Nos debe",
+          "monto": 1002.01
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "Prodigio",
+      "saldoPlanilla": 495.68,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 495.68
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "QueDificil",
+      "saldoPlanilla": -2718.19,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 0.0
+        },
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Nos debe",
+          "monto": 2718.19
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "Quintero100",
+      "saldoPlanilla": 2000.0,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 2000.0
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "Unión TeamBack GG",
+      "saldoPlanilla": -2.45,
+      "filas": [
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Nos debe",
+          "monto": 2.45
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "Uriel",
+      "saldoPlanilla": 0.01,
+      "filas": [
+        {
+          "concepto": "Saldo pendiente",
+          "situacion": "Debemos",
+          "monto": 0.01
+        }
+      ]
+    },
+    {
+      "club": "TeamBack GG",
+      "agente": "daylight25",
+      "saldoPlanilla": 2274.06,
+      "filas": [
+        {
+          "concepto": "Fichas",
+          "situacion": "Debemos",
+          "monto": 2274.06
+        }
+      ]
+    },
+    {
+      "club": "TeamBack Suprema",
       "agente": "F aducci",
       "saldoPlanilla": -320.0,
       "filas": [
@@ -431,7 +419,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "F coco",
       "saldoPlanilla": 368.32,
       "filas": [
@@ -448,7 +436,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "J Lenzo",
       "saldoPlanilla": 8.27,
       "filas": [
@@ -465,7 +453,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "JJ DD",
       "saldoPlanilla": -747.31,
       "filas": [
@@ -477,7 +465,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "Matias Fontal",
       "saldoPlanilla": 250.14,
       "filas": [
@@ -489,7 +477,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "MrBadBeats",
       "saldoPlanilla": 0.0,
       "filas": [
@@ -501,7 +489,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "Prodigio",
       "saldoPlanilla": 4421.19,
       "filas": [
@@ -513,7 +501,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "TB dementus22",
       "saldoPlanilla": -10.59,
       "filas": [
@@ -530,7 +518,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "eze.f23",
       "saldoPlanilla": 0.0,
       "filas": [
@@ -547,7 +535,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "nico",
       "saldoPlanilla": -0.19,
       "filas": [
@@ -559,7 +547,7 @@
       ]
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "patoruzit0",
       "saldoPlanilla": -868.75,
       "filas": [
@@ -571,7 +559,7 @@
       ]
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Dejodita",
       "saldoPlanilla": 0.0,
       "filas": [
@@ -583,7 +571,7 @@
       ]
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Jinx Wang Chan",
       "saldoPlanilla": 921.82,
       "filas": [
@@ -595,7 +583,7 @@
       ]
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "MutiladorDoc",
       "saldoPlanilla": 1027.94,
       "filas": [
@@ -612,7 +600,7 @@
       ]
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Prodigio",
       "saldoPlanilla": 1407.49,
       "filas": [
@@ -624,7 +612,7 @@
       ]
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Quintero100",
       "saldoPlanilla": 1392.66,
       "filas": [
@@ -636,7 +624,7 @@
       ]
     },
     {
-      "club": "X-POKER",
+      "club": "X-Poker",
       "agente": "Dejodita",
       "saldoPlanilla": -152.18,
       "filas": [
@@ -653,7 +641,7 @@
       ]
     },
     {
-      "club": "X-POKER",
+      "club": "X-Poker",
       "agente": "Prodigio",
       "saldoPlanilla": 1148.97,
       "filas": [
@@ -665,8 +653,8 @@
       ]
     },
     {
-      "club": "X-POKER",
-      "agente": "TodoRojo",
+      "club": "X-Poker",
+      "agente": "todorojo",
       "saldoPlanilla": -179.82,
       "filas": [
         {
@@ -698,42 +686,50 @@
       "monto": 725.77
     },
     {
-      "club": "TEAMBACK SUPREMA",
+      "club": "TeamBack Suprema",
       "agente": "LTinside · histórico como agente",
       "concepto": "Saldo histórico",
       "situacion": "Histórico / inactivo",
       "monto": 0.35
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Prodigio",
       "concepto": "Adelanto de rakeback",
       "situacion": "Nos debe",
       "monto": 2600.0
     },
     {
-      "club": "TINY",
+      "club": "Tiny GG",
       "agente": "Tiny",
       "concepto": "Garantía",
       "situacion": "Nos debe",
       "monto": 2000.0
     },
     {
-      "club": "GG",
+      "club": "TeamBack GG",
       "agente": "Unión TeamBack GG",
       "concepto": "Garantía",
       "situacion": "Nos debe",
       "monto": 3000.0
     },
     {
-      "club": "X-POKER",
+      "club": "X-Poker",
       "agente": "X-Poker",
       "concepto": "Garantía",
       "situacion": "Nos debe",
       "monto": 2000.0
     },
     {
-      "club": "GG",
+      "club": "TeamBack Suprema",
+      "agente": "DigiPlayers",
+      "concepto": "Saldo pendiente",
+      "situacion": "Nos debe",
+      "monto": 3.75,
+      "nota": "cuenta interna sin contraparte externa, no se sincroniza como agente"
+    },
+    {
+      "club": "TeamBack GG",
       "agente": "JereStack",
       "concepto": "Adelanto de rakeback",
       "situacion": "Nos debe",
