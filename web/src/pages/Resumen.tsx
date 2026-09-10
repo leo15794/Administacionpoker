@@ -89,6 +89,14 @@ export default function Resumen() {
         </div>
         <div
           className="kpi-card row-click"
+          onClick={() => nav("/dashboard/garantias")}
+          title="Debemos a agentes + garantías pendientes — mismo total que arma la planilla en la fila 'Debemos', salvo Adelantos de rakeback (ver nota abajo)"
+        >
+          <div className="label">Total debemos (con garantías)</div>
+          <div className="value pos">{usd(Number(data.kpis.debemosAAgentes) + Number(data.kpis.garantiasPendientes))}</div>
+        </div>
+        <div
+          className="kpi-card row-click"
           onClick={() => document.getElementById("panel-saldo-por-club")?.scrollIntoView({ behavior: "smooth", block: "start" })}
           title="Ver el saldo neto por club"
         >
@@ -101,7 +109,7 @@ export default function Resumen() {
         </div>
       </div>
       <div className="muted" style={{ marginTop: -10, marginBottom: 20, fontSize: 12 }}>
-        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club (igual que la planilla, sin mezclar garantías). Sumando además "Garantías pendientes" da el total general comparable contra la planilla. Hacé click en cualquier KPI para ver su detalle.
+        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club (igual que la planilla, sin mezclar garantías). "Total debemos (con garantías)" suma Garantías pendientes, quedando comparable contra la fila "Debemos" de la planilla — salvo el "Adelanto de rakeback" (~$2.600 en la última lectura), que no está cargado en ningún lado del sistema todavía y no se puede sumar acá. Hacé click en cualquier KPI para ver su detalle.
       </div>
 
       <div className="panel" id="panel-saldo-por-club">
