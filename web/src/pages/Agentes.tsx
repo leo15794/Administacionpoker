@@ -4,6 +4,7 @@ import { usd, pct } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import MovimientosHistorial from "../components/MovimientosHistorial";
+import ActionsMenu from "../components/ActionsMenu";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -209,21 +210,27 @@ export default function Agentes() {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
-                      <button className="btn secondary small" onClick={() => setReglasAgent({ id: a.id, name: a.name })}>Reglas especiales</button>
-                      <button className="btn secondary small" onClick={() => setHistorialAgent({ id: a.id, name: a.name })}>Historial</button>
-                      <button className="btn secondary small" onClick={() => setEditando(a)}>Editar</button>
-                      {a.active === false ? (
-                        <>
-                          <button className="btn secondary small" onClick={() => reactivarAgente(a)}>Reactivar</button>
-                          <button className="btn secondary small" style={{ color: "var(--danger, #e5484d)" }} onClick={() => eliminarAgente(a)} title="Borrado real — solo funciona si no tiene ningún historial (jugadores, movimientos, deals, etc).">
-                            Eliminar
-                          </button>
-                        </>
-                      ) : (
-                        <button className="btn secondary small" onClick={() => darDeBajaAgente(a)}>Dar de baja</button>
-                      )}
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
+                        <ActionsMenu
+                          items={[
+                            { label: "Reglas especiales", onClick: () => setReglasAgent({ id: a.id, name: a.name }) },
+                            { label: "Historial", onClick: () => setHistorialAgent({ id: a.id, name: a.name }) },
+                            { label: "Editar", onClick: () => setEditando(a) },
+                            ...(a.active === false
+                              ? [
+                                  { label: "Reactivar", onClick: () => reactivarAgente(a) },
+                                  {
+                                    label: "Eliminar",
+                                    onClick: () => eliminarAgente(a),
+                                    danger: true,
+                                  },
+                                ]
+                              : [{ label: "Dar de baja", onClick: () => darDeBajaAgente(a) }]),
+                          ]}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
