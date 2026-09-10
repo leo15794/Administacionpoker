@@ -514,7 +514,8 @@ tbody tr:last-child td { border-bottom: none; }
   width: 620px;
   max-width: 100%;
   max-height: 82vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: var(--shadow-lift);
 }
 .modal-box.wide { width: 820px; }
