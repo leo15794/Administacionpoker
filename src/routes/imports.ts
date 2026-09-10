@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuth, requireAdmin } from "../lib/auth.js";
 import { analizarImportacionSuprema, asignarAgenteJugador, listClubesImportacionSuprema, crearAgenteDesdeImportacion } from "../repo/imports.js";
 import { analizarImportacionTeamBackGG, listClubesImportacionTeamBackGG } from "../repo/importsTeamBackGG.js";
+import { analizarImportacionTinyGG, listClubesImportacionTinyGG } from "../repo/importsTinyGG.js";
 
 export const importsRouter = Router();
 
@@ -93,6 +94,46 @@ importsRouter.post("/teamback-gg/preview", requireAuth, requireAdmin, upload.sin
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo leer el archivo." });
+  }
+});
+
+// Plataforma "Tiny GG" (club "Tiny"): a diferencia de Suprema/TeamBack GG (un archivo, varias
+// hojas), acá cada super agente baja SU PROPIO archivo — este endpoint recibe VARIOS archivos
+// a la vez (campo "files", no "file") y arma una sola previa agrupada por club. sheetClubOverrides
+// / sheetsIgnoradas funcionan igual que en los otros importadores, pero la clave es el nombre
+// del ARCHIVO (ej. "Tini poker.xlsx"), no un nombre de hoja.
+importsRouter.get("/tiny-gg/clubs", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listClubesImportacionTinyGG());
+});
+
+importsRouter.post("/tiny-gg/preview", requireAuth, requireAdmin, upload.array("files", 50), async (req, res) => {
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  if (files.length === 0) return res.status(400).json({ error: "Faltan los archivos (campo 'files')." });
+  try {
+    const atDate = typeof req.body?.weekEnd === "string" && req.body.weekEnd ? req.body.weekEnd : new Date();
+    let sheetClubOverrides: Record<string, string> | undefined;
+    if (typeof req.body?.sheetClubOverrides === "string" && req.body.sheetClubOverrides) {
+      try {
+        const parsed = JSON.parse(req.body.sheetClubOverrides);
+        if (parsed && typeof parsed === "object") sheetClubOverrides = parsed;
+      } catch {
+        return res.status(400).json({ error: "sheetClubOverrides no es JSON válido." });
+      }
+    }
+    let sheetsIgnoradas: string[] | undefined;
+    if (typeof req.body?.sheetsIgnoradas === "string" && req.body.sheetsIgnoradas) {
+      try {
+        const parsed = JSON.parse(req.body.sheetsIgnoradas);
+        if (Array.isArray(parsed)) sheetsIgnoradas = parsed.filter((x) => typeof x === "string");
+      } catch {
+        return res.status(400).json({ error: "sheetsIgnoradas no es JSON válido." });
+      }
+    }
+    const archivos = files.map((f) => ({ fileName: f.originalname, buffer: f.buffer }));
+    const result = await analizarImportacionTinyGG(archivos, atDate, sheetClubOverrides, sheetsIgnoradas);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudieron leer los archivos." });
   }
 });
 

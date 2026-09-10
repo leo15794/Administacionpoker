@@ -26,7 +26,15 @@ export interface ClosingInput {
 
 export type SpecialRule =
   | { key: "MANZUR_75_RAKE"; pctRake: number } // resultado + pctRake * rakeTotal, ignora rakebackPct genérico
-  | { key: "CAJERO_CREDITO"; deudaAnterior: number }; // cargas a crédito: cobros van primero contra deuda
+  | { key: "CAJERO_CREDITO"; deudaAnterior: number } // cargas a crédito: cobros van primero contra deuda
+  // Club "Tiny" (plataforma GG Poker, reporte "Super Agent Report" propio, un archivo por
+  // super agente — ver engine/importTinyGG.ts): el rebate NO es un % fijo siempre aplicado
+  // como TeamBack GG — solo se dispara cuando el "P&L crudo antes de rake y sin jackpot" del
+  // super agente completo da negativo esa semana. bbjContribution = fee de contribución a Bad
+  // Beat Jackpot de TODOS sus jugadores esa semana (viene del importador, 0 si no hubo).
+  // Fórmula confirmada por el usuario y verificada exacta contra un reporte real (semana
+  // 31/08-06/09/2026, super agente dangerfish96): ver cierre completo abajo.
+  | { key: "TINY_GG_REBATE_CONDICIONAL"; bbjContribution: number };
 
 export interface ClosingResult {
   result: number;
@@ -39,6 +47,10 @@ export interface ClosingResult {
   rodeo: number;
   finalClosing: number;
   ruleApplied: string | null;
+  /** Solo seteado por TINY_GG_REBATE_CONDICIONAL: Resultado + Rake + Fee de Bad Beat Jackpot —
+   * si da negativo se disparó el rebate, si da >= 0 el rebate quedó en 0 esta semana. Se expone
+   * para que la UI pueda mostrar "por qué" sin tener que recalcularlo del lado del cliente. */
+  tinyBaseRebate?: number;
 }
 
 /**
@@ -65,6 +77,31 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
       rodeo,
       finalClosing: adjustedResult + rodeo,
       ruleApplied: "MANZUR_75_RAKE",
+    };
+  }
+
+  if (input.specialRule?.key === "TINY_GG_REBATE_CONDICIONAL") {
+    // Ver comentario del SpecialRule más arriba y engine/importTinyGG.ts para el detalle
+    // completo. Nunca resta: cuando el P&L crudo da negativo, el rebate SUMA (Math.abs del %
+    // configurado) para cubrir esa parte — a diferencia de TeamBack GG, acá no importa con qué
+    // signo esté cargado el % del deal en la base.
+    const rakeback = input.rakeTotal * input.rakebackPct;
+    const bbj = input.specialRule.bbjContribution;
+    const tinyBaseRebate = input.result + input.rakeTotal + bbj;
+    const rebate = tinyBaseRebate < 0 ? -tinyBaseRebate * Math.abs(input.rebatePct) : 0;
+    const adjustedResult = input.result + rakeback + rebate;
+    return {
+      result: input.result,
+      rakeTotal: input.rakeTotal,
+      rakebackPct: input.rakebackPct,
+      rakeback,
+      rebatePct: input.rebatePct,
+      rebate,
+      adjustedResult,
+      rodeo,
+      finalClosing: adjustedResult + rodeo,
+      ruleApplied: "TINY_GG_REBATE_CONDICIONAL",
+      tinyBaseRebate,
     };
   }
 

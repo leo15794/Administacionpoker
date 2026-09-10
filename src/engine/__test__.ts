@@ -201,4 +201,42 @@ assertClose(rodeoAgenteMixto.baseRodeoTotal, 600, "Rodeo (agente mixto): rodeo b
 assertClose(rodeoAgenteMixto.payable, 600, "Rodeo (agente mixto): payable = 600 (no 1000, se netea entre jugadores del mismo agente)");
 assertClose(rodeoAgenteMixto.agentShare, 90, "Rodeo (agente mixto): 15% de 600 = 90 Agente");
 
+// Tiny GG (regla condicional): caso real "Tini poker.xlsx", super agente dangerfish96, semana
+// 31/08 al 06/09/2026 — rakebackPct 0.70 coincide con el "Service Fee Rate" del reporte,
+// rebatePct cargado como -0.10 (convención GG en la base) para probar que el signo no importa.
+// baseRebate = 22827.17 + 37604.90 + 8878.48 = 69310.55 >= 0 -> rebate = 0 (no se dispara).
+// rakeback = 37604.90 * 0.70 = 26323.43. finalClosing = 22827.17 + 26323.43 + 0 = 49150.60
+// (coincide exacto con "當週交收金額 (Weekly Settlement)" del reporte real).
+const tinyGGSinDisparo = calcularCierre({
+  agentId: "dangerfish96",
+  clubId: "tiny",
+  system: "WIN_LOSE",
+  result: 22827.17,
+  rakeTotal: 37604.9,
+  rakebackPct: 0.7,
+  rebatePct: -0.1,
+  rateSnapshot: 1,
+  specialRule: { key: "TINY_GG_REBATE_CONDICIONAL", bbjContribution: 8878.48 },
+});
+assertClose(tinyGGSinDisparo.rebate, 0, "Tiny GG (sin disparo): rebate en 0 cuando el P&L crudo da positivo");
+assertClose(tinyGGSinDisparo.rakeback, 26323.43, "Tiny GG (sin disparo): rakeback 70% del rake");
+assertClose(tinyGGSinDisparo.finalClosing, 49150.6, "Tiny GG (sin disparo): cierre final igual al reporte real");
+
+// Caso inventado con disparo (no viene de un reporte real, solo prueba la rama negativa): si el
+// P&L crudo antes de rake y sin jackpot da negativo, el rebate SUMA (nunca resta) el 10% de esa
+// diferencia — probado con rebatePct guardado en POSITIVO para confirmar que el signo da igual.
+const tinyGGConDisparo = calcularCierre({
+  agentId: "test",
+  clubId: "tiny",
+  system: "WIN_LOSE",
+  result: -50000,
+  rakeTotal: 10000,
+  rakebackPct: 0.7,
+  rebatePct: 0.1,
+  rateSnapshot: 1,
+  specialRule: { key: "TINY_GG_REBATE_CONDICIONAL", bbjContribution: 2000 },
+});
+// baseRebate = -50000 + 10000 + 2000 = -38000 -> rebate = 38000 * 0.10 = 3800 (suma).
+assertClose(tinyGGConDisparo.rebate, 3800, "Tiny GG (con disparo): rebate suma 10% del P&L crudo negativo");
+
 console.log("\nTest de motor de cierre finalizado.");

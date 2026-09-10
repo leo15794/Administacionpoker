@@ -473,6 +473,10 @@ type FilaImport = {
   // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
   // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
+  // Tiny GG (ver engine/importTinyGG.ts): fee de Bad Beat Jackpot de este super agente esta
+  // semana — undefined para cualquier otra plataforma. Su sola presencia dispara la regla de
+  // rebate condicional en el backend (ver repo/closings.ts).
+  bbjContribution?: number;
   included: boolean;
   previewLoading: boolean;
   previewResult: any | null;
@@ -489,6 +493,9 @@ type FilaImport = {
 // un número distinto al que se aplicaría cargando el cierre a mano.
 function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  // Tiny GG: cada super agente baja su propio archivo — se suben varios juntos, a diferencia de
+  // "file" (SUPREMA/GG) que es un solo .xlsx con varias hojas adentro.
+  const [tinyFiles, setTinyFiles] = useState<File[]>([]);
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
   const [analizando, setAnalizando] = useState(false);
@@ -519,13 +526,18 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [clubesSuprema, setClubesSuprema] = useState<{ id: string; name: string }[]>([]);
   // Plataforma elegida arriba (pestañas) — SUPREMA y GG ya tienen parser propio; X-Poker
   // todavía muestra un aviso de "todavía no soportado" en vez del importador.
-  const [plataforma, setPlataforma] = useState<"SUPREMA" | "GG" | "XPOKER">("SUPREMA");
+  const [plataforma, setPlataforma] = useState<"SUPREMA" | "GG" | "TINY" | "XPOKER">("SUPREMA");
 
   useEffect(() => {
     // Misma lista de "todos los clubes activos" para cualquier plataforma (ver nota en
     // repo/imports.ts sobre por qué nunca se filtra por plataforma acá) — se vuelve a pedir al
     // cambiar de pestaña solo por si se creó un club nuevo mientras tanto.
-    const fetchClubes = plataforma === "GG" ? api.clubesImportacionTeamBackGG() : api.clubesImportacionSuprema();
+    const fetchClubes =
+      plataforma === "GG"
+        ? api.clubesImportacionTeamBackGG()
+        : plataforma === "TINY"
+        ? api.clubesImportacionTinyGG()
+        : api.clubesImportacionSuprema();
     fetchClubes.then(setClubesSuprema).catch(() => setClubesSuprema([]));
   }, [plataforma]);
 
@@ -533,7 +545,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // de club si el nombre matchea algo ya configurado). Todavía no calcula nada por agente — eso
   // recién pasa cuando se confirma a qué club corresponde cada hoja (paso 2).
   async function analizar() {
-    if (!file) { setAnalisisError("Elegí un archivo primero."); return; }
+    if (plataforma === "TINY") {
+      if (tinyFiles.length === 0) { setAnalisisError("Elegí uno o más archivos primero."); return; }
+    } else if (!file) {
+      setAnalisisError("Elegí un archivo primero.");
+      return;
+    }
     if (!weekStart || !weekEnd) { setAnalisisError("Completá semana desde/hasta antes de analizar."); return; }
     setAnalizando(true);
     setAnalisisError(null);
@@ -546,8 +563,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     try {
       const r =
         plataforma === "GG"
-          ? await api.previsualizarImportacionTeamBackGG(file, weekEnd)
-          : await api.previsualizarImportacion(file, weekEnd);
+          ? await api.previsualizarImportacionTeamBackGG(file!, weekEnd)
+          : plataforma === "TINY"
+          ? await api.previsualizarImportacionTinyGG(tinyFiles, weekEnd)
+          : await api.previsualizarImportacion(file!, weekEnd);
       setHojasFormatoInvalido((r.hojasNoReconocidas || []).filter((h: any) => !h.resolvable));
       const sugerencias: Record<string, string> = {};
       const detectadas: { sheetName: string; clubIdSugerido: string | null }[] = [];
@@ -571,7 +590,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // el mismo archivo con esa elección explícita — el backend la usa siempre, sin importar si el
   // nombre de la hoja coincide o no con algo configurado.
   async function confirmarClubesYProcesar() {
-    if (!file) return;
+    if (plataforma === "TINY" ? tinyFiles.length === 0 : !file) return;
     setAnalizando(true);
     setAnalisisError(null);
     try {
@@ -583,8 +602,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       const ignoradas = hojasDetectadas.filter((h) => hojaIgnorada[h.sheetName]).map((h) => h.sheetName);
       const r =
         plataforma === "GG"
-          ? await api.previsualizarImportacionTeamBackGG(file, weekEnd, overrides, ignoradas)
-          : await api.previsualizarImportacion(file, weekEnd, overrides, ignoradas);
+          ? await api.previsualizarImportacionTeamBackGG(file!, weekEnd, overrides, ignoradas)
+          : plataforma === "TINY"
+          ? await api.previsualizarImportacionTinyGG(tinyFiles, weekEnd, overrides, ignoradas)
+          : await api.previsualizarImportacion(file!, weekEnd, overrides, ignoradas);
       setConfirmado(true);
       setSinAgentePorClub(
         (r.clubes || [])
@@ -609,6 +630,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
+            bbjContribution: a.bbjContribution,
             included: true,
             previewLoading: false,
             previewResult: null,
@@ -700,6 +722,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+            tinyBbjContribution: f.bbjContribution,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -751,6 +774,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           rebatePct: f.rebatePct,
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
           rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+          tinyBbjContribution: f.bbjContribution,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
@@ -766,9 +790,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     onDone();
   }
 
-  const PLATAFORMAS: { key: "SUPREMA" | "GG" | "XPOKER"; label: string }[] = [
+  const PLATAFORMAS: { key: "SUPREMA" | "GG" | "TINY" | "XPOKER"; label: string }[] = [
     { key: "SUPREMA", label: "SupremaPoker" },
     { key: "GG", label: "GG Poker" },
+    { key: "TINY", label: "Tiny GG" },
     { key: "XPOKER", label: "X-Poker" },
   ];
 
@@ -787,6 +812,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             onClick={() => {
               setPlataforma(p.key);
               setFile(null);
+              setTinyFiles([]);
               setFilas([]);
               setHojasDetectadas([]);
               setConfirmado(false);
@@ -806,28 +832,50 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         </div>
       )}
 
-      {(plataforma === "SUPREMA" || plataforma === "GG") && (
+      {(plataforma === "SUPREMA" || plataforma === "GG" || plataforma === "TINY") && (
       <>
       <div className="muted" style={{ marginBottom: 14 }}>
         El % de rakeback/rebate de cada agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo
         nunca lo trae.
         {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
+        {plataforma === "TINY" &&
+          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) y el rebate NO es un % fijo: solo se dispara cuando el P&L crudo antes de rake y sin jackpot da negativo esa semana — si no se dispara, el rebate queda en $0."}
       </div>
 
       <div className="form-grid">
         <div className="field">
-          <label>Archivo (.xlsx)</label>
-          <input
-            type="file"
-            accept=".xlsx"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              setFilas([]);
-              setHojasDetectadas([]);
-              setConfirmado(false);
-              setAnalisisError(null);
-            }}
-          />
+          <label>{plataforma === "TINY" ? "Archivos (.xlsx) — uno por super agente" : "Archivo (.xlsx)"}</label>
+          {plataforma === "TINY" ? (
+            <input
+              type="file"
+              accept=".xlsx"
+              multiple
+              onChange={(e) => {
+                setTinyFiles(e.target.files ? Array.from(e.target.files) : []);
+                setFilas([]);
+                setHojasDetectadas([]);
+                setConfirmado(false);
+                setAnalisisError(null);
+              }}
+            />
+          ) : (
+            <input
+              type="file"
+              accept=".xlsx"
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                setFilas([]);
+                setHojasDetectadas([]);
+                setConfirmado(false);
+                setAnalisisError(null);
+              }}
+            />
+          )}
+          {plataforma === "TINY" && tinyFiles.length > 0 && (
+            <div className="muted" style={{ marginTop: 4 }}>
+              {tinyFiles.length} archivo(s): {tinyFiles.map((f) => f.name).join(", ")}
+            </div>
+          )}
         </div>
         <div className="field">
           <label>Semana desde</label>
@@ -1015,10 +1063,21 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td>
                     {(f.rebatePct * 100).toFixed(1)}%
                     {(() => {
-                      const rebate = f.applyResult?.calc?.rebate ?? f.previewResult?.calc?.rebate;
-                      return rebate != null ? (
-                        <span className="muted"> · {usd(rebate)}</span>
-                      ) : null;
+                      const calc = f.applyResult?.calc ?? f.previewResult?.calc;
+                      if (!calc || calc.rebate == null) return null;
+                      return (
+                        <span className="muted">
+                          {" "}
+                          · {usd(calc.rebate)}
+                          {f.bbjContribution !== undefined && calc.tinyBaseRebate != null && (
+                            <>
+                              {" "}
+                              (P&L crudo: {usd(calc.tinyBaseRebate)}
+                              {calc.tinyBaseRebate < 0 ? ", se disparó" : ", no se disparó"})
+                            </>
+                          )}
+                        </span>
+                      );
                     })()}
                   </td>
                   <td>

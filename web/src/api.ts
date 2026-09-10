@@ -202,6 +202,9 @@ export const api = {
     // backend aplica la memoria por jugador de forma transaccional (repo/rodeo.ts) y recién ahí
     // sale el monto real que se le suma al cierre del agente.
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    // Tiny GG (ver engine/importTinyGG.ts): su sola presencia (aunque sea 0) dispara la regla
+    // de rebate condicional en vez de la fórmula genérica.
+    tinyBbjContribution?: number;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
   // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
@@ -218,6 +221,7 @@ export const api = {
     rebatePct?: number;
     observation?: string;
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    tinyBbjContribution?: number;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,
@@ -264,10 +268,32 @@ export const api = {
     }
     return requestForm("/imports/teamback-gg/preview", form);
   },
+  // Plataforma "Tiny GG" (club "Tiny"): a diferencia de Suprema/TeamBack GG, cada super agente
+  // baja su PROPIO archivo — este endpoint recibe VARIOS archivos juntos (campo "files") y arma
+  // una sola previa agrupada. sheetClubOverrides/sheetsIgnoradas quedan indexados por NOMBRE DE
+  // ARCHIVO (no hay "hoja" acá, cada archivo entero es la unidad).
+  previsualizarImportacionTinyGG: (
+    files: File[],
+    weekEnd?: string,
+    sheetClubOverrides?: Record<string, string>,
+    sheetsIgnoradas?: string[]
+  ) => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    if (weekEnd) form.append("weekEnd", weekEnd);
+    if (sheetClubOverrides && Object.keys(sheetClubOverrides).length > 0) {
+      form.append("sheetClubOverrides", JSON.stringify(sheetClubOverrides));
+    }
+    if (sheetsIgnoradas && sheetsIgnoradas.length > 0) {
+      form.append("sheetsIgnoradas", JSON.stringify(sheetsIgnoradas));
+    }
+    return requestForm("/imports/tiny-gg/preview", form);
+  },
   // Clubes elegibles en el selector "a qué club corresponde esta hoja" del importador —
   // filtrados por plataforma, para no mezclar clubes de otras redes (ej. Fénix GG).
   clubesImportacionSuprema: () => request("/imports/suprema/clubs"),
   clubesImportacionTeamBackGG: () => request("/imports/teamback-gg/clubs"),
+  clubesImportacionTinyGG: () => request("/imports/tiny-gg/clubs"),
   // Asigna a mano un jugador que vino sin agente en el archivo (Agent Name vacío o agente no
   // reconocido) — queda guardado para siempre, así no vuelve a aparecer pendiente otra semana.
   asignarAgenteImportado: (data: { playerExternalId: string; clubId: string; agentId: string; reason?: string }) =>
