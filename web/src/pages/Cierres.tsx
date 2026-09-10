@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
@@ -8,6 +9,7 @@ export default function Cierres() {
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
   const [bancados, setBancados] = useState<any[]>([]);
+  const [adelantos, setAdelantos] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export default function Cierres() {
     refresh();
     api.agentes().then(setAgentes);
     api.clubes().then(setClubes);
+    api.adelantos().then(setAdelantos).catch(() => {});
   }, []);
 
   return (
@@ -81,8 +84,10 @@ export default function Cierres() {
         <NuevoCierre
           agentes={agentes}
           clubes={clubes}
+          adelantos={adelantos}
           onApplied={() => {
             refresh();
+            api.adelantos().then(setAdelantos).catch(() => {});
           }}
         />
       )}
@@ -210,7 +215,18 @@ function mondayOf(dateStr: string) {
   return d;
 }
 
-function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: any[]; onApplied: () => void }) {
+function NuevoCierre({
+  agentes,
+  clubes,
+  adelantos,
+  onApplied,
+}: {
+  agentes: any[];
+  clubes: any[];
+  adelantos: any[];
+  onApplied: () => void;
+}) {
+  const nav = useNavigate();
   const [agentId, setAgentId] = useState("");
   const [clubId, setClubId] = useState("");
   const [system, setSystem] = useState<"PREPAGO" | "WIN_LOSE">("WIN_LOSE");
@@ -243,6 +259,10 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
   const esBancado = agenteSeleccionado?.account_type === "BANCADO";
   const clubSeleccionado = clubes.find((c) => c.id === clubId);
   const esFichas = clubSeleccionado?.unit === "FICHAS";
+  // Aviso, no automatización: si el par agente+club tiene un adelanto de rakeback activo, se
+  // le muestra al que carga el cierre para que decida a mano si corresponde ir a Adelantos y
+  // registrar un Consumo — el cierre se calcula y paga igual, completo, sin descontar nada solo.
+  const adelantoActivo = adelantos.find((a) => a.agent_id === agentId && a.club_id === clubId);
 
   function elegirAgente(id: string) {
     setAgentId(id);
@@ -371,6 +391,20 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
           : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como movimiento al ledger."}
         {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.
       </div>
+
+      {adelantoActivo && (
+        <div className="warning" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span>
+            ⚠ {agenteSeleccionado?.name} tiene un adelanto de rakeback activo en {clubSeleccionado?.name}: pendiente{" "}
+            <strong>{usd(Number(adelantoActivo.amount) - Number(adelantoActivo.consumed))}</strong> de {usd(adelantoActivo.amount)} adelantados.
+            Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra el adelanto, hacelo a mano después en Adelantos.
+          </span>
+          <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/adelantos")}>
+            Ir a Adelantos
+          </button>
+        </div>
+      )}
+
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <div className="field">

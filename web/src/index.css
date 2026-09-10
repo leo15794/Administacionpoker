@@ -468,6 +468,15 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 9px 12px;
   border-radius: 9px;
 }
+.warning {
+  color: var(--amber);
+  font-size: 13px;
+  margin-bottom: 12px;
+  background: var(--amber-soft);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 9px 12px;
+  border-radius: 9px;
+}
 .success {
   color: var(--green);
   font-size: 13px;
