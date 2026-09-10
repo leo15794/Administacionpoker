@@ -524,6 +524,14 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // Tiny GG: cada super agente baja su propio archivo — se suben varios juntos, a diferencia de
   // "file" (SUPREMA/GG) que es un solo .xlsx con varias hojas adentro.
   const [tinyFiles, setTinyFiles] = useState<File[]>([]);
+  // Tiny GG: los números que trae el reporte de la plataforma NO están en USD (son una unidad
+  // propia de Tiny/GG, plata china en la práctica) — hay que dividirlos por la tasa de ESA
+  // semana para llegar a USD (confirmado por el usuario: reporte real 31/08-06/09/2026, tasa
+  // 31,78). La tasa cambia semana a semana, así que se pide acá, editable, nunca hardcodeada —
+  // se aplica una sola vez, al armar las filas de la previa (ver confirmarClubesYProcesar), y de
+  // ahí en más todo el resto del flujo (previsualizar/aplicar) ya trabaja en USD como cualquier
+  // otro club.
+  const [tinyRate, setTinyRate] = useState("");
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
   const [analizando, setAnalizando] = useState(false);
@@ -575,6 +583,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   async function analizar() {
     if (plataforma === "TINY") {
       if (tinyFiles.length === 0) { setAnalisisError("Elegí uno o más archivos primero."); return; }
+      if (!(Number(tinyRate) > 0)) { setAnalisisError("Cargá la tasa de esta semana (fichas por USD) antes de analizar."); return; }
     } else if (!file) {
       setAnalisisError("Elegí un archivo primero.");
       return;
@@ -641,6 +650,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           .map((c: any) => ({ clubId: c.clubId, clubName: c.clubName, items: c.sinAgente }))
       );
       setAgentesAutoCreados(r.agentesAutoCreados || []);
+      // Tiny GG: acá es donde se convierte fichas -> USD, una sola vez, dividiendo por la tasa
+      // de esta semana (ver estado tinyRate más arriba). Para cualquier otra plataforma, tasa=1
+      // y no cambia nada.
+      const tasa = plataforma === "TINY" ? Number(tinyRate) || 1 : 1;
       const nuevasFilas: FilaImport[] = [];
       for (const club of r.clubes || []) {
         for (const a of club.agentes) {
@@ -651,8 +664,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             agentId: a.agentId,
             agentName: a.agentName,
             jugadores: a.jugadores,
-            resultado: a.resultado,
-            rakeTotal: a.rakeTotal,
+            resultado: Math.round((a.resultado / tasa) * 100) / 100,
+            rakeTotal: Math.round((a.rakeTotal / tasa) * 100) / 100,
             system: a.system,
             rakebackPct: a.rakebackPct,
             rebatePct: a.rebatePct,
@@ -749,6 +762,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+            rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -800,6 +814,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           rebatePct: f.rebatePct,
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
           rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+          rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
@@ -864,7 +879,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         nunca lo trae.
         {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
         {plataforma === "TINY" &&
-          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) — el sistema toma a los sub-agentes reales de adentro de cada archivo (no al super agente) y les liquida con la misma fórmula de siempre (resultado + rake) × % rebate."}
+          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) — el sistema toma a los sub-agentes reales de adentro de cada archivo (no al super agente) y les liquida con la misma fórmula de siempre (resultado + rake) × % rebate. Los números del reporte NO están en USD: hay que cargar la tasa de esta semana para convertirlos (ver campo abajo)."}
       </div>
 
       <div className="form-grid">
@@ -910,6 +925,21 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <label>Semana hasta</label>
           <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
         </div>
+        {plataforma === "TINY" && (
+          <div className="field">
+            <label>Tasa de esta semana (fichas por USD)</label>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Ej: 31.78"
+              value={tinyRate}
+              onChange={(e) => { setTinyRate(e.target.value); setFilas([]); setConfirmado(false); }}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              El reporte de Tiny trae los números en su propia unidad, no en USD — se divide todo por esta tasa. Cambia cada semana, revisala antes de analizar.
+            </span>
+          </div>
+        )}
       </div>
       <button className="btn secondary" disabled={analizando} onClick={analizar}>
         {analizando ? "Analizando..." : "Analizar archivo"}
