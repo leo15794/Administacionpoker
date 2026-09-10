@@ -79,7 +79,9 @@ const FILAS: Fila[] = [
   { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "renacapkr", clubDb: "Fénix GG", sistema: "Prepago", cierre: -214.1025, estado: "APLICADO" },
   { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "MutiladorDoc", clubDb: "Tiny GG", sistema: "Prepago", cierre: -688.3822, estado: "APLICADO" },
   { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "Jinx Wang Chan", clubDb: "Tiny GG", sistema: "Prepago", cierre: 502.8796, estado: "APLICADO" },
-  { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "TodoRojo", clubDb: "X-Poker", sistema: "Prepago", cierre: -112.185, estado: "APLICADO" },
+  // "TodoRojo" en la planilla / "todorojo" en la base (mismo mismatch de mayúsculas ya visto
+  // antes en syncSaldosPlanilla.ts).
+  { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "todorojo", clubDb: "X-Poker", sistema: "Prepago", cierre: -112.185, estado: "APLICADO" },
   { weekStart: "2026-08-24", weekEnd: "2026-08-30", agente: "Dejodita", clubDb: "X-Poker", sistema: "Prepago", cierre: -192.852, estado: "APLICADO" },
 
   { weekStart: "2026-08-31", weekEnd: "2026-09-06", agente: "F Roesca17", clubDb: "Fénix Suprema", sistema: "Win/Lose", cierre: 0.06, estado: "APLICADO" },
