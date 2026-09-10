@@ -221,6 +221,12 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
   const [rakebackPct, setRakebackPct] = useState("70");
   const [rebatePct, setRebatePct] = useState("0");
   const [observation, setObservation] = useState("");
+  // Clubes en fichas (hoy: X-Poker — ver Configuración → Clubes, campo "Unidad"): el reporte de
+  // la plataforma viene en fichas, no en USD, y el valor de la ficha puede cambiar de una semana
+  // a otra (hoy USD 1,20 según la planilla, pero es un parámetro, no una constante) — por eso se
+  // pide acá, editable, en vez de hardcodearlo. Arranca con la tasa cargada en el club (current_rate)
+  // pero SIEMPRE se puede pisar para esta carga puntual si cambió.
+  const [valorFicha, setValorFicha] = useState("1");
 
   // La vista previa siempre viene del servidor (mismo motor, misma transacción con ROLLBACK)
   // para que nunca pueda mostrar un número distinto del que después se aplica de verdad.
@@ -235,6 +241,8 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
 
   const agenteSeleccionado = agentes.find((a) => a.id === agentId);
   const esBancado = agenteSeleccionado?.account_type === "BANCADO";
+  const clubSeleccionado = clubes.find((c) => c.id === clubId);
+  const esFichas = clubSeleccionado?.unit === "FICHAS";
 
   function elegirAgente(id: string) {
     setAgentId(id);
@@ -243,6 +251,15 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
     if (agente?.account_type === "BANCADO" && rebatePct === "0") {
       setRebatePct("50"); // default razonable: reparto 50/50 de la mesa, ajustable
     }
+  }
+
+  function elegirClub(id: string) {
+    setClubId(id);
+    invalidarPreview();
+    const club = clubes.find((c) => c.id === id);
+    // Precarga la tasa del club (ej. 1,20 para X-Poker) pero queda editable — si esta semana
+    // cambió, se pisa acá sin tener que ir a Configuración → Clubes primero.
+    if (club?.unit === "FICHAS") setValorFicha(String(club.current_rate ?? 1));
   }
 
   // Se llama en cada cambio de campo: solo invalida la CLAVE de la vista previa (deja de estar
@@ -261,17 +278,23 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
   }
 
   function armarPayload() {
+    // Clubes en fichas (X-Poker): "result"/"rakeTotal" del formulario son fichas crudas del
+    // reporte — el motor de cierre siempre espera USD, así que se convierten acá, una sola vez,
+    // con la tasa que se cargó arriba (editable por si cambió esta semana). Para cualquier otro
+    // club, tasa = 1 y no cambia nada.
+    const tasa = esFichas ? Number(valorFicha) || 1 : 1;
     return {
       agentId,
       clubId,
       weekStart,
       weekEnd,
       system,
-      result: Number(result) || 0,
-      rakeTotal: Number(rakeTotal) || 0,
+      result: (Number(result) || 0) * tasa,
+      rakeTotal: (Number(rakeTotal) || 0) * tasa,
       rakebackPct: (Number(rakebackPct) || 0) / 100,
       rebatePct: (Number(rebatePct) || 0) / 100,
       observation: observation.trim() || undefined,
+      rateSnapshot: esFichas ? tasa : undefined,
     };
   }
 
@@ -359,7 +382,7 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
           </div>
           <div className="field">
             <label>Club</label>
-            <select value={clubId} onChange={(e) => { setClubId(e.target.value); invalidarPreview(); }}>
+            <select value={clubId} onChange={(e) => elegirClub(e.target.value)}>
               <option value="">Elegir...</option>
               {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -393,13 +416,22 @@ function NuevoCierre({ agentes, clubes, onApplied }: { agentes: any[]; clubes: a
             <input value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); invalidarPreview(); }} type="date" />
           </div>
           <div className="field">
-            <label>{esBancado ? "Resultado en la mesa (bancado ganó/perdió, USD)" : "Resultado (win/lose, USD)"}</label>
+            <label>{esBancado ? "Resultado en la mesa (bancado ganó/perdió, USD)" : esFichas ? "Resultado (win/lose, fichas)" : "Resultado (win/lose, USD)"}</label>
             <input value={result} onChange={(e) => { setResult(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
           </div>
           <div className="field">
-            <label>Rake total (USD)</label>
+            <label>{esFichas ? "Rake total (fichas)" : "Rake total (USD)"}</label>
             <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
           </div>
+          {esFichas && (
+            <div className="field">
+              <label>Valor de la ficha (USD)</label>
+              <input value={valorFicha} onChange={(e) => { setValorFicha(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+              <span className="muted" style={{ fontSize: 12 }}>
+                {usd((Number(result) || 0) * (Number(valorFicha) || 0))} win/lose · {usd((Number(rakeTotal) || 0) * (Number(valorFicha) || 0))} rake
+              </span>
+            </div>
+          )}
           <div className="field">
             <label>{esBancado ? "% Rakeback (100% para el bancado)" : "% Rakeback"}</label>
             <input value={rakebackPct} onChange={(e) => { setRakebackPct(e.target.value); invalidarPreview(); }} type="number" step="0.01" />

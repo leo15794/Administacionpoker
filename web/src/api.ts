@@ -202,6 +202,11 @@ export const api = {
     // backend aplica la memoria por jugador de forma transaccional (repo/rodeo.ts) y recién ahí
     // sale el monto real que se le suma al cierre del agente.
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    // Clubes en fichas (hoy: X-Poker): valor de la ficha en USD usado para convertir result/
+    // rakeTotal ANTES de mandarlos (esos dos campos siempre viajan ya en USD) — se guarda solo
+    // como registro histórico de qué tasa estaba vigente ese cierre, el motor no la usa para
+    // calcular nada (ver engine/cierre.ts, ClosingInput.rateSnapshot).
+    rateSnapshot?: number;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
   // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
@@ -218,6 +223,7 @@ export const api = {
     rebatePct?: number;
     observation?: string;
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    rateSnapshot?: number;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,
