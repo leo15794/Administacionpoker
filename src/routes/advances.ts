@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listAdvancesConAgente, listAdvanceMovements, ajustarAdelanto, corregirAdelanto } from "../repo/advances.js";
+import { listAdvancesConAgente, listAdvanceMovements, ajustarAdelanto, corregirAdelanto, eliminarAdelanto } from "../repo/advances.js";
 
 export const advancesRouter = Router();
 
@@ -54,7 +54,7 @@ const correccionSchema = z.object({
   amount: z.number().min(0).optional(),
   consumed: z.number().min(0).optional(),
   clubOrigenId: z.string().nullable().optional(),
-  notes: z.string().min(1, "Contá el motivo de la corrección."),
+  notes: z.string().optional(),
 });
 
 advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -70,6 +70,17 @@ advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: Authed
       createdBy: req.user?.email,
     });
     res.status(200).json(advance);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real — a diferencia de "Baja" (que lo desactiva y deja el historial), esto lo saca
+// del todo junto con sus movimientos. Para cuando el adelanto nunca debió cargarse.
+advancesRouter.delete("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarAdelanto(req.params.id);
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

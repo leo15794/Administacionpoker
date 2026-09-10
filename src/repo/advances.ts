@@ -22,7 +22,7 @@ export interface CorreccionAdelantoInput {
   amount?: number; // nuevo monto TOTAL (no delta) — omitir para no tocarlo
   consumed?: number; // nuevo consumido TOTAL (no delta) — omitir para no tocarlo
   clubOrigenId?: string | null; // omitir (undefined) para no tocarlo; null para borrarlo
-  notes: string; // obligatorio: motivo de la corrección, queda en el historial
+  notes?: string; // motivo de la corrección (opcional), queda en el historial si se cargó
   createdBy?: string;
 }
 
@@ -154,10 +154,32 @@ export async function corregirAdelanto(input: CorreccionAdelantoInput) {
       [nuevoAmount, nuevoConsumed, nuevoClubOrigenId, actual.id]
     );
     const advance = r.rows[0];
-    const detalle = `Corrección: monto ${actual.amount} → ${nuevoAmount}, consumido ${actual.consumed} → ${nuevoConsumed}. Motivo: ${input.notes}`;
+    let detalle = `Corrección: monto ${actual.amount} → ${nuevoAmount}, consumido ${actual.consumed} → ${nuevoConsumed}.`;
+    if (input.notes?.trim()) detalle += ` Motivo: ${input.notes.trim()}`;
     await registrarMovimiento(client, advance, "CORRECCION", 0, detalle, input.createdBy);
     await client.query("COMMIT");
     return advance;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Borrado real de un adelanto y todo su historial de movimientos — a diferencia de "Baja"
+ * (BAJA, que lo desactiva pero deja todo el rastro), esto lo saca del todo. Pensado para
+ * limpiar un adelanto que nunca debió cargarse (ej. duplicado, o cargado al agente equivocado).
+ */
+export async function eliminarAdelanto(advanceId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM rakeback_advance_movements WHERE advance_id = $1`, [advanceId]);
+    const r = await client.query(`DELETE FROM rakeback_advances WHERE id = $1 RETURNING id`, [advanceId]);
+    if (r.rowCount === 0) throw new Error("No se encontró ese adelanto.");
+    await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

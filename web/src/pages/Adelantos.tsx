@@ -29,11 +29,27 @@ export default function Adelantos() {
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState<{ agentId?: string } | null>(null);
   const [showCorreccion, setShowCorreccion] = useState<any | null>(null);
+  const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
     api.adelantos().then(setAdelantos).catch((e) => setError(e.message));
     api.adelantosHistorial().then(setHistorial).catch(() => {});
+  }
+
+  // Borrado real (no "Baja"): saca el adelanto y todo su historial de movimientos, para cuando
+  // nunca debió cargarse (duplicado, agente equivocado, etc.).
+  async function eliminarAdelanto(a: any) {
+    if (!confirm(`¿Eliminar el adelanto de ${a.agent_name}? Esto borra también su historial de movimientos — no se puede deshacer.`)) return;
+    setBorrando(a.id);
+    try {
+      await api.eliminarAdelanto(a.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el adelanto.");
+    } finally {
+      setBorrando(null);
+    }
   }
 
   useEffect(() => {
@@ -112,6 +128,15 @@ export default function Adelantos() {
                     </button>
                     <button className="btn secondary small" onClick={() => setShowCorreccion(a)} title="Arreglar un error de carga (monto, consumido o club mal tipeados) sin que quede como un movimiento de negocio">
                       Corregir
+                    </button>
+                    <button
+                      className="btn secondary small"
+                      disabled={borrando === a.id}
+                      onClick={() => eliminarAdelanto(a)}
+                      title="Borrado real — no queda en el historial. Para un adelanto que nunca debió cargarse."
+                      style={{ color: "var(--danger, #e5484d)" }}
+                    >
+                      {borrando === a.id ? "..." : "Eliminar"}
                     </button>
                   </td>
                 </tr>
@@ -287,9 +312,9 @@ function AjusteForm({
 
 // Corrección de un error de carga (monto, consumido o club de origen mal tipeados). A propósito
 // separada de AjusteForm/ajustarAdelanto: acá se pisa el valor directo (no se suma/resta), y
-// SIEMPRE hay que explicar el motivo — queda igual en el historial (tipo CORRECCION) para no
-// perder trazabilidad, pero no se mezcla con los movimientos reales de negocio (AUMENTO,
-// REDUCCION, etc.).
+// El motivo es opcional — queda igual en el historial (tipo CORRECCION) para no perder
+// trazabilidad, pero no se mezcla con los movimientos reales de negocio (AUMENTO, REDUCCION,
+// etc.).
 function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: any[]; onDone: () => void }) {
   const [amount, setAmount] = useState(String(adelanto.amount));
   const [consumed, setConsumed] = useState(String(adelanto.consumed));
@@ -301,7 +326,6 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!notes.trim()) return setMsg({ ok: false, text: "Contá el motivo de la corrección (queda en el historial)." });
     const nuevoAmount = Number(amount);
     const nuevoConsumed = Number(consumed);
     if (!(nuevoAmount >= 0) || !(nuevoConsumed >= 0)) return setMsg({ ok: false, text: "Los montos no pueden ser negativos." });
@@ -313,7 +337,7 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
         amount: nuevoAmount,
         consumed: nuevoConsumed,
         clubOrigenId: clubOrigenId || null,
-        notes: notes.trim(),
+        notes: notes.trim() || undefined,
       });
       onDone();
     } catch (err: any) {
@@ -346,7 +370,7 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
         </div>
       </div>
       <div className="field">
-        <label>Motivo de la corrección</label>
+        <label>Motivo de la corrección (opcional)</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej: se cargó 2.600 pero era 1.600, error de tipeo." />
       </div>
 

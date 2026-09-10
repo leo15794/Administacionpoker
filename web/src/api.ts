@@ -141,8 +141,9 @@ export const api = {
   adelantosHistorial: (agentId?: string) => request(`/advances/historial${agentId ? `?agentId=${agentId}` : ""}`),
   ajustarAdelanto: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string; clubOrigenId?: string | null }) =>
     request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),
-  corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes: string }) =>
+  corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
+  eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;
