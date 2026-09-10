@@ -9,21 +9,26 @@ const TIPO_LABEL: Record<string, string> = {
   REDUCCION: "Reducción",
   CONSUMO: "Consumo",
   BAJA: "Baja",
+  CORRECCION: "Corrección",
 };
 
 // Adelantos de rakeback: plata (fichas o USDT) adelantada a un agente A CUENTA de un rakeback
 // que todavía no se generó — separado del saldo operativo, igual que Garantías (BIT-034). Es
 // por AGENTE, no por agente+club (corregido 11/09/2026: un agente sigue generando rake en
 // varios clubes a la vez, el adelanto se compensa contra el rakeback que sea, sin importar de
-// qué club salga — no tiene sentido "atarlo" a un solo club). Es el concepto "Adelanto de
-// rakeback" que la planilla suma en Agentes nos deben y que hasta ahora no teníamos cargado en
-// ningún lado del sistema.
+// qué club salga — no tiene sentido "atarlo" a un solo club). "Club de origen" (12/09/2026) es
+// aparte: un dato puramente informativo de en qué club se originó el adelanto (para rastrearlo
+// contra la planilla), que NUNCA limita contra qué club se puede compensar después. Es el
+// concepto "Adelanto de rakeback" que la planilla suma en Agentes nos deben y que hasta ahora
+// no teníamos cargado en ningún lado del sistema.
 export default function Adelantos() {
   const [adelantos, setAdelantos] = useState<any[] | null>(null);
   const [agentes, setAgentes] = useState<any[]>([]);
+  const [clubes, setClubes] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState<{ agentId?: string } | null>(null);
+  const [showCorreccion, setShowCorreccion] = useState<any | null>(null);
 
   function refresh() {
     setError("");
@@ -34,6 +39,7 @@ export default function Adelantos() {
   useEffect(() => {
     refresh();
     api.agentes().then(setAgentes);
+    api.clubes().then(setClubes);
   }, []);
 
   if (error) {
@@ -88,20 +94,24 @@ export default function Adelantos() {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {adelantos.map((a) => (
                 <tr key={a.id}>
                   <td>{a.agent_name}</td>
+                  <td className="muted">{a.club_origen_name || "—"}</td>
                   <td>{usd(a.amount)}</td>
                   <td>{usd(a.consumed)}</td>
                   <td><span className="badge neutral">{usd(Number(a.amount) - Number(a.consumed))}</span></td>
                   <td className="muted" style={{ fontSize: 12 }} title={a.notes || undefined}>{a.notes || "—"}</td>
                   <td className="muted">{dateShort(a.updated_at)}</td>
-                  <td>
+                  <td className="row-actions">
                     <button className="btn secondary small" onClick={() => setShowAjuste({ agentId: a.agent_id })}>
                       Ajustar
+                    </button>
+                    <button className="btn secondary small" onClick={() => setShowCorreccion(a)} title="Arreglar un error de carga (monto, consumido o club mal tipeados) sin que quede como un movimiento de negocio">
+                      Corregir
                     </button>
                   </td>
                 </tr>
@@ -128,7 +138,7 @@ export default function Adelantos() {
                   <td>{dateShort(m.occurred_at)}</td>
                   <td>{m.agent_name}</td>
                   <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
-                  <td>{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
+                  <td>{m.type === "BAJA" || m.type === "CORRECCION" ? "—" : usd(m.amount)}</td>
                   <td>{usd(m.resulting_amount)}</td>
                   <td>{usd(m.resulting_consumed)}</td>
                   <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
@@ -143,10 +153,24 @@ export default function Adelantos() {
         <Modal title="Ajustar adelanto" onClose={() => setShowAjuste(null)}>
           <AjusteForm
             agentes={agentes}
+            clubes={clubes}
             adelantos={adelantos}
             preselectAgentId={showAjuste.agentId}
             onDone={() => {
               setShowAjuste(null);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
+
+      {showCorreccion && (
+        <Modal title={`Corregir adelanto — ${showCorreccion.agent_name}`} onClose={() => setShowCorreccion(null)}>
+          <CorreccionForm
+            adelanto={showCorreccion}
+            clubes={clubes}
+            onDone={() => {
+              setShowCorreccion(null);
               refresh();
             }}
           />
@@ -158,11 +182,13 @@ export default function Adelantos() {
 
 function AjusteForm({
   agentes,
+  clubes,
   adelantos,
   preselectAgentId,
   onDone,
 }: {
   agentes: any[];
+  clubes: any[];
   adelantos: any[];
   preselectAgentId?: string;
   onDone: () => void;
@@ -170,6 +196,7 @@ function AjusteForm({
   const [agentId, setAgentId] = useState(preselectAgentId ?? "");
   const [type, setType] = useState<"ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA">(preselectAgentId ? "AUMENTO" : "ALTA");
   const [amount, setAmount] = useState("");
+  const [clubOrigenId, setClubOrigenId] = useState("");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -184,7 +211,13 @@ function AjusteForm({
     if (type !== "BAJA" && monto <= 0) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
     setLoading(true);
     try {
-      await api.ajustarAdelanto({ agentId, type, amount: monto, notes: notes.trim() || undefined });
+      await api.ajustarAdelanto({
+        agentId,
+        type,
+        amount: monto,
+        notes: notes.trim() || undefined,
+        clubOrigenId: type === "ALTA" ? clubOrigenId || null : undefined,
+      });
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo aplicar el ajuste." });
@@ -228,6 +261,18 @@ function AjusteForm({
             <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
           </div>
         )}
+        {type === "ALTA" && (
+          <div className="field">
+            <label>Club de origen (opcional)</label>
+            <select value={clubOrigenId} onChange={(e) => setClubOrigenId(e.target.value)}>
+              <option value="">Sin especificar</option>
+              {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Solo de referencia (para rastrearlo contra la planilla) — el adelanto se compensa igual contra el rakeback de cualquier club.
+            </span>
+          </div>
+        )}
       </div>
       <div className="field">
         <label>Notas (opcional)</label>
@@ -236,6 +281,77 @@ function AjusteForm({
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Aplicar"}</button>
+    </form>
+  );
+}
+
+// Corrección de un error de carga (monto, consumido o club de origen mal tipeados). A propósito
+// separada de AjusteForm/ajustarAdelanto: acá se pisa el valor directo (no se suma/resta), y
+// SIEMPRE hay que explicar el motivo — queda igual en el historial (tipo CORRECCION) para no
+// perder trazabilidad, pero no se mezcla con los movimientos reales de negocio (AUMENTO,
+// REDUCCION, etc.).
+function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: any[]; onDone: () => void }) {
+  const [amount, setAmount] = useState(String(adelanto.amount));
+  const [consumed, setConsumed] = useState(String(adelanto.consumed));
+  const [clubOrigenId, setClubOrigenId] = useState(adelanto.club_origen_id ?? "");
+  const [notes, setNotes] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!notes.trim()) return setMsg({ ok: false, text: "Contá el motivo de la corrección (queda en el historial)." });
+    const nuevoAmount = Number(amount);
+    const nuevoConsumed = Number(consumed);
+    if (!(nuevoAmount >= 0) || !(nuevoConsumed >= 0)) return setMsg({ ok: false, text: "Los montos no pueden ser negativos." });
+    if (nuevoConsumed > nuevoAmount) return setMsg({ ok: false, text: "El consumido no puede ser mayor al monto total." });
+    setLoading(true);
+    try {
+      await api.corregirAdelanto({
+        advanceId: adelanto.id,
+        amount: nuevoAmount,
+        consumed: nuevoConsumed,
+        clubOrigenId: clubOrigenId || null,
+        notes: notes.trim(),
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo corregir el adelanto." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Esto pisa el monto/consumido/club directamente — usalo solo para arreglar un error de carga, no para un movimiento real (para eso está "Ajustar").
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Monto total (USD)</label>
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
+        </div>
+        <div className="field">
+          <label>Consumido (USD)</label>
+          <input value={consumed} onChange={(e) => setConsumed(e.target.value)} type="number" step="0.01" min="0" />
+        </div>
+        <div className="field">
+          <label>Club de origen</label>
+          <select value={clubOrigenId} onChange={(e) => setClubOrigenId(e.target.value)}>
+            <option value="">Sin especificar</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="field">
+        <label>Motivo de la corrección</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej: se cargó 2.600 pero era 1.600, error de tipeo." />
+      </div>
+
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Corregir"}</button>
     </form>
   );
 }

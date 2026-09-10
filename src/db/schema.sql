@@ -308,25 +308,33 @@ CREATE TABLE IF NOT EXISTS guarantee_movements (
 -- del saldo operativo por la misma razón que guarantees (BIT-034): mientras no se compense
 -- contra un cierre real, no es plata que el agente "ganó".
 CREATE TABLE IF NOT EXISTS rakeback_advances (
-  id         TEXT PRIMARY KEY,
-  agent_id   TEXT NOT NULL REFERENCES agents(id),
-  amount     NUMERIC(18,4) NOT NULL DEFAULT 0,
-  consumed   NUMERIC(18,4) NOT NULL DEFAULT 0,
-  active     BOOLEAN NOT NULL DEFAULT TRUE,
-  notes      TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id             TEXT PRIMARY KEY,
+  agent_id       TEXT NOT NULL REFERENCES agents(id),
+  amount         NUMERIC(18,4) NOT NULL DEFAULT 0,
+  consumed       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  active         BOOLEAN NOT NULL DEFAULT TRUE,
+  club_origen_id TEXT REFERENCES clubs(id),
+  notes          TEXT,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- Si la tabla ya existía de una versión anterior (por agente+club), se saca la columna acá —
 -- CREATE TABLE IF NOT EXISTS de arriba no la toca en una base que ya la tenía creada.
 ALTER TABLE rakeback_advances DROP COLUMN IF EXISTS club_id;
+-- club_origen_id (12/09/2026): a pedido del usuario, referencia informativa de en qué club se
+-- originó el adelanto (para poder rastrearlo contra la planilla) — a diferencia del club_id que
+-- se sacó arriba, este NUNCA se usa para limitar contra qué rake se compensa (eso sigue siendo
+-- por agente, en cualquier club). Puede quedar en null si no se sabe/no aplica.
+ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS club_origen_id TEXT REFERENCES clubs(id);
 
--- Historial de cada alta/aumento/reducción/consumo/baja de adelanto, mismo criterio que
--- guarantee_movements.
+-- Historial de cada alta/aumento/reducción/consumo/baja/corrección de adelanto, mismo criterio
+-- que guarantee_movements. CORRECCION (12/09/2026): para arreglar un error de carga (monto mal
+-- tipeado, etc.) dejando explícito en el historial que no fue un evento real de negocio, a
+-- diferencia de AUMENTO/REDUCCION.
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),
   advance_id          TEXT NOT NULL REFERENCES rakeback_advances(id),
-  type                TEXT NOT NULL CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA')),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA','CORRECCION')),
   amount              NUMERIC(18,4) NOT NULL,
   resulting_amount    NUMERIC(18,4) NOT NULL,
   resulting_consumed  NUMERIC(18,4) NOT NULL,
@@ -335,6 +343,11 @@ CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE rakeback_advance_movements DROP COLUMN IF EXISTS club_id;
+-- Si la tabla ya existía de una corrida anterior de la migración, el CHECK de arriba (creado sin
+-- 'CORRECCION') no se actualiza solo — se recrea acá para permitirlo también en bases viejas.
+ALTER TABLE rakeback_advance_movements DROP CONSTRAINT IF EXISTS rakeback_advance_movements_type_check;
+ALTER TABLE rakeback_advance_movements ADD CONSTRAINT rakeback_advance_movements_type_check
+  CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA','CORRECCION'));
 
 -- Cierre semanal por agente+club. Guarda snapshot de las reglas usadas.
 CREATE TABLE IF NOT EXISTS weekly_closings (

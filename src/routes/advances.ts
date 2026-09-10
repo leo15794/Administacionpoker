@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listAdvancesConAgente, listAdvanceMovements, ajustarAdelanto } from "../repo/advances.js";
+import { listAdvancesConAgente, listAdvanceMovements, ajustarAdelanto, corregirAdelanto } from "../repo/advances.js";
 
 export const advancesRouter = Router();
 
@@ -21,6 +21,7 @@ const ajusteSchema = z.object({
   type: z.enum(["ALTA", "AUMENTO", "REDUCCION", "CONSUMO", "BAJA"]),
   amount: z.number(),
   notes: z.string().optional(),
+  clubOrigenId: z.string().nullable().optional(),
 });
 
 advancesRouter.post("/ajuste", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -36,9 +37,39 @@ advancesRouter.post("/ajuste", requireAuth, requireAdmin, async (req: AuthedRequ
       type: parsed.data.type,
       amount,
       notes: parsed.data.notes,
+      clubOrigenId: parsed.data.clubOrigenId,
       createdBy: req.user?.email,
     });
     res.status(201).json(advance);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Corrección de un error de carga (monto/consumido/club de origen mal tipeados) — distinto de
+// /ajuste: no representa un evento real de negocio, solo arregla el dato. Igual queda en el
+// historial (tipo CORRECCION) para no perder trazabilidad.
+const correccionSchema = z.object({
+  advanceId: z.string(),
+  amount: z.number().min(0).optional(),
+  consumed: z.number().min(0).optional(),
+  clubOrigenId: z.string().nullable().optional(),
+  notes: z.string().min(1, "Contá el motivo de la corrección."),
+});
+
+advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = correccionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const advance = await corregirAdelanto({
+      advanceId: parsed.data.advanceId,
+      amount: parsed.data.amount,
+      consumed: parsed.data.consumed,
+      clubOrigenId: parsed.data.clubOrigenId,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(advance);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
