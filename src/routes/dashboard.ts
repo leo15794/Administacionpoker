@@ -60,6 +60,27 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
      LIMIT 1`
   );
 
+  // "Resultado por club" (equivalente a la tabla del mismo nombre en DASHBOARD_EJECUTIVO de la
+  // planilla) — misma semana "limpia" de arriba, pero desglosado por club en vez de sumado en
+  // un total único. A diferencia de la planilla (que arma esto pegando valores a mano en
+  // RESUMEN_GENERAL — encontramos que ese pegado se olvidó del todo del club TINY y dejó una
+  // fila de X-Poker vieja/inconsistente), esto sale en vivo de nuestros propios cierres, así
+  // que nunca le puede faltar un club ni quedar con un número de otra semana.
+  const resultadoPorClub = gananciaSemana.rows[0]
+    ? await pool.query(
+        `SELECT c.id as club_id, c.name as club_name,
+                COALESCE(SUM(wc.rake_total), 0) as rake_total,
+                COALESCE(SUM(wc.rake_total - wc.rakeback - wc.rebate), 0) as ganancia,
+                COALESCE(SUM(wc.final_closing), 0) as cierre_agentes
+         FROM weekly_closings wc
+         JOIN clubs c ON c.id = wc.club_id
+         WHERE wc.status <> 'REVERTIDO' AND wc.week_start = $1 AND wc.week_end = $2
+         GROUP BY c.id, c.name
+         ORDER BY c.name`,
+        [gananciaSemana.rows[0].week_start, gananciaSemana.rows[0].week_end]
+      )
+    : { rows: [] as any[] };
+
   // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
   // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
   const wallet = await pool.query(
@@ -88,6 +109,7 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       gananciaSemanaFin: gananciaSemana.rows[0]?.week_end ?? null,
     },
     porClub: porClub.rows,
+    resultadoPorClub: resultadoPorClub.rows,
     balances,
   });
 });

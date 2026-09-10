@@ -147,6 +147,37 @@ export const api = {
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
+
+  // Cuentas de socios ("Cuentas y memorias" de la planilla: Saldo Uriel, Compensación Juan,
+  // etc.) — plata de los socios, no de agentes. Control total: editar y eliminar directo.
+  cuentasSocios: () => request("/partner-accounts"),
+  cuentasSociosAgregados: () => request("/partner-accounts/agregados"),
+  crearCuentaSocio: (data: { name: string; description?: string }) =>
+    request("/partner-accounts", { method: "POST", body: JSON.stringify(data) }),
+  editarCuentaSocio: (id: string, data: { name?: string; description?: string }) =>
+    request(`/partner-accounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  eliminarCuentaSocio: (id: string) => request(`/partner-accounts/${id}`, { method: "DELETE" }),
+  movimientosCuentasSocios: (accountId?: string) =>
+    request(`/partner-accounts/movimientos${accountId ? `?accountId=${accountId}` : ""}`),
+  crearMovimientoCuentaSocio: (data: {
+    accountId: string;
+    category: "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
+    concept: string;
+    amount: number;
+    entryDate?: string;
+    notes?: string;
+  }) => request("/partner-accounts/movimientos", { method: "POST", body: JSON.stringify(data) }),
+  editarMovimientoCuentaSocio: (
+    id: string,
+    data: Partial<{
+      category: "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
+      concept: string;
+      amount: number;
+      entryDate: string;
+      notes: string;
+    }>
+  ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;

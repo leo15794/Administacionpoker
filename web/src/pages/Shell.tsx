@@ -55,6 +55,12 @@ const icon = {
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  cuentasSocios: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" />
+      <path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1" /><path d="M16 14a4 4 0 0 1 4 4v2" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -135,6 +141,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
               <NavLink to="/dashboard/tesoreria" className="nav-link" title="Tesorería">{icon.tesoreria} {!collapsed && "Tesorería"}</NavLink>
               <NavLink to="/dashboard/garantias" className="nav-link" title="Garantías">{icon.garantias} {!collapsed && "Garantías"}</NavLink>
               <NavLink to="/dashboard/adelantos" className="nav-link" title="Adelantos de rakeback">{icon.adelantos} {!collapsed && "Adelantos"}</NavLink>
+              <NavLink to="/dashboard/cuentas-socios" className="nav-link" title="Cuentas de socios">{icon.cuentasSocios} {!collapsed && "Cuentas de socios"}</NavLink>
               <NavLink to="/dashboard/usuarios" className="nav-link" title="Usuarios y permisos">{icon.usuarios} {!collapsed && "Usuarios y permisos"}</NavLink>
             </>
           ) : (

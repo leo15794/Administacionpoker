@@ -430,3 +430,38 @@ DROP INDEX IF EXISTS ledger_movements_idempotency_key_key;
 CREATE UNIQUE INDEX IF NOT EXISTS ledger_movements_idempotency_key_active_key
   ON ledger_movements(idempotency_key)
   WHERE status <> 'REVERTIDO';
+
+-- ============ CUENTAS DE SOCIOS (equivalente a "Cuentas y memorias" de la planilla) ============
+-- A DIFERENCIA de todo lo anterior (ledger de agentes/tesorería, inmutable por diseño), esto es
+-- plata de los SOCIOS de la empresa (compensación de Juan, comisión por referido de Uriel,
+-- retiros, gastos operativos, etc.) — nada que ver con agentes ni clubes. Pedido explícito del
+-- usuario: acá SÍ hay que poder editar y eliminar todo directo, sin la ceremonia de
+-- revertir/corregir del resto del sistema — "control 100%".
+-- Una "cuenta" es simplemente un nombre (Uriel, Juan, Fede, o cualquier otra que se cree después)
+-- con un saldo que es la suma de sus movimientos — igual que una cuenta corriente.
+CREATE TABLE IF NOT EXISTS partner_accounts (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT,
+  active      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Movimientos de una cuenta: el monto es libre (+/-), quien carga decide el signo — no hay
+-- ALTA/AUMENTO/REDUCCION como en garantías/adelantos, para que editar sea directo (poner el
+-- monto correcto y listo). `category` es solo una etiqueta para poder agregar por tipo en los
+-- KPIs de "Ganancia neta histórica" (RETIRO y GASTO se restan, AJUSTE se suma) sin tener que
+-- adivinar el signo que cada uno le puso al monto.
+CREATE TABLE IF NOT EXISTS partner_account_entries (
+  id         TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES partner_accounts(id) ON DELETE CASCADE,
+  category   TEXT NOT NULL CHECK (category IN ('COMPENSACION','COMISION','PAGO','RETIRO','GASTO','AJUSTE','OTRO')),
+  concept    TEXT NOT NULL,
+  amount     NUMERIC(18,4) NOT NULL,
+  entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  notes      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS partner_account_entries_account_idx ON partner_account_entries(account_id);

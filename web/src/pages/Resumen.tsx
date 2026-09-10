@@ -183,6 +183,52 @@ export default function Resumen() {
         </table>
       </div>
 
+      {data.resultadoPorClub && data.resultadoPorClub.length > 0 && (
+        <div className="panel">
+          <div className="topbar" style={{ marginBottom: 14 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Resultado por club</h3>
+              {data.kpis.gananciaSemanaInicio && (
+                <div className="muted" style={{ marginTop: 2 }}>
+                  Semana {dateShort(data.kpis.gananciaSemanaInicio)} al {dateShort(data.kpis.gananciaSemanaFin)} — misma semana que "Ganancia/Rake de la semana"
+                </div>
+              )}
+            </div>
+            <button
+              className="btn secondary small"
+              onClick={() =>
+                exportCsv(
+                  "resultado_por_club.csv",
+                  data.resultadoPorClub.map((c: any) => ({
+                    club: c.club_name,
+                    rake: c.rake_total,
+                    ganancia_nuestra: c.ganancia,
+                    cierre_agentes: c.cierre_agentes,
+                  }))
+                )
+              }
+            >
+              Exportar CSV
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Club</th><th>Rake</th><th>Ganancia nuestra</th><th>Cierre agentes</th></tr>
+            </thead>
+            <tbody>
+              {data.resultadoPorClub.map((c: any) => (
+                <tr key={c.club_id}>
+                  <td>{c.club_name}</td>
+                  <td>{usd(c.rake_total)}</td>
+                  <td>{usd(c.ganancia)}</td>
+                  <td><span className={`badge ${Number(c.cierre_agentes) >= 0 ? "pos" : "neg"}`}>{usd(c.cierre_agentes)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="panel" ref={tablaSaldosRef}>
         <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
           <div>
