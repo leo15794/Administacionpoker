@@ -34,11 +34,6 @@ export interface AplicarCierreInput {
    * la misma transacción (ver repo/rodeo.ts). Vacío/undefined para cualquier cierre que no
    * venga de una importación Suprema — no afecta en nada al resto de los agentes/clubes. */
   rodeoJugadores?: RodeoJugadorEntrada[];
-  /** Solo Tiny GG (ver engine/importTinyGG.ts): fee de contribución a Bad Beat Jackpot de todo
-   * el super agente esta semana. Su sola PRESENCIA (aunque sea 0) es lo que dispara la regla
-   * especial TINY_GG_REBATE_CONDICIONAL en vez de la fórmula genérica de rebate — mismo
-   * principio que rodeoJugadores para Suprema. undefined para cualquier otro club/plataforma. */
-  tinyBbjContribution?: number;
   rateSnapshot?: number;
   /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
@@ -99,13 +94,10 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
        LIMIT 1`,
       [input.agentId, input.clubId, input.weekEnd]
     );
-    // Tiny GG: la presencia de tinyBbjContribution (aunque sea 0) prevalece sobre cualquier
-    // regla configurable — un agente de Tiny no tiene por qué tener nunca una fila en
-    // rule_versions para esto, es una regla del CLUB/plataforma, no negociada por agente.
-    const specialRule: SpecialRule | null =
-      input.tinyBbjContribution !== undefined
-        ? { key: "TINY_GG_REBATE_CONDICIONAL", bbjContribution: input.tinyBbjContribution }
-        : resolverSpecialRule(ruleRow.rows[0] ?? null);
+    // Tiny GG ya NO manda ninguna regla especial (ver engine/cierre.ts, auditoría 10/09/2026):
+    // usa la misma fórmula genérica que GG/TeamBack GG/Fénix, resuelta acá abajo como cualquier
+    // otro club sin regla configurable vigente.
+    const specialRule: SpecialRule | null = resolverSpecialRule(ruleRow.rows[0] ?? null);
 
     // "Rodeo" (solo SupremaPoker): procesa la memoria del AGENTE (agregada, no por jugador —
     // ver engine/rodeo.ts) DENTRO de esta misma transacción — si más abajo se hace ROLLBACK

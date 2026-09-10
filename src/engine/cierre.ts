@@ -27,13 +27,19 @@ export interface ClosingInput {
 export type SpecialRule =
   | { key: "MANZUR_75_RAKE"; pctRake: number } // resultado + pctRake * rakeTotal, ignora rakebackPct genérico
   | { key: "CAJERO_CREDITO"; deudaAnterior: number } // cargas a crédito: cobros van primero contra deuda
-  // Club "Tiny" (plataforma GG Poker, reporte "Super Agent Report" propio, un archivo por
-  // super agente — ver engine/importTinyGG.ts): el rebate NO es un % fijo siempre aplicado
-  // como TeamBack GG — solo se dispara cuando el "P&L crudo antes de rake y sin jackpot" del
-  // super agente completo da negativo esa semana. bbjContribution = fee de contribución a Bad
-  // Beat Jackpot de TODOS sus jugadores esa semana (viene del importador, 0 si no hubo).
-  // Fórmula confirmada por el usuario y verificada exacta contra un reporte real (semana
-  // 31/08-06/09/2026, super agente dangerfish96): ver cierre completo abajo.
+  // Club "Tiny GG" (plataforma GG Poker, reporte "Super Agent Report", un archivo .xlsx por
+  // super agente — ver engine/importTinyGG.ts): ¡OJO! esta regla NO se usa para liquidar a
+  // ningún agente real. Se armó y verificó originalmente contra el número "當週交收金額 /
+  // Weekly Settlement" que trae la hoja 1 del reporte (49.150,60 para dangerfish96, semana
+  // 31/08-06/09/2026) creyendo que era el pago real — pero ese número es un TOTAL DE CONTROL
+  // que la planilla "automatizacion clubes" usa solo para cruzar contra el reporte oficial de
+  // la plataforma, agregado a nivel del super agente completo. Los agentes que DE VERDAD cobran
+  // son los sub-agentes de la hoja "2.代理數據統計" (MutiladorDoc, etc.), cada uno con la misma
+  // fórmula GENÉRICA de siempre (resultado + rake) × rebatePct, sin condición — confirmado
+  // contra RESUMEN_TINY y CONFIG_CUENTAS_POR_CLUB_V3 de la planilla. El importador
+  // (repo/importsTinyGG.ts) desde la auditoría de 10/09/2026 ya NO manda bbjContribution y por
+  // lo tanto esta rama nunca se dispara — se deja el código sin borrar por si en el futuro se
+  // arma una pantalla de reconciliación aparte (no una liquidación) contra ese total de control.
   | { key: "TINY_GG_REBATE_CONDICIONAL"; bbjContribution: number };
 
 export interface ClosingResult {

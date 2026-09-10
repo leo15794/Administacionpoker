@@ -1,8 +1,12 @@
-// Importación de cierres — plataforma "Tiny GG" (club "Tiny" en el catálogo). A diferencia de
-// TeamBack GG (un archivo, varias hojas, una por club/super agente), acá CADA super agente baja
-// su propio archivo .xlsx — esta corrida recibe VARIOS archivos y los agrupa en la MISMA previa
-// por club (ver analizarImportacionTinyGG). Reusa sin cambios la resolución de agente
-// (override/external_id/nombre/auto-creación) exportada desde imports.ts.
+// Importación de cierres — plataforma "Tiny GG" (club "Tiny GG" en el catálogo). A diferencia
+// de TeamBack GG (un archivo, varias hojas, una por club/super agente), acá CADA super agente
+// baja su propio archivo .xlsx — esta corrida recibe VARIOS archivos. Desde la auditoría de
+// 10/09/2026 contra la planilla "automatizacion clubes": el super agente de cada archivo es
+// solo METADATA del reporte (queda como sheetName de referencia) — quien de verdad cobra es
+// cada SUB-AGENTE de la hoja "2.代理數據統計"/"3.玩家數據" (ver engine/importTinyGG.ts), y se
+// resuelve fila por fila (jugador -> agente) exactamente igual que TeamBack GG/Suprema, reusando
+// sin cambios resolvePlayerAgent de imports.ts. Los sub-agentes se agrupan en la MISMA entrada
+// de club aunque vengan de archivos (super agentes) distintos.
 import { pool } from "../db/pool.js";
 import { parseTinyGGFile } from "../engine/importTinyGG.js";
 import { resolverConfigVigente } from "./catalog.js";
@@ -11,6 +15,7 @@ import {
   upsertPlayer,
   type ResolucionAgente,
   type AgenteAgregado,
+  type JugadorSinAgente,
   type ClubImportado,
   type ResultadoImportacion,
   type AgenteAutoCreado,
@@ -27,7 +32,7 @@ export async function listClubesImportacionTinyGG() {
  * forma de resultado que analizarImportacionSuprema/TeamBackGG (ResultadoImportacion), para
  * reusar la misma UI de "Cierres a aplicar". `sheetClubOverrides`/`sheetsIgnoradas` funcionan
  * igual que en los otros importadores, pero la clave es el NOMBRE DEL ARCHIVO en vez del nombre
- * de hoja (acá "una hoja lógica" = "un archivo entero").
+ * de hoja (acá "una hoja lógica" = "un archivo entero" para efectos de elegir club/ignorar).
  */
 export async function analizarImportacionTinyGG(
   archivos: { fileName: string; buffer: Buffer }[],
@@ -37,13 +42,16 @@ export async function analizarImportacionTinyGG(
 ): Promise<ResultadoImportacion> {
   const hojasNoReconocidas: { sheetName: string; motivo: string; resolvable?: boolean }[] = [];
   const ignoradasSet = new Set(sheetsIgnoradas ?? []);
-  // Vive para TODA la corrida: si dos archivos traen un super agente nuevo con el mismo nombre
-  // (no debería pasar, cada archivo es de uno distinto) no se crea dos veces.
+  // Vive para TODA la corrida: si el mismo sub-agente aparece en más de un archivo (no debería
+  // pasar, pero no cuesta nada ser defensivo) no se auto-crea dos veces.
   const autoCreadosCache = new Map<string, ResolucionAgente>();
   // A diferencia de GG/Suprema (una hoja = un club = una entrada de ClubImportado), acá varios
   // ARCHIVOS pueden apuntar al mismo club (varios super agentes de Tiny) — se agrupan en la
-  // MISMA entrada para que la previa se vea junta, no un bloque separado por archivo.
+  // MISMA entrada para que la previa se vea junta, no un bloque separado por archivo. El
+  // acumulador de agentes también vive para toda la corrida (no por archivo), así un sub-agente
+  // que por algún motivo aparezca en dos archivos queda sumado en una sola fila.
   const clubesMap = new Map<string, ClubImportado>();
+  const agentesMapPorClub = new Map<string, Map<string, AgenteAgregado>>();
 
   for (const archivo of archivos) {
     if (ignoradasSet.has(archivo.fileName)) continue;
@@ -76,57 +84,83 @@ export async function analizarImportacionTinyGG(
       continue;
     }
 
-    const syntheticRow = {
-      playerId: p.superAgentIdRaw ?? p.superAgentNicknameRaw ?? archivo.fileName,
-      playerName: p.superAgentNicknameRaw ?? p.superAgentIdRaw ?? archivo.fileName,
-      agentIdRaw: p.superAgentIdRaw,
-      agentNameRaw: p.superAgentNicknameRaw,
-      resultado: p.resultado,
-      rake: p.rake,
-      rodeo: 0,
-      role: "Super Agent",
-      subAgentIdRaw: null,
-      subAgentNameRaw: null,
-    };
-    const resolucion = await resolvePlayerAgent(club.id, syntheticRow, autoCreadosCache);
-    await upsertPlayer(club.id, syntheticRow, resolucion.agentId);
-
     let entry = clubesMap.get(club.id);
     if (!entry) {
       entry = { clubId: club.id, clubName: club.name, sheetName: archivo.fileName, agentes: [], sinAgente: [] };
       clubesMap.set(club.id, entry);
     }
+    let agentesMap = agentesMapPorClub.get(club.id);
+    if (!agentesMap) {
+      agentesMap = new Map<string, AgenteAgregado>();
+      agentesMapPorClub.set(club.id, agentesMap);
+    }
 
-    if (!resolucion.agentId) {
-      entry.sinAgente.push({
-        playerId: syntheticRow.playerId,
-        playerName: syntheticRow.playerName,
-        agentIdRaw: syntheticRow.agentIdRaw,
-        agentNameRaw: syntheticRow.agentNameRaw,
-        resultado: p.resultado,
-        rake: p.rake,
-        motivo: resolucion.motivo ?? `El archivo "${archivo.fileName}" no trae un nombre de super agente identificable.`,
+    if (p.rows.length === 0) {
+      hojasNoReconocidas.push({
+        sheetName: archivo.fileName,
+        motivo: `El archivo "${archivo.fileName}" (super agente ${p.superAgentNicknameRaw ?? p.superAgentIdRaw ?? "?"}) no trajo filas de jugador en la hoja "3.玩家數據".`,
       });
       continue;
     }
 
-    const cfg = await resolverConfigVigente(resolucion.agentId, club.id, atDate);
-    entry.agentes.push({
-      agentId: resolucion.agentId,
-      agentName: resolucion.agentName!,
-      jugadores: 1,
-      resultado: p.resultado,
-      rakeTotal: p.rake,
-      rodeoJugadores: [],
-      system: cfg.system,
-      rakebackPct: cfg.rakebackPct,
-      rebatePct: cfg.rebatePct,
-      configSource: cfg.source,
-      bbjContribution: p.bbjContribution,
-    } satisfies AgenteAgregado);
+    for (const row of p.rows) {
+      const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
+      await upsertPlayer(club.id, row, resolucion.agentId);
+
+      if (!resolucion.agentId) {
+        const sinAgente: JugadorSinAgente = {
+          playerId: row.playerId,
+          playerName: row.playerName,
+          agentIdRaw: row.agentIdRaw,
+          agentNameRaw: row.agentNameRaw,
+          resultado: row.resultado,
+          rake: row.rake,
+          motivo: resolucion.motivo ?? "Sin agente resuelto.",
+        };
+        entry.sinAgente.push(sinAgente);
+        continue;
+      }
+
+      const acc = agentesMap.get(resolucion.agentId);
+      if (acc) {
+        acc.jugadores += 1;
+        acc.resultado += row.resultado;
+        acc.rakeTotal += row.rake;
+      } else {
+        agentesMap.set(resolucion.agentId, {
+          agentId: resolucion.agentId,
+          agentName: resolucion.agentName!,
+          jugadores: 1,
+          resultado: row.resultado,
+          rakeTotal: row.rake,
+          rodeoJugadores: [], // no existe "Rodeo" en esta plataforma
+          system: "WIN_LOSE",
+          rakebackPct: 0,
+          rebatePct: 0,
+          configSource: "default_club",
+        });
+      }
+    }
   }
 
-  for (const entry of clubesMap.values()) entry.agentes.sort((a, b) => a.agentName.localeCompare(b.agentName));
+  for (const [clubId, entry] of clubesMap) {
+    const agentesMap = agentesMapPorClub.get(clubId)!;
+    const agentes: AgenteAgregado[] = [];
+    for (const acc of agentesMap.values()) {
+      const cfg = await resolverConfigVigente(acc.agentId, clubId, atDate);
+      agentes.push({
+        ...acc,
+        resultado: Math.round(acc.resultado * 100) / 100,
+        rakeTotal: Math.round(acc.rakeTotal * 100) / 100,
+        system: cfg.system,
+        rakebackPct: cfg.rakebackPct,
+        rebatePct: cfg.rebatePct,
+        configSource: cfg.source,
+      });
+    }
+    agentes.sort((a, b) => a.agentName.localeCompare(b.agentName));
+    entry.agentes = agentes;
+  }
 
   const agentesAutoCreados: AgenteAutoCreado[] = [...autoCreadosCache.values()].map((r) => ({
     agentId: r.agentId!,

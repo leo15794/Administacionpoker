@@ -58,10 +58,6 @@ const closingSchema = z.object({
   rodeoJugadores: z
     .array(z.object({ playerExternalId: z.string().min(1), baseRodeo: z.number() }))
     .optional(),
-  // Tiny GG (ver engine/importTinyGG.ts): su sola presencia (aunque sea 0) dispara la regla
-  // especial de rebate condicional en vez de la fórmula genérica — mismo principio que
-  // rodeoJugadores para Suprema.
-  tinyBbjContribution: z.number().optional(),
   rateSnapshot: z.number().optional(),
   observation: z.string().optional(),
 });

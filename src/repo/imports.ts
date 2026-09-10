@@ -32,11 +32,6 @@ export interface AgenteAgregado {
   rakebackPct: number;
   rebatePct: number;
   configSource: "deal" | "default_club";
-  /** Solo lo setea el importador de Tiny GG (repo/importsTinyGG.ts): fee de contribución a Bad
-   * Beat Jackpot de este super agente esta semana — lo necesita el motor de cierre para el
-   * "gate" del rebate condicional (ver engine/cierre.ts, specialRule TINY_GG_REBATE_CONDICIONAL).
-   * undefined para cualquier importación que no sea Tiny GG. */
-  bbjContribution?: number;
 }
 
 export interface JugadorSinAgente {

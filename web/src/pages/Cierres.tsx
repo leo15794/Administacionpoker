@@ -473,10 +473,6 @@ type FilaImport = {
   // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
   // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
-  // Tiny GG (ver engine/importTinyGG.ts): fee de Bad Beat Jackpot de este super agente esta
-  // semana — undefined para cualquier otra plataforma. Su sola presencia dispara la regla de
-  // rebate condicional en el backend (ver repo/closings.ts).
-  bbjContribution?: number;
   included: boolean;
   previewLoading: boolean;
   previewResult: any | null;
@@ -630,7 +626,6 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
-            bbjContribution: a.bbjContribution,
             included: true,
             previewLoading: false,
             previewResult: null,
@@ -722,7 +717,6 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
-            tinyBbjContribution: f.bbjContribution,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -774,7 +768,6 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           rebatePct: f.rebatePct,
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
           rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
-          tinyBbjContribution: f.bbjContribution,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
@@ -839,7 +832,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         nunca lo trae.
         {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
         {plataforma === "TINY" &&
-          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) y el rebate NO es un % fijo: solo se dispara cuando el P&L crudo antes de rake y sin jackpot da negativo esa semana — si no se dispara, el rebate queda en $0."}
+          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) — el sistema toma a los sub-agentes reales de adentro de cada archivo (no al super agente) y les liquida con la misma fórmula de siempre (resultado + rake) × % rebate."}
       </div>
 
       <div className="form-grid">
@@ -1069,13 +1062,6 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                         <span className="muted">
                           {" "}
                           · {usd(calc.rebate)}
-                          {f.bbjContribution !== undefined && calc.tinyBaseRebate != null && (
-                            <>
-                              {" "}
-                              (P&L crudo: {usd(calc.tinyBaseRebate)}
-                              {calc.tinyBaseRebate < 0 ? ", se disparó" : ", no se disparó"})
-                            </>
-                          )}
                         </span>
                       );
                     })()}

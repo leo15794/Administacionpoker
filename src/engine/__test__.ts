@@ -201,9 +201,15 @@ assertClose(rodeoAgenteMixto.baseRodeoTotal, 600, "Rodeo (agente mixto): rodeo b
 assertClose(rodeoAgenteMixto.payable, 600, "Rodeo (agente mixto): payable = 600 (no 1000, se netea entre jugadores del mismo agente)");
 assertClose(rodeoAgenteMixto.agentShare, 90, "Rodeo (agente mixto): 15% de 600 = 90 Agente");
 
-// Tiny GG (regla condicional): caso real "Tini poker.xlsx", super agente dangerfish96, semana
-// 31/08 al 06/09/2026 — rakebackPct 0.70 coincide con el "Service Fee Rate" del reporte,
-// rebatePct cargado como -0.10 (convención GG en la base) para probar que el signo no importa.
+// Tiny GG (regla condicional TINY_GG_REBATE_CONDICIONAL) — auditoría 10/09/2026: esta regla NO
+// se usa para liquidar a ningún agente real (ver comentario en engine/cierre.ts). Estos dos
+// tests solo documentan que la rama del motor sigue funcionando igual que antes, por si algún
+// día se arma una pantalla de reconciliación aparte contra el total de control del reporte. El
+// cierre REAL de Tiny GG hoy usa la fórmula genérica de más abajo (ver test "Tiny GG — cierre
+// real por sub-agente").
+// Caso real "Tini poker.xlsx", super agente dangerfish96, semana 31/08 al 06/09/2026 —
+// rakebackPct 0.70 coincide con el "Service Fee Rate" del reporte, rebatePct cargado como -0.10
+// (convención GG en la base) para probar que el signo no importa.
 // baseRebate = 22827.17 + 37604.90 + 8878.48 = 69310.55 >= 0 -> rebate = 0 (no se dispara).
 // rakeback = 37604.90 * 0.70 = 26323.43. finalClosing = 22827.17 + 26323.43 + 0 = 49150.60
 // (coincide exacto con "當週交收金額 (Weekly Settlement)" del reporte real).
@@ -238,5 +244,31 @@ const tinyGGConDisparo = calcularCierre({
 });
 // baseRebate = -50000 + 10000 + 2000 = -38000 -> rebate = 38000 * 0.10 = 3800 (suma).
 assertClose(tinyGGConDisparo.rebate, 3800, "Tiny GG (con disparo): rebate suma 10% del P&L crudo negativo");
+
+// Tiny GG — cierre real por sub-agente (fórmula genérica, sin specialRule): caso real "Tini
+// poker.xlsx", sub-agente MutiladorDoc bajo el super agente dangerfish96, misma semana. Estos
+// números salen de sumar sus 2 jugadores en la hoja "3.玩家數據" (24470.59 + -9227.81 =
+// 15242.78 de resultado; 12241.64 + 5812.91 = 18054.55 de rake) y coinciden al centavo con la
+// fila de MutiladorDoc en la hoja "2.代理數據統計" — confirma que el importador nuevo agrupa
+// bien por sub-agente (ver engine/importTinyGG.ts, repo/importsTinyGG.ts).
+const tinyGGSubAgenteReal = calcularCierre({
+  agentId: "MutiladorDoc",
+  clubId: "tiny-gg",
+  system: "WIN_LOSE",
+  result: 15242.78,
+  rakeTotal: 18054.55,
+  rakebackPct: 0.7,
+  rebatePct: -0.1,
+  rateSnapshot: 1,
+});
+if (tinyGGSubAgenteReal.ruleApplied !== null) {
+  console.error(`❌ Tiny GG (sub-agente real): esperaba ruleApplied null, obtuve ${tinyGGSubAgenteReal.ruleApplied}`);
+  process.exitCode = 1;
+} else {
+  console.log("✅ Tiny GG (sub-agente real): no usa ninguna regla especial, fórmula genérica");
+}
+assertClose(tinyGGSubAgenteReal.rebate, -3329.733, "Tiny GG (sub-agente real): rebate = (resultado+rake) × -10%");
+assertClose(tinyGGSubAgenteReal.rakeback, 12638.185, "Tiny GG (sub-agente real): rakeback = rake × 70%");
+assertClose(tinyGGSubAgenteReal.finalClosing, 24551.232, "Tiny GG (sub-agente real): cierre final = resultado + rakeback + rebate");
 
 console.log("\nTest de motor de cierre finalizado.");
