@@ -54,6 +54,9 @@ export const api = {
   supervisores: () => request("/dashboard/supervisores"),
   bancados: () => request("/dashboard/bancados"),
   miCuenta: () => request("/portal/mi-cuenta"),
+  // Mismo shape que miCuenta pero para que un admin vea el estado de cuenta de CUALQUIER agente
+  // (saldo por club, garantía, cierres y movimientos) en vez de solo el historial crudo.
+  cuentaDeAgente: (agentId: string) => request(`/catalog/agents/${agentId}/cuenta`),
 
   // Drill-down de movimientos y tesorería
   movimientos: (params: { agentId?: string; clubId?: string } = {}) => {

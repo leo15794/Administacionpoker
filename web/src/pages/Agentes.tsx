@@ -3,7 +3,7 @@ import { api, type AccountType } from "../api";
 import { usd, pct } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
-import MovimientosHistorial from "../components/MovimientosHistorial";
+import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
@@ -216,7 +216,7 @@ export default function Agentes() {
                         <ActionsMenu
                           items={[
                             { label: "Reglas especiales", onClick: () => setReglasAgent({ id: a.id, name: a.name }) },
-                            { label: "Historial", onClick: () => setHistorialAgent({ id: a.id, name: a.name }) },
+                            { label: "Estado de cuenta", onClick: () => setHistorialAgent({ id: a.id, name: a.name }) },
                             { label: "Editar", onClick: () => setEditando(a) },
                             ...(a.active === false
                               ? [
@@ -286,8 +286,8 @@ export default function Agentes() {
       )}
 
       {historialAgent && (
-        <Modal title={`Historial — ${historialAgent.name}`} onClose={() => setHistorialAgent(null)} wide>
-          <MovimientosHistorial agentId={historialAgent.id} />
+        <Modal title={`Estado de cuenta — ${historialAgent.name}`} onClose={() => setHistorialAgent(null)} wide>
+          <EstadoCuentaAgente agentId={historialAgent.id} />
         </Modal>
       )}
 

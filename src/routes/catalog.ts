@@ -22,6 +22,8 @@ import {
   eliminarAgenteDefinitivo,
   listAllDeals,
 } from "../repo/catalog.js";
+import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
+import { pool } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
 // Catálogo cerrado de reglas especiales que el motor de cierre sabe interpretar (ver
@@ -149,6 +151,32 @@ catalogRouter.post("/deals", requireAuth, requireAdmin, async (req, res) => {
 
 catalogRouter.get("/agents/:id/deals", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listDealsForAgent(req.params.id));
+});
+
+// Estado de cuenta completo de un agente (mismo shape que /portal/mi-cuenta, pero para que un
+// admin lo vea de CUALQUIER agente): saldo por club, garantía vigente, últimos cierres y
+// movimientos recientes, todo en una sola vista en vez de solo la lista cruda de movimientos.
+catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, res) => {
+  const agentId = req.params.id;
+  const agent = await pool.query(`SELECT id, name, default_system, supervisor FROM agents WHERE id = $1`, [agentId]);
+  if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
+
+  const balances = await listBalancesByAgent(agentId);
+  const movimientos = await listMovementsByAgent(agentId, 100);
+  const guarantee = await pool.query(`SELECT * FROM guarantees WHERE agent_id = $1 AND active = true`, [agentId]);
+  const closings = await pool.query(
+    `SELECT wc.*, c.name as club_name FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+     WHERE agent_id = $1 ORDER BY week_start DESC LIMIT 20`,
+    [agentId]
+  );
+
+  res.json({
+    agente: agent.rows[0],
+    saldos: balances,
+    movimientos,
+    garantia: guarantee.rows[0] ?? null,
+    cierres: closings.rows,
+  });
 });
 
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
