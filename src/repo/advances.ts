@@ -1,6 +1,6 @@
-// Adelantos de rakeback: mismo patrón que repo/guarantees.ts, pero por agente+club (no solo
-// agente) porque así los carga la planilla — un mismo agente puede tener un adelanto vigente
-// en un club y no en otro.
+// Adelantos de rakeback: mismo patrón que repo/guarantees.ts, por AGENTE (no agente+club —
+// corregido 11/09/2026: un agente sigue generando rake en varios clubes a la vez, el adelanto
+// se compensa contra el rakeback que sea, sin importar de qué club salga).
 import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
 
@@ -8,7 +8,6 @@ export type AdvanceMovementType = "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" |
 
 export interface AjusteAdelantoInput {
   agentId: string;
-  clubId: string;
   type: AdvanceMovementType;
   amount: number; // siempre positivo — el signo lo decide el "type"
   notes?: string;
@@ -17,20 +16,19 @@ export interface AjusteAdelantoInput {
 
 export async function listAdvancesConAgente() {
   const r = await pool.query(
-    `SELECT ra.*, a.name as agent_name, c.name as club_name
+    `SELECT ra.*, a.name as agent_name
      FROM rakeback_advances ra
      JOIN agents a ON a.id = ra.agent_id
-     JOIN clubs c ON c.id = ra.club_id
      WHERE ra.active = true
-     ORDER BY a.name, c.name`
+     ORDER BY a.name`
   );
   return r.rows;
 }
 
-export async function getActiveAdvance(agentId: string, clubId: string) {
+export async function getActiveAdvance(agentId: string) {
   const r = await pool.query(
-    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND club_id = $2 AND active = true ORDER BY updated_at DESC LIMIT 1`,
-    [agentId, clubId]
+    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY updated_at DESC LIMIT 1`,
+    [agentId]
   );
   return r.rows[0] ?? null;
 }
@@ -39,10 +37,9 @@ export async function listAdvanceMovements(agentId?: string) {
   const where = agentId ? `WHERE m.agent_id = $1` : "";
   const values = agentId ? [agentId] : [];
   const r = await pool.query(
-    `SELECT m.*, a.name as agent_name, c.name as club_name
+    `SELECT m.*, a.name as agent_name
      FROM rakeback_advance_movements m
      JOIN agents a ON a.id = m.agent_id
-     JOIN clubs c ON c.id = m.club_id
      ${where}
      ORDER BY m.occurred_at DESC
      LIMIT 500`,
@@ -54,7 +51,7 @@ export async function listAdvanceMovements(agentId?: string) {
 /**
  * Aplica un alta/aumento/reducción/consumo/baja de adelanto de forma atómica, dejando
  * registrado el movimiento en rakeback_advance_movements. Nunca inserta una segunda fila
- * activa para el mismo agente+club — reutiliza la existente (UPDATE in-place) salvo en ALTA
+ * activa para el mismo agente — reutiliza la existente (UPDATE in-place) salvo en ALTA
  * cuando no hay ninguna (mismo criterio que ajustarGarantia, para evitar doble conteo).
  */
 export async function ajustarAdelanto(input: AjusteAdelantoInput) {
@@ -64,17 +61,17 @@ export async function ajustarAdelanto(input: AjusteAdelantoInput) {
     await client.query("BEGIN");
 
     const existing = await client.query(
-      `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND club_id = $2 AND active = true ORDER BY updated_at DESC LIMIT 1 FOR UPDATE`,
-      [input.agentId, input.clubId]
+      `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY updated_at DESC LIMIT 1 FOR UPDATE`,
+      [input.agentId]
     );
     const actual = existing.rows[0] ?? null;
 
     if (input.type === "ALTA") {
-      if (actual) throw new Error("Ese agente+club ya tiene un adelanto activo — usá 'Aumentar' en vez de 'Alta', o dalo de baja primero.");
+      if (actual) throw new Error("Ese agente ya tiene un adelanto activo — usá 'Aumentar' en vez de 'Alta', o dalo de baja primero.");
       const id = newId("adv");
       const r = await client.query(
-        `INSERT INTO rakeback_advances (id, agent_id, club_id, amount, consumed, active, notes) VALUES ($1,$2,$3,$4,0,true,$5) RETURNING *`,
-        [id, input.agentId, input.clubId, input.amount, input.notes ?? null]
+        `INSERT INTO rakeback_advances (id, agent_id, amount, consumed, active, notes) VALUES ($1,$2,$3,0,true,$4) RETURNING *`,
+        [id, input.agentId, input.amount, input.notes ?? null]
       );
       const advance = r.rows[0];
       await registrarMovimiento(client, advance, "ALTA", input.amount, input.notes, input.createdBy);
@@ -82,7 +79,7 @@ export async function ajustarAdelanto(input: AjusteAdelantoInput) {
       return advance;
     }
 
-    if (!actual) throw new Error("Ese agente+club no tiene un adelanto activo todavía — usá 'Alta' primero.");
+    if (!actual) throw new Error("Ese agente no tiene un adelanto activo todavía — usá 'Alta' primero.");
 
     let nuevoAmount = Number(actual.amount);
     let nuevoConsumed = Number(actual.consumed);
@@ -127,12 +124,11 @@ async function registrarMovimiento(
   createdBy: string | undefined
 ) {
   await client.query(
-    `INSERT INTO rakeback_advance_movements (id, agent_id, club_id, advance_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    `INSERT INTO rakeback_advance_movements (id, agent_id, advance_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       newId("advmov"),
       advance.agent_id,
-      advance.club_id,
       advance.id,
       type,
       amount,

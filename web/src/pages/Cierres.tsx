@@ -259,10 +259,11 @@ function NuevoCierre({
   const esBancado = agenteSeleccionado?.account_type === "BANCADO";
   const clubSeleccionado = clubes.find((c) => c.id === clubId);
   const esFichas = clubSeleccionado?.unit === "FICHAS";
-  // Aviso, no automatización: si el par agente+club tiene un adelanto de rakeback activo, se
-  // le muestra al que carga el cierre para que decida a mano si corresponde ir a Adelantos y
+  // Aviso, no automatización: si el AGENTE (no el par agente+club — un agente sigue generando
+  // rake en varios clubes a la vez, ver repo/advances.ts) tiene un adelanto de rakeback activo,
+  // se le muestra al que carga el cierre para que decida a mano si corresponde ir a Adelantos y
   // registrar un Consumo — el cierre se calcula y paga igual, completo, sin descontar nada solo.
-  const adelantoActivo = adelantos.find((a) => a.agent_id === agentId && a.club_id === clubId);
+  const adelantoActivo = adelantos.find((a) => a.agent_id === agentId);
 
   function elegirAgente(id: string) {
     setAgentId(id);
@@ -395,7 +396,7 @@ function NuevoCierre({
       {adelantoActivo && (
         <div className="warning" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>
-            ⚠ {agenteSeleccionado?.name} tiene un adelanto de rakeback activo en {clubSeleccionado?.name}: pendiente{" "}
+            ⚠ {agenteSeleccionado?.name} tiene un adelanto de rakeback activo (en cualquier club): pendiente{" "}
             <strong>{usd(Number(adelantoActivo.amount) - Number(adelantoActivo.consumed))}</strong> de {usd(adelantoActivo.amount)} adelantados.
             Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra el adelanto, hacelo a mano después en Adelantos.
           </span>

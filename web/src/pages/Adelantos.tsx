@@ -12,17 +12,18 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 // Adelantos de rakeback: plata (fichas o USDT) adelantada a un agente A CUENTA de un rakeback
-// que todavía no se generó — separado del saldo operativo, igual que Garantías (BIT-034), pero
-// por agente+club (un mismo agente puede tener un adelanto vigente en un club puntual). Es el
-// concepto "Adelanto de rakeback" que la planilla suma en Agentes nos deben y que hasta ahora
-// no teníamos cargado en ningún lado del sistema.
+// que todavía no se generó — separado del saldo operativo, igual que Garantías (BIT-034). Es
+// por AGENTE, no por agente+club (corregido 11/09/2026: un agente sigue generando rake en
+// varios clubes a la vez, el adelanto se compensa contra el rakeback que sea, sin importar de
+// qué club salga — no tiene sentido "atarlo" a un solo club). Es el concepto "Adelanto de
+// rakeback" que la planilla suma en Agentes nos deben y que hasta ahora no teníamos cargado en
+// ningún lado del sistema.
 export default function Adelantos() {
   const [adelantos, setAdelantos] = useState<any[] | null>(null);
   const [agentes, setAgentes] = useState<any[]>([]);
-  const [clubes, setClubes] = useState<any[]>([]);
   const [historial, setHistorial] = useState<any[] | null>(null);
   const [error, setError] = useState("");
-  const [showAjuste, setShowAjuste] = useState<{ agentId?: string; clubId?: string } | null>(null);
+  const [showAjuste, setShowAjuste] = useState<{ agentId?: string } | null>(null);
 
   function refresh() {
     setError("");
@@ -33,7 +34,6 @@ export default function Adelantos() {
   useEffect(() => {
     refresh();
     api.agentes().then(setAgentes);
-    api.clubes().then(setClubes);
   }, []);
 
   if (error) {
@@ -57,7 +57,7 @@ export default function Adelantos() {
       <div className="topbar">
         <div>
           <h2>Adelantos de rakeback</h2>
-          <div className="muted">Separados del saldo operativo, igual que Garantías — pero por agente+club. Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</div>
+          <div className="muted">Por agente (no por club) — un agente sigue generando rake en varios clubes a la vez, el adelanto se compensa contra cualquiera. Separado del saldo operativo. Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</div>
         </div>
         <button className="btn" onClick={() => setShowAjuste({})}>+ Nuevo / ajustar adelanto</button>
       </div>
@@ -76,7 +76,7 @@ export default function Adelantos() {
           <div className="value">{usd(totalPendiente)}</div>
         </div>
         <div className="kpi-card">
-          <div className="label">Pares agente+club con adelanto activo</div>
+          <div className="label">Agentes con adelanto activo</div>
           <div className="value">{adelantos.length}</div>
         </div>
       </div>
@@ -88,20 +88,19 @@ export default function Adelantos() {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Club</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {adelantos.map((a) => (
                 <tr key={a.id}>
                   <td>{a.agent_name}</td>
-                  <td>{a.club_name}</td>
                   <td>{usd(a.amount)}</td>
                   <td>{usd(a.consumed)}</td>
                   <td><span className="badge neutral">{usd(Number(a.amount) - Number(a.consumed))}</span></td>
                   <td className="muted" style={{ fontSize: 12 }} title={a.notes || undefined}>{a.notes || "—"}</td>
                   <td className="muted">{dateShort(a.updated_at)}</td>
                   <td>
-                    <button className="btn secondary small" onClick={() => setShowAjuste({ agentId: a.agent_id, clubId: a.club_id })}>
+                    <button className="btn secondary small" onClick={() => setShowAjuste({ agentId: a.agent_id })}>
                       Ajustar
                     </button>
                   </td>
@@ -121,14 +120,13 @@ export default function Adelantos() {
         ) : (
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Monto</th><th>Adelanto resultante</th><th>Consumido resultante</th><th>Notas</th></tr>
+              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th>Monto</th><th>Adelanto resultante</th><th>Consumido resultante</th><th>Notas</th></tr>
             </thead>
             <tbody>
               {historial.map((m) => (
                 <tr key={m.id}>
                   <td>{dateShort(m.occurred_at)}</td>
                   <td>{m.agent_name}</td>
-                  <td>{m.club_name}</td>
                   <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
                   <td>{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
                   <td>{usd(m.resulting_amount)}</td>
@@ -145,9 +143,8 @@ export default function Adelantos() {
         <Modal title="Ajustar adelanto" onClose={() => setShowAjuste(null)}>
           <AjusteForm
             agentes={agentes}
-            clubes={clubes}
             adelantos={adelantos}
-            preselect={showAjuste}
+            preselectAgentId={showAjuste.agentId}
             onDone={() => {
               setShowAjuste(null);
               refresh();
@@ -161,43 +158,33 @@ export default function Adelantos() {
 
 function AjusteForm({
   agentes,
-  clubes,
   adelantos,
-  preselect,
+  preselectAgentId,
   onDone,
 }: {
   agentes: any[];
-  clubes: any[];
   adelantos: any[];
-  preselect: { agentId?: string; clubId?: string };
+  preselectAgentId?: string;
   onDone: () => void;
 }) {
-  const [agentId, setAgentId] = useState(preselect.agentId ?? "");
-  const [clubId, setClubId] = useState(preselect.clubId ?? "");
-  const tienePreseleccion = !!(preselect.agentId && preselect.clubId);
-  const tieneAdelantoActivo = adelantos.some((a) => a.agent_id === agentId && a.club_id === clubId);
-  const [type, setType] = useState<"ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA">(tienePreseleccion ? "AUMENTO" : "ALTA");
+  const [agentId, setAgentId] = useState(preselectAgentId ?? "");
+  const [type, setType] = useState<"ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA">(preselectAgentId ? "AUMENTO" : "ALTA");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function actualizarPar(nextAgentId: string, nextClubId: string) {
-    setAgentId(nextAgentId);
-    setClubId(nextClubId);
-    const yaTiene = adelantos.some((a) => a.agent_id === nextAgentId && a.club_id === nextClubId);
-    setType(yaTiene ? "AUMENTO" : "ALTA");
-  }
+  const tieneAdelantoActivo = adelantos.some((a) => a.agent_id === agentId);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!agentId || !clubId) return setMsg({ ok: false, text: "Elegí agente y club." });
+    if (!agentId) return setMsg({ ok: false, text: "Elegí un agente." });
     const monto = Number(amount) || 0;
     if (type !== "BAJA" && monto <= 0) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
     setLoading(true);
     try {
-      await api.ajustarAdelanto({ agentId, clubId, type, amount: monto, notes: notes.trim() || undefined });
+      await api.ajustarAdelanto({ agentId, type, amount: monto, notes: notes.trim() || undefined });
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo aplicar el ajuste." });
@@ -213,22 +200,16 @@ function AjusteForm({
           <label>Agente</label>
           <select
             value={agentId}
-            onChange={(e) => actualizarPar(e.target.value, clubId)}
-            disabled={tienePreseleccion}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setAgentId(nextId);
+              const yaTiene = adelantos.some((a) => a.agent_id === nextId);
+              setType(yaTiene ? "AUMENTO" : "ALTA");
+            }}
+            disabled={!!preselectAgentId}
           >
             <option value="">Elegir...</option>
             {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label>Club</label>
-          <select
-            value={clubId}
-            onChange={(e) => actualizarPar(agentId, e.target.value)}
-            disabled={tienePreseleccion}
-          >
-            <option value="">Elegir...</option>
-            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="field">

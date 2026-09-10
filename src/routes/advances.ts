@@ -18,7 +18,6 @@ advancesRouter.get("/historial", requireAuth, requireAdmin, async (req, res) => 
 
 const ajusteSchema = z.object({
   agentId: z.string(),
-  clubId: z.string(),
   type: z.enum(["ALTA", "AUMENTO", "REDUCCION", "CONSUMO", "BAJA"]),
   amount: z.number(),
   notes: z.string().optional(),
@@ -34,7 +33,6 @@ advancesRouter.post("/ajuste", requireAuth, requireAdmin, async (req: AuthedRequ
   try {
     const advance = await ajustarAdelanto({
       agentId: parsed.data.agentId,
-      clubId: parsed.data.clubId,
       type: parsed.data.type,
       amount,
       notes: parsed.data.notes,
