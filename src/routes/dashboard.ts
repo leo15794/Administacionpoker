@@ -38,6 +38,28 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
      FROM rakeback_advances WHERE active = true`
   );
 
+  // Ganancia / rake de la última semana con cierre REAL cargado (no de los cierres
+  // "RECONSTRUIDO_SIN_DESGLOSE" — esos tienen rake_total/rakeback en 0 porque no son datos
+  // reales, así que si se los dejara entrar acá la ganancia mostrada sería falsa). Ganancia =
+  // lo que efectivamente nos quedó del rake, después de devolver rakeback y rebate a los
+  // agentes — equivalente a "GANANCIA SEMANAL" de la planilla, pero calculado en vivo desde
+  // nuestros propios cierres en vez de una celda pegada a mano.
+  const gananciaSemana = await pool.query(
+    `SELECT wc.week_start, wc.week_end,
+            COALESCE(SUM(wc.rake_total), 0) as rake_total,
+            COALESCE(SUM(wc.rake_total - wc.rakeback - wc.rebate), 0) as ganancia
+     FROM weekly_closings wc
+     WHERE wc.status <> 'REVERTIDO'
+       AND NOT EXISTS (
+         SELECT 1 FROM weekly_closings wc2
+         WHERE wc2.week_start = wc.week_start AND wc2.status <> 'REVERTIDO'
+           AND wc2.rule_applied = 'RECONSTRUIDO_SIN_DESGLOSE'
+       )
+     GROUP BY wc.week_start, wc.week_end
+     ORDER BY wc.week_end DESC
+     LIMIT 1`
+  );
+
   // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
   // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
   const wallet = await pool.query(
@@ -60,6 +82,10 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       adelantosPendientes: Number(adelantos.rows[0].pendiente),
       adelantosCantidad: adelantos.rows[0].cantidad,
       saldoWallet: Number(wallet.rows[0].neto),
+      gananciaSemana: gananciaSemana.rows[0] ? Number(gananciaSemana.rows[0].ganancia) : null,
+      rakeSemana: gananciaSemana.rows[0] ? Number(gananciaSemana.rows[0].rake_total) : null,
+      gananciaSemanaInicio: gananciaSemana.rows[0]?.week_start ?? null,
+      gananciaSemanaFin: gananciaSemana.rows[0]?.week_end ?? null,
     },
     porClub: porClub.rows,
     balances,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { usd } from "../fmt";
+import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import MovimientosHistorial from "../components/MovimientosHistorial";
@@ -64,6 +64,30 @@ export default function Resumen() {
 
       <div className="kpi-grid">
         <div
+          className="kpi-card row-click"
+          onClick={() => nav("/dashboard/cierres")}
+          title={
+            data.kpis.gananciaSemanaInicio
+              ? `Semana ${dateShort(data.kpis.gananciaSemanaInicio)} - ${dateShort(data.kpis.gananciaSemanaFin)} — rake menos rakeback y rebate devueltos a agentes. Calculado en vivo desde los cierres cargados, ir a Cierres`
+              : "Todavía no hay ningún cierre semanal real cargado"
+          }
+        >
+          <div className="label">Ganancia de la semana</div>
+          <div className="value pos">{data.kpis.gananciaSemana != null ? usd(data.kpis.gananciaSemana) : "—"}</div>
+        </div>
+        <div
+          className="kpi-card row-click"
+          onClick={() => nav("/dashboard/cierres")}
+          title={
+            data.kpis.gananciaSemanaInicio
+              ? `Semana ${dateShort(data.kpis.gananciaSemanaInicio)} - ${dateShort(data.kpis.gananciaSemanaFin)} — suma del rake total de esa semana, ir a Cierres`
+              : "Todavía no hay ningún cierre semanal real cargado"
+          }
+        >
+          <div className="label">Rake de la semana</div>
+          <div className="value">{data.kpis.rakeSemana != null ? usd(data.kpis.rakeSemana) : "—"}</div>
+        </div>
+        <div
           className={`kpi-card row-click${filtroSigno === "nosDeben" ? " kpi-active" : ""}`}
           onClick={() => irAKpi("nosDeben")}
           title="Ver el detalle de saldos por agente y club que arma este total"
@@ -121,7 +145,7 @@ export default function Resumen() {
         </div>
       </div>
       <div className="muted" style={{ marginTop: -10, marginBottom: 20, fontSize: 12 }}>
-        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club, neteado (un solo saldo por agente+club, como una cuenta corriente real). Sumando Adelantos/Garantías se arma el total comparable contra la planilla — aun así puede quedar una diferencia chica cuando un mismo agente+club tiene a la vez una fila "debemos" y una "nos debe" en la planilla (ej. debe fichas pero tiene un pago pendiente): la planilla suma bruto por fila y nosotros neteamos, que es lo correcto para un saldo real. Hacé click en cualquier KPI para ver su detalle.
+        "Ganancia de la semana" / "Rake de la semana" salen de la última semana con cierres REALES cargados (no cuenta las semanas reconstruidas sin desglose, ver Cierres) — si viene vacío es porque la última semana cargada es una de esas. "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club, neteado (un solo saldo por agente+club, como una cuenta corriente real). Sumando Adelantos/Garantías se arma el total comparable contra la planilla — aun así puede quedar una diferencia chica cuando un mismo agente+club tiene a la vez una fila "debemos" y una "nos debe" en la planilla (ej. debe fichas pero tiene un pago pendiente): la planilla suma bruto por fila y nosotros neteamos, que es lo correcto para un saldo real. Hacé click en cualquier KPI para ver su detalle.
       </div>
 
       <div className="panel" id="panel-saldo-por-club">
