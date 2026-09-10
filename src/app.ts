@@ -8,6 +8,7 @@ import { movementsRouter } from "./routes/movements.js";
 import { catalogRouter } from "./routes/catalog.js";
 import { usersRouter } from "./routes/users.js";
 import { guaranteesRouter } from "./routes/guarantees.js";
+import { advancesRouter } from "./routes/advances.js";
 import { importsRouter } from "./routes/imports.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
@@ -26,6 +27,7 @@ app.use("/movements", movementsRouter);
 app.use("/catalog", catalogRouter);
 app.use("/users", usersRouter);
 app.use("/guarantees", guaranteesRouter);
+app.use("/advances", advancesRouter);
 app.use("/imports", importsRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {

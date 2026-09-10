@@ -31,6 +31,13 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
      FROM guarantees WHERE active = true`
   );
 
+  // Adelantos de rakeback: mismo criterio que garantías (separados del saldo operativo,
+  // BIT-034), pero por agente+club — ver repo/advances.ts.
+  const adelantos = await pool.query(
+    `SELECT COALESCE(SUM(amount - consumed), 0) as pendiente, COUNT(*)::int as cantidad
+     FROM rakeback_advances WHERE active = true`
+  );
+
   // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
   // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
   const wallet = await pool.query(
@@ -50,6 +57,8 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       agentesActivos: agentsCount.rows[0].n,
       garantiasPendientes: Number(garantias.rows[0].pendiente),
       garantiasCantidad: garantias.rows[0].cantidad,
+      adelantosPendientes: Number(adelantos.rows[0].pendiente),
+      adelantosCantidad: adelantos.rows[0].cantidad,
       saldoWallet: Number(wallet.rows[0].neto),
     },
     porClub: porClub.rows,

@@ -17,6 +17,7 @@
     "ajuste:colgados:apply": "tsx src/scripts/ajustePlanillaColgados.ts --apply",
     "cierres:reconstruir": "tsx src/scripts/reconstruirCierresSeptiembre.ts",
     "cierres:reconstruir:apply": "tsx src/scripts/reconstruirCierresSeptiembre.ts --apply",
+    "alta:adelanto-prodigio": "tsx src/scripts/altaAdelantoProdigio.ts",
     "import:wallet": "tsx src/scripts/importWalletHistorial.ts",
     "test:cierre": "tsx src/engine/__test__.ts"
   },

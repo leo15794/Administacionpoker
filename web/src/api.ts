@@ -135,6 +135,12 @@ export const api = {
   garantiasHistorial: (agentId?: string) => request(`/guarantees/historial${agentId ? `?agentId=${agentId}` : ""}`),
   ajustarGarantia: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/guarantees/ajuste", { method: "POST", body: JSON.stringify(data) }),
+
+  // Adelantos de rakeback: mismo patrón que garantías, pero por agente+club.
+  adelantos: () => request("/advances"),
+  adelantosHistorial: (agentId?: string) => request(`/advances/historial${agentId ? `?agentId=${agentId}` : ""}`),
+  ajustarAdelanto: (data: { agentId: string; clubId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
+    request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;

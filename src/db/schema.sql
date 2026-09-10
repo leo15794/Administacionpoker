@@ -301,6 +301,37 @@ CREATE TABLE IF NOT EXISTS guarantee_movements (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Adelantos de rakeback: plata (fichas o USDT) que se le adelanta a un agente A CUENTA de un
+-- rakeback que todavía no se generó, para un agente+club puntual (a diferencia de garantías,
+-- que son por agente solo). Separado del saldo operativo por la misma razón que guarantees
+-- (BIT-034): mientras no se compense contra un cierre real, no es plata que el agente "ganó".
+CREATE TABLE IF NOT EXISTS rakeback_advances (
+  id         TEXT PRIMARY KEY,
+  agent_id   TEXT NOT NULL REFERENCES agents(id),
+  club_id    TEXT NOT NULL REFERENCES clubs(id),
+  amount     NUMERIC(18,4) NOT NULL DEFAULT 0,
+  consumed   NUMERIC(18,4) NOT NULL DEFAULT 0,
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  notes      TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Historial de cada alta/aumento/reducción/consumo/baja de adelanto, mismo criterio que
+-- guarantee_movements.
+CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
+  id                  TEXT PRIMARY KEY,
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  club_id             TEXT NOT NULL REFERENCES clubs(id),
+  advance_id          TEXT NOT NULL REFERENCES rakeback_advances(id),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA')),
+  amount              NUMERIC(18,4) NOT NULL,
+  resulting_amount    NUMERIC(18,4) NOT NULL,
+  resulting_consumed  NUMERIC(18,4) NOT NULL,
+  notes               TEXT,
+  created_by          TEXT,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Cierre semanal por agente+club. Guarda snapshot de las reglas usadas.
 CREATE TABLE IF NOT EXISTS weekly_closings (
   id              TEXT PRIMARY KEY,

@@ -87,10 +87,22 @@ export default function Resumen() {
           <div className="label">Garantías pendientes</div>
           <div className="value">{usd(data.kpis.garantiasPendientes)}</div>
         </div>
+        <div className="kpi-card row-click" onClick={() => nav("/dashboard/adelantos")} title="Ir a Adelantos de rakeback">
+          <div className="label">Adelantos de rakeback</div>
+          <div className="value">{usd(data.kpis.adelantosPendientes)}</div>
+        </div>
+        <div
+          className="kpi-card row-click"
+          onClick={() => nav("/dashboard/adelantos")}
+          title="Agentes nos deben + adelantos de rakeback pendientes — comparable contra la fila 'Nos debe' de la planilla"
+        >
+          <div className="label">Total nos deben (con adelantos)</div>
+          <div className="value neg">{usd(Number(data.kpis.agentesNosDeben) + Number(data.kpis.adelantosPendientes))}</div>
+        </div>
         <div
           className="kpi-card row-click"
           onClick={() => nav("/dashboard/garantias")}
-          title="Debemos a agentes + garantías pendientes — mismo total que arma la planilla en la fila 'Debemos', salvo Adelantos de rakeback (ver nota abajo)"
+          title="Debemos a agentes + garantías pendientes — comparable contra la fila 'Debemos' de la planilla"
         >
           <div className="label">Total debemos (con garantías)</div>
           <div className="value pos">{usd(Number(data.kpis.debemosAAgentes) + Number(data.kpis.garantiasPendientes))}</div>
@@ -109,7 +121,7 @@ export default function Resumen() {
         </div>
       </div>
       <div className="muted" style={{ marginTop: -10, marginBottom: 20, fontSize: 12 }}>
-        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club (igual que la planilla, sin mezclar garantías). "Total debemos (con garantías)" suma Garantías pendientes, quedando comparable contra la fila "Debemos" de la planilla — salvo el "Adelanto de rakeback" (~$2.600 en la última lectura), que no está cargado en ningún lado del sistema todavía y no se puede sumar acá. Hacé click en cualquier KPI para ver su detalle.
+        "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club, neteado (un solo saldo por agente+club, como una cuenta corriente real). Sumando Adelantos/Garantías se arma el total comparable contra la planilla — aun así puede quedar una diferencia chica cuando un mismo agente+club tiene a la vez una fila "debemos" y una "nos debe" en la planilla (ej. debe fichas pero tiene un pago pendiente): la planilla suma bruto por fila y nosotros neteamos, que es lo correcto para un saldo real. Hacé click en cualquier KPI para ver su detalle.
       </div>
 
       <div className="panel" id="panel-saldo-por-club">
