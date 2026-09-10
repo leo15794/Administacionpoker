@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Menú "⋯" para acciones secundarias de una fila de tabla — pensado para reemplazar filas de
