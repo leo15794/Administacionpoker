@@ -166,7 +166,7 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
   const guarantee = await pool.query(`SELECT * FROM guarantees WHERE agent_id = $1 AND active = true`, [agentId]);
   const closings = await pool.query(
     `SELECT wc.*, c.name as club_name FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
-     WHERE agent_id = $1 ORDER BY week_start DESC LIMIT 20`,
+     WHERE agent_id = $1 ORDER BY week_start DESC LIMIT 60`,
     [agentId]
   );
 
