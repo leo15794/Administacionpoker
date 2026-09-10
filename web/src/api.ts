@@ -136,10 +136,13 @@ export const api = {
   ajustarGarantia: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/guarantees/ajuste", { method: "POST", body: JSON.stringify(data) }),
 
-  // Adelantos de rakeback: mismo patrón que garantías, por agente.
+  // Adelantos de rakeback: por agente, pero cada adelanto es independiente — un agente puede
+  // tener varios a la vez (distintos momentos, distintos clubes de origen).
   adelantos: () => request("/advances"),
   adelantosHistorial: (agentId?: string) => request(`/advances/historial${agentId ? `?agentId=${agentId}` : ""}`),
-  ajustarAdelanto: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string; clubOrigenId?: string | null }) =>
+  altaAdelanto: (data: { agentId: string; amount: number; clubOrigenId?: string | null; notes?: string }) =>
+    request("/advances/alta", { method: "POST", body: JSON.stringify(data) }),
+  ajustarAdelanto: (data: { advanceId: string; type: "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),

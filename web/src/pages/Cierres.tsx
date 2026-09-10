@@ -260,10 +260,12 @@ function NuevoCierre({
   const clubSeleccionado = clubes.find((c) => c.id === clubId);
   const esFichas = clubSeleccionado?.unit === "FICHAS";
   // Aviso, no automatización: si el AGENTE (no el par agente+club — un agente sigue generando
-  // rake en varios clubes a la vez, ver repo/advances.ts) tiene un adelanto de rakeback activo,
-  // se le muestra al que carga el cierre para que decida a mano si corresponde ir a Adelantos y
-  // registrar un Consumo — el cierre se calcula y paga igual, completo, sin descontar nada solo.
-  const adelantoActivo = adelantos.find((a) => a.agent_id === agentId);
+  // rake en varios clubes a la vez, ver repo/advances.ts) tiene uno o más adelantos de rakeback
+  // activos — puede tener varios a la vez, en clubes distintos — se le muestran todos al que
+  // carga el cierre para que decida a mano si corresponde ir a Adelantos y registrar un Consumo
+  // en alguno; el cierre se calcula y paga igual, completo, sin descontar nada solo.
+  const adelantosDelAgente = adelantos.filter((a) => a.agent_id === agentId);
+  const adelantoPendienteTotal = adelantosDelAgente.reduce((s, a) => s + (Number(a.amount) - Number(a.consumed)), 0);
 
   function elegirAgente(id: string) {
     setAgentId(id);
@@ -393,12 +395,22 @@ function NuevoCierre({
         {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.
       </div>
 
-      {adelantoActivo && (
+      {adelantosDelAgente.length > 0 && (
         <div className="warning" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>
-            ⚠ {agenteSeleccionado?.name} tiene un adelanto de rakeback activo (en cualquier club): pendiente{" "}
-            <strong>{usd(Number(adelantoActivo.amount) - Number(adelantoActivo.consumed))}</strong> de {usd(adelantoActivo.amount)} adelantados.
-            Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra el adelanto, hacelo a mano después en Adelantos.
+            ⚠ {agenteSeleccionado?.name} tiene {adelantosDelAgente.length === 1 ? "un adelanto de rakeback activo" : `${adelantosDelAgente.length} adelantos de rakeback activos`} (en cualquier club): pendiente{" "}
+            <strong>{usd(adelantoPendienteTotal)}</strong> en total
+            {adelantosDelAgente.length > 1 && (
+              <>
+                {" "}({adelantosDelAgente.map((a, i) => (
+                  <span key={a.id}>
+                    {i > 0 && ", "}
+                    {usd(Number(a.amount) - Number(a.consumed))}{a.club_origen_name ? ` (${a.club_origen_name})` : ""}
+                  </span>
+                ))})
+              </>
+            )}
+            . Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra algún adelanto, hacelo a mano después en Adelantos.
           </span>
           <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/adelantos")}>
             Ir a Adelantos

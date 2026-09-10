@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listAdvancesConAgente, listAdvanceMovements, ajustarAdelanto, corregirAdelanto, eliminarAdelanto } from "../repo/advances.js";
+import { listAdvancesConAgente, listAdvanceMovements, altaAdelanto, ajustarAdelanto, corregirAdelanto, eliminarAdelanto } from "../repo/advances.js";
 
 export const advancesRouter = Router();
 
@@ -16,12 +16,39 @@ advancesRouter.get("/historial", requireAuth, requireAdmin, async (req, res) => 
   res.json(await listAdvanceMovements(agentId));
 });
 
-const ajusteSchema = z.object({
+// Alta de un adelanto NUEVO e independiente — un agente puede tener varios a la vez, no hay
+// "el" adelanto del agente (ver nota en repo/advances.ts).
+const altaSchema = z.object({
   agentId: z.string(),
-  type: z.enum(["ALTA", "AUMENTO", "REDUCCION", "CONSUMO", "BAJA"]),
+  amount: z.number().positive(),
+  clubOrigenId: z.string().nullable().optional(),
+  notes: z.string().optional(),
+});
+
+advancesRouter.post("/alta", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = altaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const advance = await altaAdelanto({
+      agentId: parsed.data.agentId,
+      amount: parsed.data.amount,
+      clubOrigenId: parsed.data.clubOrigenId,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(201).json(advance);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Aumento/Reducción/Consumo/Baja sobre UN adelanto puntual (por id) — nunca sobre "el del
+// agente", porque puede tener varios.
+const ajusteSchema = z.object({
+  advanceId: z.string(),
+  type: z.enum(["AUMENTO", "REDUCCION", "CONSUMO", "BAJA"]),
   amount: z.number(),
   notes: z.string().optional(),
-  clubOrigenId: z.string().nullable().optional(),
 });
 
 advancesRouter.post("/ajuste", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -33,11 +60,10 @@ advancesRouter.post("/ajuste", requireAuth, requireAdmin, async (req: AuthedRequ
   }
   try {
     const advance = await ajustarAdelanto({
-      agentId: parsed.data.agentId,
+      advanceId: parsed.data.advanceId,
       type: parsed.data.type,
       amount,
       notes: parsed.data.notes,
-      clubOrigenId: parsed.data.clubOrigenId,
       createdBy: req.user?.email,
     });
     res.status(201).json(advance);

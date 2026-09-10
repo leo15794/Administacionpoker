@@ -306,7 +306,10 @@ CREATE TABLE IF NOT EXISTS guarantee_movements (
 -- agente puede operar y seguir generando rake en varios clubes a la vez, así que un adelanto no
 -- está "atado" al club donde la planilla lo registró — mismo criterio que guarantees). Separado
 -- del saldo operativo por la misma razón que guarantees (BIT-034): mientras no se compense
--- contra un cierre real, no es plata que el agente "ganó".
+-- contra un cierre real, no es plata que el agente "ganó". CADA FILA ES UN ADELANTO
+-- INDEPENDIENTE (corregido 12/09/2026, segunda vuelta): un mismo agente puede tener varias filas
+-- activas a la vez — se le pueden dar varios adelantos en la misma semana, en clubes distintos —
+-- no existe "el" adelanto de un agente.
 CREATE TABLE IF NOT EXISTS rakeback_advances (
   id             TEXT PRIMARY KEY,
   agent_id       TEXT NOT NULL REFERENCES agents(id),
@@ -315,6 +318,7 @@ CREATE TABLE IF NOT EXISTS rakeback_advances (
   active         BOOLEAN NOT NULL DEFAULT TRUE,
   club_origen_id TEXT REFERENCES clubs(id),
   notes          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- Si la tabla ya existía de una versión anterior (por agente+club), se saca la columna acá —
@@ -325,6 +329,13 @@ ALTER TABLE rakeback_advances DROP COLUMN IF EXISTS club_id;
 -- se sacó arriba, este NUNCA se usa para limitar contra qué rake se compensa (eso sigue siendo
 -- por agente, en cualquier club). Puede quedar en null si no se sabe/no aplica.
 ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS club_origen_id TEXT REFERENCES clubs(id);
+-- created_at (12/09/2026, segunda vuelta): para poder ordenar/mostrar varios adelantos del mismo
+-- agente en el orden en que se cargaron — las filas existentes de antes de esta migración no
+-- tenían este dato, se backfillea con su updated_at (mejor aproximación disponible).
+ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+UPDATE rakeback_advances SET created_at = updated_at WHERE created_at IS NULL;
+ALTER TABLE rakeback_advances ALTER COLUMN created_at SET DEFAULT now();
+ALTER TABLE rakeback_advances ALTER COLUMN created_at SET NOT NULL;
 
 -- Historial de cada alta/aumento/reducción/consumo/baja/corrección de adelanto, mismo criterio
 -- que guarantee_movements. CORRECCION (12/09/2026): para arreglar un error de carga (monto mal

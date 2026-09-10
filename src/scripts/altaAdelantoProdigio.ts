@@ -3,10 +3,11 @@
 // — el detalle exacto está en la observación de esa fila de la planilla). Por AGENTE, no por
 // agente+club (corregido 11/09/2026: Prodigio no opera solo en Tiny GG, sino en varios clubes,
 // y el adelanto se compensa contra el rakeback que genere en cualquiera de ellos).
-// Idempotente: si ya existe un adelanto activo para este agente, no hace nada (fallaría con un
-// mensaje claro en vez de duplicar — correr una sola vez).
+// NO idempotente (a partir de la corrección de 12/09/2026: cada adelanto es independiente, un
+// agente puede tener varios a la vez, así que ya no hay "el activo del agente" para chequear
+// antes de dar de alta) — este script YA CORRIÓ UNA VEZ en producción, no volver a correrlo.
 import { getAgentByName } from "../repo/catalog.js";
-import { ajustarAdelanto } from "../repo/advances.js";
+import { altaAdelanto } from "../repo/advances.js";
 import { pool } from "../db/pool.js";
 
 async function main() {
@@ -16,9 +17,8 @@ async function main() {
     process.exit(1);
   }
 
-  const advance = await ajustarAdelanto({
+  const advance = await altaAdelanto({
     agentId: agent.id,
-    type: "ALTA",
     amount: 2600,
     notes: "Cargado desde SALDOS_AGENTES (planilla, export 10/09/2026): saldo previo USD 1.000 + nuevo adelanto de 600 en fichas. Ver historial de la planilla para el detalle completo de cuándo se dio cada parte.",
     createdBy: "alta:adelanto-prodigio",
