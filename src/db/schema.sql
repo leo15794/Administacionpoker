@@ -465,3 +465,29 @@ CREATE TABLE IF NOT EXISTS partner_account_entries (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS partner_account_entries_account_idx ON partner_account_entries(account_id);
+
+-- ============ STOCK FÍSICO POR CUENTA (equivalente a "Stock por cuenta (fuente)" de la
+-- planilla "Stock y deudas consolidados") ============
+-- Fichas físicas que tiene cada cuenta (agente) EN CUSTODIA dentro de un club — dato que nadie
+-- puede calcular solo, hay que confirmarlo a mano club por club (igual que hoy se hace en la
+-- planilla). A diferencia del ledger de agentes (BIT-034, inmutable), esto es un CONTEO físico
+-- que se re-confirma y corrige todo el tiempo — a pedido del usuario, se edita/borra directo,
+-- sin ceremonia de revertir (mismo criterio que partner_accounts).
+-- Una sola fila vigente por agente+club: cargar de nuevo pisa el valor anterior (no se acumula
+-- un historial de confirmaciones — si se necesita en el futuro, se agrega aparte).
+CREATE TABLE IF NOT EXISTS account_stock (
+  id            TEXT PRIMARY KEY,
+  agent_id      TEXT NOT NULL REFERENCES agents(id),
+  club_id       TEXT NOT NULL REFERENCES clubs(id),
+  units         NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rate          NUMERIC(18,6),          -- factor de conversión a USD (ej. Tiny ÷31,67 se carga como rate=1/31.67, X-Poker rate=1.2); NULL = todavía sin tasa definida, no se puede convertir a USD
+  excluded      BOOLEAN NOT NULL DEFAULT FALSE, -- cuenta "espejo" de otra (ej. superagente que refleja el mismo stack) — se guarda para referencia pero no se suma en los totales, para no duplicar
+  estado        TEXT,                    -- etiqueta libre de cómo se confirmó (ej. "Confirmación de usuario", "Auditoría manual", "Movimiento sincronizado")
+  fuente        TEXT,                    -- referencia/ticket de auditoría, opcional
+  observaciones TEXT,
+  confirmado_en DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(agent_id, club_id)
+);
+CREATE INDEX IF NOT EXISTS account_stock_club_idx ON account_stock(club_id);

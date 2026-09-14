@@ -178,6 +178,39 @@ export const api = {
     }>
   ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
+
+  // Stock físico por cuenta ("Stock y deudas consolidados" de la planilla) — conteo de fichas en
+  // custodia por agente+club, del cual salen las 4 vistas calculadas. Control total: editar y
+  // eliminar directo, igual que Cuentas de socios.
+  stockList: () => request("/account-stock"),
+  stockConsolidado: () => request("/account-stock/consolidado"),
+  stockObligacionPrepago: () => request("/account-stock/obligacion-prepago"),
+  stockResumen: () => request("/account-stock/resumen"),
+  stockDeudasConsolidadas: () => request("/account-stock/deudas-consolidadas"),
+  guardarStock: (data: {
+    agentId: string;
+    clubId: string;
+    units: number;
+    rate?: number | null;
+    excluded?: boolean;
+    estado?: string;
+    fuente?: string;
+    observaciones?: string;
+    confirmadoEn?: string;
+  }) => request("/account-stock", { method: "POST", body: JSON.stringify(data) }),
+  editarStock: (
+    id: string,
+    data: Partial<{
+      units: number;
+      rate: number | null;
+      excluded: boolean;
+      estado: string;
+      fuente: string;
+      observaciones: string;
+      confirmadoEn: string;
+    }>
+  ) => request(`/account-stock/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  eliminarStock: (id: string) => request(`/account-stock/${id}`, { method: "DELETE" }),
   crearDeal: (data: {
     agentId: string;
     clubId: string;

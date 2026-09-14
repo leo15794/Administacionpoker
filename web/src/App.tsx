@@ -10,6 +10,7 @@ import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Adelantos from "./pages/Adelantos";
 import CuentasSocios from "./pages/CuentasSocios";
+import StockDeudas from "./pages/StockDeudas";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import { api } from "./api";
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="garantias" element={<Garantias />} />
           <Route path="adelantos" element={<Adelantos />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />
+          <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="usuarios" element={<Usuarios />} />
         </Route>
 

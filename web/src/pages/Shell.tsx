@@ -61,6 +61,11 @@ const icon = {
       <path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1" /><path d="M16 14a4 4 0 0 1 4 4v2" />
     </svg>
   ),
+  stockDeudas: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.9 8.5 12 3 3.1 8.5v7L12 21l8.9-5.5z" /><path d="M3.1 8.5 12 14l8.9-5.5" /><path d="M12 14v7" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -142,6 +147,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
               <NavLink to="/dashboard/garantias" className="nav-link" title="Garantías">{icon.garantias} {!collapsed && "Garantías"}</NavLink>
               <NavLink to="/dashboard/adelantos" className="nav-link" title="Adelantos de rakeback">{icon.adelantos} {!collapsed && "Adelantos"}</NavLink>
               <NavLink to="/dashboard/cuentas-socios" className="nav-link" title="Cuentas de socios">{icon.cuentasSocios} {!collapsed && "Cuentas de socios"}</NavLink>
+              <NavLink to="/dashboard/stock-deudas" className="nav-link" title="Stock y deudas">{icon.stockDeudas} {!collapsed && "Stock y deudas"}</NavLink>
               <NavLink to="/dashboard/usuarios" className="nav-link" title="Usuarios y permisos">{icon.usuarios} {!collapsed && "Usuarios y permisos"}</NavLink>
             </>
           ) : (

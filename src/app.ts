@@ -11,6 +11,7 @@ import { guaranteesRouter } from "./routes/guarantees.js";
 import { advancesRouter } from "./routes/advances.js";
 import { importsRouter } from "./routes/imports.js";
 import { partnerAccountsRouter } from "./routes/partnerAccounts.js";
+import { accountStockRouter } from "./routes/accountStock.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
 // modo servidor local (server.ts, con app.listen) como en modo función serverless
@@ -31,6 +32,7 @@ app.use("/guarantees", guaranteesRouter);
 app.use("/advances", advancesRouter);
 app.use("/imports", importsRouter);
 app.use("/partner-accounts", partnerAccountsRouter);
+app.use("/account-stock", accountStockRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
