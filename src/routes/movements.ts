@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { registrarMovimiento, revertirMovimiento } from "../repo/ledger.js";
-import { aplicarCierreSemanal, revertirCierreSemanal, eliminarCierreSemanalDefinitivo } from "../repo/closings.js";
+import { aplicarCierreSemanal, revertirCierreSemanal, eliminarCierreSemanalDefinitivo, eliminarCierresSemanaDefinitivo } from "../repo/closings.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
 export const movementsRouter = Router();
@@ -117,6 +117,21 @@ movementsRouter.delete("/cierre-semanal/:id/definitivo", requireAuth, requireAdm
   try {
     const result = await eliminarCierreSemanalDefinitivo(req.params.id);
     if (!result.found) return res.status(404).json({ error: "Cierre no encontrado" });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// BORRADO REAL en bloque (misma salvedad que la de arriba: solo para datos de PRUEBA, nunca
+// plata real operada) — borra de un saque todos los cierres de una semana (opcionalmente
+// filtrados a un solo club) mientras se esta probando el sistema. Va antes de la ruta
+// "/cierre-semanal/:id/definitivo" no hace falta porque tiene un segmento mas ("semana" +
+// weekStart + "definitivo"), pero se deja aca al lado por prolijidad.
+movementsRouter.delete("/cierre-semanal/semana/:weekStart/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const clubId = typeof req.query.clubId === "string" ? req.query.clubId : undefined;
+    const result = await eliminarCierresSemanaDefinitivo(req.params.weekStart, clubId);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

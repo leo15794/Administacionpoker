@@ -80,6 +80,13 @@ export const api = {
   // Nunca usar sobre plata real ya operada: para eso está revertirCierre de arriba.
   eliminarCierreDefinitivo: (id: string) =>
     request(`/movements/cierre-semanal/${id}/definitivo`, { method: "DELETE" }),
+  // BORRADO REAL en bloque — toda una semana (opcionalmente un solo club) de un saque, misma
+  // salvedad: solo para limpiar datos de PRUEBA, nunca plata real ya operada.
+  eliminarCierresSemanaDefinitivo: (weekStart: string, clubId?: string) =>
+    request(
+      `/movements/cierre-semanal/semana/${weekStart}/definitivo${clubId ? `?clubId=${clubId}` : ""}`,
+      { method: "DELETE" }
+    ),
   ajustarTesoreria: (data: {
     ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
     direction: "INGRESO" | "EGRESO";

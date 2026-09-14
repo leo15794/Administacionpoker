@@ -535,6 +535,31 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
   }
 }
 
+// BORRADO REAL en bloque — mismo uso que eliminarCierreSemanalDefinitivo (limpiar datos de
+// PRUEBA rapido, nunca plata real operada), pero para toda una semana de un saque en vez de
+// tener que borrar cierre por cierre. Reusa esa misma funcion (transaccion propia por cierre)
+// para no duplicar la logica de deshacer saldos/memoria/ledger — si alguno individual falla
+// (por ejemplo el caso "mas de un movimiento de ledger, no se puede borrar solo") no aborta el
+// resto: sigue con los demas y devuelve el detalle de que fallo, para no dejar a mitad de
+// camino una semana que se podia borrar en un 95%.
+export async function eliminarCierresSemanaDefinitivo(weekStart: string, clubId?: string) {
+  const r = clubId
+    ? await pool.query(`SELECT id FROM weekly_closings WHERE week_start = $1 AND club_id = $2`, [weekStart, clubId])
+    : await pool.query(`SELECT id FROM weekly_closings WHERE week_start = $1`, [weekStart]);
+
+  let borrados = 0;
+  const errores: { id: string; message: string }[] = [];
+  for (const row of r.rows) {
+    try {
+      const res = await eliminarCierreSemanalDefinitivo(row.id);
+      if (res.found) borrados += 1;
+    } catch (err: any) {
+      errores.push({ id: row.id, message: err.message ?? String(err) });
+    }
+  }
+  return { total: r.rows.length, borrados, errores };
+}
+
 export async function listClosings(weekStart?: string) {
   const r = weekStart
     ? await pool.query(

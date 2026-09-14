@@ -24,6 +24,41 @@ export default function Cierres() {
     });
   }
 
+  // Borrado en bloque — mientras se prueba el sistema (mismo BORRADO REAL de "Borrar" arriba,
+  // aplicado a todos los cierres de una semana + club de un saque, en vez de uno por uno).
+  const [semanaABorrar, setSemanaABorrar] = useState("");
+  const [clubABorrar, setClubABorrar] = useState("");
+  const [borrandoSemana, setBorrandoSemana] = useState(false);
+  const semanasDisponibles = Array.from(new Set(cierres.map((c) => c.week_start))).sort().reverse();
+
+  async function borrarSemanaCompleta() {
+    if (!semanaABorrar) return;
+    const club = clubABorrar ? clubes.find((c) => c.id === clubABorrar) : null;
+    const cantidad = cierres.filter(
+      (c) => c.week_start === semanaABorrar && (!clubABorrar || c.club_id === clubABorrar)
+    ).length;
+    if (cantidad === 0) {
+      alert("No hay cierres cargados con ese filtro.");
+      return;
+    }
+    const confirmacion = prompt(
+      `Esto BORRA DEL TODO ${cantidad} cierre(s) de la semana ${dateShort(semanaABorrar)}${club ? ` en ${club.name}` : " (todos los clubes)"} — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
+    );
+    if (confirmacion !== "BORRAR") return;
+    setBorrandoSemana(true);
+    try {
+      const r = await api.eliminarCierresSemanaDefinitivo(semanaABorrar, clubABorrar || undefined);
+      if (r.errores?.length > 0) {
+        alert(`Se borraron ${r.borrados} de ${r.total} cierre(s). ${r.errores.length} no se pudieron borrar automáticamente (revisalos a mano):\n\n${r.errores.map((e: any) => e.message).join("\n")}`);
+      }
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo borrar la semana.");
+    } finally {
+      setBorrandoSemana(false);
+    }
+  }
+
   function refresh() {
     api.cierres().then(setCierres);
     api.bancados().then(setBancados);
@@ -103,8 +138,35 @@ export default function Cierres() {
       )}
 
       <div className="panel">
-        <div className="topbar" style={{ marginBottom: 14 }}>
+        <div className="topbar" style={{ marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
           <h3 style={{ margin: 0 }}>Historial de cierres</h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={semanaABorrar} onChange={(e) => setSemanaABorrar(e.target.value)}>
+              <option value="">Borrar semana...</option>
+              {semanasDisponibles.map((w) => (
+                <option key={w} value={w}>{dateShort(w)}</option>
+              ))}
+            </select>
+            {semanaABorrar && (
+              <select value={clubABorrar} onChange={(e) => setClubABorrar(e.target.value)}>
+                <option value="">Todos los clubes</option>
+                {clubes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
+            {semanaABorrar && (
+              <button
+                className="btn secondary small"
+                disabled={borrandoSemana}
+                onClick={borrarSemanaCompleta}
+                title="Borrado real de toda la semana (con el filtro de club, si elegiste uno) — solo para datos de prueba."
+                style={{ color: "var(--danger, #e5484d)" }}
+              >
+                {borrandoSemana ? "Borrando..." : "Borrar todo"}
+              </button>
+            )}
+          </div>
           <button
             className="btn secondary small"
             onClick={() =>
