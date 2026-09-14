@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
@@ -13,6 +13,16 @@ export default function Cierres() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
+  const [expandido, setExpandido] = useState<Set<string>>(new Set());
+
+  function toggleExpandido(id: string) {
+    setExpandido((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function refresh() {
     api.cierres().then(setCierres);
@@ -106,8 +116,12 @@ export default function Cierres() {
                   agente: c.agent_name,
                   club: c.club_name,
                   sistema: c.system,
+                  jugadores: c.jugadores ?? "",
                   resultado: c.result,
                   rake: c.rake_total,
+                  ring_game: c.ring_game ?? "",
+                  mtt: c.mtt ?? "",
+                  sng: c.sng ?? "",
                   rakeback: c.rakeback,
                   rodeo: c.rodeo,
                   cierre_final: c.final_closing,
@@ -122,59 +136,93 @@ export default function Cierres() {
         <table>
           <thead>
             <tr>
-              <th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
+              <th></th><th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
               <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Rodeo</th><th>Cierre final</th><th>Regla</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {cierres.map((c) => (
-              <tr key={c.id} style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
-                <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
-                <td>{c.agent_name}</td>
-                <td>{c.club_name}</td>
-                <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                <td>{usd(c.result)}</td>
-                <td>{usd(c.rake_total)}</td>
-                <td>{usd(c.rakeback)}</td>
-                <td>
-                  {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
-                      para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
-                  {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
-                </td>
-                <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
-                <td>
-                  {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
-                  {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
-                  {c.rule_applied === "BANCADO" && (
-                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                      Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
-                      {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
-                    </div>
+            {cierres.map((c) => {
+              // Desglose Jugadores/Ring Game/MTT/SNG: solo existe en cierres de formato Suprema
+              // (Fenix/TeamBack Suprema) cargados despues de este cambio — el resto queda en NULL.
+              const tieneDesglose =
+                c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null;
+              const abierto = expandido.has(c.id);
+              return (
+                <Fragment key={c.id}>
+                  <tr style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                    <td>
+                      {tieneDesglose && (
+                        <button
+                          className="btn secondary small"
+                          onClick={() => toggleExpandido(c.id)}
+                          title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
+                          style={{ padding: "2px 8px" }}
+                        >
+                          {abierto ? "▾" : "▸"}
+                        </button>
+                      )}
+                    </td>
+                    <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
+                    <td>{c.agent_name}</td>
+                    <td>{c.club_name}</td>
+                    <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                    <td>{usd(c.result)}</td>
+                    <td>{usd(c.rake_total)}</td>
+                    <td>{usd(c.rakeback)}</td>
+                    <td>
+                      {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
+                          para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
+                      {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
+                    </td>
+                    <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
+                    <td>
+                      {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+                      {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
+                      {c.rule_applied === "BANCADO" && (
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
+                          {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="row-actions">
+                      {c.status !== "REVERTIDO" && (
+                        <button
+                          className="btn secondary small"
+                          disabled={borrando === c.id}
+                          onClick={() => revertirCierre(c)}
+                          title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
+                        >
+                          {borrando === c.id ? "..." : "Revertir"}
+                        </button>
+                      )}
+                      <button
+                        className="btn secondary small"
+                        disabled={borrando === c.id}
+                        onClick={() => borrarDefinitivo(c)}
+                        title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                        style={{ color: "var(--danger, #e5484d)" }}
+                      >
+                        {borrando === c.id ? "..." : "Borrar"}
+                      </button>
+                    </td>
+                  </tr>
+                  {abierto && tieneDesglose && (
+                    <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
+                      <td></td>
+                      <td colSpan={10}>
+                        <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
+                          <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
+                          <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
+                          <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
+                          <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                </td>
-                <td className="row-actions">
-                  {c.status !== "REVERTIDO" && (
-                    <button
-                      className="btn secondary small"
-                      disabled={borrando === c.id}
-                      onClick={() => revertirCierre(c)}
-                      title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
-                    >
-                      {borrando === c.id ? "..." : "Revertir"}
-                    </button>
-                  )}
-                  <button
-                    className="btn secondary small"
-                    disabled={borrando === c.id}
-                    onClick={() => borrarDefinitivo(c)}
-                    title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                    style={{ color: "var(--danger, #e5484d)" }}
-                  >
-                    {borrando === c.id ? "..." : "Borrar"}
-                  </button>
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
