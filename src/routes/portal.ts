@@ -19,6 +19,17 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
      WHERE agent_id = $1 ORDER BY week_start DESC LIMIT 20`,
     [agentId]
   );
+  const stock = await pool.query(
+    `SELECT s.*, c.name as club_name,
+            CASE WHEN s.rate IS NOT NULL THEN s.units * s.rate ELSE NULL END as usd_ref
+     FROM account_stock s JOIN clubs c ON c.id = s.club_id
+     WHERE s.agent_id = $1 ORDER BY c.name`,
+    [agentId]
+  );
+  const adelantos = await pool.query(
+    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY created_at DESC`,
+    [agentId]
+  );
 
   res.json({
     agente: agent.rows[0],
@@ -26,5 +37,7 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     movimientos,
     garantia: guarantee.rows[0] ?? null,
     cierres: closings.rows,
+    stock: stock.rows,
+    adelantos: adelantos.rows,
   });
 });

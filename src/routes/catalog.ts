@@ -169,6 +169,19 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
      WHERE agent_id = $1 ORDER BY week_start DESC LIMIT 60`,
     [agentId]
   );
+  // Stock físico por cuenta (mismo dato que "Stock y deudas" -> Stock por cuenta), para que la
+  // ficha del agente en Administración no obligue a ir a otra pantalla a ver esto.
+  const stock = await pool.query(
+    `SELECT s.*, c.name as club_name,
+            CASE WHEN s.rate IS NOT NULL THEN s.units * s.rate ELSE NULL END as usd_ref
+     FROM account_stock s JOIN clubs c ON c.id = s.club_id
+     WHERE s.agent_id = $1 ORDER BY c.name`,
+    [agentId]
+  );
+  const adelantos = await pool.query(
+    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY created_at DESC`,
+    [agentId]
+  );
 
   res.json({
     agente: agent.rows[0],
@@ -176,6 +189,8 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
     movimientos,
     garantia: guarantee.rows[0] ?? null,
     cierres: closings.rows,
+    stock: stock.rows,
+    adelantos: adelantos.rows,
   });
 });
 
