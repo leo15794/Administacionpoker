@@ -53,6 +53,12 @@ export interface SupremaPlayerRow {
   agentNameRaw: string | null;
   resultado: number;
   rake: number;
+  // Desglose del rake por tipo de juego — igual a las columnas "Ring Game"/"MTT"/"SNG" del
+  // resumen semanal por club (ver repo/clubResumen.ts). ringGame+mtt+sngOtros = rake siempre;
+  // sngOtros junta SNG+SPIN+TLT porque el resumen de la planilla real tampoco los separa.
+  ringGame?: number;
+  mtt?: number;
+  sngOtros?: number;
   rodeo: number;
   // Informativos (columnas opcionales) — no afectan el cálculo de plata, ver nota en
   // OPTIONAL_HEADERS. role: "MEMBER" | "AGENT" | "SUPERAGENT" tal cual lo manda Suprema.
@@ -139,12 +145,18 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       const agentIdRaw = normText(row.getCell(colIndex["Agent ID"]).value);
       const agentNameRaw = normText(row.getCell(colIndex["Agent Name"]).value);
       const resultado = toNumber(row.getCell(colIndex["Total(Local)"]).value);
+      const ringGame = toNumber(row.getCell(colIndex["Ring Game Total(Local)"]).value);
+      const mtt = toNumber(row.getCell(colIndex["MTT Total(Local)"]).value);
+      const sngOtros =
+        toNumber(row.getCell(colIndex["SNG Total(Local)"]).value) +
+        toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value) +
+        toNumber(row.getCell(colIndex["TLT Total(Local)"]).value);
       const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0);
       const rodeo = toNumber(row.getCell(colIndex["Total Profit Rodeo(Local)"]).value);
       const role = colIndex["Role"] !== undefined ? normText(row.getCell(colIndex["Role"]).value) : null;
       const subAgentIdRaw = colIndex["Sub Agent ID"] !== undefined ? normText(row.getCell(colIndex["Sub Agent ID"]).value) : null;
       const subAgentNameRaw = colIndex["Sub Agent Name"] !== undefined ? normText(row.getCell(colIndex["Sub Agent Name"]).value) : null;
-      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake, rodeo, role, subAgentIdRaw, subAgentNameRaw });
+      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake, ringGame, mtt, sngOtros, rodeo, role, subAgentIdRaw, subAgentNameRaw });
     });
 
     sheets.push({ sheetName: ws.name, rows });

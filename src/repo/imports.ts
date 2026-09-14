@@ -20,6 +20,9 @@ export interface AgenteAgregado {
   jugadores: number;
   resultado: number;
   rakeTotal: number;
+  ringGame?: number;
+  mtt?: number;
+  sngOtros?: number;
   /** "Rodeo" (solo SupremaPoker): lista cruda por jugador (Player ID + baseRodeo del archivo,
    * signo: + = perdió, - = ganó). NUNCA es un total pre-sumado — el monto real que le toca al
    * agente depende de la memoria arrastrada de cada jugador individual, y esa memoria solo se
@@ -281,6 +284,9 @@ export async function analizarImportacionSuprema(
         acc.jugadores += 1;
         acc.resultado += row.resultado;
         acc.rakeTotal += row.rake;
+        acc.ringGame = (acc.ringGame ?? 0) + (row.ringGame ?? 0);
+        acc.mtt = (acc.mtt ?? 0) + (row.mtt ?? 0);
+        acc.sngOtros = (acc.sngOtros ?? 0) + (row.sngOtros ?? 0);
         if (row.rodeo !== 0) acc.rodeoJugadores.push({ playerExternalId: row.playerId, baseRodeo: row.rodeo });
       } else {
         agentesMap.set(resolucion.agentId, {
@@ -289,6 +295,9 @@ export async function analizarImportacionSuprema(
           jugadores: 1,
           resultado: row.resultado,
           rakeTotal: row.rake,
+          ringGame: row.ringGame,
+          mtt: row.mtt,
+          sngOtros: row.sngOtros,
           rodeoJugadores: row.rodeo !== 0 ? [{ playerExternalId: row.playerId, baseRodeo: row.rodeo }] : [],
           system: "WIN_LOSE",
           rakebackPct: 0,

@@ -60,6 +60,12 @@ const closingSchema = z.object({
     .optional(),
   rateSnapshot: z.number().optional(),
   observation: z.string().optional(),
+  // Desglose por tipo de juego (solo SupremaPoker) para el resumen semanal por club — ver
+  // repo/clubResumen.ts. Opcional: no rompe ningun cierre manual ni de otras plataformas.
+  jugadores: z.number().optional(),
+  ringGame: z.number().optional(),
+  mtt: z.number().optional(),
+  sng: z.number().optional(),
 });
 
 movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, res) => {

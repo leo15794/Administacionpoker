@@ -286,6 +286,11 @@ export const api = {
     // como registro histórico de qué tasa estaba vigente ese cierre, el motor no la usa para
     // calcular nada (ver engine/cierre.ts, ClosingInput.rateSnapshot).
     rateSnapshot?: number;
+    // Desglose por tipo de juego (solo importación SupremaPoker) para el resumen por club.
+    jugadores?: number;
+    ringGame?: number;
+    mtt?: number;
+    sng?: number;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
   // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
@@ -303,6 +308,10 @@ export const api = {
     observation?: string;
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
     rateSnapshot?: number;
+    jugadores?: number;
+    ringGame?: number;
+    mtt?: number;
+    sng?: number;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,

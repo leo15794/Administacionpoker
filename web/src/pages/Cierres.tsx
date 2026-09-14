@@ -545,6 +545,9 @@ type FilaImport = {
   jugadores: number;
   resultado: number;
   rakeTotal: number;
+  ringGame?: number;
+  mtt?: number;
+  sngOtros?: number;
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
@@ -713,6 +716,9 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             jugadores: a.jugadores,
             resultado: Math.round((a.resultado / tasa) * 100) / 100,
             rakeTotal: Math.round((a.rakeTotal / tasa) * 100) / 100,
+            ringGame: a.ringGame !== undefined ? Math.round((a.ringGame / tasa) * 100) / 100 : undefined,
+            mtt: a.mtt !== undefined ? Math.round((a.mtt / tasa) * 100) / 100 : undefined,
+            sngOtros: a.sngOtros !== undefined ? Math.round((a.sngOtros / tasa) * 100) / 100 : undefined,
             system: a.system,
             rakebackPct: a.rakebackPct,
             rebatePct: a.rebatePct,
@@ -810,6 +816,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
             rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
+            jugadores: f.jugadores,
+            ringGame: f.ringGame,
+            mtt: f.mtt,
+            sng: f.sngOtros,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -862,6 +872,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
           rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
           rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
+          jugadores: f.jugadores,
+          ringGame: f.ringGame,
+          mtt: f.mtt,
+          sng: f.sngOtros,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));

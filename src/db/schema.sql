@@ -233,6 +233,15 @@ ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_club_share NUMERIC(18
 -- bancado_debt_before/after).
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS rodeo_detalle JSONB;
 
+-- Desglose por tipo de juego (solo SupremaPoker: Fenix/TeamBack Suprema) — igual a las
+-- columnas "Ring Game"/"MTT"/"SNG" del resumen semanal por club (ver repo/clubResumen.ts).
+-- NULL en cierres viejos o de otras plataformas (GG/Fenix GG/Tiny/X-Poker no tienen este
+-- desglose). ring_game + mtt + sng = rake_total siempre que esten cargados.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS jugadores INTEGER;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ring_game NUMERIC(18,4);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS mtt NUMERIC(18,4);
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS sng NUMERIC(18,4);
+
 -- CORRECCIÓN (auditoría vs. planilla real, hoja MEMORIA_RODEO, BIT-nueva): la memoria de rodeo
 -- es por AGENTE+CLUB, no por jugador — la planilla agrega el rodeo bruto de todos los jugadores
 -- de un agente antes de netear contra la memoria arrastrada, así un jugador que gana esa semana

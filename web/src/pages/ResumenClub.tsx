@@ -105,29 +105,60 @@ export default function ResumenClub() {
               <div className="muted">Sin cierres cargados para este club en esta semana.</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Agente</th><th>Resultado</th><th>Rake total</th><th>% Rakeback</th>
-                      <th>Rakeback agente</th><th>Rebate</th><th>Rodeo agente</th><th>Ganancia por rake</th><th>Cierre final agente</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resumen.filas.map((f: any) => (
-                      <tr key={f.agentId}>
-                        <td>{f.agentName}</td>
-                        <td>{usd(f.resultado)}</td>
-                        <td>{usd(f.rakeTotal)}</td>
-                        <td className="muted">{pct(f.rakebackPct)}</td>
-                        <td>{usd(f.rakebackAgente)}</td>
-                        <td className="muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
-                        <td className="muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
-                        <td>{usd(f.gananciaPorRake)}</td>
-                        <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
+                {resumen.clubFamily === "SUPREMA" ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Ring Game</th><th>MTT</th><th>SNG</th>
+                        <th>Rake total</th><th>% Rakeback</th><th>Comisión agente</th><th>Comisión plataforma</th>
+                        <th>Ganancia por rake</th><th>Rodeo agente</th><th>Cierre final agente</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {resumen.filas.map((f: any) => (
+                        <tr key={f.agentId}>
+                          <td>{f.agentName}</td>
+                          <td className="muted">{f.jugadores ?? "-"}</td>
+                          <td>{usd(f.resultado)}</td>
+                          <td className="muted">{f.ringGame !== null ? usd(f.ringGame) : "-"}</td>
+                          <td className="muted">{f.mtt !== null ? usd(f.mtt) : "-"}</td>
+                          <td className="muted">{f.sng !== null ? usd(f.sng) : "-"}</td>
+                          <td>{usd(f.rakeTotal)}</td>
+                          <td className="muted">{pct(f.rakebackPct)}</td>
+                          <td>{usd(f.rakebackAgente)}</td>
+                          <td className="muted">{usd(f.comisionPlataforma)}</td>
+                          <td>{usd(f.gananciaPorRake)}</td>
+                          <td className="muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
+                          <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Agente</th><th>Resultado</th><th>Rake total</th><th>% Rakeback</th>
+                        <th>Rakeback agente</th><th>Comisión plataforma</th><th>Rebate</th><th>Ganancia por rake</th><th>Cierre final agente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resumen.filas.map((f: any) => (
+                        <tr key={f.agentId}>
+                          <td>{f.agentName}</td>
+                          <td>{usd(f.resultado)}</td>
+                          <td>{usd(f.rakeTotal)}</td>
+                          <td className="muted">{pct(f.rakebackPct)}</td>
+                          <td>{usd(f.rakebackAgente)}</td>
+                          <td className="muted">{usd(f.comisionPlataforma)}</td>
+                          <td className="muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
+                          <td>{usd(f.gananciaPorRake)}</td>
+                          <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </div>

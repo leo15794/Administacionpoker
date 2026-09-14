@@ -8,15 +8,36 @@
 // (engine/rodeo.ts) ya calcula y guarda esto en weekly_closings.rodeo / .rodeo_club_share al
 // aplicar cada cierre (solo aplica a SupremaPoker: Fenix/TeamBack Suprema). Solo "Ingreso por
 // ventas" es un dato externo real que no sale de ningun cierre — ese si se carga a mano.
+//
+// "Jugadores"/"Ring Game"/"MTT"/"SNG" (columnas propias del formato Suprema) tambien vienen
+// de weekly_closings — se guardan ahi desde la importacion (ver engine/importSuprema.ts,
+// repo/imports.ts). NULL en cierres cargados antes de este cambio o de otras plataformas.
 import { pool, newId } from "../db/pool.js";
+
+// A que "familia" de formula pertenece un club, para que el frontend elija que columnas
+// mostrar en la tabla por agente (cada familia tiene columnas distintas en la planilla real).
+export type ClubFamily = "SUPREMA" | "GG" | "FENIX_GG" | "XPOKER" | "OTRO";
+
+function familiaDeClub(nombre: string): ClubFamily {
+  if (nombre === "TeamBack Suprema" || nombre === "Fénix Suprema") return "SUPREMA";
+  if (nombre === "TeamBack GG") return "GG";
+  if (nombre === "Fénix GG") return "FENIX_GG";
+  if (nombre === "X-Poker") return "XPOKER";
+  return "OTRO";
+}
 
 export interface FilaAgenteResumenClub {
   agentId: string;
   agentName: string;
+  jugadores: number | null;
   resultado: number;
   rakeTotal: number;
+  ringGame: number | null;
+  mtt: number | null;
+  sng: number | null;
   rakebackPct: number;
   rakebackAgente: number;
+  comisionPlataforma: number;
   rebate: number;
   rodeoAgente: number;
   rodeoClubShare: number;
@@ -27,11 +48,13 @@ export interface FilaAgenteResumenClub {
 export interface ResumenClubSemanal {
   clubId: string;
   clubName: string;
+  clubFamily: ClubFamily;
   weekStart: string;
   weekEnd: string | null;
   filas: FilaAgenteResumenClub[];
   rakeTotal: number;
   comisionesAgentes: number;
+  comisionPlataformaTotal: number;
   rebateTotal: number;
   rodeoPagadoAgentes: number;
   gananciaRodeoClub: number;
@@ -48,10 +71,12 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   if (clubRes.rows.length === 0) return null;
   const club = clubRes.rows[0];
   const ratioDefaultClub = 1 - Number(club.platform_pct);
+  const clubFamily = familiaDeClub(club.name);
 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
             wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share,
+            wc.jugadores, wc.ring_game, wc.mtt, wc.sng,
             (SELECT d.club_payout_ratio_override FROM agent_club_deals d
              WHERE d.agent_id = wc.agent_id AND d.club_id = wc.club_id AND d.valid_to IS NULL
              ORDER BY d.valid_from DESC LIMIT 1) as ratio_override
@@ -65,6 +90,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   const filas: FilaAgenteResumenClub[] = [];
   let rakeTotal = 0;
   let comisionesAgentes = 0;
+  let comisionPlataformaTotal = 0;
   let rebateTotal = 0;
   let rodeoPagadoAgentes = 0;
   let gananciaRodeoClub = 0;
@@ -76,13 +102,19 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     const rakeback = Number(r.rakeback);
     const ratio = r.ratio_override !== null ? Number(r.ratio_override) : ratioDefaultClub;
     const gananciaFila = rake * ratio - rakeback;
+    const comisionPlataformaFila = rake * (1 - ratio);
     filas.push({
       agentId: r.agent_id,
       agentName: r.agent_name,
+      jugadores: r.jugadores !== null ? Number(r.jugadores) : null,
       resultado: Number(r.result),
       rakeTotal: rake,
+      ringGame: r.ring_game !== null ? Number(r.ring_game) : null,
+      mtt: r.mtt !== null ? Number(r.mtt) : null,
+      sng: r.sng !== null ? Number(r.sng) : null,
       rakebackPct: Number(r.rakeback_pct),
       rakebackAgente: rakeback,
+      comisionPlataforma: comisionPlataformaFila,
       rebate: Number(r.rebate),
       rodeoAgente: Number(r.rodeo),
       rodeoClubShare: Number(r.rodeo_club_share),
@@ -91,6 +123,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     });
     rakeTotal += rake;
     comisionesAgentes += rakeback;
+    comisionPlataformaTotal += comisionPlataformaFila;
     rebateTotal += Number(r.rebate);
     rodeoPagadoAgentes += Number(r.rodeo);
     gananciaRodeoClub += Number(r.rodeo_club_share);
@@ -109,11 +142,13 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   return {
     clubId: club.id,
     clubName: club.name,
+    clubFamily,
     weekStart,
     weekEnd,
     filas,
     rakeTotal,
     comisionesAgentes,
+    comisionPlataformaTotal,
     rebateTotal,
     rodeoPagadoAgentes,
     gananciaRodeoClub,

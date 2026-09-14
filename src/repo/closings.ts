@@ -35,6 +35,13 @@ export interface AplicarCierreInput {
    * venga de una importación Suprema — no afecta en nada al resto de los agentes/clubes. */
   rodeoJugadores?: RodeoJugadorEntrada[];
   rateSnapshot?: number;
+  /** Desglose por tipo de juego (solo SupremaPoker) para el resumen semanal por club — ver
+   * repo/clubResumen.ts. undefined para cualquier cierre que no venga de una importación
+   * Suprema (queda NULL en la base, no se inventa un 0). */
+  jugadores?: number;
+  ringGame?: number;
+  mtt?: number;
+  sng?: number;
   /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
   specialRule?: SpecialRule | null;
@@ -186,8 +193,9 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       `INSERT INTO weekly_closings
         (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
          rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
-         rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id, rodeo, rodeo_club_share, rodeo_detalle)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23)`,
+         rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id, rodeo, rodeo_club_share, rodeo_detalle,
+         jugadores, ring_game, mtt, sng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
         id,
         input.agentId,
@@ -218,6 +226,10 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
               jugadores: rodeoResultado.jugadores, // desglose informativo: cuánto aportó cada jugador
             })
           : null,
+        input.jugadores ?? null,
+        input.ringGame ?? null,
+        input.mtt ?? null,
+        input.sng ?? null,
       ]
     );
 
