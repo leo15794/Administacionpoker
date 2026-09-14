@@ -133,8 +133,18 @@ export async function resolvePlayerAgent(
   }
 
   if (row.agentNameRaw) {
+    // CORRECCIÓN (14/09/2026, caso real: "TB OTTI" vs "TB  OTTI" con doble espacio quedaron
+    // como dos agentes separados): trim() solo saca espacios al principio/final, no colapsa
+    // espacios dobles/múltiples en el medio del nombre — un típeo de un espacio de más en el
+    // archivo (o al crear el agente) alcanzaba para que este match fallara silenciosamente y
+    // el importador creara/matcheara un agente distinto al que tenía el deal cargado. Se
+    // normalizan los espacios internos a uno solo de los dos lados antes de comparar.
     const a = await pool.query(
-      `SELECT id, name FROM agents WHERE active = true AND lower(trim(name)) = lower(trim($1))`,
+      `SELECT id, name FROM agents
+       WHERE active = true
+         AND regexp_replace(lower(trim(name)), '\\s+', ' ', 'g') = regexp_replace(lower(trim($1)), '\\s+', ' ', 'g')
+       ORDER BY (name = trim($1)) DESC
+       LIMIT 1`,
       [row.agentNameRaw]
     );
     if (a.rows[0]) {
