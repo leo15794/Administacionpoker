@@ -93,10 +93,14 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     // carga el cierre la tipee a mano. Esto es lo que hoy faltaba: la regla de Manzur (75% del
     // rake) existe en el motor y está testeada, pero nada la disparaba en producción porque el
     // formulario de Cierres no tenía forma de pasarla.
+    // Mismo ajuste que resolverConfigVigente/getActiveRule (comparar por dia calendario, no
+    // por instante exacto) — si no, una regla cargada el mismo dia que se cierra la semana
+    // quedaba afuera porque valid_from (con hora) nunca es <= weekEnd (fecha sin hora).
     const ruleRow = await client.query(
       `SELECT rule_key, params FROM rule_versions
        WHERE agent_id = $1 AND (club_id = $2 OR club_id IS NULL)
-         AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+         AND valid_from::date <= $3::date
+         AND (valid_to IS NULL OR valid_to::date > $3::date)
        ORDER BY (club_id IS NULL) ASC, valid_from DESC
        LIMIT 1`,
       [input.agentId, input.clubId, input.weekEnd]

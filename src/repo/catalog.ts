@@ -270,10 +270,13 @@ export async function moverAgenteDeClub(fromClubId: string, agentId: string, toC
 // ahora). Prioriza una regla específica del club por sobre una regla global del agente
 // (club_id NULL) si ambas están vigentes al mismo tiempo.
 export async function getActiveRule(agentId: string, clubId: string, atDate: string | Date = new Date()) {
+  // Mismo ajuste que resolverConfigVigente (ver comentario ahi): comparar por dia calendario,
+  // no por instante exacto, para que una regla cargada hoy ya aplique a un cierre de hoy.
   const r = await pool.query(
     `SELECT * FROM rule_versions
      WHERE agent_id = $1 AND (club_id = $2 OR club_id IS NULL)
-       AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+       AND valid_from::date <= $3::date
+       AND (valid_to IS NULL OR valid_to::date > $3::date)
      ORDER BY (club_id IS NULL) ASC, valid_from DESC
      LIMIT 1`,
     [agentId, clubId, atDate]
@@ -429,11 +432,23 @@ export async function upsertDeal(
  * no que el archivo traiga su propio %"). Prioridad: deal vigente agente↔club > default del
  * club + sistema por defecto del agente. Nunca inventa un % — si no hay deal ni default
  * configurado, devuelve 0 y lo marca (source) para que la UI pueda avisar.
+ *
+ * CORRECCIÓN (14/09/2026, reporte del usuario: "seteo el % de rakeback y no lo toma en el
+ * cierre"): la comparación era a nivel timestamp (valid_from <= atDate), pero valid_from se
+ * guarda con la hora exacta en que se creó el deal (DEFAULT now()) mientras que atDate llega
+ * como una fecha sin hora (el weekEnd del cierre/importación, ej. '2026-09-12'). Postgres
+ * interpreta esa fecha como medianoche — así que un deal creado HOY a cualquier hora después
+ * de las 00:00 quedaba SIEMPRE excluido de su propia semana (e incluso de semanas futuras con
+ * la misma fecha), porque valid_from (hoy 14:32) nunca es <= hoy 00:00. Se compara por día
+ * calendario en vez de por instante exacto: un deal cargado hoy ya aplica a cualquier cierre
+ * de hoy o de antes (coincide con la intención real: "a partir de ahora/esta semana").
  */
 export async function resolverConfigVigente(agentId: string, clubId: string, atDate: string | Date = new Date()) {
   const dealRes = await pool.query(
     `SELECT system, rakeback_pct, rebate_pct FROM agent_club_deals
-     WHERE agent_id = $1 AND club_id = $2 AND valid_from <= $3 AND (valid_to IS NULL OR valid_to > $3)
+     WHERE agent_id = $1 AND club_id = $2
+       AND valid_from::date <= $3::date
+       AND (valid_to IS NULL OR valid_to::date > $3::date)
      ORDER BY valid_from DESC LIMIT 1`,
     [agentId, clubId, atDate]
   );
