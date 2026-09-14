@@ -242,6 +242,12 @@ export const api = {
   // Borra una fila de jugador mal asignada a un club (ej. por el bug viejo del import_source),
   // para poder recargarla a mano en el club correcto. No toca cierres ni ledger.
   eliminarJugador: (playerId: string) => request(`/catalog/players/${playerId}`, { method: "DELETE" }),
+  // "Jugadores bancados": jugadores puntuales que se excluyen del cierre agregado de su agente
+  // (se contabilizan aparte). Ver players.bancado en schema.sql y repo/imports.ts.
+  jugadoresBancados: () => request(`/catalog/jugadores-bancados`),
+  buscarJugadores: (q: string) => request(`/catalog/players/buscar?q=${encodeURIComponent(q)}`),
+  setJugadorBancado: (playerId: string, bancado: boolean) =>
+    request(`/catalog/players/${playerId}/bancado`, { method: "PATCH", body: JSON.stringify({ bancado }) }),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

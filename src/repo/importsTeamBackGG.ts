@@ -13,6 +13,7 @@ import {
   type ResolucionAgente,
   type AgenteAgregado,
   type JugadorSinAgente,
+  type JugadorBancadoOmitido,
   type ClubImportado,
   type ResultadoImportacion,
   type AgenteAutoCreado,
@@ -74,10 +75,11 @@ export async function analizarImportacionTeamBackGG(
 
     const agentesMap = new Map<string, AgenteAgregado>();
     const sinAgente: JugadorSinAgente[] = [];
+    const bancados: JugadorBancadoOmitido[] = [];
 
     for (const row of sheet.rows) {
       const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
-      await upsertPlayer(club.id, row, resolucion.agentId);
+      const esBancado = await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
         sinAgente.push({
@@ -88,6 +90,18 @@ export async function analizarImportacionTeamBackGG(
           resultado: row.resultado,
           rake: row.rake,
           motivo: resolucion.motivo ?? "Sin agente resuelto.",
+        });
+        continue;
+      }
+
+      if (esBancado) {
+        bancados.push({
+          playerId: row.playerId,
+          playerName: row.playerName,
+          agentId: resolucion.agentId,
+          agentName: resolucion.agentName!,
+          resultado: row.resultado,
+          rake: row.rake,
         });
         continue;
       }
@@ -128,7 +142,7 @@ export async function analizarImportacionTeamBackGG(
     }
     agentes.sort((a, b) => a.agentName.localeCompare(b.agentName));
 
-    clubes.push({ clubId: club.id, clubName: club.name, sheetName: sheet.sheetName, agentes, sinAgente });
+    clubes.push({ clubId: club.id, clubName: club.name, sheetName: sheet.sheetName, agentes, sinAgente, bancados });
   }
 
   const agentesAutoCreados: AgenteAutoCreado[] = [...autoCreadosCache.values()].map((r) => ({

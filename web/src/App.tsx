@@ -12,6 +12,7 @@ import Adelantos from "./pages/Adelantos";
 import CuentasSocios from "./pages/CuentasSocios";
 import StockDeudas from "./pages/StockDeudas";
 import ResumenClub from "./pages/ResumenClub";
+import JugadoresBancados from "./pages/JugadoresBancados";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import { api } from "./api";
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="cuentas-socios" element={<CuentasSocios />} />
           <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="resumen-club" element={<ResumenClub />} />
+          <Route path="jugadores-bancados" element={<JugadoresBancados />} />
           <Route path="usuarios" element={<Usuarios />} />
         </Route>
 

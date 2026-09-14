@@ -30,6 +30,11 @@ const icon = {
       <path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" />
     </svg>
   ),
+  jugadoresBancados: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="8" r="5" /><path d="M12 3v10" />
+    </svg>
+  ),
   usuarios: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
@@ -148,6 +153,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
               <NavLink to="/dashboard/movimientos" className="nav-link" title="Cargar movimiento">{icon.movimientos} {!collapsed && "Cargar movimiento"}</NavLink>
               <NavLink to="/dashboard/cierres" className="nav-link" title="Cierres semanales">{icon.cierres} {!collapsed && "Cierres semanales"}</NavLink>
               <NavLink to="/dashboard/resumen-club" className="nav-link" title="Resumen por club">{icon.resumenClub} {!collapsed && "Resumen por club"}</NavLink>
+              <NavLink to="/dashboard/jugadores-bancados" className="nav-link" title="Jugadores bancados">{icon.jugadoresBancados} {!collapsed && "Jugadores bancados"}</NavLink>
               <NavLink to="/dashboard/wallet" className="nav-link" title="Wallet">{icon.wallet} {!collapsed && "Wallet"}</NavLink>
               <NavLink to="/dashboard/tesoreria" className="nav-link" title="Tesorería">{icon.tesoreria} {!collapsed && "Tesorería"}</NavLink>
               <NavLink to="/dashboard/garantias" className="nav-link" title="Garantías">{icon.garantias} {!collapsed && "Garantías"}</NavLink>

@@ -21,6 +21,9 @@ import {
   moverAgenteDeClub,
   eliminarAgenteDefinitivo,
   listAllDeals,
+  listJugadoresBancados,
+  buscarJugadores,
+  setJugadorBancado,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { pool } from "../db/pool.js";
@@ -231,6 +234,27 @@ catalogRouter.delete("/players/:id", requireAuth, requireAdmin, async (req, res)
   const ok = await eliminarJugador(req.params.id);
   if (!ok) return res.status(404).json({ error: "Jugador no encontrado" });
   res.status(204).send();
+});
+
+// "Jugadores bancados": pantalla dedicada para buscar un jugador (por nombre/ID) y marcarlo/
+// desmarcarlo, y ver de un vistazo a todos los que ya están marcados en cualquier club.
+catalogRouter.get("/jugadores-bancados", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listJugadoresBancados());
+});
+
+catalogRouter.get("/players/buscar", requireAuth, requireAdmin, async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q : "";
+  if (q.trim().length < 2) return res.json([]);
+  res.json(await buscarJugadores(q));
+});
+
+const jugadorBancadoSchema = z.object({ bancado: z.boolean() });
+catalogRouter.patch("/players/:id/bancado", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = jugadorBancadoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const r = await setJugadorBancado(req.params.id, parsed.data.bancado);
+  if (!r) return res.status(404).json({ error: "Jugador no encontrado" });
+  res.json(r);
 });
 
 const moverAgenteSchema = z.object({ toClubId: z.string().min(1) });

@@ -16,6 +16,7 @@ import {
   type ResolucionAgente,
   type AgenteAgregado,
   type JugadorSinAgente,
+  type JugadorBancadoOmitido,
   type ClubImportado,
   type ResultadoImportacion,
   type AgenteAutoCreado,
@@ -86,7 +87,7 @@ export async function analizarImportacionTinyGG(
 
     let entry = clubesMap.get(club.id);
     if (!entry) {
-      entry = { clubId: club.id, clubName: club.name, sheetName: archivo.fileName, agentes: [], sinAgente: [] };
+      entry = { clubId: club.id, clubName: club.name, sheetName: archivo.fileName, agentes: [], sinAgente: [], bancados: [] };
       clubesMap.set(club.id, entry);
     }
     let agentesMap = agentesMapPorClub.get(club.id);
@@ -105,7 +106,7 @@ export async function analizarImportacionTinyGG(
 
     for (const row of p.rows) {
       const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
-      await upsertPlayer(club.id, row, resolucion.agentId);
+      const esBancado = await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
         const sinAgente: JugadorSinAgente = {
@@ -118,6 +119,19 @@ export async function analizarImportacionTinyGG(
           motivo: resolucion.motivo ?? "Sin agente resuelto.",
         };
         entry.sinAgente.push(sinAgente);
+        continue;
+      }
+
+      if (esBancado) {
+        const bancado: JugadorBancadoOmitido = {
+          playerId: row.playerId,
+          playerName: row.playerName,
+          agentId: resolucion.agentId,
+          agentName: resolucion.agentName!,
+          resultado: row.resultado,
+          rake: row.rake,
+        };
+        entry.bancados.push(bancado);
         continue;
       }
 

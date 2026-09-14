@@ -96,6 +96,14 @@ CREATE TABLE IF NOT EXISTS players (
   UNIQUE(club_id, external_id)
 );
 
+-- "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que se contabiliza
+-- aparte (fuera del sistema, por ahora) en vez de sumarse al cierre normal de ese agente — ver
+-- pantalla "Jugadores bancados" y repo/imports.ts. Default false: no cambia nada de lo que ya
+-- había cargado hasta ahora. NO confundir con agents.account_type = 'BANCADO' (eso es una
+-- cuenta de AGENTE con motor de cierre propio, esto es un JUGADOR individual excluido del
+-- agregado de su agente).
+ALTER TABLE players ADD COLUMN IF NOT EXISTS bancado BOOLEAN NOT NULL DEFAULT false;
+
 -- Override manual jugador->agente (BIT-069): IDs que siempre deben mapear al mismo
 -- agente aunque el reporte del club venga sin agente asignado.
 CREATE TABLE IF NOT EXISTS player_agent_overrides (

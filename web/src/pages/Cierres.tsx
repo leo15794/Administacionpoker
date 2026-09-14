@@ -768,6 +768,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // claro que no fue "magia" — si algún nombre es en realidad un typo de un agente que ya
   // existía, se corrige a mano desde el Árbol de clubes (mover jugadores / eliminar el duplicado).
   const [agentesAutoCreados, setAgentesAutoCreados] = useState<{ agentId: string; agentName: string; agentIdRaw: string | null }[]>([]);
+  // Jugadores marcados como "bancados" (pantalla Jugadores bancados) que aparecieron en el
+  // archivo — se omiten del agregado del agente (ver repo/imports.ts) y se informan acá para
+  // que el total que quedó afuera del cierre no desaparezca en silencio.
+  const [bancadosPorClub, setBancadosPorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
   const [guardandoAsignacion, setGuardandoAsignacion] = useState<string | null>(null);
@@ -865,6 +869,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         (r.clubes || [])
           .filter((c: any) => c.sinAgente?.length > 0)
           .map((c: any) => ({ clubId: c.clubId, clubName: c.clubName, items: c.sinAgente }))
+      );
+      setBancadosPorClub(
+        (r.clubes || [])
+          .filter((c: any) => c.bancados?.length > 0)
+          .map((c: any) => ({ clubId: c.clubId, clubName: c.clubName, items: c.bancados }))
       );
       setAgentesAutoCreados(r.agentesAutoCreados || []);
       // Tiny GG: acá es donde se convierte fichas -> USD, una sola vez, dividiendo por la tasa
@@ -1310,6 +1319,41 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                 </tbody>
               </table>
             </div>
+            );
+          })}
+        </div>
+      )}
+
+      {bancadosPorClub.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h4>Jugadores bancados omitidos del cierre</h4>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Estos jugadores están marcados en "Jugadores bancados" — no entran al cierre agregado de su agente, se contabilizan
+            aparte. El total de acá abajo NO está incluido en ningún cierre que vayas a aplicar.
+          </div>
+          {bancadosPorClub.map((grupo) => {
+            const totalResultado = grupo.items.reduce((s: number, it: any) => s + Number(it.resultado), 0);
+            const totalRake = grupo.items.reduce((s: number, it: any) => s + Number(it.rake), 0);
+            return (
+              <div key={grupo.clubId} style={{ marginBottom: 14 }}>
+                <div className="muted">
+                  {grupo.clubName} — {grupo.items.length} jugador{grupo.items.length === 1 ? "" : "es"} omitido{grupo.items.length === 1 ? "" : "s"}, resultado
+                  total {usd(totalResultado)}, rake total {usd(totalRake)}
+                </div>
+                <table>
+                  <thead><tr><th>Jugador</th><th>Agente</th><th>Resultado</th><th>Rake</th></tr></thead>
+                  <tbody>
+                    {grupo.items.map((it: any) => (
+                      <tr key={it.playerId}>
+                        <td>{it.playerName} <span className="muted">#{it.playerId}</span></td>
+                        <td>{it.agentName}</td>
+                        <td>{usd(it.resultado)}</td>
+                        <td>{usd(it.rake)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           })}
         </div>

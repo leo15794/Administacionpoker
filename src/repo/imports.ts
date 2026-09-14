@@ -47,12 +47,26 @@ export interface JugadorSinAgente {
   motivo: string;
 }
 
+// Jugador marcado como "bancado" (ver Jugadores bancados / players.bancado): tiene agente
+// resuelto igual que cualquier otro, pero se omite del agregado semanal de ese agente porque
+// se contabiliza aparte. Se informa acá (en vez de desaparecer en silencio) para que quede a
+// mano el total que quedó afuera.
+export interface JugadorBancadoOmitido {
+  playerId: string;
+  playerName: string;
+  agentId: string;
+  agentName: string;
+  resultado: number;
+  rake: number;
+}
+
 export interface ClubImportado {
   clubId: string;
   clubName: string;
   sheetName: string;
   agentes: AgenteAgregado[];
   sinAgente: JugadorSinAgente[];
+  bancados: JugadorBancadoOmitido[];
 }
 
 export interface ResultadoImportacion {
@@ -188,13 +202,19 @@ export async function resolvePlayerAgent(
   };
 }
 
-export async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: string | null) {
-  await pool.query(
+// Devuelve el flag "bancado" del jugador (ver columna players.bancado) para que el llamador
+// pueda decidir si esta fila entra al agregado normal del agente o se omite — el flag nunca se
+// toca acá, ON CONFLICT solo actualiza nombre/agente, así que un jugador marcado bancado sigue
+// bancado semana tras semana aunque se vuelva a importar.
+export async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: string | null): Promise<boolean> {
+  const r = await pool.query(
     `INSERT INTO players (id, external_id, display_name, club_id, agent_id)
      VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id`,
+     ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id
+     RETURNING bancado`,
     [newId("player"), row.playerId, row.playerName, clubId, agentId]
   );
+  return r.rows[0]?.bancado ?? false;
 }
 
 /**
@@ -271,10 +291,11 @@ export async function analizarImportacionSuprema(
 
     const agentesMap = new Map<string, AgenteAgregado>();
     const sinAgente: JugadorSinAgente[] = [];
+    const bancados: JugadorBancadoOmitido[] = [];
 
     for (const row of sheet.rows) {
       const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
-      await upsertPlayer(club.id, row, resolucion.agentId);
+      const esBancado = await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
         sinAgente.push({
@@ -285,6 +306,18 @@ export async function analizarImportacionSuprema(
           resultado: row.resultado,
           rake: row.rake,
           motivo: resolucion.motivo ?? "Sin agente resuelto.",
+        });
+        continue;
+      }
+
+      if (esBancado) {
+        bancados.push({
+          playerId: row.playerId,
+          playerName: row.playerName,
+          agentId: resolucion.agentId,
+          agentName: resolucion.agentName!,
+          resultado: row.resultado,
+          rake: row.rake,
         });
         continue;
       }
@@ -336,7 +369,7 @@ export async function analizarImportacionSuprema(
     }
     agentes.sort((a, b) => a.agentName.localeCompare(b.agentName));
 
-    clubes.push({ clubId: club.id, clubName: club.name, sheetName: sheet.sheetName, agentes, sinAgente });
+    clubes.push({ clubId: club.id, clubName: club.name, sheetName: sheet.sheetName, agentes, sinAgente, bancados });
   }
 
   const agentesAutoCreados: AgenteAutoCreado[] = [...autoCreadosCache.values()].map((r) => ({

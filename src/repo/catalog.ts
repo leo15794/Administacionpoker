@@ -240,6 +240,52 @@ export async function eliminarJugador(playerId: string) {
   return r.rowCount ? r.rowCount > 0 : false;
 }
 
+// "Jugadores bancados" (14/09/2026): jugadores puntuales de un agente que hay que excluir del
+// cierre agregado de ese agente porque se contabilizan aparte. Ver columna players.bancado en
+// schema.sql y repo/imports.ts (donde se usa el flag para omitirlos del agregado semanal).
+
+// Lista TODOS los jugadores marcados como bancados, de cualquier club/agente, para la pantalla
+// dedicada "Jugadores bancados" — no hace falta entrar club por club a buscarlos.
+export async function listJugadoresBancados() {
+  const r = await pool.query(
+    `SELECT p.id, p.external_id, p.display_name, p.club_id, c.name as club_name,
+            p.agent_id, a.name as agent_name
+     FROM players p
+     JOIN clubs c ON c.id = p.club_id
+     LEFT JOIN agents a ON a.id = p.agent_id
+     WHERE p.bancado = true
+     ORDER BY c.name, a.name NULLS LAST, p.display_name`
+  );
+  return r.rows;
+}
+
+// Busca jugadores por nombre o ID (para elegir a cuál marcar como bancado) — trae club y
+// agente para poder distinguir de un vistazo si hay más de un jugador con el mismo nombre en
+// clubes distintos. Limitado a 30 resultados: es un buscador de a uno, no un listado completo.
+export async function buscarJugadores(query: string) {
+  const q = `%${query.trim()}%`;
+  const r = await pool.query(
+    `SELECT p.id, p.external_id, p.display_name, p.club_id, c.name as club_name,
+            p.agent_id, a.name as agent_name, p.bancado
+     FROM players p
+     JOIN clubs c ON c.id = p.club_id
+     LEFT JOIN agents a ON a.id = p.agent_id
+     WHERE p.display_name ILIKE $1 OR p.external_id ILIKE $1
+     ORDER BY p.display_name
+     LIMIT 30`,
+    [q]
+  );
+  return r.rows;
+}
+
+export async function setJugadorBancado(playerId: string, bancado: boolean) {
+  const r = await pool.query(
+    `UPDATE players SET bancado = $1 WHERE id = $2 RETURNING id, bancado`,
+    [bancado, playerId]
+  );
+  return r.rows[0] ?? null;
+}
+
 // Mueve TODOS los jugadores de un agente en un club a otro club de una — para el caso típico de
 // contaminación (un agente quedó entero bajo el club equivocado por el bug viejo de
 // import_source). Igual que eliminarJugador, esto es un cambio de catálogo puro: no toca
