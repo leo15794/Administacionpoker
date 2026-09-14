@@ -387,3 +387,47 @@ dashboardRouter.post("/tesoreria/ajuste", requireAuth, requireAdmin, async (req:
     res.status(400).json({ error: err.message });
   }
 });
+
+// ============ Resumen semanal por club ============
+// Reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion clubes" (ver
+// repo/clubResumen.ts para la explicacion completa de la formula unificada).
+import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
+
+dashboardRouter.get("/resumen-club/semanas", requireAuth, requireAdmin, async (req, res) => {
+  const clubId = typeof req.query.clubId === "string" ? req.query.clubId : undefined;
+  res.json(await listSemanasConCierres(clubId));
+});
+
+dashboardRouter.get("/resumen-club", requireAuth, requireAdmin, async (req, res) => {
+  const clubId = req.query.clubId;
+  const weekStart = req.query.weekStart;
+  if (typeof clubId !== "string" || typeof weekStart !== "string") {
+    return res.status(400).json({ error: "Falta clubId o weekStart." });
+  }
+  const resumen = await getResumenClubSemanal(clubId, weekStart);
+  if (!resumen) return res.status(404).json({ error: "Club no encontrado." });
+  res.json(resumen);
+});
+
+const extrasSchema = z.object({
+  clubId: z.string(),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  gananciaRodeoClub: z.number().default(0),
+  ingresoPorVentas: z.number().default(0),
+  observaciones: z.string().optional(),
+});
+
+// Carga manual de "Ganancia Rodeo Club" e "Ingreso por ventas" — datos externos que no salen
+// de ningun cierre de agente (en la planilla se cargan a mano club por semana, ver
+// MEMORIA_CLUB_RODEO / CARGA_VENTAS).
+dashboardRouter.post("/resumen-club/extras", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = extrasSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const r = await upsertClubWeeklyExtras({ ...parsed.data, createdBy: req.user?.email ?? null });
+    res.status(201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});

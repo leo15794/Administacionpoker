@@ -491,3 +491,40 @@ CREATE TABLE IF NOT EXISTS account_stock (
   UNIQUE(agent_id, club_id)
 );
 CREATE INDEX IF NOT EXISTS account_stock_club_idx ON account_stock(club_id);
+
+-- ============ RESUMEN SEMANAL POR CLUB ============
+-- Reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion clubes" (una pestaña
+-- RESUMEN_TB/RESUMEN_FENIX/RESUMEN_GG/RESUMEN_FENIX_GG por club, confirmadas fórmula por
+-- fórmula contra esa planilla el 14/09/2026). Se descubrió que las 5 (TeamBack Suprema, Fénix
+-- Suprema, TeamBack GG, Fénix GG, X-Poker) comparten la MISMA forma:
+--   Ganancia por rake = SUM(rake_total del cierre semanal * ratio de plataforma) - rakeback pagado
+-- Solo cambia el "ratio de plataforma" (lo que la plataforma nos paga a nosotros del rake, antes
+-- de pagarle su parte al agente): 80% Suprema, 82,5% TeamBack GG, 90% X-Poker, 65% Fénix GG por
+-- defecto (75% para el grupo de Uriel, ver agent_club_deals.club_payout_ratio_override). Tiny GG
+-- queda afuera de este cálculo por ahora: su "rebate de plataforma" se reparte proporcional al
+-- déficit de TODAS las cuentas de la semana, un dato crudo de importación que hoy no persistimos
+-- aparte — ver RESUMEN_TINY de la planilla si hay que retomarlo.
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS weekly_fixed_fee NUMERIC(12,2) NOT NULL DEFAULT 0;
+-- platform_pct ya existe (nunca se había usado): fracción del rake que se queda la plataforma.
+-- El "ratio de plataforma" de la fórmula de arriba es 1 - platform_pct.
+
+-- Excepción por agente al ratio de plataforma del club (ej. subagentes de Uriel en Fénix GG
+-- cobran 75% en vez del 65% general) — NUNCA afecta el saldo del agente ni su cierre individual,
+-- solo el cálculo de "Ganancia por rake" en el resumen del club.
+ALTER TABLE agent_club_deals ADD COLUMN IF NOT EXISTS club_payout_ratio_override NUMERIC(6,4);
+
+-- "Ganancia Rodeo Club" e "Ingreso por ventas" son datos externos que no salen de ningún cierre
+-- de agente (en la planilla se cargan a mano club por semana) — se cargan y corrigen directo,
+-- mismo criterio que account_stock (no es un movimiento de plata del ledger de agentes).
+CREATE TABLE IF NOT EXISTS club_weekly_extras (
+  id                  TEXT PRIMARY KEY,
+  club_id             TEXT NOT NULL REFERENCES clubs(id),
+  week_start          DATE NOT NULL,
+  week_end            DATE NOT NULL,
+  ganancia_rodeo_club NUMERIC(18,4) NOT NULL DEFAULT 0,
+  ingreso_por_ventas  NUMERIC(18,4) NOT NULL DEFAULT 0,
+  observaciones       TEXT,
+  created_by          TEXT,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(club_id, week_start)
+);

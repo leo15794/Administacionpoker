@@ -384,6 +384,20 @@ export const api = {
   crearAgenteImportado: (data: { name: string; agentIdRaw?: string | null; defaultSystem?: "PREPAGO" | "WIN_LOSE" }) =>
     request("/imports/suprema/crear-agente", { method: "POST", body: JSON.stringify(data) }),
 
+  // Resumen semanal por club (ver repo/clubResumen.ts) — desglose por agente + totales del
+  // club, reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion clubes".
+  semanasResumenClub: (clubId?: string) => request(`/dashboard/resumen-club/semanas${clubId ? `?clubId=${clubId}` : ""}`),
+  resumenClub: (clubId: string, weekStart: string) =>
+    request(`/dashboard/resumen-club?clubId=${clubId}&weekStart=${weekStart}`),
+  guardarExtrasResumenClub: (data: {
+    clubId: string;
+    weekStart: string;
+    weekEnd: string;
+    gananciaRodeoClub: number;
+    ingresoPorVentas: number;
+    observaciones?: string;
+  }) => request("/dashboard/resumen-club/extras", { method: "POST", body: JSON.stringify(data) }),
+
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),
   getToken,
