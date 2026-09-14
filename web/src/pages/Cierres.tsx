@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
@@ -30,6 +30,37 @@ export default function Cierres() {
   const [clubABorrar, setClubABorrar] = useState("");
   const [borrandoSemana, setBorrandoSemana] = useState(false);
   const semanasDisponibles = Array.from(new Set(cierres.map((c) => c.week_start))).sort().reverse();
+
+  // Colapsar el cierre completo de una semana (todas sus filas), no solo el desglose de una
+  // fila — para que la tabla no se vaya larguisimo para abajo cuando hay muchos agentes/clubes
+  // cargados la misma semana. Por default se abre solo la semana mas reciente y el resto queda
+  // colapsado; una vez que el usuario abre/cierra algo a mano, un refresh() no se lo pisa.
+  const [semanasColapsadas, setSemanasColapsadas] = useState<Set<string>>(new Set());
+  const colapsoInicial = useRef(false);
+  useEffect(() => {
+    if (colapsoInicial.current || cierres.length === 0) return;
+    colapsoInicial.current = true;
+    const semanas = Array.from(new Set(cierres.map((c) => c.week_start)));
+    setSemanasColapsadas(new Set(semanas.slice(1)));
+  }, [cierres]);
+
+  function toggleSemanaColapsada(weekStart: string) {
+    setSemanasColapsadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(weekStart)) next.delete(weekStart);
+      else next.add(weekStart);
+      return next;
+    });
+  }
+
+  // Cierres ya vienen ordenados por semana desc + nombre desde el backend — solo hace falta
+  // agrupar filas consecutivas de la misma semana, no reordenar nada.
+  const gruposPorSemana: { weekStart: string; weekEnd: string; filas: any[] }[] = [];
+  for (const c of cierres) {
+    const ultimo = gruposPorSemana[gruposPorSemana.length - 1];
+    if (ultimo && ultimo.weekStart === c.week_start) ultimo.filas.push(c);
+    else gruposPorSemana.push({ weekStart: c.week_start, weekEnd: c.week_end, filas: [c] });
+  }
 
   async function borrarSemanaCompleta() {
     if (!semanaABorrar) return;
@@ -203,85 +234,111 @@ export default function Cierres() {
             </tr>
           </thead>
           <tbody>
-            {cierres.map((c) => {
-              // Desglose Jugadores/Ring Game/MTT/SNG: solo existe en cierres de formato Suprema
-              // (Fenix/TeamBack Suprema) cargados despues de este cambio — el resto queda en NULL.
-              const tieneDesglose =
-                c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null;
-              const abierto = expandido.has(c.id);
+            {gruposPorSemana.map((g) => {
+              const semanaColapsada = semanasColapsadas.has(g.weekStart);
+              const cierreFinalSemana = g.filas.reduce((s, c) => s + Number(c.final_closing), 0);
               return (
-                <Fragment key={c.id}>
-                  <tr style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
-                    <td>
-                      {tieneDesglose && (
-                        <button
-                          className="btn secondary small"
-                          onClick={() => toggleExpandido(c.id)}
-                          title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
-                          style={{ padding: "2px 8px" }}
-                        >
-                          {abierto ? "▾" : "▸"}
-                        </button>
-                      )}
-                    </td>
-                    <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
-                    <td>{c.agent_name}</td>
-                    <td>{c.club_name}</td>
-                    <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                    <td>{usd(c.result)}</td>
-                    <td>{usd(c.rake_total)}</td>
-                    <td>{usd(c.rakeback)}</td>
-                    <td>
-                      {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
-                          para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
-                      {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
-                    </td>
-                    <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
-                    <td>
-                      {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
-                      {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
-                      {c.rule_applied === "BANCADO" && (
-                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                          Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
-                          {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
-                        </div>
-                      )}
-                    </td>
-                    <td className="row-actions">
-                      {c.status !== "REVERTIDO" && (
-                        <button
-                          className="btn secondary small"
-                          disabled={borrando === c.id}
-                          onClick={() => revertirCierre(c)}
-                          title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
-                        >
-                          {borrando === c.id ? "..." : "Revertir"}
-                        </button>
-                      )}
-                      <button
-                        className="btn secondary small"
-                        disabled={borrando === c.id}
-                        onClick={() => borrarDefinitivo(c)}
-                        title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                        style={{ color: "var(--danger, #e5484d)" }}
-                      >
-                        {borrando === c.id ? "..." : "Borrar"}
-                      </button>
+                <Fragment key={g.weekStart}>
+                  <tr
+                    className="row-click"
+                    onClick={() => toggleSemanaColapsada(g.weekStart)}
+                    style={{ background: "rgba(255,255,255,0.04)" }}
+                  >
+                    <td colSpan={12}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span>{semanaColapsada ? "▸" : "▾"}</span>
+                        <strong>{dateShort(g.weekStart)} - {dateShort(g.weekEnd)}</strong>
+                        <span className="muted">({g.filas.length} cierre{g.filas.length === 1 ? "" : "s"})</span>
+                        <span className="muted" style={{ marginLeft: "auto" }}>
+                          Cierre final: <strong className={cierreFinalSemana >= 0 ? "pos" : "neg"}>{usd(cierreFinalSemana)}</strong>
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                  {abierto && tieneDesglose && (
-                    <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
-                      <td></td>
-                      <td colSpan={10}>
-                        <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
-                          <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
-                          <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
-                          <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
-                          <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                  {!semanaColapsada &&
+                    g.filas.map((c) => {
+                      // Desglose Jugadores/Ring Game/MTT/SNG: solo existe en cierres de formato
+                      // Suprema (Fenix/TeamBack Suprema) cargados despues de este cambio — el
+                      // resto queda en NULL.
+                      const tieneDesglose =
+                        c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null;
+                      const abierto = expandido.has(c.id);
+                      return (
+                        <Fragment key={c.id}>
+                          <tr style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                            <td>
+                              {tieneDesglose && (
+                                <button
+                                  className="btn secondary small"
+                                  onClick={() => toggleExpandido(c.id)}
+                                  title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
+                                  style={{ padding: "2px 8px" }}
+                                >
+                                  {abierto ? "▾" : "▸"}
+                                </button>
+                              )}
+                            </td>
+                            <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
+                            <td>{c.agent_name}</td>
+                            <td>{c.club_name}</td>
+                            <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                            <td>{usd(c.result)}</td>
+                            <td>{usd(c.rake_total)}</td>
+                            <td>{usd(c.rakeback)}</td>
+                            <td>
+                              {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
+                                  para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
+                              {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
+                            </td>
+                            <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
+                            <td>
+                              {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+                              {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
+                              {c.rule_applied === "BANCADO" && (
+                                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                                  Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
+                                  {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
+                                </div>
+                              )}
+                            </td>
+                            <td className="row-actions">
+                              {c.status !== "REVERTIDO" && (
+                                <button
+                                  className="btn secondary small"
+                                  disabled={borrando === c.id}
+                                  onClick={() => revertirCierre(c)}
+                                  title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
+                                >
+                                  {borrando === c.id ? "..." : "Revertir"}
+                                </button>
+                              )}
+                              <button
+                                className="btn secondary small"
+                                disabled={borrando === c.id}
+                                onClick={() => borrarDefinitivo(c)}
+                                title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                                style={{ color: "var(--danger, #e5484d)" }}
+                              >
+                                {borrando === c.id ? "..." : "Borrar"}
+                              </button>
+                            </td>
+                          </tr>
+                          {abierto && tieneDesglose && (
+                            <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
+                              <td></td>
+                              <td colSpan={11}>
+                                <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
+                                  <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
+                                  <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
+                                  <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
+                                  <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                 </Fragment>
               );
             })}
