@@ -413,14 +413,12 @@ const extrasSchema = z.object({
   clubId: z.string(),
   weekStart: z.string(),
   weekEnd: z.string(),
-  gananciaRodeoClub: z.number().default(0),
   ingresoPorVentas: z.number().default(0),
   observaciones: z.string().optional(),
 });
 
-// Carga manual de "Ganancia Rodeo Club" e "Ingreso por ventas" — datos externos que no salen
-// de ningun cierre de agente (en la planilla se cargan a mano club por semana, ver
-// MEMORIA_CLUB_RODEO / CARGA_VENTAS).
+// Carga manual de "Ingreso por ventas" — el unico dato de este resumen que de verdad no sale
+// de ningun cierre de agente (Rodeo se calcula solo, ver repo/clubResumen.ts).
 dashboardRouter.post("/resumen-club/extras", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = extrasSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

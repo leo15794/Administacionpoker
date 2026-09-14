@@ -19,7 +19,6 @@ export default function ResumenClub() {
   const [error, setError] = useState("");
   const [editandoExtras, setEditandoExtras] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [rodeoInput, setRodeoInput] = useState("0");
   const [ventasInput, setVentasInput] = useState("0");
   const [observaciones, setObservaciones] = useState("");
 
@@ -48,7 +47,6 @@ export default function ResumenClub() {
       .resumenClub(clubId, weekStart)
       .then((r: any) => {
         setResumen(r);
-        setRodeoInput(String(r.gananciaRodeoClub));
         setVentasInput(String(r.ingresoPorVentas));
       })
       .catch((e: any) => setError(e.message));
@@ -62,7 +60,6 @@ export default function ResumenClub() {
         clubId: resumen.clubId,
         weekStart: resumen.weekStart,
         weekEnd: resumen.weekEnd ?? resumen.weekStart,
-        gananciaRodeoClub: Number(rodeoInput) || 0,
         ingresoPorVentas: Number(ventasInput) || 0,
         observaciones: observaciones || undefined,
       });
@@ -112,7 +109,7 @@ export default function ResumenClub() {
                   <thead>
                     <tr>
                       <th>Agente</th><th>Resultado</th><th>Rake total</th><th>% Rakeback</th>
-                      <th>Rakeback agente</th><th>Rebate</th><th>Ganancia por rake</th><th>Cierre final agente</th>
+                      <th>Rakeback agente</th><th>Rebate</th><th>Rodeo agente</th><th>Ganancia por rake</th><th>Cierre final agente</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -124,6 +121,7 @@ export default function ResumenClub() {
                         <td className="muted">{pct(f.rakebackPct)}</td>
                         <td>{usd(f.rakebackAgente)}</td>
                         <td className="muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
+                        <td className="muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
                         <td>{usd(f.gananciaPorRake)}</td>
                         <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
                       </tr>
@@ -139,7 +137,7 @@ export default function ResumenClub() {
               <h3 style={{ margin: 0 }}>Resumen del club — {resumen.clubName}</h3>
               {!editandoExtras && (
                 <button className="btn secondary small" onClick={() => setEditandoExtras(true)}>
-                  Cargar Rodeo / Ventas
+                  Cargar Ingreso por ventas
                 </button>
               )}
             </div>
@@ -149,16 +147,8 @@ export default function ResumenClub() {
                 <tr><td>Comisiones / rakeback agentes</td><td>{usd(resumen.comisionesAgentes)}</td></tr>
                 {resumen.rebateTotal !== 0 && <tr><td>Rebate total</td><td>{usd(resumen.rebateTotal)}</td></tr>}
                 <tr><td><strong>Ganancia por rake</strong></td><td><strong>{usd(resumen.gananciaPorRake)}</strong></td></tr>
-                <tr>
-                  <td>Ganancia Rodeo Club</td>
-                  <td>
-                    {editandoExtras ? (
-                      <input type="number" step="0.01" value={rodeoInput} onChange={(e) => setRodeoInput(e.target.value)} style={{ width: 120 }} />
-                    ) : (
-                      usd(resumen.gananciaRodeoClub)
-                    )}
-                  </td>
-                </tr>
+                {resumen.rodeoPagadoAgentes !== 0 && <tr><td className="muted">Rodeo pagado agentes (ya incluido en el cierre de cada agente)</td><td className="muted">{usd(resumen.rodeoPagadoAgentes)}</td></tr>}
+                {resumen.gananciaRodeoClub !== 0 && <tr><td>Ganancia Rodeo Club</td><td>{usd(resumen.gananciaRodeoClub)}</td></tr>}
                 <tr>
                   <td>Ingreso por ventas</td>
                   <td>

@@ -521,7 +521,6 @@ CREATE TABLE IF NOT EXISTS club_weekly_extras (
   club_id             TEXT NOT NULL REFERENCES clubs(id),
   week_start          DATE NOT NULL,
   week_end            DATE NOT NULL,
-  ganancia_rodeo_club NUMERIC(18,4) NOT NULL DEFAULT 0,
   ingreso_por_ventas  NUMERIC(18,4) NOT NULL DEFAULT 0,
   observaciones       TEXT,
   created_by          TEXT,

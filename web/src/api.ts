@@ -393,7 +393,6 @@ export const api = {
     clubId: string;
     weekStart: string;
     weekEnd: string;
-    gananciaRodeoClub: number;
     ingresoPorVentas: number;
     observaciones?: string;
   }) => request("/dashboard/resumen-club/extras", { method: "POST", body: JSON.stringify(data) }),
