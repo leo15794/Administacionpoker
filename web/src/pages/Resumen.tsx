@@ -68,7 +68,7 @@ export default function Resumen() {
           onClick={() => nav("/dashboard/cierres")}
           title={
             data.kpis.gananciaSemanaInicio
-              ? `Semana ${dateShort(data.kpis.gananciaSemanaInicio)} - ${dateShort(data.kpis.gananciaSemanaFin)} — rake menos rakeback y rebate devueltos a agentes. Calculado en vivo desde los cierres cargados, ir a Cierres`
+              ? `Semana ${dateShort(data.kpis.gananciaSemanaInicio)} - ${dateShort(data.kpis.gananciaSemanaFin)} — suma de la Ganancia Neta de cada club (ver Resumen por club), calculada en vivo desde los cierres cargados, ir a Cierres`
               : "Todavía no hay ningún cierre semanal real cargado"
           }
         >

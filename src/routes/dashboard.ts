@@ -5,6 +5,7 @@ import { listAllBalances } from "../repo/ledger.js";
 import { listClosings } from "../repo/closings.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
 
 export const dashboardRouter = Router();
 
@@ -66,20 +67,33 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   // RESUMEN_GENERAL — encontramos que ese pegado se olvidó del todo del club TINY y dejó una
   // fila de X-Poker vieja/inconsistente), esto sale en vivo de nuestros propios cierres, así
   // que nunca le puede faltar un club ni quedar con un número de otra semana.
-  const resultadoPorClub = gananciaSemana.rows[0]
-    ? await pool.query(
-        `SELECT c.id as club_id, c.name as club_name,
-                COALESCE(SUM(wc.rake_total), 0) as rake_total,
-                COALESCE(SUM(wc.rake_total - wc.rakeback - wc.rebate), 0) as ganancia,
-                COALESCE(SUM(wc.final_closing), 0) as cierre_agentes
-         FROM weekly_closings wc
-         JOIN clubs c ON c.id = wc.club_id
-         WHERE wc.status <> 'REVERTIDO' AND wc.week_start = $1 AND wc.week_end = $2
-         GROUP BY c.id, c.name
-         ORDER BY c.name`,
-        [gananciaSemana.rows[0].week_start, gananciaSemana.rows[0].week_end]
-      )
-    : { rows: [] as any[] };
+  //
+  // "ganancia" de cada fila es la GANANCIA NETA real del club (misma fórmula que "Resumen por
+  // club": rake × ratio de plataforma del club − rakeback, más Rodeo Club + Ingreso por ventas
+  // + tasa semanal fija) — no el cálculo genérico rake−rakeback−rebate de antes, que ignoraba
+  // el ratio propio de cada club y esos tres datos. La "Ganancia de la semana" de los KPIs de
+  // arriba es la suma de esta ganancia neta de todos los clubes de la semana (ver más abajo).
+  let resultadoPorClub: any[] = [];
+  if (gananciaSemana.rows[0]) {
+    const clubesSemana = await pool.query(
+      `SELECT DISTINCT wc.club_id FROM weekly_closings wc
+       WHERE wc.status <> 'REVERTIDO' AND wc.week_start = $1 AND wc.week_end = $2`,
+      [gananciaSemana.rows[0].week_start, gananciaSemana.rows[0].week_end]
+    );
+    for (const { club_id } of clubesSemana.rows) {
+      const r = await getResumenClubSemanal(club_id, gananciaSemana.rows[0].week_start);
+      if (!r) continue;
+      resultadoPorClub.push({
+        club_id: r.clubId,
+        club_name: r.clubName,
+        rake_total: r.rakeTotal,
+        ganancia: r.gananciaNeta,
+        cierre_agentes: r.cierreTotalAgentes,
+      });
+    }
+    resultadoPorClub.sort((a, b) => a.club_name.localeCompare(b.club_name));
+  }
+  const gananciaNetaSemana = resultadoPorClub.reduce((s, c) => s + Number(c.ganancia), 0);
 
   // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
   // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
@@ -103,13 +117,13 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       adelantosPendientes: Number(adelantos.rows[0].pendiente),
       adelantosCantidad: adelantos.rows[0].cantidad,
       saldoWallet: Number(wallet.rows[0].neto),
-      gananciaSemana: gananciaSemana.rows[0] ? Number(gananciaSemana.rows[0].ganancia) : null,
+      gananciaSemana: gananciaSemana.rows[0] ? gananciaNetaSemana : null,
       rakeSemana: gananciaSemana.rows[0] ? Number(gananciaSemana.rows[0].rake_total) : null,
       gananciaSemanaInicio: gananciaSemana.rows[0]?.week_start ?? null,
       gananciaSemanaFin: gananciaSemana.rows[0]?.week_end ?? null,
     },
     porClub: porClub.rows,
-    resultadoPorClub: resultadoPorClub.rows,
+    resultadoPorClub,
     balances,
   });
 });
@@ -391,8 +405,6 @@ dashboardRouter.post("/tesoreria/ajuste", requireAuth, requireAdmin, async (req:
 // ============ Resumen semanal por club ============
 // Reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion clubes" (ver
 // repo/clubResumen.ts para la explicacion completa de la formula unificada).
-import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
-
 dashboardRouter.get("/resumen-club/semanas", requireAuth, requireAdmin, async (req, res) => {
   const clubId = typeof req.query.clubId === "string" ? req.query.clubId : undefined;
   res.json(await listSemanasConCierres(clubId));
