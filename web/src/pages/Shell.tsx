@@ -216,17 +216,17 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
           )}
-        </nav>
-
-        <div className="sidebar-footer">
           <button
-            className="btn secondary"
+            className="nav-link"
             onClick={toggleTheme}
             title={theme === "dark" ? "Modo día" : "Modo noche"}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}
+            style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer", font: "inherit", borderTop: "1px solid var(--border)", borderLeft: "none", borderRight: "none", borderBottom: "none", marginTop: 8, paddingTop: 14 }}
           >
             {theme === "dark" ? icon.sun : icon.moon} {!collapsed && (theme === "dark" ? "Modo día" : "Modo noche")}
           </button>
+        </nav>
+
+        <div className="sidebar-footer">
           <button
             className="btn secondary"
             onClick={logout}
