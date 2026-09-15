@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -96,7 +96,35 @@ const icon = {
       <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m12 9 2 3-2 3" />
     </svg>
   ),
+  sun: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+    </svg>
+  ),
+  moon: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+    </svg>
+  ),
 };
+
+type Theme = "dark" | "light";
+
+function getInitialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem("dp_theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    /* localStorage no disponible, sigue con el default */
+  }
+  return "dark";
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+}
 
 function getInitialCollapsed() {
   try {
@@ -109,6 +137,23 @@ function getInitialCollapsed() {
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
   const nav = useNavigate();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((v) => {
+      const next: Theme = v === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("dp_theme", next);
+      } catch {
+        /* localStorage no disponible, no pasa nada — el toggle igual funciona en esta sesión */
+      }
+      return next;
+    });
+  }
 
   function logout() {
     api.clearToken();
@@ -174,6 +219,14 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
         </nav>
 
         <div className="sidebar-footer">
+          <button
+            className="btn secondary"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Modo día" : "Modo noche"}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}
+          >
+            {theme === "dark" ? icon.sun : icon.moon} {!collapsed && (theme === "dark" ? "Modo día" : "Modo noche")}
+          </button>
           <button
             className="btn secondary"
             onClick={logout}

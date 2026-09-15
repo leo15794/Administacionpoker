@@ -11,6 +11,14 @@
     <title>DigiPlayers</title>
   </head>
   <body>
+    <script>
+      // Setea el tema ANTES de que React pinte nada, así no hay un flash del tema por defecto
+      // (oscuro) al entrar en modo día — mismo localStorage que usa el toggle en Shell.tsx.
+      try {
+        var t = localStorage.getItem("dp_theme");
+        if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

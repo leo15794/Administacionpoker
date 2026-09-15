@@ -331,7 +331,7 @@ function NuevoPeriodoForm({ onDone }: { onDone: () => void }) {
         ) : semanas.length === 0 ? (
           <div className="muted">No hay semanas con cierres cargados todavía.</div>
         ) : (
-          <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--border, #333)", borderRadius: 8, padding: 8 }}>
+          <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 8 }}>
             {semanas.map((s) => (
               <label key={s.week_start} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
                 <input type="checkbox" checked={seleccionadas.includes(s.week_start)} onChange={() => toggleSemana(s.week_start)} />
