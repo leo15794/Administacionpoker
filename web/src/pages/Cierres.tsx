@@ -403,6 +403,11 @@ function NuevoCierre({
   const [rakeTotal, setRakeTotal] = useState("0");
   const [rakebackPct, setRakebackPct] = useState("70");
   const [rebatePct, setRebatePct] = useState("0");
+  // Rodeo (solo tiene sentido para SupremaPoker — Fenix/TeamBack Suprema) cargado a mano para
+  // este cierre puntual: no pasa por la memoria automática por jugador (eso solo existe en la
+  // importacion de archivo), es un monto directo que el usuario tipea y se suma al cierre tal
+  // cual, igual que ya pasa con rakeTotal/rakebackPct en este mismo formulario.
+  const [rodeoManual, setRodeoManual] = useState("0");
   const [observation, setObservation] = useState("");
   // Clubes en fichas (hoy: X-Poker — ver Configuración → Clubes, campo "Unidad"): el reporte de
   // la plataforma viene en fichas, no en USD, y el valor de la ficha puede cambiar de una semana
@@ -483,6 +488,7 @@ function NuevoCierre({
       rakeTotal: (Number(rakeTotal) || 0) * tasa,
       rakebackPct: (Number(rakebackPct) || 0) / 100,
       rebatePct: (Number(rebatePct) || 0) / 100,
+      rodeoManual: Number(rodeoManual) || 0,
       observation: observation.trim() || undefined,
       rateSnapshot: esFichas ? tasa : undefined,
     };
@@ -653,6 +659,13 @@ function NuevoCierre({
           <div className="field">
             <label>{esBancado ? "% de la mesa para el bancado (si ganó)" : "% Rebate"}</label>
             <input value={rebatePct} onChange={(e) => { setRebatePct(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+          </div>
+          <div className="field">
+            <label>Rodeo (opcional, USD)</label>
+            <input value={rodeoManual} onChange={(e) => { setRodeoManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Solo si este club paga Rodeo (SupremaPoker) y este cierre no viene de una importación de archivo — se suma directo, sin memoria automática.
+            </span>
           </div>
         </div>
         <div className="field">

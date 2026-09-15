@@ -58,6 +58,9 @@ const closingSchema = z.object({
   rodeoJugadores: z
     .array(z.object({ playerExternalId: z.string().min(1), baseRodeo: z.number() }))
     .optional(),
+  // Rodeo cargado a mano en el cierre manual (ver AplicarCierreInput.rodeoManual en
+  // repo/closings.ts) — se ignora si rodeoJugadores viene con datos.
+  rodeoManual: z.number().optional(),
   rateSnapshot: z.number().optional(),
   observation: z.string().optional(),
   // Desglose por tipo de juego (solo SupremaPoker) para el resumen semanal por club — ver

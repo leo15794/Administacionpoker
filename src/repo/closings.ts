@@ -34,6 +34,15 @@ export interface AplicarCierreInput {
    * la misma transacción (ver repo/rodeo.ts). Vacío/undefined para cualquier cierre que no
    * venga de una importación Suprema — no afecta en nada al resto de los agentes/clubes. */
   rodeoJugadores?: RodeoJugadorEntrada[];
+  /** Rodeo cargado a mano en el cierre MANUAL (Cierres -> "+ Aplicar cierre"), para cuando no
+   * viene de una importación Suprema (que sí pasa rodeoJugadores y calcula memoria por jugador
+   * — ver arriba). Este monto se suma DIRECTO al cierre, sin tocar la memoria de rodeo de nadie
+   * (ver repo/rodeo.ts): es una carga manual, responsabilidad de quien la tipea, igual que ya
+   * pasa con rakeTotal/rakebackPct en este mismo formulario. Se ignora si rodeoJugadores viene
+   * con datos (ese camino automático siempre tiene prioridad). "Rodeo pagado agentes" en el
+   * resumen por club va a incluir este monto igual que cualquier otro (rodeo_club_share queda
+   * en 0 para estos casos — no hay forma de saber la parte del club sin la memoria real). */
+  rodeoManual?: number;
   rateSnapshot?: number;
   /** Desglose por tipo de juego (solo SupremaPoker) para el resumen semanal por club — ver
    * repo/clubResumen.ts. undefined para cualquier cierre que no venga de una importación
@@ -115,6 +124,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     // (vista previa), esta actualización de memoria se revierte sola, igual que bancados.
     const rodeoResultado = input.rodeoJugadores?.length
       ? await procesarRodeoAgenteTx(client, input.agentId, input.clubId, input.rodeoJugadores)
+      : input.rodeoManual
+      ? { baseRodeoTotal: input.rodeoManual, jugadores: [], memoriaAnterior: 0, payable: input.rodeoManual, memoriaNueva: 0, clubShare: 0, agentShare: input.rodeoManual }
       : { baseRodeoTotal: 0, jugadores: [], memoriaAnterior: 0, payable: 0, memoriaNueva: 0, clubShare: 0, agentShare: 0 };
 
     const calc = calcularCierre({
