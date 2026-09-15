@@ -718,6 +718,62 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
   const [error, setError] = useState("");
   const [items, setItems] = useState<any[]>([]);
 
+  // Clubes elegibles para el selector de "a qué club corresponde esta hoja" — mismo patrón
+  // que Cierres.tsx: el nombre de la hoja del archivo no siempre coincide con el nombre de
+  // ningún club configurado (ej. una hoja genérica "Hoja1" en vez de "Fénix Suprema"/"TeamBack
+  // Suprema"), así que hace falta poder elegirlo a mano en vez de asumir que siempre matchea.
+  const [clubesDisponibles, setClubesDisponibles] = useState<{ id: string; name: string }[]>([]);
+  // Hojas que trae el archivo (con formato reconocido) y a qué club quedó sugerida/asignada
+  // cada una. clubIdSugerido = null significa que no hubo auto-match: hay que elegirlo abajo.
+  const [hojasDetectadas, setHojasDetectadas] = useState<{ sheetName: string; clubIdSugerido: string | null }[]>([]);
+  const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({});
+  const [hojasFormatoInvalido, setHojasFormatoInvalido] = useState<{ sheetName: string; motivo: string }[]>([]);
+  const [paso, setPaso] = useState<"elegir_archivo" | "elegir_club" | "resultado">("elegir_archivo");
+
+  useEffect(() => {
+    const fetchClubes =
+      plataforma === "teamback-gg"
+        ? api.clubesImportacionTeamBackGG()
+        : plataforma === "tiny-gg"
+        ? api.clubesImportacionTinyGG()
+        : api.clubesImportacionSuprema();
+    fetchClubes.then(setClubesDisponibles).catch(() => setClubesDisponibles([]));
+  }, [plataforma]);
+
+  async function subirArchivo(overrides?: Record<string, string>): Promise<any> {
+    if (plataforma === "suprema") {
+      if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+      return api.previsualizarImportacion(archivo, weekEnd, overrides);
+    }
+    if (plataforma === "teamback-gg") {
+      if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+      return api.previsualizarImportacionTeamBackGG(archivo, weekEnd, overrides);
+    }
+    if (archivos.length === 0) throw new Error("Subí los archivos (uno por super agente).");
+    return api.previsualizarImportacionTinyGG(archivos, weekEnd, overrides);
+  }
+
+  function extraerBancados(result: any) {
+    const detectados: any[] = [];
+    for (const c of result.clubes ?? []) {
+      for (const b of c.bancados ?? []) {
+        detectados.push({
+          key: `${c.clubId}_${b.playerId}`,
+          playerId: b.playerId,
+          playerExternalId: b.playerExternalId,
+          playerName: b.playerName,
+          agentName: b.agentName,
+          clubName: c.clubName,
+          resultado: Number(b.resultado) || 0,
+          rake: Number(b.rake) || 0,
+        });
+      }
+    }
+    return detectados;
+  }
+
+  // Paso 1: lee el archivo y arma qué hoja quedó resuelta a qué club (o no) — todavía no busca
+  // bancados, porque una hoja sin club asignado no cuenta ningún jugador de esa hoja.
   async function analizar() {
     setError("");
     setItems([]);
@@ -727,33 +783,55 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
     }
     setAnalizando(true);
     try {
-      let result: any;
-      if (plataforma === "suprema") {
-        if (!archivo) throw new Error("Subí el archivo (.xlsx).");
-        result = await api.previsualizarImportacion(archivo, weekEnd);
-      } else if (plataforma === "teamback-gg") {
-        if (!archivo) throw new Error("Subí el archivo (.xlsx).");
-        result = await api.previsualizarImportacionTeamBackGG(archivo, weekEnd);
+      const result = await subirArchivo();
+      setHojasFormatoInvalido((result.hojasNoReconocidas || []).filter((h: any) => !h.resolvable));
+      const sugerencias: Record<string, string> = {};
+      const detectadas: { sheetName: string; clubIdSugerido: string | null }[] = [];
+      for (const c of result.clubes || []) {
+        detectadas.push({ sheetName: c.sheetName, clubIdSugerido: c.clubId });
+        sugerencias[c.sheetName] = c.clubId;
+      }
+      for (const h of (result.hojasNoReconocidas || []).filter((h: any) => h.resolvable)) {
+        detectadas.push({ sheetName: h.sheetName, clubIdSugerido: null });
+      }
+      setHojasDetectadas(detectadas);
+      setClubElegidoPorHoja(sugerencias);
+      if (detectadas.length === 0) {
+        setError("El archivo no trajo ninguna hoja con formato reconocido.");
+        setPaso("elegir_archivo");
+        return;
+      }
+      // Si TODAS las hojas ya matchearon un club solas, no hace falta el paso intermedio —
+      // vamos directo a buscar los bancados con lo que ya se resolvió.
+      if (detectadas.every((h) => h.clubIdSugerido)) {
+        await confirmarClubesYBuscar(sugerencias);
       } else {
-        if (archivos.length === 0) throw new Error("Subí los archivos (uno por super agente).");
-        result = await api.previsualizarImportacionTinyGG(archivos, weekEnd);
+        setPaso("elegir_club");
       }
-      const detectados: any[] = [];
-      for (const c of result.clubes ?? []) {
-        for (const b of c.bancados ?? []) {
-          detectados.push({
-            key: `${c.clubId}_${b.playerId}`,
-            playerId: b.playerId,
-            playerExternalId: b.playerExternalId,
-            playerName: b.playerName,
-            agentName: b.agentName,
-            clubName: c.clubName,
-            resultado: Number(b.resultado) || 0,
-            rake: Number(b.rake) || 0,
-          });
-        }
+    } catch (err: any) {
+      setError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setAnalizando(false);
+    }
+  }
+
+  // Paso 2: con el club ya elegido (sugerido o a mano) para cada hoja, vuelve a mandar el mismo
+  // archivo con esa elección explícita y ahí sí extrae los jugadores bancados.
+  async function confirmarClubesYBuscar(overridesForzados?: Record<string, string>) {
+    setError("");
+    setAnalizando(true);
+    try {
+      const overrides = overridesForzados ?? clubElegidoPorHoja;
+      const faltantes = hojasDetectadas.filter((h) => !overrides[h.sheetName]);
+      if (faltantes.length > 0) {
+        setError(`Elegí un club para: ${faltantes.map((h) => h.sheetName).join(", ")}.`);
+        setAnalizando(false);
+        return;
       }
+      const result = await subirArchivo(overrides);
+      const detectados = extraerBancados(result);
       setItems(detectados);
+      setPaso("resultado");
       if (detectados.length === 0) {
         setError("El archivo no trajo ningún jugador marcado como bancado (revisá que estén marcados en el panel de arriba).");
       }
@@ -762,6 +840,15 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
     } finally {
       setAnalizando(false);
     }
+  }
+
+  function reiniciar() {
+    setItems([]);
+    setHojasDetectadas([]);
+    setClubElegidoPorHoja({});
+    setHojasFormatoInvalido([]);
+    setError("");
+    setPaso("elegir_archivo");
   }
 
   return (
@@ -775,7 +862,10 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
       <div className="form-grid">
         <div className="field">
           <label>Plataforma</label>
-          <select value={plataforma} onChange={(e) => { setPlataforma(e.target.value as any); setItems([]); setArchivo(null); setArchivos([]); }}>
+          <select
+            value={plataforma}
+            onChange={(e) => { setPlataforma(e.target.value as any); setArchivo(null); setArchivos([]); reiniciar(); }}
+          >
             <option value="suprema">SupremaPoker (Fénix/TeamBack Suprema)</option>
             <option value="teamback-gg">GG Poker / TeamBack GG</option>
             <option value="tiny-gg">Tiny GG</option>
@@ -792,31 +882,69 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
         <div className="field">
           <label>{plataforma === "tiny-gg" ? "Archivos (uno por super agente)" : "Archivo"}</label>
           {plataforma === "tiny-gg" ? (
-            <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => setArchivos(Array.from(e.target.files ?? []))} />
+            <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => { setArchivos(Array.from(e.target.files ?? [])); reiniciar(); }} />
           ) : (
-            <input type="file" accept=".xlsx,.xls" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+            <input type="file" accept=".xlsx,.xls" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); reiniciar(); }} />
           )}
         </div>
       </div>
       {error && <div className="error">{error}</div>}
-      <button className="btn small" disabled={analizando} onClick={analizar} style={{ marginTop: 6 }}>
-        {analizando ? "Analizando..." : "Analizar archivo"}
-      </button>
 
-      {items.length > 0 && (
-        <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <FilaImportBancado key={it.key} item={it} weekStart={weekStart} weekEnd={weekEnd} onCierreAplicado={onCierreAplicado} />
-              ))}
-            </tbody>
-          </table>
+      {paso === "elegir_archivo" && (
+        <button className="btn small" disabled={analizando} onClick={analizar} style={{ marginTop: 6 }}>
+          {analizando ? "Analizando..." : "Analizar archivo"}
+        </button>
+      )}
+
+      {paso === "elegir_club" && (
+        <div style={{ marginTop: 10 }}>
+          {hojasFormatoInvalido.length > 0 && (
+            <div className="muted" style={{ marginBottom: 10 }}>
+              Hojas ignoradas (no tienen el formato esperado): {hojasFormatoInvalido.map((h) => h.sheetName).join(", ")}.
+            </div>
+          )}
+          <div style={{ marginBottom: 10 }}>
+            El nombre de la hoja no coincide solo con ningún club — elegí a qué club corresponde cada una:
+          </div>
+          {hojasDetectadas.map((h) => (
+            <div className="field" key={h.sheetName} style={{ maxWidth: 420 }}>
+              <label>Hoja "{h.sheetName}"</label>
+              <select
+                value={clubElegidoPorHoja[h.sheetName] ?? ""}
+                onChange={(e) => setClubElegidoPorHoja((cur) => ({ ...cur, [h.sheetName]: e.target.value }))}
+              >
+                <option value="">Elegir club...</option>
+                {clubesDisponibles.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          <button className="btn small" disabled={analizando} onClick={() => confirmarClubesYBuscar()} style={{ marginTop: 6 }}>
+            {analizando ? "Buscando..." : "Confirmar y buscar bancados"}
+          </button>
+        </div>
+      )}
+
+      {paso === "resultado" && (
+        <div style={{ marginTop: 10 }}>
+          <button className="btn secondary small" onClick={reiniciar}>Analizar otro archivo</button>
+          {items.length > 0 && (
+            <div style={{ overflowX: "auto", marginTop: 14 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <FilaImportBancado key={it.key} item={it} weekStart={weekStart} weekEnd={weekEnd} onCierreAplicado={onCierreAplicado} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
