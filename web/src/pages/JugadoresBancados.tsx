@@ -744,6 +744,7 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
           detectados.push({
             key: `${c.clubId}_${b.playerId}`,
             playerId: b.playerId,
+            playerExternalId: b.playerExternalId,
             playerName: b.playerName,
             agentName: b.agentName,
             clubName: c.clubName,
@@ -882,7 +883,7 @@ function FilaImportBancado({
   return (
     <>
       <tr>
-        <td>{item.playerName}</td>
+        <td>{item.playerName} <span className="muted">#{item.playerExternalId ?? item.playerId}</span></td>
         <td>{item.clubName}</td>
         <td>{item.agentName}</td>
         <td>

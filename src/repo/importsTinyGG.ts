@@ -106,7 +106,7 @@ export async function analizarImportacionTinyGG(
 
     for (const row of p.rows) {
       const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
-      const esBancado = await upsertPlayer(club.id, row, resolucion.agentId);
+      const jugadorUpsert = await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
         const sinAgente: JugadorSinAgente = {
@@ -122,9 +122,10 @@ export async function analizarImportacionTinyGG(
         continue;
       }
 
-      if (esBancado) {
+      if (jugadorUpsert.bancado) {
         const bancado: JugadorBancadoOmitido = {
-          playerId: row.playerId,
+          playerId: jugadorUpsert.id,
+          playerExternalId: row.playerId,
           playerName: row.playerName,
           agentId: resolucion.agentId,
           agentName: resolucion.agentName!,

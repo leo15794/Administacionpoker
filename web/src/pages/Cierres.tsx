@@ -1358,7 +1358,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <tbody>
                     {grupo.items.map((it: any) => (
                       <tr key={it.playerId}>
-                        <td>{it.playerName} <span className="muted">#{it.playerId}</span></td>
+                        <td>{it.playerName} <span className="muted">#{it.playerExternalId ?? it.playerId}</span></td>
                         <td>{it.agentName}</td>
                         <td>{usd(it.resultado)}</td>
                         <td>{usd(it.rake)}</td>

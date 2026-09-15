@@ -52,7 +52,8 @@ export interface JugadorSinAgente {
 // se contabiliza aparte. Se informa acá (en vez de desaparecer en silencio) para que quede a
 // mano el total que quedó afuera.
 export interface JugadorBancadoOmitido {
-  playerId: string;
+  playerId: string; // id interno (players.id) — el que hay que usar para /bancados/*
+  playerExternalId: string; // Player ID tal cual viene en el archivo, solo para mostrar en pantalla
   playerName: string;
   agentId: string;
   agentName: string;
@@ -206,15 +207,26 @@ export async function resolvePlayerAgent(
 // pueda decidir si esta fila entra al agregado normal del agente o se omite — el flag nunca se
 // toca acá, ON CONFLICT solo actualiza nombre/agente, así que un jugador marcado bancado sigue
 // bancado semana tras semana aunque se vuelva a importar.
-export async function upsertPlayer(clubId: string, row: SupremaPlayerRow, agentId: string | null): Promise<boolean> {
+// Devuelve el id INTERNO del jugador (players.id) y su flag bancado — antes solo devolvía el
+// flag, y todo el código de "bancados" de la importación terminaba usando por error el
+// external_id crudo del archivo (row.playerId) como si fuera el id interno, lo que rompía
+// cualquier llamada posterior a /bancados/* (previsualizar, config, etc. buscan por players.id)
+// con "Jugador no encontrado". El id interno NO cambia en un ON CONFLICT (el jugador ya
+// existía con otro id) — por eso también se pide de vuelta con RETURNING en vez de asumir el
+// que se generó acá con newId().
+export async function upsertPlayer(
+  clubId: string,
+  row: SupremaPlayerRow,
+  agentId: string | null
+): Promise<{ id: string; bancado: boolean }> {
   const r = await pool.query(
     `INSERT INTO players (id, external_id, display_name, club_id, agent_id)
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id
-     RETURNING bancado`,
+     RETURNING id, bancado`,
     [newId("player"), row.playerId, row.playerName, clubId, agentId]
   );
-  return r.rows[0]?.bancado ?? false;
+  return { id: r.rows[0].id, bancado: r.rows[0]?.bancado ?? false };
 }
 
 /**
@@ -295,7 +307,7 @@ export async function analizarImportacionSuprema(
 
     for (const row of sheet.rows) {
       const resolucion = await resolvePlayerAgent(club.id, row, autoCreadosCache);
-      const esBancado = await upsertPlayer(club.id, row, resolucion.agentId);
+      const jugadorUpsert = await upsertPlayer(club.id, row, resolucion.agentId);
 
       if (!resolucion.agentId) {
         sinAgente.push({
@@ -310,9 +322,10 @@ export async function analizarImportacionSuprema(
         continue;
       }
 
-      if (esBancado) {
+      if (jugadorUpsert.bancado) {
         bancados.push({
-          playerId: row.playerId,
+          playerId: jugadorUpsert.id,
+          playerExternalId: row.playerId,
           playerName: row.playerName,
           agentId: resolucion.agentId,
           agentName: resolucion.agentName!,
