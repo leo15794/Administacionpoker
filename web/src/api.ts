@@ -64,6 +64,22 @@ export const api = {
     request(`/catalog/liquidacion/semanas?agentIds=${agentIds.join(",")}`),
   liquidacion: (agentIds: string[], weekStart: string) =>
     request(`/catalog/liquidacion?agentIds=${agentIds.join(",")}&weekStart=${weekStart}`),
+  // Historial: guarda una foto congelada de la liquidación (para consultar después "qué le
+  // mandamos") — separado de liquidacion() de arriba, que siempre recalcula en vivo.
+  guardarLiquidacion: (data: {
+    nombreGrupo: string;
+    agentIds: string[];
+    weekStart: string;
+    weekEnd: string;
+    filas: any[];
+    total: number;
+    adelantosAplicados: number;
+    adelantosManual: number;
+    totalAPagar: number;
+    nota?: string | null;
+  }) => request("/catalog/liquidacion/guardar", { method: "POST", body: JSON.stringify(data) }),
+  historialLiquidaciones: () => request("/catalog/liquidacion/historial"),
+  eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 
   // Drill-down de movimientos y tesorería
   movimientos: (params: { agentId?: string; clubId?: string } = {}) => {

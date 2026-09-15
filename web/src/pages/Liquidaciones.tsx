@@ -12,7 +12,23 @@ import { usd, dateShort } from "../fmt";
 // Todo en USD: weekly_closings ya guarda los montos convertidos con la tasa de esa semana, no
 // el monto en moneda local original, así que cualquier aclaración de conversión se agrega a
 // mano en la nota de abajo.
-async function generarPdf(nombreGrupo: string, data: any, adelantosAplicados: number, adelantosManual: number, nota: string) {
+interface PdfInput {
+  nombreGrupo: string;
+  weekStart: string;
+  weekEnd: string;
+  filas: any[];
+  multiAgente: boolean;
+  total: number;
+  adelantosAplicados: number;
+  adelantosManual: number;
+  nota: string;
+}
+
+// Recibe SIEMPRE los totales ya resueltos (aplicado + tildado + manual) — nunca solo "lo
+// tildado ahora mismo", porque si el cruce ya se aplicó (y el checkbox se reseteó al refrescar
+// los pendientes), el PDF terminaba mostrando "Adelantos a descontar: 0" a pesar de que el
+// cruce sí se había consumido de verdad (BIT: pasaba justo con el adelanto de rake de Prodigio).
+async function generarPdf(input: PdfInput) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),
@@ -20,27 +36,27 @@ async function generarPdf(nombreGrupo: string, data: any, adelantosAplicados: nu
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;
-  const totalDescontar = adelantosAplicados + adelantosManual;
-  const totalAPagar = data.total - totalDescontar;
+  const totalDescontar = input.adelantosAplicados + input.adelantosManual;
+  const totalAPagar = input.total - totalDescontar;
 
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.text(`${nombreGrupo} · Cierre ${dateShort(data.weekStart)} - ${dateShort(data.weekEnd)}`, margen, y);
+  doc.text(`${input.nombreGrupo} · Cierre ${dateShort(input.weekStart)} - ${dateShort(input.weekEnd)}`, margen, y);
   y += 9;
 
   autoTable(doc, {
     startY: y,
     margin: { left: margen, right: margen },
     head: [["Club", "Ganancias/Pérdidas", "Rake", "Rakeback bruto", "Rebate", "Rakeback neto"]],
-    body: data.filas.map((f: any) => [
-      data.agentes.length > 1 ? `${f.clubName} (${f.agentName})` : f.clubName,
+    body: input.filas.map((f: any) => [
+      input.multiAgente ? `${f.clubName} (${f.agentName})` : f.clubName,
       usd(f.resultado),
       usd(f.rakeTotal),
       usd(f.rakebackBruto),
       usd(f.rebate),
       usd(f.rakebackNeto),
     ]),
-    foot: [["TOTAL", "", "", "", "", usd(data.total)]],
+    foot: [["TOTAL", "", "", "", "", usd(input.total)]],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [40, 50, 90] },
     footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
@@ -53,14 +69,14 @@ async function generarPdf(nombreGrupo: string, data: any, adelantosAplicados: nu
   y += 7;
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Rakeback / comisiones finales: ${usd(data.total)}`, margen, y);
+  doc.text(`Rakeback / comisiones finales: ${usd(input.total)}`, margen, y);
   y += 6;
   doc.text(`Adelantos a descontar: -${usd(totalDescontar)}`, margen, y);
   y += 6;
-  if (adelantosManual !== 0) {
+  if (input.adelantosManual !== 0) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
-    doc.text(`(incluye ${usd(adelantosManual)} pendiente de registrar)`, margen, y);
+    doc.text(`(incluye ${usd(input.adelantosManual)} pendiente de registrar)`, margen, y);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     y += 6;
@@ -68,19 +84,19 @@ async function generarPdf(nombreGrupo: string, data: any, adelantosAplicados: nu
   y += 4;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.text(`Total a pagar a ${nombreGrupo}: ${usd(totalAPagar)}`, margen, y);
+  doc.text(`Total a pagar a ${input.nombreGrupo}: ${usd(totalAPagar)}`, margen, y);
   y += 10;
 
-  if (nota.trim()) {
+  if (input.nota.trim()) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
     doc.setTextColor(90);
-    const lineas = doc.splitTextToSize(nota.trim(), 180);
+    const lineas = doc.splitTextToSize(input.nota.trim(), 180);
     doc.text(lineas, margen, y);
     doc.setTextColor(0);
   }
 
-  const nombreArchivo = `liquidacion_${nombreGrupo.replace(/[^a-z0-9]+/gi, "-")}_${data.weekStart}.pdf`;
+  const nombreArchivo = `liquidacion_${input.nombreGrupo.replace(/[^a-z0-9]+/gi, "-")}_${input.weekStart}.pdf`;
   doc.save(nombreArchivo);
 }
 
@@ -100,10 +116,19 @@ export default function Liquidaciones() {
   const [cargando, setCargando] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [guardado, setGuardado] = useState(false); // ya se guardó ESTA liquidación tal cual está — evita duplicar
+  const [historial, setHistorial] = useState<any[] | null>(null);
+  const [borrandoHist, setBorrandoHist] = useState<string | null>(null);
 
   useEffect(() => {
     api.agentes().then(setAgentes).catch(() => {});
+    refrescarHistorial();
   }, []);
+
+  function refrescarHistorial() {
+    api.historialLiquidaciones().then(setHistorial).catch(() => {});
+  }
 
   const agentesFiltrados = useMemo(() => {
     const f = filtro.trim().toLowerCase();
@@ -145,6 +170,7 @@ export default function Liquidaciones() {
       .then((d) => {
         setData(d);
         setCruces({});
+        setGuardado(false);
         if (!preservarAplicado) {
           setAplicado(0);
           setAdelantosManual(0);
@@ -254,22 +280,64 @@ export default function Liquidaciones() {
                 Cierre {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
               </span>
             </div>
-            <button
-              className="btn secondary small"
-              disabled={generandoPdf}
-              onClick={async () => {
-                setGenerandoPdf(true);
-                try {
-                  await generarPdf(nombreGrupo || "Liquidación", data, totalCruzado, adelantosManual, nota);
-                } catch (err: any) {
-                  alert(err.message || "No se pudo generar el PDF.");
-                } finally {
-                  setGenerandoPdf(false);
-                }
-              }}
-            >
-              {generandoPdf ? "Generando..." : "Descargar PDF"}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn secondary small"
+                disabled={guardando}
+                onClick={async () => {
+                  setGuardando(true);
+                  try {
+                    await api.guardarLiquidacion({
+                      nombreGrupo: nombreGrupo || "Liquidación",
+                      agentIds: seleccionados,
+                      weekStart: data.weekStart,
+                      weekEnd: data.weekEnd,
+                      filas: data.filas,
+                      total: data.total,
+                      adelantosAplicados: aplicado + totalCruzado,
+                      adelantosManual,
+                      totalAPagar,
+                      nota,
+                    });
+                    setGuardado(true);
+                    refrescarHistorial();
+                  } catch (err: any) {
+                    alert(err.message || "No se pudo guardar la liquidación.");
+                  } finally {
+                    setGuardando(false);
+                  }
+                }}
+                title="Deja esta liquidación guardada en el historial de abajo, tal cual está ahora"
+              >
+                {guardando ? "Guardando..." : guardado ? "✓ Guardada" : "Guardar en historial"}
+              </button>
+              <button
+                className="btn secondary small"
+                disabled={generandoPdf}
+                onClick={async () => {
+                  setGenerandoPdf(true);
+                  try {
+                    await generarPdf({
+                      nombreGrupo: nombreGrupo || "Liquidación",
+                      weekStart: data.weekStart,
+                      weekEnd: data.weekEnd,
+                      filas: data.filas,
+                      multiAgente: data.agentes.length > 1,
+                      total: data.total,
+                      adelantosAplicados: aplicado + totalCruzado,
+                      adelantosManual,
+                      nota,
+                    });
+                  } catch (err: any) {
+                    alert(err.message || "No se pudo generar el PDF.");
+                  } finally {
+                    setGenerandoPdf(false);
+                  }
+                }}
+              >
+                {generandoPdf ? "Generando..." : "Descargar PDF"}
+              </button>
+            </div>
           </div>
 
           <table>
@@ -325,7 +393,8 @@ export default function Liquidaciones() {
                     <input
                       type="checkbox"
                       checked={a.id in cruces}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setGuardado(false);
                         setCruces((prev) => {
                           const next = { ...prev };
                           if (e.target.checked) {
@@ -338,8 +407,8 @@ export default function Liquidaciones() {
                             delete next[a.id];
                           }
                           return next;
-                        })
-                      }
+                        });
+                      }}
                     />
                     <span style={{ minWidth: 260 }}>
                       {a.agentName}{a.clubOrigenName ? ` (${a.clubOrigenName})` : ""} — pendiente {usd(a.pendiente)}
@@ -351,7 +420,10 @@ export default function Liquidaciones() {
                         min={0}
                         max={a.pendiente}
                         value={cruces[a.id]}
-                        onChange={(e) => setCruces((prev) => ({ ...prev, [a.id]: Math.min(Number(e.target.value) || 0, a.pendiente) }))}
+                        onChange={(e) => {
+                          setGuardado(false);
+                          setCruces((prev) => ({ ...prev, [a.id]: Math.min(Number(e.target.value) || 0, a.pendiente) }));
+                        }}
                         style={{ width: 110, textAlign: "right" }}
                       />
                     )}
@@ -376,7 +448,10 @@ export default function Liquidaciones() {
                 type="number"
                 step="0.01"
                 value={adelantosManual}
-                onChange={(e) => setAdelantosManual(Number(e.target.value) || 0)}
+                onChange={(e) => {
+                  setAdelantosManual(Number(e.target.value) || 0);
+                  setGuardado(false);
+                }}
                 style={{ width: 150 }}
               />
             </div>
@@ -402,7 +477,10 @@ export default function Liquidaciones() {
               </label>
               <textarea
                 value={nota}
-                onChange={(e) => setNota(e.target.value)}
+                onChange={(e) => {
+                  setNota(e.target.value);
+                  setGuardado(false);
+                }}
                 rows={2}
                 style={{ width: "100%", resize: "vertical" }}
                 placeholder="Ej: rakeback bruto calculado con el rate de la semana; ver diferencia de TWD al momento del pago."
@@ -411,6 +489,74 @@ export default function Liquidaciones() {
           </div>
         </div>
       )}
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Historial de liquidaciones</h3>
+        {!historial ? (
+          <div className="muted">Cargando...</div>
+        ) : historial.length === 0 ? (
+          <div className="muted">Todavía no se guardó ninguna liquidación.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Nombre</th><th>Semana</th><th>Rakeback total</th>
+                <th>Adelantos descontados</th><th>Total pagado</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((h) => (
+                <tr key={h.id}>
+                  <td>{dateShort(h.created_at)}</td>
+                  <td>{h.nombre_grupo}</td>
+                  <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
+                  <td>{usd(h.total)}</td>
+                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual))}</td>
+                  <td><strong>{usd(h.total_a_pagar)}</strong></td>
+                  <td style={{ display: "flex", gap: 6 }}>
+                    <button
+                      className="btn secondary small"
+                      onClick={() =>
+                        generarPdf({
+                          nombreGrupo: h.nombre_grupo,
+                          weekStart: h.week_start,
+                          weekEnd: h.week_end,
+                          filas: h.filas,
+                          multiAgente: h.agent_ids.length > 1,
+                          total: Number(h.total),
+                          adelantosAplicados: Number(h.adelantos_aplicados),
+                          adelantosManual: Number(h.adelantos_manual),
+                          nota: h.nota || "",
+                        }).catch((err: any) => alert(err.message || "No se pudo generar el PDF."))
+                      }
+                    >
+                      Descargar PDF
+                    </button>
+                    <button
+                      className="btn danger small"
+                      disabled={borrandoHist === h.id}
+                      onClick={async () => {
+                        if (!confirm(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto NO afecta ningún adelanto ya cruzado ni ningún cierre — solo borra este registro/foto.`)) return;
+                        setBorrandoHist(h.id);
+                        try {
+                          await api.eliminarLiquidacionGuardada(h.id);
+                          refrescarHistorial();
+                        } catch (err: any) {
+                          alert(err.message || "No se pudo eliminar.");
+                        } finally {
+                          setBorrandoHist(null);
+                        }
+                      }}
+                    >
+                      {borrandoHist === h.id ? "..." : "Eliminar"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

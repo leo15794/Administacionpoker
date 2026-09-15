@@ -746,3 +746,25 @@ CREATE TABLE IF NOT EXISTS extraordinary_adjustment_applications (
 );
 CREATE INDEX IF NOT EXISTS extraordinary_adjustment_applications_period_idx ON extraordinary_adjustment_applications(period_id);
 CREATE INDEX IF NOT EXISTS extraordinary_adjustment_applications_adjustment_idx ON extraordinary_adjustment_applications(adjustment_id);
+
+-- Historial de liquidaciones "guardadas" (15/09/2026): a diferencia de la vista de arriba, que
+-- siempre recalcula en vivo contra weekly_closings/rakeback_advances, esto congela una FOTO de
+-- lo que se le mandó de verdad a la persona/grupo (filas, totales, nota) — para poder consultar
+-- después "¿qué le mandamos a Prodigio la semana pasada?" sin depender de que nada se haya
+-- revertido o corregido desde entonces.
+CREATE TABLE IF NOT EXISTS liquidaciones_guardadas (
+  id                    TEXT PRIMARY KEY,
+  nombre_grupo          TEXT NOT NULL,
+  agent_ids             TEXT[] NOT NULL,
+  week_start            DATE NOT NULL,
+  week_end              DATE NOT NULL,
+  filas                 JSONB NOT NULL,
+  total                 NUMERIC(18,4) NOT NULL,
+  adelantos_aplicados   NUMERIC(18,4) NOT NULL DEFAULT 0,
+  adelantos_manual      NUMERIC(18,4) NOT NULL DEFAULT 0,
+  total_a_pagar         NUMERIC(18,4) NOT NULL,
+  nota                  TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by            TEXT
+);
+CREATE INDEX IF NOT EXISTS liquidaciones_guardadas_week_idx ON liquidaciones_guardadas(week_start DESC);

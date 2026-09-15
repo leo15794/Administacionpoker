@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, requireAdmin } from "../lib/auth.js";
+import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import {
   upsertAgent,
   upsertClub,
@@ -27,7 +27,7 @@ import {
   setJugadorBancado,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
-import { pool } from "../db/pool.js";
+import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
 // Catálogo cerrado de reglas especiales que el motor de cierre sabe interpretar (ver
@@ -279,6 +279,63 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       pendiente: Number(a.amount) - Number(a.consumed),
     })),
   });
+});
+
+// Guarda una FOTO congelada de una liquidación ya armada (filas, totales, nota) para que quede
+// en un historial consultable — a diferencia de GET /liquidacion (arriba), que siempre recalcula
+// en vivo. Se guarda recién cuando el usuario confirma que esto es lo que se mandó de verdad.
+const guardarLiquidacionSchema = z.object({
+  nombreGrupo: z.string().min(1),
+  agentIds: z.array(z.string()).min(1),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  filas: z.array(z.any()),
+  total: z.number(),
+  adelantosAplicados: z.number().default(0),
+  adelantosManual: z.number().default(0),
+  totalAPagar: z.number(),
+  nota: z.string().nullable().optional(),
+});
+
+catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = guardarLiquidacionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const d = parsed.data;
+  const r = await pool.query(
+    `INSERT INTO liquidaciones_guardadas
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, total_a_pagar, nota, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    [
+      newId("liq"),
+      d.nombreGrupo,
+      d.agentIds,
+      d.weekStart,
+      d.weekEnd,
+      JSON.stringify(d.filas),
+      d.total,
+      d.adelantosAplicados,
+      d.adelantosManual,
+      d.totalAPagar,
+      d.nota ?? null,
+      req.user?.email ?? null,
+    ]
+  );
+  res.status(201).json(r.rows[0]);
+});
+
+// Historial de liquidaciones guardadas — más reciente primero.
+catalogRouter.get("/liquidacion/historial", requireAuth, requireAdmin, async (_req, res) => {
+  const r = await pool.query(`SELECT * FROM liquidaciones_guardadas ORDER BY created_at DESC LIMIT 200`);
+  res.json(r.rows);
+});
+
+// Borrado real — para limpiar liquidaciones de PRUEBA. No afecta ningún adelanto ni cierre real
+// (esto es solo la foto/reporte, ya guardada; los cruces de adelanto ya quedaron aplicados
+// aparte y hay que deshacerlos, si corresponde, desde Adelantos).
+catalogRouter.delete("/liquidacion/historial/:id", requireAuth, requireAdmin, async (req, res) => {
+  const r = await pool.query(`DELETE FROM liquidaciones_guardadas WHERE id = $1 RETURNING id`, [req.params.id]);
+  if (r.rowCount === 0) return res.status(404).json({ error: "No se encontró esa liquidación guardada." });
+  res.json({ ok: true });
 });
 
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
