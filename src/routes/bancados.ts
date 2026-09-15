@@ -13,6 +13,8 @@ import {
   revertirCierreBancado,
   eliminarCierreBancadoDefinitivo,
   registrarRecargaCapital,
+  pagarCierreBancado,
+  listResumenBancados,
 } from "../repo/bancados.js";
 
 export const bancadosRouter = Router();
@@ -117,6 +119,13 @@ bancadosRouter.get("/historial", requireAuth, requireAdmin, async (_req, res) =>
   res.json(await listHistorialBancadoGlobal());
 });
 
+// Resumen histórico: una fila por jugador bancado, con el acumulado de todos sus cierres
+// semanales (ganancia jugador vs. ganancia empresa) — para ver el desglose global sin tener
+// que abrir cada jugador uno por uno.
+bancadosRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listResumenBancados());
+});
+
 bancadosRouter.get("/historial/:playerId", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listHistorialBancado(req.params.playerId));
 });
@@ -135,4 +144,15 @@ bancadosRouter.delete("/historial/:id/definitivo", requireAuth, requireAdmin, as
   const r = await eliminarCierreBancadoDefinitivo(req.params.id);
   if (!r.found) return res.status(404).json({ error: "Cierre de banca no encontrado." });
   res.json(r);
+});
+
+// Botón "Pagar": registra en Wallet (WALLET_MANOS, EGRESO) el pago de este cierre semanal —
+// ver pagarCierreBancado para el detalle e idempotencia.
+bancadosRouter.post("/historial/:id/pagar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    const r = await pagarCierreBancado(req.params.id, req.user?.email ?? null);
+    res.status(r.alreadyPaid ? 200 : 201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });

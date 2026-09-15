@@ -628,3 +628,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS bancado_historial_player_week_active_key
   ON bancado_historial(player_id, week_start)
   WHERE status <> 'REVERTIDO' AND tipo = 'CIERRE_SEMANAL';
 CREATE INDEX IF NOT EXISTS bancado_historial_player_idx ON bancado_historial(player_id, week_start DESC);
+
+-- Botón "Pagar" (18/09/2026): registra el pago de un cierre semanal ya cerrado como un EGRESO
+-- en treasury_adjustments (ledger WALLET_MANOS), y anota acá cuándo y con qué movimiento —
+-- así el botón se puede deshabilitar/mostrar "Pagado" sin depender de ir a buscarlo a Wallet
+-- cada vez, y no se puede pagar dos veces el mismo cierre por error.
+ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_pagado_at TIMESTAMPTZ;
+ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_movement_id TEXT;

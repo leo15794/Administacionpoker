@@ -4,6 +4,7 @@
 // agregado semanal (ver repo/imports.ts, players.bancado).
 import { pool, newId } from "../db/pool.js";
 import { calcularCierreBancado, type BancadoConfig, type BancadoEstado, type BancadoOrigen } from "../engine/bancados.js";
+import { registrarAjusteTesoreria } from "./treasury.js";
 
 export interface BancadoConfigInput {
   pctJugador: number;
@@ -102,6 +103,72 @@ export async function getResumenBancado(playerId: string): Promise<BancadoResume
     rakeBancaTotal: rakeGeneradoTotal - rakebackBancadoTotal,
     semanasCerradas: Number(row?.semanas_cerradas ?? 0),
   };
+}
+
+// Resumen histórico de TODOS los jugadores bancados (pedido 18/09/2026): un renglón por
+// jugador con lo acumulado de todos sus cierres semanales activos — cuánto ganó el jugador en
+// total, cuánto le quedó de ganancia neta a la empresa/banca, y su capital/makeup vigente — para
+// verlo de un vistazo sin tener que entrar cierre por cierre. Las recargas de capital NO suman
+// acá (no son ganancia de nadie, son un ajuste de caja) pero el capital/makeup vigente sí las
+// refleja porque se lee del último historial real de cada jugador (igual que getEstadoBancado).
+export interface ResumenBancadoJugador {
+  playerId: string;
+  playerName: string;
+  playerExternalId: string;
+  clubName: string;
+  agentName: string | null;
+  semanasCerradas: number;
+  resultadoMesasTotal: number;
+  gananciaJugadorTotal: number;
+  gananciaEmpresaTotal: number;
+  capitalActual: number;
+  makeupActual: number;
+}
+
+export async function listResumenBancados(): Promise<ResumenBancadoJugador[]> {
+  const agregados = await pool.query(
+    `SELECT h.player_id,
+            p.display_name as player_name,
+            p.external_id as player_external_id,
+            c.name as club_name,
+            a.name as agent_name,
+            COUNT(*) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL') as semanas_cerradas,
+            COALESCE(SUM(h.resultado_mesas) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as resultado_mesas_total,
+            COALESCE(SUM(h.pago_jugador_total) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as ganancia_jugador_total,
+            COALESCE(SUM(h.ganancia_banca_mesas) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as ganancia_empresa_total
+     FROM bancado_historial h
+     JOIN players p ON p.id = h.player_id
+     JOIN clubs c ON c.id = h.club_id
+     LEFT JOIN agents a ON a.id = h.agent_id
+     WHERE h.status <> 'REVERTIDO'
+     GROUP BY h.player_id, p.display_name, p.external_id, c.name, a.name
+     ORDER BY p.display_name`
+  );
+
+  const estados = await pool.query(
+    `SELECT DISTINCT ON (player_id) player_id, capital_despues, makeup_nuevo
+     FROM bancado_historial
+     WHERE status <> 'REVERTIDO'
+     ORDER BY player_id, week_start DESC, created_at DESC`
+  );
+  const estadoPorJugador = new Map(estados.rows.map((r) => [r.player_id, r]));
+
+  return agregados.rows.map((r) => {
+    const estado = estadoPorJugador.get(r.player_id);
+    return {
+      playerId: r.player_id,
+      playerName: r.player_name,
+      playerExternalId: r.player_external_id,
+      clubName: r.club_name,
+      agentName: r.agent_name,
+      semanasCerradas: Number(r.semanas_cerradas),
+      resultadoMesasTotal: Number(r.resultado_mesas_total),
+      gananciaJugadorTotal: Number(r.ganancia_jugador_total),
+      gananciaEmpresaTotal: Number(r.ganancia_empresa_total),
+      capitalActual: estado ? Number(estado.capital_despues) : 0,
+      makeupActual: estado ? Number(estado.makeup_nuevo) : 0,
+    };
+  });
 }
 
 export interface CierreBancadoInput {
@@ -291,6 +358,50 @@ export async function listHistorialBancadoGlobal() {
      ORDER BY h.week_start DESC, p.display_name`
   );
   return r.rows;
+}
+
+// Botón "Pagar" (18/09/2026): registra el pago de un cierre semanal YA CERRADO como un EGRESO
+// en Wallet (treasury_adjustments, ledger WALLET_MANOS) por el monto de "Pago total jugador" de
+// esa semana, y deja anotado acá cuándo y con qué movimiento — así no se puede pagar dos veces
+// el mismo cierre (idempotencyKey) y el botón puede mostrar "Pagado" sin ir a buscarlo a Wallet.
+// Solo aplica a cierres semanales de verdad (no a una recarga de capital, que no es un pago al
+// jugador) y nunca a uno ya revertido.
+export async function pagarCierreBancado(id: string, createdBy?: string | null) {
+  const r = await pool.query(
+    `SELECT h.*, p.display_name as player_name, c.name as club_name
+     FROM bancado_historial h
+     JOIN players p ON p.id = h.player_id
+     JOIN clubs c ON c.id = h.club_id
+     WHERE h.id = $1`,
+    [id]
+  );
+  const row = r.rows[0];
+  if (!row) throw new Error("Cierre de banca no encontrado.");
+  if (row.tipo !== "CIERRE_SEMANAL") throw new Error("Esto no es un cierre semanal — no representa un pago al jugador.");
+  if (row.status === "REVERTIDO") throw new Error("Este cierre está revertido — no se puede pagar.");
+  if (row.wallet_pagado_at) {
+    return { alreadyPaid: true, walletMovementId: row.wallet_movement_id as string };
+  }
+  const monto = Number(row.pago_jugador_total);
+  if (monto <= 0) {
+    throw new Error("El pago total de esta semana es 0 (o negativo) — no hay nada que registrar en Wallet.");
+  }
+
+  const { id: movementId } = await registrarAjusteTesoreria({
+    ledger: "WALLET_MANOS",
+    direction: "EGRESO",
+    amount: monto,
+    reason: `Pago banca ${row.player_name} (${row.club_name}) — semana ${row.week_start}`,
+    idempotencyKey: `bancado_pago_${id}`,
+    createdBy: createdBy ?? null,
+  });
+
+  await pool.query(
+    `UPDATE bancado_historial SET wallet_pagado_at = now(), wallet_movement_id = $2 WHERE id = $1`,
+    [id, movementId]
+  );
+
+  return { alreadyPaid: false, walletMovementId: movementId };
 }
 
 export async function revertirCierreBancado(id: string, motivo?: string) {

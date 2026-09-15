@@ -24,6 +24,8 @@ export default function JugadoresBancados() {
   const [historialGlobal, setHistorialGlobal] = useState<any[]>([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
   const [accionandoGlobal, setAccionandoGlobal] = useState<string | null>(null);
+  const [resumenBancados, setResumenBancados] = useState<any[]>([]);
+  const [cargandoResumen, setCargandoResumen] = useState(true);
 
   function refresh() {
     setCargando(true);
@@ -43,8 +45,20 @@ export default function JugadoresBancados() {
       .finally(() => setCargandoHistorial(false));
   }
 
+  function refreshResumen() {
+    setCargandoResumen(true);
+    api
+      .resumenBancados()
+      .then(setResumenBancados)
+      .catch((e: any) => setError(e.message))
+      .finally(() => setCargandoResumen(false));
+  }
+
   async function revertirGlobal(h: any) {
-    const motivo = prompt(`Revertir el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
+    const avisoPago = h.wallet_pagado_at
+      ? "\n\n⚠️ Este cierre ya se pagó en la Wallet — revertirlo NO deshace ese movimiento, hay que anotarlo aparte si corresponde."
+      : "";
+    const motivo = prompt(`Revertir el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)${avisoPago}`) ?? undefined;
     if (motivo === undefined) return;
     setAccionandoGlobal(h.id);
     try {
@@ -75,9 +89,27 @@ export default function JugadoresBancados() {
     }
   }
 
+  async function pagarGlobal(h: any) {
+    const ok = confirm(
+      `Registrar el pago de ${usd(h.pago_jugador_total)} a ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}) como un EGRESO en la Wallet (WALLET_MANOS), con fecha de hoy.\n\n¿Confirmás?`
+    );
+    if (!ok) return;
+    setAccionandoGlobal(h.id);
+    try {
+      const r = await api.pagarCierreBancado(h.id);
+      if (r.alreadyPaid) alert("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
+      refreshHistorial();
+    } catch (err: any) {
+      alert(err.message || "No se pudo registrar el pago.");
+    } finally {
+      setAccionandoGlobal(null);
+    }
+  }
+
   useEffect(() => {
     refresh();
     refreshHistorial();
+    refreshResumen();
   }, []);
 
   useEffect(() => {
@@ -220,6 +252,54 @@ export default function JugadoresBancados() {
 
       <div className="panel">
         <div className="topbar" style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: 0 }}>Resumen histórico de bancados</h3>
+        </div>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          Acumulado de todos los cierres semanales de cada jugador bancado — ganancia del jugador vs. ganancia de la
+          empresa, para ver el desglose sin tener que abrir cada uno.
+        </div>
+        {cargandoResumen ? (
+          <div className="muted">Cargando...</div>
+        ) : resumenBancados.length === 0 ? (
+          <div className="muted">Todavía no hay ningún cierre semanal cargado.</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Jugador</th>
+                  <th>Club</th>
+                  <th>Agente</th>
+                  <th>Semanas cerradas</th>
+                  <th>Resultado mesas total</th>
+                  <th>Ganancia total jugador</th>
+                  <th>Ganancia total empresa</th>
+                  <th>Capital actual</th>
+                  <th>Makeup actual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumenBancados.map((r) => (
+                  <tr key={r.playerId}>
+                    <td>{r.playerName} <span className="muted">#{r.playerExternalId}</span></td>
+                    <td>{r.clubName}</td>
+                    <td>{r.agentName ?? <span className="muted">Sin agente</span>}</td>
+                    <td>{r.semanasCerradas}</td>
+                    <td>{usd(r.resultadoMesasTotal)}</td>
+                    <td><span className={`badge ${Number(r.gananciaJugadorTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaJugadorTotal)}</span></td>
+                    <td><span className={`badge ${Number(r.gananciaEmpresaTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaEmpresaTotal)}</span></td>
+                    <td><strong>{usd(r.capitalActual)}</strong></td>
+                    <td className="muted">{usd(r.makeupActual)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Historial de la banca</h3>
         </div>
         {cargandoHistorial ? (
@@ -270,6 +350,20 @@ export default function JugadoresBancados() {
                     <td>{usd(h.ganancia_banca_mesas)}</td>
                     <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
                     <td className="row-actions">
+                      {h.tipo === "CIERRE_SEMANAL" && h.status !== "REVERTIDO" && (
+                        h.wallet_pagado_at ? (
+                          <span className="badge pos" style={{ marginRight: 6 }} title="Pagado a la Wallet">Pagado</span>
+                        ) : (
+                          <button
+                            className="btn secondary small"
+                            disabled={accionandoGlobal === h.id}
+                            onClick={() => pagarGlobal(h)}
+                            title="Registrar este pago como un EGRESO en la Wallet (WALLET_MANOS)"
+                          >
+                            {accionandoGlobal === h.id ? "..." : "Pagar"}
+                          </button>
+                        )
+                      )}
                       {h.status === "REVERTIDO" ? (
                         <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
                       ) : (
@@ -388,6 +482,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
   const [observacionesRecarga, setObservacionesRecarga] = useState("");
   const [recargando, setRecargando] = useState(false);
   const [errorRecarga, setErrorRecarga] = useState<string | null>(null);
+  const [pagando, setPagando] = useState<string | null>(null);
 
   function cargarTodo() {
     setCargandoConfig(true);
@@ -525,15 +620,36 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
     }
   }
 
-  async function revertir(id: string) {
-    const motivo = prompt("¿Por qué se revierte este cierre de banca? (queda en el historial, no se borra nada)") ?? undefined;
+  async function revertir(h: any) {
+    const avisoPago = h.wallet_pagado_at
+      ? "\n\n⚠️ Este cierre ya se pagó en la Wallet — revertirlo NO deshace ese movimiento, hay que anotarlo aparte si corresponde."
+      : "";
+    const motivo = prompt(`¿Por qué se revierte este cierre de banca? (queda en el historial, no se borra nada)${avisoPago}`) ?? undefined;
     if (motivo === undefined) return;
     try {
-      await api.revertirCierreBancado(id, motivo || undefined);
+      await api.revertirCierreBancado(h.id, motivo || undefined);
       cargarTodo();
       onCierreAplicado();
     } catch (err: any) {
       alert(err.message || "No se pudo revertir.");
+    }
+  }
+
+  async function pagar(h: any) {
+    const ok = confirm(
+      `Registrar el pago de ${usd(h.pago_jugador_total)} como un EGRESO en la Wallet (WALLET_MANOS), con fecha de hoy.\n\n¿Confirmás?`
+    );
+    if (!ok) return;
+    setPagando(h.id);
+    try {
+      const r = await api.pagarCierreBancado(h.id);
+      if (r.alreadyPaid) alert("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
+      cargarTodo();
+      onCierreAplicado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo registrar el pago.");
+    } finally {
+      setPagando(null);
     }
   }
 
@@ -764,8 +880,22 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                             <td>{usd(h.pago_jugador_total)}</td>
                             <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
                             <td className="row-actions">
+                              {h.tipo === "CIERRE_SEMANAL" && h.status !== "REVERTIDO" && (
+                                h.wallet_pagado_at ? (
+                                  <span className="badge pos" style={{ marginRight: 6 }} title="Pagado a la Wallet">Pagado</span>
+                                ) : (
+                                  <button
+                                    className="btn secondary small"
+                                    disabled={pagando === h.id}
+                                    onClick={() => pagar(h)}
+                                    title="Registrar este pago como un EGRESO en la Wallet (WALLET_MANOS)"
+                                  >
+                                    {pagando === h.id ? "..." : "Pagar"}
+                                  </button>
+                                )
+                              )}
                               {h.status !== "REVERTIDO" ? (
-                                <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
+                                <button className="btn secondary small" onClick={() => revertir(h)}>Revertir</button>
                               ) : (
                                 <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
                               )}

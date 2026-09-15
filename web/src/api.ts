@@ -287,6 +287,10 @@ export const api = {
   // Borrado real (no queda en el historial) — solo para datos de prueba, nunca plata real.
   eliminarCierreBancadoDefinitivo: (id: string) =>
     request(`/bancados/historial/${id}/definitivo`, { method: "DELETE" }),
+
+  pagarCierreBancado: (id: string) =>
+    request(`/bancados/historial/${id}/pagar`, { method: "POST" }),
+  resumenBancados: () => request(`/bancados/resumen`),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),
