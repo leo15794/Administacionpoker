@@ -73,12 +73,12 @@ export function calcularCierreBancado(
   // En una pérdida, la banca absorbe el 100% (no se reparte por %banca).
   const gananciaBancaMesas = resultado >= 0 ? resultado * cfg.pctBanca : resultado;
 
-  // El capital de la banca se mueve SOLO por mesas: resultado de mesas y el pago al jugador que
-  // sale de esas mesas (pagoJugadorMesas). El rakeback no entra acá para nada — ni la parte que
-  // tapa makeup, ni el excedente que termina en el jugador — porque es un flujo de plata aparte
-  // (no sale del capital de la banca).
+  // El "capital" es el saldo acumulado del JUGADOR (no la caja de la banca): crece con el
+  // resultado de mesas de esta semana, punto — no se le resta lo que se le paga esta semana
+  // (pagoJugadorTotal es cuánto le corresponde cobrar, un dato aparte, no una salida de este
+  // saldo) ni el rakeback (que tampoco toca este número, ver arriba).
   const capitalAnterior = estado.capitalActual ?? cfg.capitalInicial ?? 0;
-  const capitalDespues = capitalAnterior + resultado - pagoJugadorMesas;
+  const capitalDespues = capitalAnterior + resultado;
 
   return {
     resultadoMesas: redondear(resultado),
