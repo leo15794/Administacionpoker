@@ -248,6 +248,38 @@ export const api = {
   buscarJugadores: (q: string) => request(`/catalog/players/buscar?q=${encodeURIComponent(q)}`),
   setJugadorBancado: (playerId: string, bancado: boolean) =>
     request(`/catalog/players/${playerId}/bancado`, { method: "PATCH", body: JSON.stringify({ bancado }) }),
+  // Motor de liquidación de banca (capital/makeup/rakeback) por jugador bancado — ver
+  // engine/bancados.ts.
+  bancadoConfig: (playerId: string) => request(`/bancados/config/${playerId}`),
+  guardarBancadoConfig: (
+    playerId: string,
+    data: {
+      pctJugador: number;
+      pctBanca: number;
+      rakebackPct: number;
+      capitalInicial: number;
+      makeupInicial: number;
+      moneda?: string;
+      regla?: string;
+      observaciones?: string;
+      recuperacionMakeup?: string;
+    }
+  ) => request(`/bancados/config/${playerId}`, { method: "PUT", body: JSON.stringify(data) }),
+  bancadoEstado: (playerId: string) => request(`/bancados/estado/${playerId}`),
+  previsualizarCierreBancado: (playerId: string, resultadoMesas: number, rakeTotal: number) =>
+    request(`/bancados/previsualizar`, { method: "POST", body: JSON.stringify({ playerId, resultadoMesas, rakeTotal }) }),
+  cerrarCierreBancado: (data: {
+    playerId: string;
+    weekStart: string;
+    weekEnd: string;
+    resultadoMesas: number;
+    rakeTotal: number;
+    observaciones?: string;
+  }) => request(`/bancados/cerrar`, { method: "POST", body: JSON.stringify(data) }),
+  historialBancadoGlobal: () => request(`/bancados/historial`),
+  historialBancado: (playerId: string) => request(`/bancados/historial/${playerId}`),
+  revertirCierreBancado: (id: string, motivo?: string) =>
+    request(`/bancados/historial/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

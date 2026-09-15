@@ -544,3 +544,75 @@ CREATE TABLE IF NOT EXISTS club_weekly_extras (
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(club_id, week_start)
 );
+
+-- ============================================================
+-- MOTOR DE JUGADORES BANCADOS (15/09/2026)
+-- ============================================================
+-- Liquidación semanal propia para un jugador marcado como bancado (players.bancado), separada
+-- del cierre normal de su agente. Réplica de la lógica ya probada en la planilla Google Sheets
+-- (motor "DIGIPLAYERS · MOTOR DE JUGADORES BANCADOS", primera implementación: Matias Fontal,
+-- TeamBack Suprema) — mismas reglas, misma fórmula, acá adentro del sistema:
+--   - Resultado de mesas positivo: se reparte según % jugador / % banca.
+--   - Resultado de mesas negativo: la pérdida completa aumenta el makeup.
+--   - El makeup NO se recupera con ganancias de mesas, solo con rakeback.
+--   - El rakeback primero cancela el makeup pendiente; el excedente (si el makeup llega a 0)
+--     es 100% del jugador.
+-- Ver engine/bancados.ts (calcularCierreBancado) para la implementación exacta.
+
+-- Config por jugador bancado — 1:1 con players (solo tiene sentido para un jugador ya marcado
+-- bancado, pero no se fuerza acá por FK para poder cargar la config antes de la primera
+-- importación que lo traiga). Capital/makeup inicial son el punto de partida cuando todavía no
+-- hay ningún cierre de banca cargado (ver bancado_historial para el estado vigente real).
+CREATE TABLE IF NOT EXISTS bancado_config (
+  player_id            TEXT PRIMARY KEY REFERENCES players(id),
+  pct_jugador          NUMERIC(6,4) NOT NULL,
+  pct_banca            NUMERIC(6,4) NOT NULL,
+  rakeback_pct         NUMERIC(6,4) NOT NULL DEFAULT 0,
+  capital_inicial      NUMERIC(18,4) NOT NULL DEFAULT 0,
+  makeup_inicial       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  moneda               TEXT NOT NULL DEFAULT 'USD',
+  regla                TEXT,
+  observaciones        TEXT,
+  recuperacion_makeup  TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Historial de cierres de banca — un registro por jugador+semana, igual que HISTORIAL_BANCADOS_
+-- MASTER de la planilla (acá no hace falta una hoja individual por jugador aparte, se filtra por
+-- player_id). status='REVERTIDO' (mismo patrón que weekly_closings, BIT-001) en vez de borrar:
+-- un cierre revertido no cuenta para el estado vigente (capital/makeup actual) ni bloquea volver
+-- a cerrar esa semana.
+CREATE TABLE IF NOT EXISTS bancado_historial (
+  id                          TEXT PRIMARY KEY,
+  player_id                   TEXT NOT NULL REFERENCES players(id),
+  agent_id                    TEXT REFERENCES agents(id),
+  club_id                     TEXT NOT NULL REFERENCES clubs(id),
+  week_start                  DATE NOT NULL,
+  week_end                    DATE NOT NULL,
+  resultado_mesas             NUMERIC(18,4) NOT NULL,
+  rake_total                  NUMERIC(18,4) NOT NULL,
+  rakeback_total               NUMERIC(18,4) NOT NULL,
+  makeup_anterior              NUMERIC(18,4) NOT NULL,
+  perdida_agrega_makeup       NUMERIC(18,4) NOT NULL,
+  rakeback_a_makeup           NUMERIC(18,4) NOT NULL,
+  rakeback_excedente_jugador  NUMERIC(18,4) NOT NULL,
+  makeup_nuevo                NUMERIC(18,4) NOT NULL,
+  pago_jugador_mesas          NUMERIC(18,4) NOT NULL,
+  pago_jugador_total          NUMERIC(18,4) NOT NULL,
+  ganancia_banca_mesas        NUMERIC(18,4) NOT NULL,
+  capital_anterior             NUMERIC(18,4) NOT NULL,
+  capital_despues              NUMERIC(18,4) NOT NULL,
+  pct_jugador_snapshot        NUMERIC(6,4) NOT NULL,
+  pct_banca_snapshot          NUMERIC(6,4) NOT NULL,
+  rakeback_pct_snapshot       NUMERIC(6,4) NOT NULL,
+  observaciones                TEXT,
+  status                      TEXT NOT NULL DEFAULT 'ACTIVO',
+  motivo_reversion             TEXT,
+  created_by                  TEXT,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS bancado_historial_player_week_active_key
+  ON bancado_historial(player_id, week_start)
+  WHERE status <> 'REVERTIDO';
+CREATE INDEX IF NOT EXISTS bancado_historial_player_idx ON bancado_historial(player_id, week_start DESC);
