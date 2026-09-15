@@ -459,6 +459,34 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .field input::placeholder { color: var(--text-faint); }
 
+/* Inputs/selects "sueltos" (fuera de un .field) — filtros de topbar (ej. Resumen por club,
+   Historial de cierres), selects/inputs dentro de una celda de tabla, etc. Sin esto tomaban el
+   estilo por defecto del navegador (fondo blanco), que desentonaba fuerte con el tema oscuro.
+   :where(...) a propósito: especificidad CERO, así esta base nunca le gana a .field
+   input/select/textarea ni a .search-input (que sí tienen que ganar) — esto es puramente el
+   fallback para lo que quede sin ninguna de esas dos clases. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 7px 11px;
+}
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}
+:where(input, textarea)::placeholder {
+  color: var(--text-faint);
+}
+select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
 .error {
   color: var(--red);
   font-size: 13px;
