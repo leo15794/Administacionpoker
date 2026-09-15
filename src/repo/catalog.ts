@@ -230,6 +230,20 @@ export async function getJugadoresDeAgenteEnClub(clubId: string, agentId: string
   return r.rows;
 }
 
+// Todos los jugadores de un agente, en CUALQUIER club (a diferencia de getJugadoresDeAgenteEnClub,
+// que filtra por un club puntual) — para el árbol de "Supervisores" (Supervisor -> Agentes a
+// cargo -> Jugadores), donde un agente a cargo puede tener roster en más de un club.
+export async function getJugadoresDeAgente(agentId: string) {
+  const r = await pool.query(
+    `SELECT p.id, p.external_id, p.display_name, p.club_id, c.name as club_name, p.bancado
+     FROM players p JOIN clubs c ON c.id = p.club_id
+     WHERE p.agent_id = $1
+     ORDER BY c.name, p.display_name`,
+    [agentId]
+  );
+  return r.rows;
+}
+
 // Borra una fila de "players" (catálogo/roster: club+agente asignado a un jugador). Esto NUNCA
 // toca el ledger: weekly_closings y ledger_movements se referencian por agent_id+club_id, no por
 // player_id, así que borrar acá no revierte ni afecta ningún cierre ya aplicado (ver schema.sql).

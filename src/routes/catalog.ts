@@ -16,6 +16,7 @@ import {
   listAllRules,
   getArbolClubes,
   getJugadoresDeAgenteEnClub,
+  getJugadoresDeAgente,
   eliminarJugador,
   resolverConfigVigente,
   moverAgenteDeClub,
@@ -216,6 +217,11 @@ catalogRouter.get("/arbol", requireAuth, requireAdmin, async (_req, res) => {
 
 catalogRouter.get("/clubs/:clubId/agents/:agentId/players", requireAuth, requireAdmin, async (req, res) => {
   res.json(await getJugadoresDeAgenteEnClub(req.params.clubId, req.params.agentId));
+});
+
+// Roster completo de un agente en TODOS sus clubes — para el árbol de "Supervisores".
+catalogRouter.get("/agents/:agentId/players", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await getJugadoresDeAgente(req.params.agentId));
 });
 
 // Config vigente (deal propio o default del club) de un agente en un club, AHORA MISMO. Se usa

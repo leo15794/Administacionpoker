@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { api, type AccountType } from "../api";
 import { usd, pct } from "../fmt";
 import { exportCsv } from "../csv";
@@ -1034,6 +1034,66 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   );
 }
 
+// Fila de agente (o supervisor) expandible: al abrirla trae TODOS sus jugadores, en cualquier
+// club, on-demand (mismo patrón lazy que ArbolClubes, para no traer un roster gigante de una si
+// nadie lo abre).
+function FilaAgenteConJugadores({ agente, extraCols }: { agente: any; extraCols: ReactNode }) {
+  const [abierto, setAbierto] = useState(false);
+  const [jugadores, setJugadores] = useState<any[] | null>(null);
+  const [cargando, setCargando] = useState(false);
+
+  async function toggle() {
+    setAbierto((v) => !v);
+    if (jugadores === null && !abierto) {
+      setCargando(true);
+      try {
+        setJugadores(await api.jugadoresDeAgente(agente.id));
+      } finally {
+        setCargando(false);
+      }
+    }
+  }
+
+  return (
+    <>
+      <tr>
+        <td>
+          <button className="btn secondary small" onClick={toggle} style={{ marginRight: 8 }}>
+            {abierto ? "▾" : "▸"}
+          </button>
+          {agente.name}
+        </td>
+        {extraCols}
+      </tr>
+      {abierto && (
+        <tr>
+          <td colSpan={99} style={{ paddingTop: 0, paddingBottom: 14, background: "rgba(255,255,255,0.015)" }}>
+            {cargando ? (
+              <div className="muted" style={{ fontSize: 13 }}>Cargando jugadores...</div>
+            ) : !jugadores || jugadores.length === 0 ? (
+              <div className="muted" style={{ fontSize: 13 }}>Sin jugadores cargados.</div>
+            ) : (
+              <table style={{ marginLeft: 20, width: "calc(100% - 20px)" }}>
+                <thead><tr><th>Jugador</th><th>ID</th><th>Club</th><th></th></tr></thead>
+                <tbody>
+                  {jugadores.map((j: any) => (
+                    <tr key={j.id}>
+                      <td>{j.display_name ?? <span className="muted">Sin nombre</span>}</td>
+                      <td className="muted">{j.external_id}</td>
+                      <td>{j.club_name}</td>
+                      <td>{j.bancado && <span className="badge neutral">Bancado</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 function SupervisoresView() {
   const [data, setData] = useState<{ supervisores: any[]; supervisoresInvalidos: any[] } | null>(null);
 
@@ -1046,10 +1106,11 @@ function SupervisoresView() {
   return (
     <div>
       <div className="panel">
-        <h3>Rakeback centralizado por supervisor</h3>
+        <h3>Árbol de supervisores</h3>
         <div className="muted" style={{ marginBottom: 14 }}>
-          Cuando un club tiene el rebate configurado con destino "Rakeback supervisor", ese % de cada cierre de sus agentes a cargo no
-          entra al saldo del agente — se acredita acá, centralizado.
+          Supervisor → agentes a cargo → jugadores de cada agente (en cualquier club). Cuando un club tiene el rebate configurado con
+          destino "Rakeback supervisor", ese % de cada cierre de sus agentes a cargo no entra al saldo del agente — se acredita acá,
+          centralizado.
         </div>
         {data.supervisores.length === 0 ? (
           <div className="muted">Todavía no hay agentes con tipo de cuenta "Supervisor".</div>
@@ -1063,22 +1124,36 @@ function SupervisoresView() {
                   <span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(s.saldo_total)}</span>
                 </div>
               </div>
-              {s.agentes.length === 0 ? (
-                <div className="muted" style={{ fontSize: 13 }}>Sin agentes a cargo.</div>
-              ) : (
-                <table>
-                  <thead><tr><th>Agente a cargo</th><th>Tipo de cuenta</th><th>Saldo propio</th></tr></thead>
-                  <tbody>
-                    {s.agentes.map((a: any) => (
-                      <tr key={a.id}>
-                        <td>{a.name}</td>
-                        <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type as AccountType] ?? a.account_type}</span></td>
-                        <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              <table>
+                <thead><tr><th></th><th>Tipo de cuenta</th><th>Saldo propio</th></tr></thead>
+                <tbody>
+                  <FilaAgenteConJugadores
+                    agente={s}
+                    extraCols={
+                      <>
+                        <td><span className="badge neutral">Supervisor</span></td>
+                        <td><span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(s.saldo_total)}</span></td>
+                      </>
+                    }
+                  />
+                  {s.agentes.length === 0 ? (
+                    <tr><td colSpan={3} className="muted" style={{ fontSize: 13 }}>Sin agentes a cargo.</td></tr>
+                  ) : (
+                    s.agentes.map((a: any) => (
+                      <FilaAgenteConJugadores
+                        key={a.id}
+                        agente={a}
+                        extraCols={
+                          <>
+                            <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type as AccountType] ?? a.account_type}</span></td>
+                            <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
+                          </>
+                        }
+                      />
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           ))
         )}
