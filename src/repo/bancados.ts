@@ -72,6 +72,38 @@ export async function getEstadoBancado(playerId: string, config: BancadoConfigIn
   return { capitalActual: config.capitalInicial, makeupActual: config.makeupInicial };
 }
 
+// Resumen acumulado (todas las semanas activas, no revertidas) — para el panel de totales:
+// cuánto rake generó ese jugador en total, cuánto de eso volvió como rakeback, y cuánto le
+// quedó de rake neto a la banca (rake generado - rakeback pagado). No es un valor que se
+// guarde aparte: se suma en vivo desde bancado_historial, igual que el estado (capital/makeup).
+export interface BancadoResumen {
+  rakeGeneradoTotal: number;
+  rakebackBancadoTotal: number;
+  rakeBancaTotal: number;
+  semanasCerradas: number;
+}
+
+export async function getResumenBancado(playerId: string): Promise<BancadoResumen> {
+  const r = await pool.query(
+    `SELECT
+       COALESCE(SUM(rake_total), 0) as rake_generado_total,
+       COALESCE(SUM(rakeback_total), 0) as rakeback_bancado_total,
+       COUNT(*) as semanas_cerradas
+     FROM bancado_historial
+     WHERE player_id = $1 AND status <> 'REVERTIDO'`,
+    [playerId]
+  );
+  const row = r.rows[0];
+  const rakeGeneradoTotal = Number(row?.rake_generado_total ?? 0);
+  const rakebackBancadoTotal = Number(row?.rakeback_bancado_total ?? 0);
+  return {
+    rakeGeneradoTotal,
+    rakebackBancadoTotal,
+    rakeBancaTotal: rakeGeneradoTotal - rakebackBancadoTotal,
+    semanasCerradas: Number(row?.semanas_cerradas ?? 0),
+  };
+}
+
 export interface CierreBancadoInput {
   playerId: string;
   weekStart: string;

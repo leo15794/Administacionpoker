@@ -5,6 +5,7 @@ import {
   getBancadoConfig,
   upsertBancadoConfig,
   getEstadoBancado,
+  getResumenBancado,
   previsualizarCierreBancado,
   cerrarCierreBancado,
   listHistorialBancado,
@@ -48,7 +49,8 @@ bancadosRouter.get("/estado/:playerId", requireAuth, requireAdmin, async (req, r
     capitalInicial: Number(config.capital_inicial),
     makeupInicial: Number(config.makeup_inicial),
   });
-  res.json({ config, estado });
+  const resumen = await getResumenBancado(req.params.playerId);
+  res.json({ config, estado, resumen });
 });
 
 const origenSchema = z.object({

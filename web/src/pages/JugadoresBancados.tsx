@@ -146,6 +146,8 @@ export default function JugadoresBancados() {
         )}
       </div>
 
+      <ImportarBancados onCierreAplicado={refreshHistorial} />
+
       <div className="panel">
         <h3>Jugadores marcados como bancados ({bancados.length})</h3>
         {cargando ? (
@@ -285,6 +287,7 @@ function FilaBancado({
 function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplicado: () => void }) {
   const [config, setConfig] = useState<any | null>(null);
   const [estado, setEstado] = useState<any | null>(null);
+  const [resumen, setResumen] = useState<any | null>(null);
   const [cargandoConfig, setCargandoConfig] = useState(true);
   const [editandoConfig, setEditandoConfig] = useState(false);
   const [guardandoConfig, setGuardandoConfig] = useState(false);
@@ -318,6 +321,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
       .then((r: any) => {
         setConfig(r.config);
         setEstado(r.estado);
+        setResumen(r.resumen ?? null);
         setPctJugador(String(Number(r.config.pct_jugador) * 100));
         setPctBanca(String(Number(r.config.pct_banca) * 100));
         setRakebackPct(String(Number(r.config.rakeback_pct) * 100));
@@ -490,6 +494,13 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
               <span>Makeup actual: <strong className={Number(estado?.makeupActual ?? 0) > 0 ? "neg" : "pos"}>{usd(estado?.makeupActual ?? 0)}</strong></span>
               <span className="muted">% Jugador {(Number(config.pct_jugador) * 100).toFixed(1)}% · % Banca {(Number(config.pct_banca) * 100).toFixed(1)}% · % Rakeback {(Number(config.rakeback_pct) * 100).toFixed(1)}%</span>
             </div>
+            {resumen && (
+              <div className="muted" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border, #2a2a2a)" }}>
+                <span>Rake generado total (acumulado): <strong>{usd(resumen.rakeGeneradoTotal)}</strong></span>
+                <span>Rakeback Bancado (acumulado): <strong>{usd(resumen.rakebackBancadoTotal)}</strong></span>
+                <span>Rake Banca (acumulado): <strong>{usd(resumen.rakeBancaTotal)}</strong></span>
+              </div>
+            )}
           </div>
 
           <div className="panel" style={{ marginBottom: 12 }}>
@@ -583,5 +594,234 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
         </>
       )}
     </div>
+  );
+}
+
+
+// Carga automática por archivo (pedido 15/09/2026): mismo archivo semanal que se sube en
+// Cierres, pero acá solo interesan los jugadores marcados como bancados — reusa tal cual los
+// endpoints de importación existentes (analizarImportacionSuprema/TeamBackGG/TinyGG), que YA
+// devuelven por club un array `bancados` con playerId/resultado/rake de cada jugador bancado
+// que apareció en el archivo (ver repo/imports.ts, JugadorBancadoOmitido) — no hace falta
+// ningún endpoint nuevo del lado del backend, solo filtrar/mostrar ese pedazo de la respuesta
+// en vez del agregado normal por agente.
+function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }) {
+  const [plataforma, setPlataforma] = useState<"suprema" | "teamback-gg" | "tiny-gg">("suprema");
+  const [weekStart, setWeekStart] = useState("");
+  const [weekEnd, setWeekEnd] = useState("");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [analizando, setAnalizando] = useState(false);
+  const [error, setError] = useState("");
+  const [items, setItems] = useState<any[]>([]);
+
+  async function analizar() {
+    setError("");
+    setItems([]);
+    if (!weekStart || !weekEnd) {
+      setError("Cargá la semana (desde/hasta) antes de analizar el archivo.");
+      return;
+    }
+    setAnalizando(true);
+    try {
+      let result: any;
+      if (plataforma === "suprema") {
+        if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+        result = await api.previsualizarImportacion(archivo, weekEnd);
+      } else if (plataforma === "teamback-gg") {
+        if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+        result = await api.previsualizarImportacionTeamBackGG(archivo, weekEnd);
+      } else {
+        if (archivos.length === 0) throw new Error("Subí los archivos (uno por super agente).");
+        result = await api.previsualizarImportacionTinyGG(archivos, weekEnd);
+      }
+      const detectados: any[] = [];
+      for (const c of result.clubes ?? []) {
+        for (const b of c.bancados ?? []) {
+          detectados.push({
+            key: `${c.clubId}_${b.playerId}`,
+            playerId: b.playerId,
+            playerName: b.playerName,
+            agentName: b.agentName,
+            clubName: c.clubName,
+            resultado: Number(b.resultado) || 0,
+            rake: Number(b.rake) || 0,
+          });
+        }
+      }
+      setItems(detectados);
+      if (detectados.length === 0) {
+        setError("El archivo no trajo ningún jugador marcado como bancado (revisá que estén marcados en el panel de arriba).");
+      }
+    } catch (err: any) {
+      setError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setAnalizando(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h3>Cargar archivo semanal (solo bancados)</h3>
+      <div className="muted" style={{ marginBottom: 10 }}>
+        Subí el mismo archivo semanal que usás en Cierres — acá solo se procesan los jugadores que ya están marcados como
+        bancados (el resto del archivo se ignora). Para cada uno se usa el resultado y el rake que trae el archivo, junto con
+        su configuración de banca ya cargada.
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Plataforma</label>
+          <select value={plataforma} onChange={(e) => { setPlataforma(e.target.value as any); setItems([]); setArchivo(null); setArchivos([]); }}>
+            <option value="suprema">SupremaPoker (Fénix/TeamBack Suprema)</option>
+            <option value="teamback-gg">GG Poker / TeamBack GG</option>
+            <option value="tiny-gg">Tiny GG</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Semana desde</label>
+          <input value={weekStart} onChange={(e) => setWeekStart(e.target.value)} type="date" />
+        </div>
+        <div className="field">
+          <label>Semana hasta</label>
+          <input value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} type="date" />
+        </div>
+        <div className="field">
+          <label>{plataforma === "tiny-gg" ? "Archivos (uno por super agente)" : "Archivo"}</label>
+          {plataforma === "tiny-gg" ? (
+            <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => setArchivos(Array.from(e.target.files ?? []))} />
+          ) : (
+            <input type="file" accept=".xlsx,.xls" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+          )}
+        </div>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <button className="btn small" disabled={analizando} onClick={analizar} style={{ marginTop: 6 }}>
+        {analizando ? "Analizando..." : "Analizar archivo"}
+      </button>
+
+      {items.length > 0 && (
+        <div style={{ overflowX: "auto", marginTop: 14 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <FilaImportBancado key={it.key} item={it} weekStart={weekStart} weekEnd={weekEnd} onCierreAplicado={onCierreAplicado} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilaImportBancado({
+  item,
+  weekStart,
+  weekEnd,
+  onCierreAplicado,
+}: {
+  item: any;
+  weekStart: string;
+  weekEnd: string;
+  onCierreAplicado: () => void;
+}) {
+  const [resultadoMesas, setResultadoMesas] = useState(String(item.resultado));
+  const [rakeTotal, setRakeTotal] = useState(String(item.rake));
+  const [previa, setPrevia] = useState<any | null>(null);
+  const [calculando, setCalculando] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aplicado, setAplicado] = useState(false);
+
+  async function previsualizar() {
+    setCalculando(true);
+    setError(null);
+    setPrevia(null);
+    try {
+      const r = await api.previsualizarCierreBancado(item.playerId, Number(resultadoMesas) || 0, Number(rakeTotal) || 0);
+      setPrevia(r.calc);
+    } catch (err: any) {
+      setError(err.message || "No se pudo calcular.");
+    } finally {
+      setCalculando(false);
+    }
+  }
+
+  async function confirmar() {
+    setCerrando(true);
+    setError(null);
+    try {
+      const r = await api.cerrarCierreBancado({
+        playerId: item.playerId,
+        weekStart,
+        weekEnd,
+        resultadoMesas: Number(resultadoMesas) || 0,
+        rakeTotal: Number(rakeTotal) || 0,
+      });
+      if (r.alreadyApplied) {
+        setError("Ya había un cierre de banca aplicado para esa semana — no se duplicó.");
+      } else {
+        setAplicado(true);
+        onCierreAplicado();
+      }
+    } catch (err: any) {
+      setError(err.message || "No se pudo cerrar la semana.");
+    } finally {
+      setCerrando(false);
+    }
+  }
+
+  return (
+    <>
+      <tr>
+        <td>{item.playerName}</td>
+        <td>{item.clubName}</td>
+        <td>{item.agentName}</td>
+        <td>
+          <input value={resultadoMesas} onChange={(e) => { setResultadoMesas(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} />
+        </td>
+        <td>
+          <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} />
+        </td>
+        <td className="row-actions">
+          {aplicado ? (
+            <span className="badge pos">Cierre aplicado</span>
+          ) : (
+            <>
+              <button className="btn secondary small" disabled={calculando} onClick={previsualizar}>
+                {calculando ? "..." : "Previsualizar"}
+              </button>
+              {previa && (
+                <button className="btn small" disabled={cerrando} onClick={confirmar}>
+                  {cerrando ? "..." : "Confirmar"}
+                </button>
+              )}
+            </>
+          )}
+        </td>
+      </tr>
+      {(error || previa) && (
+        <tr>
+          <td></td>
+          <td colSpan={5}>
+            {error && <div className="error">{error}</div>}
+            {previa && (
+              <div className="muted" style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "4px 0" }}>
+                <span>Rakeback: <strong>{usd(previa.rakebackTotal)}</strong></span>
+                <span>Makeup: {usd(previa.makeupAnterior)} → {usd(previa.makeupNuevo)}</span>
+                <span>Pago total jugador: <strong>{usd(previa.pagoJugadorTotal)}</strong></span>
+                <span>Ganancia banca mesas: {usd(previa.gananciaBancaMesas)}</span>
+                <span>Capital después: <strong>{usd(previa.capitalDespues)}</strong></span>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
