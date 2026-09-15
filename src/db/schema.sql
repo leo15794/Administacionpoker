@@ -588,6 +588,15 @@ CREATE TABLE IF NOT EXISTS bancado_historial (
   player_id                   TEXT NOT NULL REFERENCES players(id),
   agent_id                    TEXT REFERENCES agents(id),
   club_id                     TEXT NOT NULL REFERENCES clubs(id),
+  -- 'CIERRE_SEMANAL' (default, todo lo de antes) o 'RECARGA_CAPITAL' (18/09/2026): un ajuste
+  -- manual de capital sin resultado de mesas — para cuando el jugador pierde todo su capital y
+  -- hay que volver a cargarle fichas, algo que antes solo se podía hacer una vez (capital_inicial
+  -- en la config, que además deja de tener efecto en cuanto existe algún cierre semanal). En una
+  -- fila RECARGA_CAPITAL: resultado_mesas guarda el monto de la recarga (puede ser negativo para
+  -- un descuento), rake/rakeback/makeup/pago/ganancia quedan todos en 0 (no las toca), y
+  -- capital_despues = capital_anterior + resultado_mesas — igual que la fórmula normal del
+  -- capital, ver engine/bancados.ts.
+  tipo                         TEXT NOT NULL DEFAULT 'CIERRE_SEMANAL',
   week_start                  DATE NOT NULL,
   week_end                    DATE NOT NULL,
   resultado_mesas             NUMERIC(18,4) NOT NULL,
@@ -612,7 +621,10 @@ CREATE TABLE IF NOT EXISTS bancado_historial (
   created_by                  TEXT,
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- El "no duplicar la misma semana" solo aplica a cierres semanales de verdad — una recarga de
+-- capital no tiene semana propia (se anota con la fecha del día que se carga) y puede haber más
+-- de una el mismo día sin problema.
 CREATE UNIQUE INDEX IF NOT EXISTS bancado_historial_player_week_active_key
   ON bancado_historial(player_id, week_start)
-  WHERE status <> 'REVERTIDO';
+  WHERE status <> 'REVERTIDO' AND tipo = 'CIERRE_SEMANAL';
 CREATE INDEX IF NOT EXISTS bancado_historial_player_idx ON bancado_historial(player_id, week_start DESC);

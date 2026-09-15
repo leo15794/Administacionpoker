@@ -276,6 +276,10 @@ export const api = {
     rakeTotal: number;
     observaciones?: string;
   }) => request(`/bancados/cerrar`, { method: "POST", body: JSON.stringify(data) }),
+  // Recarga/ajuste manual de capital (monto negativo = descuento) — para cuando el jugador
+  // pierde todo el capital y hay que volver a cargarle fichas.
+  recargarCapitalBancado: (data: { playerId: string; monto: number; fecha: string; observaciones?: string }) =>
+    request(`/bancados/recargar`, { method: "POST", body: JSON.stringify(data) }),
   historialBancadoGlobal: () => request(`/bancados/historial`),
   historialBancado: (playerId: string) => request(`/bancados/historial/${playerId}`),
   revertirCierreBancado: (id: string, motivo?: string) =>

@@ -154,7 +154,8 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
   });
 
   const existing = await pool.query(
-    `SELECT id FROM bancado_historial WHERE player_id = $1 AND week_start = $2 AND status <> 'REVERTIDO'`,
+    `SELECT id FROM bancado_historial
+     WHERE player_id = $1 AND week_start = $2 AND status <> 'REVERTIDO' AND tipo = 'CIERRE_SEMANAL'`,
     [input.playerId, input.weekStart]
   );
   if (existing.rows.length > 0) {
@@ -164,12 +165,12 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
   const id = newId("banh");
   await pool.query(
     `INSERT INTO bancado_historial (
-       id, player_id, agent_id, club_id, week_start, week_end,
+       id, player_id, agent_id, club_id, tipo, week_start, week_end,
        resultado_mesas, rake_total, rakeback_total, makeup_anterior, perdida_agrega_makeup,
        rakeback_a_makeup, rakeback_excedente_jugador, makeup_nuevo, pago_jugador_mesas,
        pago_jugador_total, ganancia_banca_mesas, capital_anterior, capital_despues,
        pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
     [
       id,
       input.playerId,
@@ -199,6 +200,74 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
   );
 
   return { id, alreadyApplied: false, calc };
+}
+
+export interface RecargaCapitalInput {
+  playerId: string;
+  monto: number; // positivo = recarga, negativo = descuento/ajuste
+  fecha: string; // YYYY-MM-DD, se guarda en week_start y week_end (no representa una semana real)
+  observaciones?: string | null;
+  createdBy?: string | null;
+}
+
+// Ajuste manual de capital (18/09/2026): antes solo se podía setear el capital inicial una vez
+// en la config, y encima dejaba de tener efecto en cuanto ya había algún cierre semanal cargado
+// (el estado vigente siempre se lee del último historial, ver getEstadoBancado) — no había forma
+// de "recargar fichas" si el jugador se quedaba en 0 o negativo a mitad de camino. Esto inserta
+// una fila más en el mismo historial (tipo='RECARGA_CAPITAL') que solo mueve el capital: no
+// toca rake/rakeback/makeup/pago/ganancia (todo en 0), así el resto de las cuentas de esa
+// semana siguen intactas.
+export async function registrarRecargaCapital(input: RecargaCapitalInput) {
+  const config = await getBancadoConfig(input.playerId);
+  if (!config) {
+    throw new Error("Este jugador todavía no tiene configurada la banca — cargala primero en Jugadores bancados.");
+  }
+  const playerRes = await pool.query(
+    `SELECT p.id, p.club_id, p.agent_id FROM players p WHERE p.id = $1`,
+    [input.playerId]
+  );
+  const player = playerRes.rows[0];
+  if (!player) throw new Error("Jugador no encontrado.");
+
+  const estado = await getEstadoBancado(input.playerId, {
+    pctJugador: Number(config.pct_jugador),
+    pctBanca: Number(config.pct_banca),
+    rakebackPct: Number(config.rakeback_pct),
+    capitalInicial: Number(config.capital_inicial),
+    makeupInicial: Number(config.makeup_inicial),
+  });
+  const capitalAnterior = estado.capitalActual;
+  const capitalDespues = Math.round((capitalAnterior + input.monto + Number.EPSILON) * 100) / 100;
+
+  const id = newId("banh");
+  await pool.query(
+    `INSERT INTO bancado_historial (
+       id, player_id, agent_id, club_id, tipo, week_start, week_end,
+       resultado_mesas, rake_total, rakeback_total, makeup_anterior, perdida_agrega_makeup,
+       rakeback_a_makeup, rakeback_excedente_jugador, makeup_nuevo, pago_jugador_mesas,
+       pago_jugador_total, ganancia_banca_mesas, capital_anterior, capital_despues,
+       pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
+     ) VALUES ($1,$2,$3,$4,'RECARGA_CAPITAL',$5,$5,$6,0,0,$7,0,0,0,$7,0,0,0,$8,$9,
+               $10,$11,$12,$13,$14)`,
+    [
+      id,
+      input.playerId,
+      player.agent_id,
+      player.club_id,
+      input.fecha,
+      input.monto,
+      estado.makeupActual,
+      capitalAnterior,
+      capitalDespues,
+      config.pct_jugador,
+      config.pct_banca,
+      config.rakeback_pct,
+      input.observaciones ?? null,
+      input.createdBy ?? null,
+    ]
+  );
+
+  return { id, capitalAnterior, capitalDespues };
 }
 
 export async function listHistorialBancado(playerId: string) {

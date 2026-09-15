@@ -232,29 +232,43 @@ export default function JugadoresBancados() {
               <thead>
                 <tr>
                   <th>Semana</th>
+                  <th>Tipo</th>
                   <th>Jugador</th>
                   <th>Club</th>
                   <th>Resultado mesas</th>
-                  <th>Rakeback</th>
-                  <th>Makeup</th>
-                  <th>Pago jugador</th>
+                  <th>Rakeback total</th>
+                  <th>RB → Makeup</th>
+                  <th>RB → Jugador</th>
+                  <th>Makeup (ant. → nuevo)</th>
+                  <th>Pago mesas</th>
+                  <th>Pago total jugador</th>
                   <th>Ganancia banca</th>
-                  <th>Capital después</th>
+                  <th>Capital (ant. → después)</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {historialGlobal.map((h) => (
                   <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
-                    <td>{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
+                    <td>{dateShort(h.week_start)}{h.tipo !== "RECARGA_CAPITAL" ? ` - ${dateShort(h.week_end)}` : ""}</td>
+                    <td>
+                      {h.tipo === "RECARGA_CAPITAL" ? (
+                        <span className="badge neutral">Recarga capital</span>
+                      ) : (
+                        <span className="muted">Cierre semanal</span>
+                      )}
+                    </td>
                     <td>{h.player_name} <span className="muted">#{h.player_external_id}</span></td>
                     <td>{h.club_name}</td>
                     <td>{usd(h.resultado_mesas)}</td>
                     <td>{usd(h.rakeback_total)}</td>
-                    <td>{usd(h.makeup_nuevo)}</td>
+                    <td className="muted">{usd(h.rakeback_a_makeup)}</td>
+                    <td className="muted">{usd(h.rakeback_excedente_jugador)}</td>
+                    <td className="muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
+                    <td className="muted">{usd(h.pago_jugador_mesas)}</td>
                     <td><span className={`badge ${Number(h.pago_jugador_total) >= 0 ? "pos" : "neg"}`}>{usd(h.pago_jugador_total)}</span></td>
                     <td>{usd(h.ganancia_banca_mesas)}</td>
-                    <td>{usd(h.capital_despues)}</td>
+                    <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
                     <td className="row-actions">
                       {h.status === "REVERTIDO" ? (
                         <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
@@ -369,6 +383,12 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
   const [cerrando, setCerrando] = useState(false);
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
 
+  const [montoRecarga, setMontoRecarga] = useState("0");
+  const [fechaRecarga, setFechaRecarga] = useState(() => new Date().toISOString().slice(0, 10));
+  const [observacionesRecarga, setObservacionesRecarga] = useState("");
+  const [recargando, setRecargando] = useState(false);
+  const [errorRecarga, setErrorRecarga] = useState<string | null>(null);
+
   function cargarTodo() {
     setCargandoConfig(true);
     api
@@ -472,6 +492,39 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
     }
   }
 
+  // Recarga/ajuste manual de capital (pedido 18/09/2026): antes solo se podía cargar el capital
+  // inicial una vez, en la config — y encima esa config deja de tener efecto en cuanto ya hay
+  // algún cierre semanal (el estado vigente se lee siempre del último historial). Esto guarda un
+  // movimiento aparte que solo mueve el capital, sin tocar rake/rakeback/makeup.
+  async function recargarCapital() {
+    if (!Number(montoRecarga)) {
+      setErrorRecarga("Cargá un monto distinto de 0.");
+      return;
+    }
+    if (!fechaRecarga) {
+      setErrorRecarga("Cargá la fecha de la recarga.");
+      return;
+    }
+    setRecargando(true);
+    setErrorRecarga(null);
+    try {
+      await api.recargarCapitalBancado({
+        playerId: jugador.id,
+        monto: Number(montoRecarga) || 0,
+        fecha: fechaRecarga,
+        observaciones: observacionesRecarga || undefined,
+      });
+      setMontoRecarga("0");
+      setObservacionesRecarga("");
+      cargarTodo();
+      onCierreAplicado();
+    } catch (err: any) {
+      setErrorRecarga(err.message || "No se pudo registrar la recarga.");
+    } finally {
+      setRecargando(false);
+    }
+  }
+
   async function revertir(id: string) {
     const motivo = prompt("¿Por qué se revierte este cierre de banca? (queda en el historial, no se borra nada)") ?? undefined;
     if (motivo === undefined) return;
@@ -567,6 +620,32 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
           </div>
 
           <div className="panel" style={{ marginBottom: 12 }}>
+            <h4 style={{ marginTop: 0 }}>Recargar capital</h4>
+            <div className="muted" style={{ marginBottom: 10 }}>
+              Para cuando el jugador se queda en 0 (o negativo) a mitad de camino y hay que volver a cargarle fichas — no toca
+              rake/rakeback/makeup, solo el capital. Un monto negativo lo descuenta en vez de recargarlo.
+            </div>
+            <div className="form-grid">
+              <div className="field">
+                <label>Monto (USD)</label>
+                <input value={montoRecarga} onChange={(e) => setMontoRecarga(e.target.value)} type="number" step="0.01" />
+              </div>
+              <div className="field">
+                <label>Fecha</label>
+                <input value={fechaRecarga} onChange={(e) => setFechaRecarga(e.target.value)} type="date" />
+              </div>
+            </div>
+            <div className="field">
+              <label>Observaciones (opcional)</label>
+              <input value={observacionesRecarga} onChange={(e) => setObservacionesRecarga(e.target.value)} />
+            </div>
+            {errorRecarga && <div className="error">{errorRecarga}</div>}
+            <button className="btn secondary small" disabled={recargando} onClick={recargarCapital}>
+              {recargando ? "Guardando..." : "Registrar recarga"}
+            </button>
+          </div>
+
+          <div className="panel" style={{ marginBottom: 12 }}>
             <h4 style={{ marginTop: 0 }}>Cerrar semana</h4>
             <div className="form-grid">
               <div className="field">
@@ -653,43 +732,57 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   );
                 })()}
                 {historialAbierto && (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Semana</th><th>Resultado</th><th>Rake generado</th><th>Rakeback</th><th>Rake Banca</th>
-                        <th>Makeup</th><th>Pago jugador</th><th>Capital después</th><th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historial.map((h: any) => (
-                        <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
-                          <td>{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
-                          <td>{usd(h.resultado_mesas)}</td>
-                          <td>{usd(h.rake_total)}</td>
-                          <td>{usd(h.rakeback_total)}</td>
-                          <td>{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
-                          <td>{usd(h.makeup_nuevo)}</td>
-                          <td>{usd(h.pago_jugador_total)}</td>
-                          <td>{usd(h.capital_despues)}</td>
-                          <td className="row-actions">
-                            {h.status !== "REVERTIDO" ? (
-                              <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
-                            ) : (
-                              <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
-                            )}
-                            <button
-                              className="btn secondary small"
-                              onClick={() => borrarDefinitivo(h.id)}
-                              title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                              style={{ color: "var(--danger, #e5484d)" }}
-                            >
-                              Borrar
-                            </button>
-                          </td>
+                  <div style={{ overflowX: "auto" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Semana</th><th>Tipo</th><th>Resultado</th><th>Rake generado</th>
+                          <th>Rakeback total</th><th>RB → Makeup</th><th>RB → Jugador</th><th>Rake Banca</th>
+                          <th>Makeup (ant. → nuevo)</th><th>Pago mesas</th><th>Pago total jugador</th>
+                          <th>Capital (ant. → después)</th><th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {historial.map((h: any) => (
+                          <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
+                            <td>{dateShort(h.week_start)}{h.tipo !== "RECARGA_CAPITAL" ? ` - ${dateShort(h.week_end)}` : ""}</td>
+                            <td>
+                              {h.tipo === "RECARGA_CAPITAL" ? (
+                                <span className="badge neutral">Recarga capital</span>
+                              ) : (
+                                <span className="muted">Cierre semanal</span>
+                              )}
+                            </td>
+                            <td>{usd(h.resultado_mesas)}</td>
+                            <td>{usd(h.rake_total)}</td>
+                            <td>{usd(h.rakeback_total)}</td>
+                            <td className="muted">{usd(h.rakeback_a_makeup)}</td>
+                            <td className="muted">{usd(h.rakeback_excedente_jugador)}</td>
+                            <td>{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
+                            <td className="muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
+                            <td className="muted">{usd(h.pago_jugador_mesas)}</td>
+                            <td>{usd(h.pago_jugador_total)}</td>
+                            <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
+                            <td className="row-actions">
+                              {h.status !== "REVERTIDO" ? (
+                                <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
+                              ) : (
+                                <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
+                              )}
+                              <button
+                                className="btn secondary small"
+                                onClick={() => borrarDefinitivo(h.id)}
+                                title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                                style={{ color: "var(--danger, #e5484d)" }}
+                              >
+                                Borrar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </>
             )}

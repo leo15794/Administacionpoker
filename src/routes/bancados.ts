@@ -12,6 +12,7 @@ import {
   listHistorialBancadoGlobal,
   revertirCierreBancado,
   eliminarCierreBancadoDefinitivo,
+  registrarRecargaCapital,
 } from "../repo/bancados.js";
 
 export const bancadosRouter = Router();
@@ -87,6 +88,26 @@ bancadosRouter.post("/cerrar", requireAuth, requireAdmin, async (req: AuthedRequ
   try {
     const r = await cerrarCierreBancado({ ...parsed.data, createdBy: req.user?.email ?? null });
     res.status(r.alreadyApplied ? 200 : 201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const recargaSchema = z.object({
+  playerId: z.string().min(1),
+  monto: z.number().refine((n) => n !== 0, "El monto no puede ser 0."),
+  fecha: z.string().min(1),
+  observaciones: z.string().optional(),
+});
+// Recarga/ajuste manual de capital — para cuando el jugador se queda en 0 (o negativo) a mitad
+// de camino y hay que volver a cargarle fichas; antes solo se podía setear una vez, al crear la
+// config (ver registrarRecargaCapital). No toca rake/rakeback/makeup, solo el capital.
+bancadosRouter.post("/recargar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = recargaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const r = await registrarRecargaCapital({ ...parsed.data, createdBy: req.user?.email ?? null });
+    res.status(201).json(r);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
