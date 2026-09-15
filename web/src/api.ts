@@ -57,6 +57,12 @@ export const api = {
   // Mismo shape que miCuenta pero para que un admin vea el estado de cuenta de CUALQUIER agente
   // (saldo por club, garantía, cierres y movimientos) en vez de solo el historial crudo.
   cuentaDeAgente: (agentId: string) => request(`/catalog/agents/${agentId}/cuenta`),
+  // Resumen de liquidación (rakeback por club) de una semana puntual de un agente, para
+  // armar/mandar el pago semanal — no confundir con cuentaDeAgente (que es el estado de cuenta
+  // completo con saldo acumulado histórico).
+  semanasLiquidacion: (agentId: string) => request(`/catalog/agents/${agentId}/liquidacion/semanas`),
+  liquidacion: (agentId: string, weekStart: string) =>
+    request(`/catalog/agents/${agentId}/liquidacion?weekStart=${weekStart}`),
 
   // Drill-down de movimientos y tesorería
   movimientos: (params: { agentId?: string; clubId?: string } = {}) => {

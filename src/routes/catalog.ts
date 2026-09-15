@@ -198,6 +198,67 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
   });
 });
 
+// Semanas con cierres cargados para un agente (para el selector de la liquidación) — más
+// reciente primero.
+catalogRouter.get("/agents/:id/liquidacion/semanas", requireAuth, requireAdmin, async (req, res) => {
+  const r = await pool.query(
+    `SELECT DISTINCT week_start, week_end FROM weekly_closings
+     WHERE agent_id = $1 AND status <> 'REVERTIDO'
+     ORDER BY week_start DESC LIMIT 52`,
+    [req.params.id]
+  );
+  res.json(r.rows);
+});
+
+// Resumen de liquidación de UNA semana de UN agente: una fila por club (Ganancias/Pérdidas,
+// Rake, Rakeback bruto, Rebate, Rakeback neto) + total, para armar el mensaje/PDF que se le
+// manda al agente con lo que se le paga. Todo en USD (weekly_closings ya guarda los montos
+// convertidos con la tasa de esa semana — no hay forma de recuperar el monto en moneda local
+// sin agregarlo al esquema, así que por ahora se resuelve con una nota manual editable en el
+// frontend para esas aclaraciones).
+catalogRouter.get("/agents/:id/liquidacion", requireAuth, requireAdmin, async (req, res) => {
+  const agentId = req.params.id;
+  const weekStart = String(req.query.weekStart || "");
+  if (!weekStart) return res.status(400).json({ error: "Falta weekStart" });
+
+  const agent = await pool.query(`SELECT id, name FROM agents WHERE id = $1`, [agentId]);
+  if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
+
+  const closings = await pool.query(
+    `SELECT wc.*, c.name as club_name FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+     WHERE wc.agent_id = $1 AND wc.week_start = $2 AND wc.status <> 'REVERTIDO'
+     ORDER BY c.name`,
+    [agentId, weekStart]
+  );
+  if (closings.rows.length === 0) return res.status(404).json({ error: "No hay cierres para esa semana." });
+
+  const adelantos = await pool.query(
+    `SELECT COALESCE(SUM(amount - consumed), 0) as pendiente FROM rakeback_advances
+     WHERE agent_id = $1 AND active = true`,
+    [agentId]
+  );
+
+  const filas = closings.rows.map((c) => ({
+    clubId: c.club_id,
+    clubName: c.club_name,
+    resultado: Number(c.result),
+    rakeTotal: Number(c.rake_total),
+    rakebackBruto: Number(c.rakeback),
+    rebate: Number(c.rebate),
+    rakebackNeto: Number(c.rakeback) + Number(c.rebate),
+  }));
+  const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);
+
+  res.json({
+    agente: agent.rows[0],
+    weekStart: closings.rows[0].week_start,
+    weekEnd: closings.rows[0].week_end,
+    filas,
+    total,
+    adelantosPendientes: Number(adelantos.rows[0].pendiente),
+  });
+});
+
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
 catalogRouter.get("/agents/:id/rules", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listRulesForAgent(req.params.id));
