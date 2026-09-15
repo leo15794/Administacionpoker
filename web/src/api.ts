@@ -164,6 +164,9 @@ export const api = {
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
+  // Borra UN movimiento puntual (solo el más reciente de su adelanto) — para corregir pruebas
+  // sin tener que eliminar el adelanto entero. Ver nota en repo/advances.ts.
+  eliminarMovimientoAdelanto: (movementId: string) => request(`/advances/movimientos/${movementId}`, { method: "DELETE" }),
 
   // Cuentas de socios ("Cuentas y memorias" de la planilla: Saldo Uriel, Compensación Juan,
   // etc.) — plata de los socios, no de agentes. Control total: editar y eliminar directo.

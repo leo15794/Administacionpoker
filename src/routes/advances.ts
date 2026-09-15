@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listAdvancesConAgente, listAdvanceMovements, altaAdelanto, ajustarAdelanto, corregirAdelanto, eliminarAdelanto } from "../repo/advances.js";
+import { listAdvancesConAgente, listAdvanceMovements, altaAdelanto, ajustarAdelanto, corregirAdelanto, eliminarAdelanto, eliminarMovimientoAdelanto } from "../repo/advances.js";
 
 export const advancesRouter = Router();
 
@@ -106,6 +106,18 @@ advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: Authed
 advancesRouter.delete("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
     await eliminarAdelanto(req.params.id);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borra UN movimiento puntual (solo el más reciente de su adelanto — ver nota en
+// repo/advances.ts) — para corregir un Consumo/Ajuste cargado de más sin tener que tirar todo
+// el adelanto ni pelearse con "Corrección" a mano.
+advancesRouter.delete("/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarMovimientoAdelanto(req.params.id);
     res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

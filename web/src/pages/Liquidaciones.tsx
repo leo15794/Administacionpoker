@@ -92,7 +92,8 @@ export default function Liquidaciones() {
   const [semanas, setSemanas] = useState<any[]>([]);
   const [weekStart, setWeekStart] = useState("");
   const [data, setData] = useState<any>(null);
-  const [cruces, setCruces] = useState<Record<string, number>>({}); // advanceId -> monto a cruzar (tildado)
+  const [cruces, setCruces] = useState<Record<string, number>>({}); // advanceId -> monto a cruzar (tildado, todavía sin aplicar)
+  const [aplicado, setAplicado] = useState<number>(0); // suma de lo YA aplicado (consumido de verdad) en esta liquidación
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
   const [nota, setNota] = useState("");
   const [error, setError] = useState("");
@@ -131,7 +132,11 @@ export default function Liquidaciones() {
     }
   }, [seleccionados]);
 
-  function refrescarLiquidacion() {
+  // preservarAplicado=true después de aplicar un cruce: solo refresca los datos (pendientes
+  // actualizados) sin resetear lo que ya se descontó en esta liquidación ni la nota/adelanto
+  // manual — si no, el PDF terminaba mostrando "Adelantos a descontar: 0" después de aplicar
+  // el cruce, porque se perdía el registro de lo recién consumido.
+  function refrescarLiquidacion(preservarAplicado = false) {
     if (seleccionados.length === 0 || !weekStart) return;
     setError("");
     setCargando(true);
@@ -140,21 +145,30 @@ export default function Liquidaciones() {
       .then((d) => {
         setData(d);
         setCruces({});
-        setAdelantosManual(0);
-        if (seleccionados.length === 1) setNota("");
+        if (!preservarAplicado) {
+          setAplicado(0);
+          setAdelantosManual(0);
+          if (seleccionados.length === 1) setNota("");
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setCargando(false));
   }
 
   useEffect(() => {
-    refrescarLiquidacion();
+    refrescarLiquidacion(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seleccionados.join(","), weekStart]);
 
   const totalCruzado = Object.values(cruces).reduce((s, v) => s + (Number(v) || 0), 0);
-  const totalDescontar = totalCruzado + adelantosManual;
+  // Lo que ya se descuenta de verdad: lo aplicado en rondas anteriores de esta misma
+  // liquidación + lo que está tildado ahora mismo (todavía sin aplicar) + el manual.
+  const totalDescontar = aplicado + totalCruzado + adelantosManual;
   const totalAPagar = data ? data.total - totalDescontar : 0;
+  // Cuánto rakeback de esta semana queda todavía "libre" para cruzar contra un adelanto, sin
+  // contar más de lo que esta liquidación generó — no tiene sentido consumirle a un agente más
+  // adelanto del que este cierre efectivamente cubre; el resto queda pendiente para la próxima.
+  const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado : 0);
 
   async function aplicarCruces() {
     const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
@@ -170,7 +184,8 @@ export default function Liquidaciones() {
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
       }
-      refrescarLiquidacion();
+      setAplicado((prev) => prev + totalCruzado);
+      refrescarLiquidacion(true);
     } catch (err: any) {
       alert(err.message || "No se pudo aplicar el cruce.");
     } finally {
@@ -295,6 +310,12 @@ export default function Liquidaciones() {
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
             <h3 style={{ marginTop: 0 }}>Cruzar adelantos pendientes</h3>
+            {data.adelantos.length > 0 && (
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Disponible para cruzar en esta liquidación: {usd(disponibleParaCruzar)} (no se propone cruzar más que esto por
+                default, aunque el adelanto tenga más pendiente — se puede subir a mano si hace falta).
+              </div>
+            )}
             {data.adelantos.length === 0 ? (
               <div className="muted">Sin adelantos activos para estos agentes.</div>
             ) : (
@@ -307,8 +328,15 @@ export default function Liquidaciones() {
                       onChange={(e) =>
                         setCruces((prev) => {
                           const next = { ...prev };
-                          if (e.target.checked) next[a.id] = a.pendiente;
-                          else delete next[a.id];
+                          if (e.target.checked) {
+                            // Por default solo cruza hasta lo que esta liquidación realmente
+                            // genera — si el adelanto pendiente es mayor al total a pagar de
+                            // esta semana, NO se lo come entero: se puede subir a mano si de
+                            // verdad se quiere consumir más de lo que cubre este cierre.
+                            next[a.id] = Math.min(a.pendiente, disponibleParaCruzar);
+                          } else {
+                            delete next[a.id];
+                          }
                           return next;
                         })
                       }

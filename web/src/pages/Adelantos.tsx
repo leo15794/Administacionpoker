@@ -32,6 +32,7 @@ export default function Adelantos() {
   const [showAjuste, setShowAjuste] = useState<any | null>(null);
   const [showCorreccion, setShowCorreccion] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
+  const [borrandoMov, setBorrandoMov] = useState<string | null>(null);
 
   function refresh() {
     setError("");
@@ -59,6 +60,22 @@ export default function Adelantos() {
     api.agentes().then(setAgentes);
     api.clubes().then(setClubes);
   }, []);
+
+  // Solo se puede borrar el movimiento MÁS RECIENTE de cada adelanto (ver nota del backend) —
+  // como el historial ya viene ordenado más nuevo primero, alcanza con marcar la primera
+  // aparición de cada advance_id.
+  async function eliminarMovimiento(m: any) {
+    if (!confirm(`¿Eliminar este movimiento (${TIPO_LABEL[m.type] ?? m.type} de ${m.agent_name}, ${usd(m.amount)})? Deja el adelanto como estaba antes de este movimiento. Es para corregir cargas de prueba, no se puede deshacer.`)) return;
+    setBorrandoMov(m.id);
+    try {
+      await api.eliminarMovimientoAdelanto(m.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el movimiento.");
+    } finally {
+      setBorrandoMov(null);
+    }
+  }
 
   if (error) {
     return (
@@ -163,20 +180,41 @@ export default function Adelantos() {
         ) : (
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th>Monto</th><th>Adelanto resultante</th><th>Consumido resultante</th><th>Notas</th></tr>
+              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th>Monto</th><th>Adelanto resultante</th><th>Consumido resultante</th><th>Notas</th><th></th></tr>
             </thead>
             <tbody>
-              {historial.map((m) => (
-                <tr key={m.id}>
-                  <td>{dateShort(m.occurred_at)}</td>
-                  <td>{m.agent_name}</td>
-                  <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
-                  <td>{m.type === "BAJA" || m.type === "CORRECCION" ? "—" : usd(m.amount)}</td>
-                  <td>{usd(m.resulting_amount)}</td>
-                  <td>{usd(m.resulting_consumed)}</td>
-                  <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
-                </tr>
-              ))}
+              {(() => {
+                const vistos = new Set<string>();
+                return historial.map((m) => {
+                  // El historial viene ordenado más nuevo primero — la primera vez que aparece
+                  // un advance_id es su movimiento más reciente, el único borrable individualmente.
+                  const esElMasReciente = !vistos.has(m.advance_id);
+                  vistos.add(m.advance_id);
+                  return (
+                    <tr key={m.id}>
+                      <td>{dateShort(m.occurred_at)}</td>
+                      <td>{m.agent_name}</td>
+                      <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
+                      <td>{m.type === "BAJA" || m.type === "CORRECCION" ? "—" : usd(m.amount)}</td>
+                      <td>{usd(m.resulting_amount)}</td>
+                      <td>{usd(m.resulting_consumed)}</td>
+                      <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                      <td>
+                        {esElMasReciente && m.type !== "ALTA" && (
+                          <button
+                            className="btn danger small"
+                            disabled={borrandoMov === m.id}
+                            onClick={() => eliminarMovimiento(m)}
+                            title="Borrar este movimiento puntual (deja el adelanto como estaba antes) — para corregir pruebas"
+                          >
+                            {borrandoMov === m.id ? "..." : "Eliminar"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         )}

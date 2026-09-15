@@ -206,6 +206,57 @@ export async function eliminarAdelanto(advanceId: string) {
   }
 }
 
+/**
+ * Borra UN movimiento puntual del historial (ej. un Consumo cargado por error durante pruebas)
+ * — a diferencia de eliminarAdelanto (que borra todo el adelanto), esto corrige un solo evento
+ * sin perder el resto del historial. Solo se puede borrar el movimiento MÁS RECIENTE de ese
+ * adelanto (mismo criterio que reabrir un período: deshacer siempre del más nuevo hacia atrás),
+ * porque los movimientos posteriores ya quedaron con su resulting_amount/resulting_consumed
+ * calculado asumiendo que este existía — borrar uno del medio los desincronizaría. La ALTA
+ * tampoco se puede borrar sola (sería dejar el adelanto sin origen): para eso está "Eliminar"
+ * sobre el adelanto completo.
+ */
+export async function eliminarMovimientoAdelanto(movementId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const movRes = await client.query(`SELECT * FROM rakeback_advance_movements WHERE id = $1 FOR UPDATE`, [movementId]);
+    const mov = movRes.rows[0];
+    if (!mov) throw new Error("No se encontró ese movimiento.");
+    if (mov.type === "ALTA") {
+      throw new Error("No se puede borrar la ALTA sola — para sacar el adelanto entero usá \"Eliminar\" sobre el adelanto.");
+    }
+
+    const ultimo = await client.query(
+      `SELECT id FROM rakeback_advance_movements WHERE advance_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.advance_id]
+    );
+    if (ultimo.rows[0]?.id !== movementId) {
+      throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE de este adelanto — borralos en orden, del más nuevo hacia atrás.");
+    }
+
+    const anterior = await client.query(
+      `SELECT resulting_amount, resulting_consumed FROM rakeback_advance_movements
+       WHERE advance_id = $1 AND id <> $2 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.advance_id, movementId]
+    );
+    const amount = anterior.rows[0] ? Number(anterior.rows[0].resulting_amount) : 0;
+    const consumed = anterior.rows[0] ? Number(anterior.rows[0].resulting_consumed) : 0;
+
+    await client.query(
+      `UPDATE rakeback_advances SET amount=$1, consumed=$2, active=true, updated_at=now() WHERE id=$3`,
+      [amount, consumed, mov.advance_id]
+    );
+    await client.query(`DELETE FROM rakeback_advance_movements WHERE id = $1`, [movementId]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function registrarMovimiento(
   client: PoolClient,
   advance: any,
