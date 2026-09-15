@@ -194,7 +194,14 @@ export default function CuentasSocios() {
                                 <tr key={m.id}>
                                   <td>{dateShort(m.entry_date)}</td>
                                   <td><span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span></td>
-                                  <td>{m.concept}</td>
+                                  <td>
+                                    {m.concept}
+                                    {m.idempotency_key && (
+                                      <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Generado automáticamente por un cierre semanal — para corregirlo, corregí o revertí el cierre de origen, no este movimiento.">
+                                        Auto
+                                      </span>
+                                    )}
+                                  </td>
                                   <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{usd(m.amount)}</td>
                                   <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                                   <td className="row-actions">

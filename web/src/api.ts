@@ -130,6 +130,9 @@ export const api = {
       // Dar de baja (no borra nada: el agente deja de aparecer para cargar cierres nuevos,
       // pero su historial de movimientos/cierres queda intacto).
       active?: boolean;
+      // Cuenta de socio (caso Juan): nombre de una cuenta en Cuentas de socios. Si se setea,
+      // el cierre semanal de este agente deja de tocar su balance y se rutea entero ahí.
+      personKey?: string | null;
     }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // BORRADO REAL (no "dar de baja") — solo funciona si el agente no tiene ningún rastro

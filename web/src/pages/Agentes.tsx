@@ -329,6 +329,7 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
   const [defaultSystem, setDefaultSystem] = useState<"PREPAGO" | "WIN_LOSE">(agente.default_system);
   const [supervisor, setSupervisor] = useState(agente.supervisor ?? "");
   const [accountType, setAccountType] = useState<AccountType>((agente.account_type as AccountType) ?? agente.default_system);
+  const [personKey, setPersonKey] = useState(agente.person_key ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -343,6 +344,7 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         defaultSystem,
         supervisor: supervisor.trim() || null,
         accountType,
+        personKey: personKey.trim() || null,
       });
       onSaved();
     } catch (err: any) {
@@ -378,6 +380,19 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         <div className="field">
           <label>Supervisor (opcional)</label>
           <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Cuenta de socio (opcional)</label>
+          <input
+            value={personKey}
+            onChange={(e) => setPersonKey(e.target.value)}
+            placeholder="Ej: Juan"
+          />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Solo para identidades de un socio (ej. Juan y sus 4 mesas de club). Si se completa,
+            los cierres de este agente dejan de tocarle balance propio y se rutean enteros a esa
+            cuenta en "Cuentas de socios" (tiene que existir con ese mismo nombre).
+          </div>
         </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}

@@ -694,6 +694,9 @@ function NuevoCierre({
             {previewResult.supervisorAgentId && (
               <> · el rebate ({usd(previewResult.calc?.rebate)}) se desvía al rakeback centralizado del supervisor, no entra al saldo de este agente.</>
             )}
+            {previewResult.routedToPartnerAccountName && (
+              <> · <strong>este agente es una identidad de socio</strong>: no le forma balance propio — se acredita como {usd(-Number(previewResult.calc?.finalClosing))} en la cuenta de socio "{previewResult.routedToPartnerAccountName}" (Cuentas de socios).</>
+            )}
           </div>
         )}
         {previewVigente && previewResult && esBancado && (

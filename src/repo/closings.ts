@@ -90,9 +90,22 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       return { id: existing.rows[0].id, alreadyApplied: true, preview: input.preview ?? false };
     }
 
-    const agentRes = await client.query(`SELECT account_type FROM agents WHERE id = $1`, [input.agentId]);
+    const agentRes = await client.query(`SELECT account_type, person_key FROM agents WHERE id = $1`, [input.agentId]);
     if (agentRes.rows[0]?.account_type === "BANCADO") {
       const result = await aplicarCierreBancadoTx(client, input);
+      await client.query(input.preview ? "ROLLBACK" : "COMMIT");
+      return { ...result, preview: input.preview ?? false };
+    }
+
+    // Compensación de socio (caso Juan, BIT-068 + planilla "COMPENSACIÓN DE JUAN"): si el agente
+    // tiene person_key seteado, este cierre NO le forma balance propio (el agente no es un
+    // "cobrador" común, es una identidad de club de un socio) — se rutea entero a su cuenta de
+    // socio en partner_account_entries, con el signo dado vuelta (si Juan ganó, eso REDUCE lo
+    // que le debe a la empresa). Corre antes de la fórmula genérica de abajo porque cambia a
+    // dónde va la plata, no cómo se calcula (la fórmula sigue siendo la misma calcularCierre).
+    const personKey: string | null = agentRes.rows[0]?.person_key ?? null;
+    if (personKey) {
+      const result = await aplicarCierreCompensacionPersonaTx(client, input, personKey);
       await client.query(input.preview ? "ROLLBACK" : "COMMIT");
       return { ...result, preview: input.preview ?? false };
     }
@@ -293,6 +306,131 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
 }
 
 /**
+ * Cierre semanal de una identidad de club de un socio (caso Juan: J Chamacos / Juan / Juan
+ * Masters / Guerrrda, todas person_key='juan', 70% rakeback cada una). Usa la MISMA fórmula
+ * genérica (calcularCierre) que cualquier agente — la diferencia es dónde aterriza la plata:
+ * en vez de balances/ledger_movements, un solo movimiento en partner_account_entries de la
+ * cuenta de socio que matchea person_key por nombre (ver bootstrap en schema.sql). Queda
+ * igual un weekly_closings de auditoría (routed_to_partner_account_id seteado) para que el
+ * historial de cierres de la identidad siga mostrando algo, aunque no le formó balance propio.
+ *
+ * Signo (igual que la planilla vieja "COMPENSACIÓN DE JUAN": ajuste = -cierreJuan): si el
+ * cierre dio positivo (Juan ganó esa semana en esa identidad), reduce lo que le debe a la
+ * empresa → amount NEGATIVO en la cuenta de socio. Si dio negativo, aumenta la deuda → amount
+ * POSITIVO.
+ */
+async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: AplicarCierreInput, personKey: string) {
+  const cuentaRes = await client.query(`SELECT id, name FROM partner_accounts WHERE lower(name) = $1 AND active = true`, [personKey]);
+  if (!cuentaRes.rows[0]) {
+    throw new Error(
+      `El agente tiene "Cuenta de socio" = "${personKey}", pero no existe (o está inactiva) una cuenta de socio con ese nombre en Cuentas de socios. Creála antes de aplicar este cierre.`
+    );
+  }
+  const cuentaId: string = cuentaRes.rows[0].id;
+  const cuentaName: string = cuentaRes.rows[0].name;
+
+  const ruleRow = await client.query(
+    `SELECT rule_key, params FROM rule_versions
+     WHERE agent_id = $1 AND (club_id = $2 OR club_id IS NULL)
+       AND valid_from::date <= $3::date
+       AND (valid_to IS NULL OR valid_to::date > $3::date)
+     ORDER BY (club_id IS NULL) ASC, valid_from DESC
+     LIMIT 1`,
+    [input.agentId, input.clubId, input.weekEnd]
+  );
+  const specialRule: SpecialRule | null = resolverSpecialRule(ruleRow.rows[0] ?? null);
+
+  const rodeoResultado = input.rodeoJugadores?.length
+    ? await procesarRodeoAgenteTx(client, input.agentId, input.clubId, input.rodeoJugadores)
+    : input.rodeoManual
+    ? { baseRodeoTotal: input.rodeoManual, jugadores: [], memoriaAnterior: 0, payable: input.rodeoManual, memoriaNueva: 0, clubShare: 0, agentShare: input.rodeoManual }
+    : { baseRodeoTotal: 0, jugadores: [], memoriaAnterior: 0, payable: 0, memoriaNueva: 0, clubShare: 0, agentShare: 0 };
+
+  const calc = calcularCierre({
+    agentId: input.agentId,
+    clubId: input.clubId,
+    system: input.system,
+    result: input.result,
+    rakeTotal: input.rakeTotal,
+    rakebackPct: input.rakebackPct,
+    rebatePct: input.rebatePct,
+    rodeo: rodeoResultado.agentShare,
+    rateSnapshot: input.rateSnapshot ?? 1,
+    specialRule,
+  });
+
+  const id = newId("wc");
+  await client.query(
+    `INSERT INTO weekly_closings
+      (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
+       rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
+       rate_snapshot, rule_applied, status, observation, routed_to_partner_account_id,
+       rodeo, rodeo_club_share, rodeo_detalle, jugadores, ring_game, mtt, sng)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24)`,
+    [
+      id,
+      input.agentId,
+      input.clubId,
+      input.weekStart,
+      input.weekEnd,
+      input.system,
+      calc.result,
+      calc.rakeTotal,
+      calc.rakebackPct,
+      calc.rakeback,
+      calc.rebatePct,
+      calc.rebate,
+      calc.adjustedResult,
+      calc.finalClosing,
+      input.rateSnapshot ?? 1,
+      calc.ruleApplied,
+      input.observation ?? null,
+      cuentaId,
+      calc.rodeo,
+      rodeoResultado.clubShare,
+      input.rodeoJugadores?.length
+        ? JSON.stringify({
+            memoriaAnterior: rodeoResultado.memoriaAnterior,
+            memoriaNueva: rodeoResultado.memoriaNueva,
+            jugadores: rodeoResultado.jugadores,
+          })
+        : null,
+      input.jugadores ?? null,
+      input.ringGame ?? null,
+      input.mtt ?? null,
+      input.sng ?? null,
+    ]
+  );
+
+  await client.query(
+    `INSERT INTO partner_account_entries
+      (id, account_id, category, concept, amount, entry_date, notes, idempotency_key, source_agent_id, source_club_id, source_week_start)
+     VALUES ($1,$2,'COMPENSACION',$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      newId("pae"),
+      cuentaId,
+      `Cierre semanal · ${input.weekStart} al ${input.weekEnd} (agente id ${input.agentId})` +
+        (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : ""),
+      -calc.finalClosing,
+      input.weekEnd,
+      calc.rodeo ? `Incluye Rodeo: ${calc.rodeo}.` : null,
+      `cierre_persona:${input.agentId}:${input.clubId}:${input.weekStart}`,
+      input.agentId,
+      input.clubId,
+      input.weekStart,
+    ]
+  );
+
+  return {
+    id,
+    alreadyApplied: false,
+    calc,
+    routedToPartnerAccountId: cuentaId,
+    routedToPartnerAccountName: cuentaName,
+  };
+}
+
+/**
  * Motor de cierre de cuentas tipo BANCADO (caso real Matías Fontal — ver calcularCierreBancado
  * para la fórmula completa). Corre DENTRO de la misma transacción que aplicarCierreSemanal
  * (recibe su client, no abre ni cierra conexión). La "memoria" (deuda eterna) se lee y escribe
@@ -397,6 +535,20 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
     throw new Error("Este cierre ya fue revertido antes — no se puede revertir dos veces.");
   }
 
+  // Compensación de socio (caso Juan): este cierre nunca generó un ledger_movements (se
+  // ruteó entero a partner_account_entries) — revertirlo es borrar directo esa fila de la
+  // cuenta de socio (mismo criterio "control 100%" del módulo de Cuentas de socios: no hay
+  // ceremonia de reversa ahí, se borra y listo) e identificarla por el idempotency_key con el
+  // que se creó, no por fecha/monto (que podría matchear más de una si hay ajustes manuales).
+  if (wc.routed_to_partner_account_id) {
+    await pool.query(
+      `DELETE FROM partner_account_entries WHERE idempotency_key = $1`,
+      [`cierre_persona:${wc.agent_id}:${wc.club_id}:${wc.week_start}`]
+    );
+    await pool.query(`UPDATE weekly_closings SET status = 'REVERTIDO' WHERE id = $1`, [closingId]);
+    return { found: true, id: closingId };
+  }
+
   const movRes = await pool.query(
     `SELECT id FROM ledger_movements
      WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date AND status <> 'REVERTIDO'`,
@@ -480,6 +632,19 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
     }
 
     const yaRevertido = wc.status === "REVERTIDO";
+
+    // Compensación de socio (caso Juan): nunca tuvo ledger_movements — borra directo su fila
+    // de partner_account_entries (si el revert de arriba ya la borró, esto no encuentra nada
+    // y sigue de largo) y listo, no hay saldo/memoria que deshacer en balances.
+    if (wc.routed_to_partner_account_id) {
+      await client.query(
+        `DELETE FROM partner_account_entries WHERE idempotency_key = $1`,
+        [`cierre_persona:${wc.agent_id}:${wc.club_id}:${wc.week_start}`]
+      );
+      await client.query(`DELETE FROM weekly_closings WHERE id = $1`, [closingId]);
+      await client.query("COMMIT");
+      return { found: true, id: closingId };
+    }
 
     const movRes = await client.query(
       `SELECT id FROM ledger_movements

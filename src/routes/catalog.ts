@@ -316,6 +316,9 @@ const agentEditSchema = z.object({
   // Dar de baja: el agente deja de listarse como activo (no puede recibir cierres/movimientos
   // nuevos), pero su historial ya cargado queda intacto — nunca se borra nada.
   active: z.boolean().optional(),
+  // Cuenta de socio (caso Juan): nombre de una cuenta en Cuentas de socios. Si se setea, el
+  // cierre semanal de este agente deja de tocar balances y se rutea entero a esa cuenta.
+  personKey: z.string().nullable().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -328,6 +331,7 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       accountType: parsed.data.accountType,
       externalId: parsed.data.externalId === undefined ? undefined : parsed.data.externalId?.trim() || null,
       active: parsed.data.active,
+      personKey: parsed.data.personKey === undefined ? undefined : parsed.data.personKey?.trim() || null,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);

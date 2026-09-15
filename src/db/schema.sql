@@ -635,3 +635,43 @@ CREATE INDEX IF NOT EXISTS bancado_historial_player_idx ON bancado_historial(pla
 -- cada vez, y no se puede pagar dos veces el mismo cierre por error.
 ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_pagado_at TIMESTAMPTZ;
 ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_movement_id TEXT;
+
+-- ============ COMPENSACIÓN DE JUAN — cierres de socio ruteados a cuenta de socio (15/09/2026) ============
+-- Juan es socio/jefe de la operación, no un agente común: sus cierres semanales de póker (y otros
+-- movimientos) no le forman un "balance" propio en la tabla balances — mueven su deuda/saldo
+-- pendiente con la empresa, que ya se maneja en partner_account_entries (módulo "Cuentas de
+-- socios", control 100% manual). Esto agrega el enganche automático: cuando un agente tiene
+-- person_key seteado, su cierre semanal se rutea a la cuenta de socio de ese nombre en lugar de
+-- tocar balances/ledger_movements — igual que hace hoy CAJERO_CREDITO/BANCADO con sus propias tablas.
+--
+-- Convención de signo (igual que la planilla vieja: "ajuste = -cierreJuan"): si Juan ganó la
+-- semana (final_closing positivo), ESO REDUCE lo que le debe a la empresa → amount negativo en
+-- partner_account_entries. Si perdió, aumenta la deuda → amount positivo.
+
+-- Traza de qué cierre semanal generó qué movimiento de socio (para no duplicar y para poder
+-- auditar "¿de dónde salió este monto?" sin adivinar).
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_agent_id TEXT REFERENCES agents(id);
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_club_id TEXT REFERENCES clubs(id);
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_week_start DATE;
+CREATE UNIQUE INDEX IF NOT EXISTS partner_account_entries_idempotency_key
+  ON partner_account_entries(idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+-- Deja constancia en el propio cierre semanal de que fue ruteado a una cuenta de socio (para que
+-- el historial de cierres del agente pueda mostrar "va a cuenta de Juan" en vez de un balance que
+-- nunca se movió).
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS routed_to_partner_account_id TEXT REFERENCES partner_accounts(id);
+
+-- Bootstrap idempotente: asegura que exista la cuenta de socio "Juan" (si el usuario ya la creó
+-- a mano con otro nombre, esto no crea una duplicada — hay que unificar a mano en ese caso).
+INSERT INTO partner_accounts (id, name, description)
+SELECT 'juan', 'Juan', 'Compensación automática por cierres semanales (J Chamacos, Juan, Juan Masters, Guerrrda) + movimientos manuales (sueldo manos, gastos, USDT)'
+WHERE NOT EXISTS (SELECT 1 FROM partner_accounts WHERE lower(name) = 'juan');
+
+-- Data fix idempotente: si alguna de las 4 identidades de club de Juan ya existe como agente,
+-- la marca con person_key='juan' para que su cierre se rutee solo. Los agentes que todavía no
+-- existan hay que crearlos a mano en Agentes (uno por club: J Chamacos / Juan / Juan Masters /
+-- Guerrrda, los 4 a 70% rakeback) y ponerles "Cuenta de socio: Juan" desde el formulario de editar.
+UPDATE agents SET person_key = 'juan'
+  WHERE lower(name) IN ('juan', 'j chamacos', 'juan masters', 'guerrrda', 'guerrda')
+  AND (person_key IS NULL OR person_key <> 'juan');

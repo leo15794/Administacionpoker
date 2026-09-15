@@ -369,6 +369,11 @@ export async function updateAgent(
     /** ID del agente en la plataforma de origen (ej. "Agent ID" del reporte Suprema). Permite
      * que el importador lo reconozca aunque el nombre cambie o venga con espacios distintos. */
     externalId?: string | null;
+    /** Cuenta de socio (caso Juan, BIT-068): si se setea, el cierre semanal de este agente deja
+     * de tocar su balance/ledger y se rutea entero a la cuenta de socio con este nombre (debe
+     * existir en Cuentas de socios — ver repo/closings.ts aplicarCierreCompensacionPersonaTx).
+     * Se guarda en minúsculas para que el match por nombre en el cierre sea case-insensitive. */
+    personKey?: string | null;
   }
 ) {
   const sets: string[] = [];
@@ -380,6 +385,7 @@ export async function updateAgent(
   if (fields.active !== undefined) { sets.push(`active = $${i++}`); values.push(fields.active); }
   if (fields.accountType !== undefined) { sets.push(`account_type = $${i++}`); values.push(fields.accountType); }
   if (fields.externalId !== undefined) { sets.push(`external_id = $${i++}`); values.push(fields.externalId); }
+  if (fields.personKey !== undefined) { sets.push(`person_key = $${i++}`); values.push(fields.personKey ? fields.personKey.toLowerCase() : null); }
   if (sets.length === 0) {
     const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
     return r.rows[0] ?? null;
