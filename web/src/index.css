@@ -358,6 +358,21 @@ tbody tr { transition: background 0.12s ease; }
 tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
 tbody tr:last-child td { border-bottom: none; }
 
+/* Tablas densas (muchas columnas — historiales discriminados de banca, etc.): mismo esquema
+   visual pero con menos aire, para que entre más sin tener que scrollear tanto en horizontal.
+   La primera columna queda fija (sticky) para no perder de referencia la semana/fila al
+   scrollear el resto hacia la derecha. */
+.table-compact { font-size: 12px; white-space: nowrap; }
+.table-compact th { padding: 6px 8px; font-size: 10px; }
+.table-compact td { padding: 6px 8px; }
+.table-compact th:first-child, .table-compact td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.table-compact tbody tr:hover td:first-child { background: var(--panel-2); }
+
 /* ---------- badges ---------- */
 
 .badge {

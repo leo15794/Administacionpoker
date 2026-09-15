@@ -308,7 +308,7 @@ export default function JugadoresBancados() {
           <div className="muted">Todavía no se cerró ninguna semana de banca.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table>
+            <table className="table-compact">
               <thead>
                 <tr>
                   <th>Semana</th>
@@ -849,7 +849,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                 })()}
                 {historialAbierto && (
                   <div style={{ overflowX: "auto" }}>
-                    <table>
+                    <table className="table-compact">
                       <thead>
                         <tr>
                           <th>Semana</th><th>Tipo</th><th>Resultado</th><th>Rake generado</th>
