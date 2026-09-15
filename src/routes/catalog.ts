@@ -198,49 +198,64 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
   });
 });
 
-// Semanas con cierres cargados para un agente (para el selector de la liquidación) — más
-// reciente primero.
-catalogRouter.get("/agents/:id/liquidacion/semanas", requireAuth, requireAdmin, async (req, res) => {
+// Semanas con cierres cargados para uno o varios agentes (para el selector de la liquidación,
+// que ahora permite combinar varios agentes/clubes en un solo PDF — ej. "Prodigio" cuando en
+// realidad son varias identidades de agente, una por club). ?agentIds=a,b,c (unión de semanas
+// de todos) — más reciente primero.
+catalogRouter.get("/liquidacion/semanas", requireAuth, requireAdmin, async (req, res) => {
+  const agentIds = String(req.query.agentIds || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (agentIds.length === 0) return res.status(400).json({ error: "Falta agentIds" });
   const r = await pool.query(
     `SELECT DISTINCT week_start, week_end FROM weekly_closings
-     WHERE agent_id = $1 AND status <> 'REVERTIDO'
+     WHERE agent_id = ANY($1::text[]) AND status <> 'REVERTIDO'
      ORDER BY week_start DESC LIMIT 52`,
-    [req.params.id]
+    [agentIds]
   );
   res.json(r.rows);
 });
 
-// Resumen de liquidación de UNA semana de UN agente: una fila por club (Ganancias/Pérdidas,
-// Rake, Rakeback bruto, Rebate, Rakeback neto) + total, para armar el mensaje/PDF que se le
-// manda al agente con lo que se le paga. Todo en USD (weekly_closings ya guarda los montos
-// convertidos con la tasa de esa semana — no hay forma de recuperar el monto en moneda local
-// sin agregarlo al esquema, así que por ahora se resuelve con una nota manual editable en el
-// frontend para esas aclaraciones).
-catalogRouter.get("/agents/:id/liquidacion", requireAuth, requireAdmin, async (req, res) => {
-  const agentId = req.params.id;
+// Resumen de liquidación de UNA semana, combinando uno o varios agentes (de clubes distintos si
+// hace falta) en un solo total — para armar el mensaje/PDF que se le manda a la persona con lo
+// que se le paga (ej. "Prodigio" = varias identidades de agente juntas). Todo en USD
+// (weekly_closings ya guarda los montos convertidos con la tasa de esa semana — no hay forma de
+// recuperar el monto en moneda local original sin agregarlo al esquema, así que eso se resuelve
+// con una nota manual editable en el frontend). También devuelve los adelantos ACTIVOS de esos
+// mismos agentes (con su "pendiente" real) para que el frontend permita elegir a mano cuáles se
+// cruzan contra el total, en vez de un solo número fijo.
+catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) => {
+  const agentIds = String(req.query.agentIds || "").split(",").map((s) => s.trim()).filter(Boolean);
   const weekStart = String(req.query.weekStart || "");
+  if (agentIds.length === 0) return res.status(400).json({ error: "Falta agentIds" });
   if (!weekStart) return res.status(400).json({ error: "Falta weekStart" });
 
-  const agent = await pool.query(`SELECT id, name FROM agents WHERE id = $1`, [agentId]);
-  if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
+  const agentes = await pool.query(`SELECT id, name FROM agents WHERE id = ANY($1::text[])`, [agentIds]);
+  if (agentes.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
 
   const closings = await pool.query(
-    `SELECT wc.*, c.name as club_name FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
-     WHERE wc.agent_id = $1 AND wc.week_start = $2 AND wc.status <> 'REVERTIDO'
+    `SELECT wc.*, c.name as club_name, a.name as agent_name FROM weekly_closings wc
+     JOIN clubs c ON c.id = wc.club_id
+     JOIN agents a ON a.id = wc.agent_id
+     WHERE wc.agent_id = ANY($1::text[]) AND wc.week_start = $2 AND wc.status <> 'REVERTIDO'
      ORDER BY c.name`,
-    [agentId, weekStart]
+    [agentIds, weekStart]
   );
   if (closings.rows.length === 0) return res.status(404).json({ error: "No hay cierres para esa semana." });
 
   const adelantos = await pool.query(
-    `SELECT COALESCE(SUM(amount - consumed), 0) as pendiente FROM rakeback_advances
-     WHERE agent_id = $1 AND active = true`,
-    [agentId]
+    `SELECT ra.id, ra.amount, ra.consumed, a.name as agent_name, c.name as club_origen_name
+     FROM rakeback_advances ra
+     JOIN agents a ON a.id = ra.agent_id
+     LEFT JOIN clubs c ON c.id = ra.club_origen_id
+     WHERE ra.agent_id = ANY($1::text[]) AND ra.active = true AND ra.amount > ra.consumed
+     ORDER BY a.name, ra.created_at`,
+    [agentIds]
   );
 
   const filas = closings.rows.map((c) => ({
     clubId: c.club_id,
     clubName: c.club_name,
+    agentId: c.agent_id,
+    agentName: c.agent_name,
     resultado: Number(c.result),
     rakeTotal: Number(c.rake_total),
     rakebackBruto: Number(c.rakeback),
@@ -250,12 +265,19 @@ catalogRouter.get("/agents/:id/liquidacion", requireAuth, requireAdmin, async (r
   const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);
 
   res.json({
-    agente: agent.rows[0],
+    agentes: agentes.rows,
     weekStart: closings.rows[0].week_start,
     weekEnd: closings.rows[0].week_end,
     filas,
     total,
-    adelantosPendientes: Number(adelantos.rows[0].pendiente),
+    adelantos: adelantos.rows.map((a) => ({
+      id: a.id,
+      agentName: a.agent_name,
+      clubOrigenName: a.club_origen_name,
+      amount: Number(a.amount),
+      consumed: Number(a.consumed),
+      pendiente: Number(a.amount) - Number(a.consumed),
+    })),
   });
 });
 
