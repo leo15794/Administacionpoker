@@ -189,6 +189,43 @@ export const api = {
   ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
 
+  // Ganancias por período + Ajustes extraordinarios (recreación de esas dos pestañas de la
+  // planilla, 15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre y, al cerrarlo,
+  // congela los números y consume una cuota de cada ajuste extraordinario todavía activo.
+  ajustesExtraordinarios: () => request("/profit-periods/ajustes"),
+  crearAjusteExtraordinario: (data: {
+    occurredAt?: string;
+    tipo: string;
+    descripcion: string;
+    responsable?: string | null;
+    clubAgencia?: string | null;
+    montoOriginal: number;
+    absorbeDigiplayers?: number;
+    absorbeAgente?: number;
+    absorbeSupervisor?: number;
+    modoDistribucion?: "IGUAL_POR_PERIODO" | "PERSONALIZADO";
+    periodosTotales?: number;
+    afectadoTipo?: string | null;
+    afectadoNombre?: string | null;
+    observaciones?: string | null;
+  }) => request("/profit-periods/ajustes", { method: "POST", body: JSON.stringify(data) }),
+  editarAjusteExtraordinario: (id: string, data: Record<string, any>) =>
+    request(`/profit-periods/ajustes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  eliminarAjusteExtraordinario: (id: string) => request(`/profit-periods/ajustes/${id}`, { method: "DELETE" }),
+
+  semanasDisponiblesPeriodo: () => request("/profit-periods/semanas-disponibles"),
+  previewPeriodo: (weekStarts: string[]) =>
+    request("/profit-periods/preview", { method: "POST", body: JSON.stringify({ weekStarts }) }),
+  periodos: () => request("/profit-periods"),
+  periodoDetalle: (id: string) => request(`/profit-periods/${id}`),
+  crearPeriodo: (name: string, weekStarts: string[]) =>
+    request("/profit-periods", { method: "POST", body: JSON.stringify({ name, weekStarts }) }),
+  editarPeriodo: (id: string, data: { name?: string; weekStarts?: string[] }) =>
+    request(`/profit-periods/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  cerrarPeriodo: (id: string) => request(`/profit-periods/${id}/cerrar`, { method: "POST" }),
+  reabrirPeriodo: (id: string) => request(`/profit-periods/${id}/reabrir`, { method: "POST" }),
+  eliminarPeriodo: (id: string) => request(`/profit-periods/${id}`, { method: "DELETE" }),
+
   // Stock físico por cuenta ("Stock y deudas consolidados" de la planilla) — conteo de fichas en
   // custodia por agente+club, del cual salen las 4 vistas calculadas. Control total: editar y
   // eliminar directo, igual que Cuentas de socios.

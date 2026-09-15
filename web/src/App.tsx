@@ -10,6 +10,7 @@ import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Adelantos from "./pages/Adelantos";
 import CuentasSocios from "./pages/CuentasSocios";
+import GananciasPorPeriodo from "./pages/GananciasPorPeriodo";
 import StockDeudas from "./pages/StockDeudas";
 import ResumenClub from "./pages/ResumenClub";
 import JugadoresBancados from "./pages/JugadoresBancados";
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="garantias" element={<Garantias />} />
           <Route path="adelantos" element={<Adelantos />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />
+          <Route path="ganancias-por-periodo" element={<GananciasPorPeriodo />} />
           <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="resumen-club" element={<ResumenClub />} />
           <Route path="jugadores-bancados" element={<JugadoresBancados />} />

@@ -675,3 +675,74 @@ WHERE NOT EXISTS (SELECT 1 FROM partner_accounts WHERE lower(name) = 'juan');
 UPDATE agents SET person_key = 'juan'
   WHERE lower(name) IN ('juan', 'j chamacos', 'juan masters', 'guerrrda', 'guerrda')
   AND (person_key IS NULL OR person_key <> 'juan');
+
+-- ============ GANANCIAS POR PERÍODO + AJUSTES EXTRAORDINARIOS (recreación de las pestañas
+-- GANANCIAS_POR_PERIODO y AJUSTES EXTRAORDINARIOS de la planilla, 15/09/2026) ============
+-- Un "período" es simplemente un nombre puesto a mano sobre un grupo de semanas ya cerradas
+-- (4, 5, 6 semanas, las que sea — no tiene que ser un mes calendario). Mientras está ABIERTO
+-- se recalcula en vivo; al cerrarlo se congela una foto (no se recalcula más aunque después
+-- se carguen retiros/gastos con fecha vieja) — igual que "Cerrado" en la planilla.
+CREATE TABLE IF NOT EXISTS profit_periods (
+  id                        TEXT PRIMARY KEY,
+  name                      TEXT NOT NULL,
+  status                    TEXT NOT NULL DEFAULT 'ABIERTO' CHECK (status IN ('ABIERTO','CERRADO')),
+  -- Snapshot: solo se completan al cerrar (ver closePeriod). NULL mientras está ABIERTO —
+  -- la vista previa se calcula en vivo, no se guarda hasta que se cierra de verdad.
+  ganancia_operativa        NUMERIC(18,4),
+  retiros                   NUMERIC(18,4),
+  gastos                    NUMERIC(18,4),
+  ingresos_ajustes          NUMERIC(18,4),
+  ganancia_antes_ajustes_dp NUMERIC(18,4),
+  ajustes_extraordinarios_dp NUMERIC(18,4),
+  ganancia_neta_final       NUMERIC(18,4),
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closed_at                 TIMESTAMPTZ
+);
+
+-- Qué semanas (across todos los clubes) forman este período.
+CREATE TABLE IF NOT EXISTS profit_period_weeks (
+  id         TEXT PRIMARY KEY,
+  period_id  TEXT NOT NULL REFERENCES profit_periods(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  UNIQUE(period_id, week_start)
+);
+CREATE INDEX IF NOT EXISTS profit_period_weeks_period_idx ON profit_period_weeks(period_id);
+
+-- Pérdidas/retenciones extraordinarias (fichas confiscadas, retenciones de club, etc.) cuya
+-- parte a cargo de DigiPlayers se amortiza en cuotas contra la ganancia de los próximos
+-- períodos que se vayan cerrando — no se descuenta todo de una — hasta agotar
+-- absorbe_digiplayers en periodos_totales cuotas iguales (o 1 sola cuota si es "Personalizado").
+CREATE TABLE IF NOT EXISTS extraordinary_adjustments (
+  id                  TEXT PRIMARY KEY,
+  occurred_at         DATE NOT NULL DEFAULT CURRENT_DATE,
+  tipo                TEXT NOT NULL,
+  descripcion         TEXT NOT NULL,
+  responsable         TEXT,
+  club_agencia        TEXT,
+  monto_original      NUMERIC(18,4) NOT NULL,
+  absorbe_digiplayers NUMERIC(18,4) NOT NULL DEFAULT 0,
+  absorbe_agente      NUMERIC(18,4) NOT NULL DEFAULT 0,
+  absorbe_supervisor  NUMERIC(18,4) NOT NULL DEFAULT 0,
+  modo_distribucion   TEXT NOT NULL DEFAULT 'IGUAL_POR_PERIODO' CHECK (modo_distribucion IN ('IGUAL_POR_PERIODO','PERSONALIZADO')),
+  periodos_totales    INTEGER NOT NULL DEFAULT 1 CHECK (periodos_totales >= 1),
+  periodos_aplicados  INTEGER NOT NULL DEFAULT 0,
+  estado              TEXT NOT NULL DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO','FINALIZADO')),
+  afectado_tipo       TEXT,
+  afectado_nombre     TEXT,
+  observaciones       TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Traza de qué cuota de qué ajuste se consumió al cerrar qué período — para poder reabrir un
+-- período (deshacer la cuota que consumió) sin perder el historial de las demás.
+CREATE TABLE IF NOT EXISTS extraordinary_adjustment_applications (
+  id            TEXT PRIMARY KEY,
+  adjustment_id TEXT NOT NULL REFERENCES extraordinary_adjustments(id) ON DELETE CASCADE,
+  period_id     TEXT NOT NULL REFERENCES profit_periods(id) ON DELETE CASCADE,
+  amount        NUMERIC(18,4) NOT NULL,
+  applied_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(adjustment_id, period_id)
+);
+CREATE INDEX IF NOT EXISTS extraordinary_adjustment_applications_period_idx ON extraordinary_adjustment_applications(period_id);
+CREATE INDEX IF NOT EXISTS extraordinary_adjustment_applications_adjustment_idx ON extraordinary_adjustment_applications(adjustment_id);
