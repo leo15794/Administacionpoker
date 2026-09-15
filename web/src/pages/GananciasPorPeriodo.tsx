@@ -479,22 +479,27 @@ function AjusteForm({ ajuste, onDone }: { ajuste?: any; onDone: () => void }) {
     const monto = Number(montoOriginal);
     if (!(monto > 0)) return setMsg({ ok: false, text: "El monto original tiene que ser mayor a 0." });
     setLoading(true);
-    const data = {
+    // Si ya tiene cuotas aplicadas, el backend rechaza el pedido entero si vienen presentes
+    // estos 4 campos (aunque el valor sea el mismo) — se omiten del todo para poder editar el
+    // resto (descripción, responsable, observaciones) sin chocar contra ese bloqueo.
+    const data: Record<string, any> = {
       occurredAt,
       tipo,
       descripcion: descripcion.trim(),
       responsable: responsable.trim() || null,
       clubAgencia: clubAgencia.trim() || null,
-      montoOriginal: monto,
-      absorbeDigiplayers: Number(absorbeDigiplayers) || 0,
       absorbeAgente: Number(absorbeAgente) || 0,
       absorbeSupervisor: Number(absorbeSupervisor) || 0,
-      modoDistribucion,
-      periodosTotales: modoDistribucion === "PERSONALIZADO" ? 1 : Math.max(1, Number(periodosTotales) || 1),
       afectadoTipo: afectadoTipo.trim() || null,
       afectadoNombre: afectadoNombre.trim() || null,
       observaciones: observaciones.trim() || null,
     };
+    if (!yaAplicado) {
+      data.montoOriginal = monto;
+      data.absorbeDigiplayers = Number(absorbeDigiplayers) || 0;
+      data.modoDistribucion = modoDistribucion;
+      data.periodosTotales = modoDistribucion === "PERSONALIZADO" ? 1 : Math.max(1, Number(periodosTotales) || 1);
+    }
     try {
       if (ajuste) await api.editarAjusteExtraordinario(ajuste.id, data);
       else await api.crearAjusteExtraordinario(data as any);

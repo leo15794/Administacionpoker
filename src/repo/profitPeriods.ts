@@ -174,9 +174,12 @@ async function computeCategoriasSocios(client: PoolClient, desde: string | null,
   );
   const map: Record<string, number> = {};
   for (const row of r.rows) map[row.category] = Number(row.total);
+  // Mismo criterio que getAgregadosSocios (Cuentas de socios): suma cruda, sin abs — la
+  // convención ya es "cargalo en positivo" (ver ayuda del formulario de movimientos). Usar abs
+  // acá desalinearía este cálculo del histórico si alguna vez se carga algo con signo distinto.
   return {
-    retiros: Math.abs(map.RETIRO ?? 0),
-    gastos: Math.abs(map.GASTO ?? 0),
+    retiros: map.RETIRO ?? 0,
+    gastos: map.GASTO ?? 0,
     ingresosAjustes: map.AJUSTE ?? 0,
   };
 }
