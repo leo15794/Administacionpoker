@@ -23,6 +23,7 @@ export default function JugadoresBancados() {
   const [expandido, setExpandido] = useState<string | null>(null);
   const [historialGlobal, setHistorialGlobal] = useState<any[]>([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
+  const [accionandoGlobal, setAccionandoGlobal] = useState<string | null>(null);
 
   function refresh() {
     setCargando(true);
@@ -40,6 +41,38 @@ export default function JugadoresBancados() {
       .then(setHistorialGlobal)
       .catch((e: any) => setError(e.message))
       .finally(() => setCargandoHistorial(false));
+  }
+
+  async function revertirGlobal(h: any) {
+    const motivo = prompt(`Revertir el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
+    if (motivo === undefined) return;
+    setAccionandoGlobal(h.id);
+    try {
+      await api.revertirCierreBancado(h.id, motivo || undefined);
+      refreshHistorial();
+    } catch (err: any) {
+      alert(err.message || "No se pudo revertir.");
+    } finally {
+      setAccionandoGlobal(null);
+    }
+  }
+
+  // BORRADO REAL — solo para limpiar datos de prueba. Sobre plata real siempre "Revertir",
+  // nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
+  async function borrarGlobal(h: any) {
+    const confirmacion = prompt(
+      `Esto BORRA DEL TODO el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}) — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
+    );
+    if (confirmacion !== "BORRAR") return;
+    setAccionandoGlobal(h.id);
+    try {
+      await api.eliminarCierreBancadoDefinitivo(h.id);
+      refreshHistorial();
+    } catch (err: any) {
+      alert(err.message || "No se pudo borrar.");
+    } finally {
+      setAccionandoGlobal(null);
+    }
   }
 
   useEffect(() => {
@@ -222,7 +255,29 @@ export default function JugadoresBancados() {
                     <td><span className={`badge ${Number(h.pago_jugador_total) >= 0 ? "pos" : "neg"}`}>{usd(h.pago_jugador_total)}</span></td>
                     <td>{usd(h.ganancia_banca_mesas)}</td>
                     <td>{usd(h.capital_despues)}</td>
-                    <td>{h.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}</td>
+                    <td className="row-actions">
+                      {h.status === "REVERTIDO" ? (
+                        <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
+                      ) : (
+                        <button
+                          className="btn secondary small"
+                          disabled={accionandoGlobal === h.id}
+                          onClick={() => revertirGlobal(h)}
+                          title="Revertir (queda en el historial, no se borra nada)"
+                        >
+                          {accionandoGlobal === h.id ? "..." : "Revertir"}
+                        </button>
+                      )}
+                      <button
+                        className="btn secondary small"
+                        disabled={accionandoGlobal === h.id}
+                        onClick={() => borrarGlobal(h)}
+                        title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                        style={{ color: "var(--danger, #e5484d)" }}
+                      >
+                        {accionandoGlobal === h.id ? "..." : "Borrar"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -429,6 +484,22 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
     }
   }
 
+  // BORRADO REAL — solo para limpiar datos de prueba. Sobre plata real siempre "Revertir",
+  // nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
+  async function borrarDefinitivo(id: string) {
+    const confirmacion = prompt(
+      'Esto BORRA DEL TODO este cierre de banca — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:'
+    );
+    if (confirmacion !== "BORRAR") return;
+    try {
+      await api.eliminarCierreBancadoDefinitivo(id);
+      cargarTodo();
+      onCierreAplicado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo borrar.");
+    }
+  }
+
   if (cargandoConfig) return <div className="muted" style={{ padding: "10px 0" }}>Cargando banca...</div>;
 
   return (
@@ -600,12 +671,20 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                           <td>{usd(h.makeup_nuevo)}</td>
                           <td>{usd(h.pago_jugador_total)}</td>
                           <td>{usd(h.capital_despues)}</td>
-                          <td>
+                          <td className="row-actions">
                             {h.status !== "REVERTIDO" ? (
                               <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
                             ) : (
-                              <span className="badge neg">Revertido</span>
+                              <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>
                             )}
+                            <button
+                              className="btn secondary small"
+                              onClick={() => borrarDefinitivo(h.id)}
+                              title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
+                              style={{ color: "var(--danger, #e5484d)" }}
+                            >
+                              Borrar
+                            </button>
                           </td>
                         </tr>
                       ))}

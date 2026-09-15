@@ -232,3 +232,13 @@ export async function revertirCierreBancado(id: string, motivo?: string) {
   );
   return { found: r.rows.length > 0 };
 }
+
+// BORRADO REAL (no revierte, elimina la fila) — mismo criterio que el borrado real de
+// weekly_closings (movements.ts): SOLO para limpiar datos de prueba, nunca sobre un cierre de
+// banca real ya operado (para eso está "Revertir", que mantiene el historial auditable). Acá es
+// más simple que el de weekly_closings porque este módulo no toca ledger/saldos de agente — es
+// un DELETE directo, no hay nada más que deshacer.
+export async function eliminarCierreBancadoDefinitivo(id: string) {
+  const r = await pool.query(`DELETE FROM bancado_historial WHERE id = $1 RETURNING id`, [id]);
+  return { found: r.rows.length > 0 };
+}

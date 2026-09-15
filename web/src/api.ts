@@ -280,6 +280,9 @@ export const api = {
   historialBancado: (playerId: string) => request(`/bancados/historial/${playerId}`),
   revertirCierreBancado: (id: string, motivo?: string) =>
     request(`/bancados/historial/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
+  // Borrado real (no queda en el historial) — solo para datos de prueba, nunca plata real.
+  eliminarCierreBancadoDefinitivo: (id: string) =>
+    request(`/bancados/historial/${id}/definitivo`, { method: "DELETE" }),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

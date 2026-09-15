@@ -11,6 +11,7 @@ import {
   listHistorialBancado,
   listHistorialBancadoGlobal,
   revertirCierreBancado,
+  eliminarCierreBancadoDefinitivo,
 } from "../repo/bancados.js";
 
 export const bancadosRouter = Router();
@@ -103,5 +104,14 @@ bancadosRouter.delete("/historial/:id", requireAuth, requireAdmin, async (req, r
   const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
   const r = await revertirCierreBancado(req.params.id, motivo);
   if (!r.found) return res.status(404).json({ error: "Cierre de banca no encontrado (o ya estaba revertido)." });
+  res.json(r);
+});
+
+// BORRADO REAL — solo para limpiar datos de prueba, nunca sobre plata real ya operada (ver
+// eliminarCierreBancadoDefinitivo). Va con un segmento más ("/definitivo") para no chocar con
+// el revertir de arriba.
+bancadosRouter.delete("/historial/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  const r = await eliminarCierreBancadoDefinitivo(req.params.id);
+  if (!r.found) return res.status(404).json({ error: "Cierre de banca no encontrado." });
   res.json(r);
 });
