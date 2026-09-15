@@ -287,7 +287,7 @@ function FilaBancado({
 function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplicado: () => void }) {
   const [config, setConfig] = useState<any | null>(null);
   const [estado, setEstado] = useState<any | null>(null);
-  const [resumen, setResumen] = useState<any | null>(null);
+  const [historialAbierto, setHistorialAbierto] = useState(true);
   const [cargandoConfig, setCargandoConfig] = useState(true);
   const [editandoConfig, setEditandoConfig] = useState(false);
   const [guardandoConfig, setGuardandoConfig] = useState(false);
@@ -321,7 +321,6 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
       .then((r: any) => {
         setConfig(r.config);
         setEstado(r.estado);
-        setResumen(r.resumen ?? null);
         setPctJugador(String(Number(r.config.pct_jugador) * 100));
         setPctBanca(String(Number(r.config.pct_banca) * 100));
         setRakebackPct(String(Number(r.config.rakeback_pct) * 100));
@@ -494,13 +493,6 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
               <span>Makeup actual: <strong className={Number(estado?.makeupActual ?? 0) > 0 ? "neg" : "pos"}>{usd(estado?.makeupActual ?? 0)}</strong></span>
               <span className="muted">% Jugador {(Number(config.pct_jugador) * 100).toFixed(1)}% · % Banca {(Number(config.pct_banca) * 100).toFixed(1)}% · % Rakeback {(Number(config.rakeback_pct) * 100).toFixed(1)}%</span>
             </div>
-            {resumen && (
-              <div className="muted" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border, #2a2a2a)" }}>
-                <span>Rake generado total (acumulado): <strong>{usd(resumen.rakeGeneradoTotal)}</strong></span>
-                <span>Rakeback Bancado (acumulado): <strong>{usd(resumen.rakebackBancadoTotal)}</strong></span>
-                <span>Rake Banca (acumulado): <strong>{usd(resumen.rakeBancaTotal)}</strong></span>
-              </div>
-            )}
           </div>
 
           <div className="panel" style={{ marginBottom: 12 }}>
@@ -559,36 +551,68 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
           </div>
 
           <div className="panel">
-            <h4 style={{ marginTop: 0 }}>Historial de este jugador</h4>
+            <div className="topbar" style={{ marginBottom: 10 }}>
+              <h4 style={{ margin: 0 }}>Historial de este jugador</h4>
+              {historial.length > 0 && (
+                <button className="btn secondary small" onClick={() => setHistorialAbierto((v) => !v)}>
+                  {historialAbierto ? "Contraer semanas" : "Ver semanas"}
+                </button>
+              )}
+            </div>
             {cargandoHistorial ? (
               <div className="muted">Cargando...</div>
             ) : historial.length === 0 ? (
               <div className="muted">Todavía no se cerró ninguna semana.</div>
             ) : (
-              <table>
-                <thead>
-                  <tr><th>Semana</th><th>Resultado</th><th>Rakeback</th><th>Makeup</th><th>Pago jugador</th><th>Capital después</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {historial.map((h: any) => (
-                    <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
-                      <td>{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
-                      <td>{usd(h.resultado_mesas)}</td>
-                      <td>{usd(h.rakeback_total)}</td>
-                      <td>{usd(h.makeup_nuevo)}</td>
-                      <td>{usd(h.pago_jugador_total)}</td>
-                      <td>{usd(h.capital_despues)}</td>
-                      <td>
-                        {h.status !== "REVERTIDO" ? (
-                          <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
-                        ) : (
-                          <span className="badge neg">Revertido</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                {/* Totales acumulados: suman TODAS las semanas activas, se vean o no en la tabla
+                    de abajo — contraer semanas es solo para no ensuciar la vista, nunca deja
+                    afuera una semana de la suma. */}
+                {(() => {
+                  const activas = historial.filter((h: any) => h.status !== "REVERTIDO");
+                  const totalRake = activas.reduce((acc: number, h: any) => acc + Number(h.rake_total), 0);
+                  const totalRakeback = activas.reduce((acc: number, h: any) => acc + Number(h.rakeback_total), 0);
+                  const totalRakeBanca = totalRake - totalRakeback;
+                  return (
+                    <div className="muted" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 }}>
+                      <span>Rake generado total (acumulado): <strong>{usd(totalRake)}</strong></span>
+                      <span>Rakeback Bancado (acumulado): <strong>{usd(totalRakeback)}</strong></span>
+                      <span>Rake Banca (acumulado): <strong>{usd(totalRakeBanca)}</strong></span>
+                    </div>
+                  );
+                })()}
+                {historialAbierto && (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Semana</th><th>Resultado</th><th>Rake generado</th><th>Rakeback</th><th>Rake Banca</th>
+                        <th>Makeup</th><th>Pago jugador</th><th>Capital después</th><th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historial.map((h: any) => (
+                        <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
+                          <td>{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
+                          <td>{usd(h.resultado_mesas)}</td>
+                          <td>{usd(h.rake_total)}</td>
+                          <td>{usd(h.rakeback_total)}</td>
+                          <td>{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
+                          <td>{usd(h.makeup_nuevo)}</td>
+                          <td>{usd(h.pago_jugador_total)}</td>
+                          <td>{usd(h.capital_despues)}</td>
+                          <td>
+                            {h.status !== "REVERTIDO" ? (
+                              <button className="btn secondary small" onClick={() => revertir(h.id)}>Revertir</button>
+                            ) : (
+                              <span className="badge neg">Revertido</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
             )}
           </div>
         </>
