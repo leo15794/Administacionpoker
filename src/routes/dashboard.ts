@@ -106,6 +106,24 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
      ) t`
   );
 
+  // Últimas 8 semanas "limpias" (mismo criterio que arriba: si una semana tiene algún cierre
+  // RECONSTRUIDO_SIN_DESGLOSE se descarta entera, no solo esa fila) — para el gráfico de
+  // tendencia del Resumen. Chico a propósito: es un vistazo rápido, no reemplaza Cierres.
+  const historicoSemanal = await pool.query(
+    `SELECT wc.week_start, wc.week_end,
+            COALESCE(SUM(wc.rake_total - wc.rakeback - wc.rebate), 0) as ganancia
+     FROM weekly_closings wc
+     WHERE wc.status <> 'REVERTIDO'
+       AND NOT EXISTS (
+         SELECT 1 FROM weekly_closings wc2
+         WHERE wc2.week_start = wc.week_start AND wc2.status <> 'REVERTIDO'
+           AND wc2.rule_applied = 'RECONSTRUIDO_SIN_DESGLOSE'
+       )
+     GROUP BY wc.week_start, wc.week_end
+     ORDER BY wc.week_start DESC
+     LIMIT 8`
+  );
+
   res.json({
     kpis: {
       agentesNosDeben: Math.abs(totalAFavorNuestro),
@@ -124,6 +142,7 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
     },
     porClub: porClub.rows,
     resultadoPorClub,
+    historicoSemanal: historicoSemanal.rows.reverse(),
     balances,
   });
 });

@@ -148,6 +148,16 @@ export default function Resumen() {
         "Ganancia de la semana" / "Rake de la semana" salen de la última semana con cierres REALES cargados (no cuenta las semanas reconstruidas sin desglose, ver Cierres) — si viene vacío es porque la última semana cargada es una de esas. "Agentes nos deben" / "Debemos a agentes" son saldo de fichas y saldo pendiente por agente+club, neteado (un solo saldo por agente+club, como una cuenta corriente real). Sumando Adelantos/Garantías se arma el total comparable contra la planilla — aun así puede quedar una diferencia chica cuando un mismo agente+club tiene a la vez una fila "debemos" y una "nos debe" en la planilla (ej. debe fichas pero tiene un pago pendiente): la planilla suma bruto por fila y nosotros neteamos, que es lo correcto para un saldo real. Hacé click en cualquier KPI para ver su detalle.
       </div>
 
+      {data.historicoSemanal && data.historicoSemanal.length > 1 && (
+        <div className="panel">
+          <h3 style={{ marginBottom: 4 }}>Tendencia de ganancia</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+            Últimas {data.historicoSemanal.length} semanas con cierres reales cargados — mismo dato que "Ganancia de la semana", semana a semana.
+          </div>
+          <TendenciaGanancia semanas={data.historicoSemanal} />
+        </div>
+      )}
+
       <div className="panel" id="panel-saldo-por-club">
         <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Saldo neto por club</h3>
@@ -293,6 +303,62 @@ export default function Resumen() {
           <MovimientosHistorial agentId={detalle.agentId} clubId={detalle.clubId} />
         </Modal>
       )}
+    </div>
+  );
+}
+
+// Gráfico de barras chico, en SVG puro (sin librerías nuevas) — muestra la ganancia neta de
+// cada una de las últimas semanas "limpias" para que la tendencia se vea de un vistazo, en vez
+// de tener que ir semana por semana a Cierres. Positivo = degradé de la marca, negativo = rojo
+// (mismos colores que el resto de la app), con el eje cero marcado cuando hace falta.
+function TendenciaGanancia({ semanas }: { semanas: { week_start: string; week_end: string; ganancia: number }[] }) {
+  const width = 100; // % — se escala solo con el contenedor
+  const height = 120;
+  const gap = 3;
+  const barW = (width - gap * (semanas.length - 1)) / semanas.length;
+  const valores = semanas.map((s) => Number(s.ganancia));
+  const max = Math.max(...valores, 0);
+  const min = Math.min(...valores, 0);
+  const rango = max - min || 1;
+  const zeroY = height - ((0 - min) / rango) * height;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" style={{ overflow: "visible" }}>
+        <defs>
+          <linearGradient id="ganancia-pos" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#7c6ffc" />
+            <stop offset="100%" stopColor="#4f7cff" />
+          </linearGradient>
+        </defs>
+        {min < 0 && max > 0 && (
+          <line x1={0} y1={zeroY} x2={width} y2={zeroY} stroke="var(--border-strong)" strokeWidth={0.4} />
+        )}
+        {valores.map((v, i) => {
+          const x = i * (barW + gap);
+          const barH = (Math.abs(v) / rango) * height;
+          const y = v >= 0 ? zeroY - barH : zeroY;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barW}
+              height={Math.max(barH, 1.5)}
+              rx={1.5}
+              fill={v >= 0 ? "url(#ganancia-pos)" : "#f43f5e"}
+            >
+              <title>
+                {dateShort(semanas[i].week_start)} al {dateShort(semanas[i].week_end)}: {usd(v)}
+              </title>
+            </rect>
+          );
+        })}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }} className="muted">
+        <span>{dateShort(semanas[0].week_start)}</span>
+        <span>{dateShort(semanas[semanas.length - 1].week_end)}</span>
+      </div>
     </div>
   );
 }
