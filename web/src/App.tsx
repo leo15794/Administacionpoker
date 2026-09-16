@@ -17,6 +17,7 @@ import ResumenClub from "./pages/ResumenClub";
 import JugadoresBancados from "./pages/JugadoresBancados";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
+import MiSupervision from "./pages/MiSupervision";
 import { api } from "./api";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -64,6 +65,17 @@ export default function App() {
           }
         >
           <Route index element={<MiCuenta />} />
+        </Route>
+
+        <Route
+          path="/mi-supervision"
+          element={
+            <RequireAuth>
+              <Shell role="SUPERVISOR" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MiSupervision />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

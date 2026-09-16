@@ -70,3 +70,42 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     adelantos: adelantos.rows,
   });
 });
+
+// Portal de SUPERVISOR: mismo dato que /dashboard/supervisores arma para el admin (agentes a
+// cargo + rakeback centralizado), pero filtrado al propio supervisor del login — nunca al resto.
+// Placeholder mínimo hasta tener las reglas de negocio del rol Supervisor (16/09/2026): por
+// ahora solo LEE, no agrega ninguna acción nueva.
+portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res) => {
+  const agent = await pool.query(
+    `SELECT id, name, account_type, COALESCE(SUM(b.amount), 0) as saldo_total
+     FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
+     WHERE a.id = $1
+     GROUP BY a.id, a.name, a.account_type`,
+    [req.user!.agentId]
+  );
+  if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
+  if (agent.rows[0].account_type !== "SUPERVISOR") {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+  }
+  const supervisor = agent.rows[0];
+
+  const agentesACargo = await pool.query(
+    `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
+     FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
+     WHERE a.active = true AND a.supervisor = $1
+     GROUP BY a.id, a.name, a.account_type
+     ORDER BY a.name`,
+    [supervisor.name]
+  );
+  const rakebackAcreditado = await pool.query(
+    `SELECT COALESCE(SUM(rebate), 0) as total FROM weekly_closings
+     WHERE supervisor_agent_id = $1 AND status <> 'REVERTIDO'`,
+    [supervisor.id]
+  );
+
+  res.json({
+    supervisor,
+    agentes: agentesACargo.rows,
+    rakeback_centralizado_acreditado: Number(rakebackAcreditado.rows[0].total),
+  });
+});

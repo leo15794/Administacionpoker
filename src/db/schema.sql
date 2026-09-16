@@ -416,7 +416,7 @@ CREATE TABLE IF NOT EXISTS agent_users (
   agent_id      TEXT NOT NULL REFERENCES agents(id),
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL DEFAULT 'AGENT' CHECK (role IN ('AGENT','ADMIN')),
+  role          TEXT NOT NULL DEFAULT 'AGENT' CHECK (role IN ('AGENT','ADMIN','SUPERVISOR')),
   active        BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -784,3 +784,12 @@ CREATE TABLE IF NOT EXISTS agent_user_agents (
 INSERT INTO agent_user_agents (user_id, agent_id)
   SELECT id, agent_id FROM agent_users
   ON CONFLICT DO NOTHING;
+
+-- Rol SUPERVISOR (16/09/2026): un login de portal que, en vez de "Mi cuenta" de un solo agente,
+-- ve el resumen de su grupo de agentes a cargo (mismo dato que ya arma /dashboard/supervisores
+-- para el admin, filtrado a su propio nombre) — para cuando su agent_id principal es de
+-- account_type='SUPERVISOR'. El CHECK de agent_users.role de arriba puede no actualizarse solo
+-- en una base que ya existía (CREATE TABLE IF NOT EXISTS no toca constraints existentes), así
+-- que se recrea acá de forma idempotente.
+ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
+ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR'));

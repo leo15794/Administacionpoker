@@ -6,7 +6,7 @@ const SECRET = process.env.JWT_SECRET || "dev-secret";
 export interface JwtPayload {
   userId: string;
   agentId: string;
-  role: "AGENT" | "ADMIN";
+  role: "AGENT" | "ADMIN" | "SUPERVISOR";
   email: string;
 }
 

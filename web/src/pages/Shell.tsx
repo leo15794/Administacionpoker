@@ -177,7 +177,7 @@ function getInitialNavOrder(): string[] {
   }
 }
 
-export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
+export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" }) {
   const nav = useNavigate();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
@@ -261,7 +261,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
             <div>
               <h1>DigiPlayers</h1>
               <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>
-                {role === "ADMIN" ? "Panel administrativo" : "Portal de agente"}
+                {role === "ADMIN" ? "Panel administrativo" : role === "SUPERVISOR" ? "Portal de supervisor" : "Portal de agente"}
               </div>
             </div>
           )}
@@ -313,6 +313,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
                 </button>
               )}
             </>
+          ) : role === "SUPERVISOR" ? (
+            <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} {!collapsed && "Mi supervisión"}</NavLink>
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
           )}

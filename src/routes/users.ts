@@ -32,7 +32,7 @@ const createSchema = z.object({
   agentIds: z.array(z.string()).min(1, "Elegí al menos un agente."),
   email: usuarioField,
   password: z.string().min(6),
-  role: z.enum(["ADMIN", "AGENT"]),
+  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR"]),
 });
 usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
@@ -68,7 +68,7 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
 
 const updateSchema = z.object({
   email: usuarioField.optional(),
-  role: z.enum(["ADMIN", "AGENT"]).optional(),
+  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR"]).optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
   agentIds: z.array(z.string()).min(1).optional(),

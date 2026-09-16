@@ -70,8 +70,9 @@ export default function Usuarios() {
     refresh();
   }
 
-  async function toggleRole(u: any) {
-    await api.actualizarUsuario(u.id, { role: u.role === "ADMIN" ? "AGENT" : "ADMIN" });
+  async function cambiarRole(u: any, role: "ADMIN" | "AGENT" | "SUPERVISOR") {
+    if (role === u.role) return;
+    await api.actualizarUsuario(u.id, { role });
     refresh();
   }
 
@@ -81,7 +82,7 @@ export default function Usuarios() {
         <div>
           <h2>Usuarios y permisos</h2>
           <div className="muted">
-            ADMIN ve y administra todo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
+            ADMIN ve y administra todo. SUPERVISOR ve el resumen de su grupo de agentes a cargo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
           </div>
         </div>
         <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Nuevo usuario"}</button>
@@ -99,13 +100,16 @@ export default function Usuarios() {
               <tr key={u.id}>
                 <td>{u.email}</td>
                 <td className="muted">{(u.agentes ?? []).map((a: any) => a.name).join(", ")}</td>
-                <td><span className={`badge ${u.role === "ADMIN" ? "pos" : "neutral"}`}>{u.role}</span></td>
+                <td>
+                  <select value={u.role} onChange={(e) => cambiarRole(u, e.target.value as any)} style={{ fontSize: 12.5 }}>
+                    <option value="AGENT">Agente</option>
+                    <option value="SUPERVISOR">Supervisor</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </td>
                 <td><span className={`badge ${u.active ? "pos" : "neg"}`}>{u.active ? "Activo" : "Desactivado"}</span></td>
                 <td className="row-actions">
                   <button className="btn secondary small" onClick={() => setEditando(u)}>Editar</button>
-                  <button className="btn secondary small" onClick={() => toggleRole(u)}>
-                    Hacer {u.role === "ADMIN" ? "agente" : "admin"}
-                  </button>
                   <button className="btn secondary small" onClick={() => toggleActive(u)}>
                     {u.active ? "Desactivar" : "Activar"}
                   </button>
@@ -136,7 +140,7 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "AGENT">("AGENT");
+  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR">("AGENT");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -178,6 +182,7 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
             <label>Rol</label>
             <select value={role} onChange={(e) => setRole(e.target.value as any)}>
               <option value="AGENT">Agente (solo sus cuentas)</option>
+              <option value="SUPERVISOR">Supervisor (resumen de su grupo)</option>
               <option value="ADMIN">Admin (control total)</option>
             </select>
           </div>

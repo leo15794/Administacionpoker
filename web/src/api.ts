@@ -57,6 +57,9 @@ export const api = {
   // Qué agentes/clubes puede ver el login actual — para el selector en "Mi cuenta" cuando tiene
   // más de uno asociado (ver Usuarios y permisos → "Agentes/clubes que puede ver").
   misAgentes: () => request("/portal/mis-agentes"),
+  // Vista del rol Supervisor: agentes a cargo + rakeback centralizado (placeholder mínimo
+  // hasta tener las reglas de negocio completas del rol).
+  miSupervision: () => request("/portal/mi-supervision"),
   // Mismo shape que miCuenta pero para que un admin vea el estado de cuenta de CUALQUIER agente
   // (saldo por club, garantía, cierres y movimientos) en vez de solo el historial crudo.
   cuentaDeAgente: (agentId: string) => request(`/catalog/agents/${agentId}/cuenta`),
@@ -389,11 +392,11 @@ export const api = {
   usuarios: () => request("/users"),
   // agentIds: uno o varios — el primero queda como "cuenta principal" (la que usa el login por
   // default), el resto solo agrega opciones al selector de "Mi cuenta" de ese usuario.
-  crearUsuario: (data: { agentIds: string[]; email: string; password: string; role: "ADMIN" | "AGENT" }) =>
+  crearUsuario: (data: { agentIds: string[]; email: string; password: string; role: "ADMIN" | "AGENT" | "SUPERVISOR" }) =>
     request("/users", { method: "POST", body: JSON.stringify(data) }),
   actualizarUsuario: (
     id: string,
-    data: { email?: string; role?: "ADMIN" | "AGENT"; active?: boolean; password?: string; agentIds?: string[] }
+    data: { email?: string; role?: "ADMIN" | "AGENT" | "SUPERVISOR"; active?: boolean; password?: string; agentIds?: string[] }
   ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   aplicarCierre: (data: {
