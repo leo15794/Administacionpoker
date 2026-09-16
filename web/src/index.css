@@ -519,6 +519,15 @@ tbody tr:last-child td { border-bottom: none; }
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 .field input::placeholder { color: var(--text-faint); }
+/* Checkboxes/radios sueltos DENTRO de un .field (ej. checklist de agentes en Usuarios y
+   permisos) — sin esto, la regla ".field input" de arriba (pensada para inputs de texto) les
+   pisaba el ancho a 100%, estirando el cuadradito invisible y empujando el texto de al lado
+   bien a la derecha. */
+.field input[type="checkbox"],
+.field input[type="radio"] {
+  width: auto;
+  padding: 0;
+}
 
 /* Inputs/selects "sueltos" (fuera de un .field) — filtros de topbar (ej. Resumen por club,
    Historial de cierres), selects/inputs dentro de una celda de tabla, etc. Sin esto tomaban el
