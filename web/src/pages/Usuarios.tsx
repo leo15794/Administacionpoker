@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import Modal from "../components/Modal";
+import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
+import { usd } from "../fmt";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
 // para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
@@ -221,9 +223,16 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
     }
   }
 
+  const agentesACargoConDetalle = otrosAgentes.filter((a) => aCargoIds.has(a.id));
+
   return (
     <div className="panel" style={{ marginTop: 16 }}>
-      <h3>Configuración de Supervisor — {usuario.email}</h3>
+      <div className="topbar" style={{ marginBottom: 4 }}>
+        <h3 style={{ margin: 0 }}>Configuración de Supervisor — {usuario.email}</h3>
+        {supervisor && (
+          <span className={`badge ${Number(supervisor.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(supervisor.saldo_total)}</span>
+        )}
+      </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
         Por cada agente: tildá "A cargo" si el rakeback centralizado de ese club le llega a este supervisor
         (mismo dato que Administración → Agentes → Supervisores{!supervisorName && " — necesita que la cuenta principal de este usuario sea un agente tipo Supervisor"}),
@@ -262,6 +271,31 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
       </div>
       {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 8 }}>{msg.text}</div>}
 
+      {agentesACargoConDetalle.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+            Detalle de agentes a cargo (mismo árbol que antes veías en Administración → Agentes → Supervisores).
+          </div>
+          <table>
+            <thead><tr><th></th><th>Tipo de cuenta</th><th>Saldo propio</th></tr></thead>
+            <tbody>
+              {agentesACargoConDetalle.map((a) => (
+                <FilaAgenteConJugadores
+                  key={a.id}
+                  agente={a}
+                  extraCols={
+                    <>
+                      <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type as keyof typeof ACCOUNT_TYPE_LABELS] ?? a.account_type}</span></td>
+                      <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
+                    </>
+                  }
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <button type="button" className="btn secondary small" style={{ marginTop: 12 }} onClick={() => setVerHistorial((v) => !v)}>
         {verHistorial ? "Ocultar historial de comisiones" : `Ver historial de comisiones (${movimientos.length})`}
       </button>
@@ -295,6 +329,7 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
+  const [supervisoresInvalidos, setSupervisoresInvalidos] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
 
@@ -304,6 +339,10 @@ export default function Usuarios() {
 
   function refreshAgentes() {
     api.agentes().then(setAgentes);
+    // Alerta que antes vivía en Administración → Agentes → Supervisores (16/09/2026: se
+    // unificó todo acá para no tener la config de un supervisor repartida en dos pantallas).
+    // Agentes con un agents.supervisor cargado que no matchea a ningún agente Supervisor activo.
+    api.supervisores().then((d: any) => setSupervisoresInvalidos(d.supervisoresInvalidos ?? []));
   }
 
   useEffect(() => {
@@ -345,6 +384,26 @@ export default function Usuarios() {
         </div>
         <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Nuevo usuario"}</button>
       </div>
+
+      {supervisoresInvalidos.length > 0 && (
+        <div className="panel" style={{ borderColor: "var(--red)" }}>
+          <h3>⚠ Supervisores mal cargados</h3>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Estos agentes tienen un supervisor cargado que no coincide con ningún agente activo de tipo
+            "Supervisor". Si alguno de sus clubes tiene el rebate con destino "Rakeback supervisor", el
+            cierre semanal se va a bloquear hasta que lo corrijas — entrá al usuario Supervisor
+            correspondiente (o creálo) y volvé a tildarlo como "A cargo".
+          </div>
+          <table>
+            <thead><tr><th>Agente</th><th>Supervisor cargado (no válido)</th></tr></thead>
+            <tbody>
+              {supervisoresInvalidos.map((a: any) => (
+                <tr key={a.id}><td>{a.name}</td><td>{a.supervisor}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showForm && <NuevoUsuario agentes={agentes} onCreated={() => { refresh(); setShowForm(false); }} />}
 

@@ -7,7 +7,7 @@ import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
-const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   PREPAGO: "Prepago",
   WIN_LOSE: "Win/Lose",
   BANCADO: "Bancado",
@@ -25,7 +25,7 @@ export default function Agentes() {
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
-  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "supervisores" | "deal" | "reglas" | "arbol">("lista");
+  const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "deal" | "reglas" | "arbol">("lista");
   const [filtro, setFiltro] = useState("");
   // "Dar de baja" nunca borra nada, pero antes desaparecían de la lista sin forma de volver a
   // verlos, reactivarlos o borrarlos de verdad si eran duplicados de prueba — este toggle los
@@ -119,7 +119,6 @@ export default function Agentes() {
         <button className={tab === "nuevo-agente" ? "active" : ""} onClick={() => setTab("nuevo-agente")}>+ Nuevo agente</button>
         <button className={tab === "nuevo-club" ? "active" : ""} onClick={() => setTab("nuevo-club")}>+ Nuevo club</button>
         <button className={tab === "clubes" ? "active" : ""} onClick={() => setTab("clubes")}>Configurar clubes</button>
-        <button className={tab === "supervisores" ? "active" : ""} onClick={() => setTab("supervisores")}>Supervisores</button>
         <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
         <button className={tab === "reglas" ? "active" : ""} onClick={() => setTab("reglas")}>Reglas especiales</button>
         <button className={tab === "arbol" ? "active" : ""} onClick={() => setTab("arbol")}>Árbol de clubes</button>
@@ -128,7 +127,6 @@ export default function Agentes() {
       {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} />}
       {tab === "nuevo-club" && <NuevoClub onCreated={refresh} />}
       {tab === "clubes" && <ClubesConfig clubes={clubes} onEdit={setConfigurandoClub} onDarDeBaja={darDeBajaClub} />}
-      {tab === "supervisores" && <SupervisoresView />}
       {tab === "deal" && <NuevoDeal agentes={agentes} clubes={clubes} onCreated={refresh} />}
       {tab === "reglas" && <ReglasGlobal agentes={agentes} clubes={clubes} />}
       {tab === "arbol" && <ArbolClubes agentes={agentes} clubes={clubes} />}
@@ -1052,7 +1050,9 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
 // Fila de agente (o supervisor) expandible: al abrirla trae TODOS sus jugadores, en cualquier
 // club, on-demand (mismo patrón lazy que ArbolClubes, para no traer un roster gigante de una si
 // nadie lo abre).
-function FilaAgenteConJugadores({ agente, extraCols }: { agente: any; extraCols: ReactNode }) {
+// Exportado: se reusa desde Usuarios y permisos (panel de Supervisor) — la vieja pestaña
+// "Supervisores" de acá se sacó, quedó todo unificado en Usuarios (16/09/2026).
+export function FilaAgenteConJugadores({ agente, extraCols }: { agente: any; extraCols: ReactNode }) {
   const [abierto, setAbierto] = useState(false);
   const [jugadores, setJugadores] = useState<any[] | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -1106,92 +1106,6 @@ function FilaAgenteConJugadores({ agente, extraCols }: { agente: any; extraCols:
         </tr>
       )}
     </>
-  );
-}
-
-function SupervisoresView() {
-  const [data, setData] = useState<{ supervisores: any[]; supervisoresInvalidos: any[] } | null>(null);
-
-  useEffect(() => {
-    api.supervisores().then(setData);
-  }, []);
-
-  if (!data) return <div className="muted">Cargando...</div>;
-
-  return (
-    <div>
-      <div className="panel">
-        <h3>Árbol de supervisores</h3>
-        <div className="muted" style={{ marginBottom: 14 }}>
-          Supervisor → agentes a cargo → jugadores de cada agente (en cualquier club). Cuando un club tiene el rebate configurado con
-          destino "Rakeback supervisor", ese % de cada cierre de sus agentes a cargo no entra al saldo del agente — se acredita acá,
-          centralizado.
-        </div>
-        {data.supervisores.length === 0 ? (
-          <div className="muted">Todavía no hay agentes con tipo de cuenta "Supervisor".</div>
-        ) : (
-          data.supervisores.map((s) => (
-            <div key={s.id} style={{ marginBottom: 22 }}>
-              <div className="topbar" style={{ marginBottom: 8 }}>
-                <h4 style={{ margin: 0 }}>{s.name}</h4>
-                <div style={{ display: "flex", gap: 16 }}>
-                  <span className="muted">Rakeback centralizado acreditado: <strong>{usd(s.rakeback_centralizado_acreditado)}</strong></span>
-                  <span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(s.saldo_total)}</span>
-                </div>
-              </div>
-              <table>
-                <thead><tr><th></th><th>Tipo de cuenta</th><th>Saldo propio</th></tr></thead>
-                <tbody>
-                  <FilaAgenteConJugadores
-                    agente={s}
-                    extraCols={
-                      <>
-                        <td><span className="badge neutral">Supervisor</span></td>
-                        <td><span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(s.saldo_total)}</span></td>
-                      </>
-                    }
-                  />
-                  {s.agentes.length === 0 ? (
-                    <tr><td colSpan={3} className="muted" style={{ fontSize: 13 }}>Sin agentes a cargo.</td></tr>
-                  ) : (
-                    s.agentes.map((a: any) => (
-                      <FilaAgenteConJugadores
-                        key={a.id}
-                        agente={a}
-                        extraCols={
-                          <>
-                            <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type as AccountType] ?? a.account_type}</span></td>
-                            <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
-                          </>
-                        }
-                      />
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ))
-        )}
-      </div>
-
-      {data.supervisoresInvalidos.length > 0 && (
-        <div className="panel">
-          <h3>⚠ Supervisores mal cargados</h3>
-          <div className="muted" style={{ marginBottom: 14 }}>
-            Estos agentes tienen un supervisor cargado que no coincide con ningún agente activo de tipo "Supervisor". Si alguno de sus
-            clubes tiene el rebate con destino "Rakeback supervisor", el cierre semanal se va a bloquear hasta que corrijas esto.
-          </div>
-          <table>
-            <thead><tr><th>Agente</th><th>Supervisor cargado (no válido)</th></tr></thead>
-            <tbody>
-              {data.supervisoresInvalidos.map((a: any) => (
-                <tr key={a.id}><td>{a.name}</td><td>{a.supervisor}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
   );
 }
 
