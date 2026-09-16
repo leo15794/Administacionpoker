@@ -342,6 +342,7 @@ export default function Usuarios() {
   const [supervisoresData, setSupervisoresData] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
+  const [preseleccionarAgente, setPreseleccionarAgente] = useState<{ id: string; name: string } | null>(null);
 
   function refresh() {
     api.usuarios().then(setUsuarios);
@@ -409,7 +410,15 @@ export default function Usuarios() {
             ADMIN ve y administra todo. SUPERVISOR ve el resumen de su grupo de agentes a cargo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
           </div>
         </div>
-        <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Nuevo usuario"}</button>
+        <button
+          className="btn"
+          onClick={() => {
+            setPreseleccionarAgente(null);
+            setShowForm((v) => !v);
+          }}
+        >
+          {showForm ? "Cerrar formulario" : "+ Nuevo usuario"}
+        </button>
       </div>
 
       {supervisoresInvalidos.length > 0 && (
@@ -467,9 +476,19 @@ export default function Usuarios() {
             <div key={s.id} style={{ marginBottom: 22 }}>
               <div className="topbar" style={{ marginBottom: 8 }}>
                 <h4 style={{ margin: 0 }}>{s.name}</h4>
-                <div style={{ display: "flex", gap: 16 }}>
+                <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                   <span className="muted">Rakeback centralizado acreditado: <strong>{usd(s.rakeback_centralizado_acreditado)}</strong></span>
                   <span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(s.saldo_total)}</span>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => {
+                      setPreseleccionarAgente({ id: s.id, name: s.name });
+                      setShowForm(true);
+                    }}
+                  >
+                    + Crear usuario para este agente
+                  </button>
                 </div>
               </div>
               <table>
@@ -507,7 +526,17 @@ export default function Usuarios() {
         </div>
       )}
 
-      {showForm && <NuevoUsuario agentes={agentes} onCreated={() => { refresh(); setShowForm(false); }} />}
+      {showForm && (
+        <NuevoUsuario
+          agentes={agentes}
+          preseleccionado={preseleccionarAgente ? { agentId: preseleccionarAgente.id, agentName: preseleccionarAgente.name, role: "SUPERVISOR" } : undefined}
+          onCreated={() => {
+            refresh();
+            setShowForm(false);
+            setPreseleccionarAgente(null);
+          }}
+        />
+      )}
 
       <div className="panel">
         <table>
@@ -557,12 +586,20 @@ export default function Usuarios() {
   );
 }
 
-function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () => void }) {
-  const [agentIds, setAgentIds] = useState<string[]>([]);
-  const [defaultAgentId, setDefaultAgentId] = useState("");
+function NuevoUsuario({
+  agentes,
+  onCreated,
+  preseleccionado,
+}: {
+  agentes: any[];
+  onCreated: () => void;
+  preseleccionado?: { agentId: string; agentName?: string; role?: "ADMIN" | "AGENT" | "SUPERVISOR" };
+}) {
+  const [agentIds, setAgentIds] = useState<string[]>(preseleccionado ? [preseleccionado.agentId] : []);
+  const [defaultAgentId, setDefaultAgentId] = useState(preseleccionado?.agentId ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR">("AGENT");
+  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR">(preseleccionado?.role ?? "AGENT");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -602,6 +639,11 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
   return (
     <div className="panel">
       <h3>Nuevo usuario de acceso</h3>
+      {preseleccionado && (
+        <div className="muted" style={{ marginBottom: 10 }}>
+          {preseleccionado.agentName ?? "Agente"} precargado como cuenta principal — completá usuario y contraseña para darle acceso al portal.
+        </div>
+      )}
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <div className="field">
