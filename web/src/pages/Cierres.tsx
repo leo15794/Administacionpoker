@@ -229,7 +229,7 @@ export default function Cierres() {
         <table>
           <thead>
             <tr>
-              <th></th><th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
+              <th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
               <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Rodeo</th><th>Cierre final</th><th>Regla</th><th></th>
             </tr>
           </thead>
@@ -244,7 +244,7 @@ export default function Cierres() {
                     onClick={() => toggleSemanaColapsada(g.weekStart)}
                     style={{ background: "rgba(255,255,255,0.04)" }}
                   >
-                    <td colSpan={12}>
+                    <td colSpan={11}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span>{semanaColapsada ? "▸" : "▾"}</span>
                         <strong>{dateShort(g.weekStart)} - {dateShort(g.weekEnd)}</strong>
@@ -267,18 +267,20 @@ export default function Cierres() {
                         <Fragment key={c.id}>
                           <tr style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                             <td>
-                              {tieneDesglose && (
-                                <button
-                                  className="btn secondary small"
-                                  onClick={() => toggleExpandido(c.id)}
-                                  title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
-                                  style={{ padding: "2px 8px" }}
-                                >
-                                  {abierto ? "▾" : "▸"}
-                                </button>
-                              )}
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {tieneDesglose && (
+                                  <button
+                                    className="btn secondary small"
+                                    onClick={() => toggleExpandido(c.id)}
+                                    title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
+                                    style={{ padding: "2px 8px" }}
+                                  >
+                                    {abierto ? "▾" : "▸"}
+                                  </button>
+                                )}
+                                <span>{dateShort(c.week_start)} - {dateShort(c.week_end)}</span>
+                              </div>
                             </td>
-                            <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
                             <td>{c.agent_name}</td>
                             <td>{c.club_name}</td>
                             <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
@@ -325,7 +327,6 @@ export default function Cierres() {
                           </tr>
                           {abierto && tieneDesglose && (
                             <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
-                              <td></td>
                               <td colSpan={11}>
                                 <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
                                   <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
