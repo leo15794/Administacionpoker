@@ -421,6 +421,18 @@ export default function Usuarios() {
         </button>
       </div>
 
+      {showForm && (
+        <NuevoUsuario
+          agentes={agentes}
+          preseleccionado={preseleccionarAgente ? { agentId: preseleccionarAgente.id, agentName: preseleccionarAgente.name, role: "SUPERVISOR" } : undefined}
+          onCreated={() => {
+            refresh();
+            setShowForm(false);
+            setPreseleccionarAgente(null);
+          }}
+        />
+      )}
+
       {supervisoresInvalidos.length > 0 && (
         <div className="panel" style={{ borderColor: "var(--red)" }}>
           <h3>⚠ Supervisores mal cargados</h3>
@@ -485,6 +497,7 @@ export default function Usuarios() {
                     onClick={() => {
                       setPreseleccionarAgente({ id: s.id, name: s.name });
                       setShowForm(true);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                   >
                     + Crear usuario para este agente
@@ -524,18 +537,6 @@ export default function Usuarios() {
             </div>
           ))}
         </div>
-      )}
-
-      {showForm && (
-        <NuevoUsuario
-          agentes={agentes}
-          preseleccionado={preseleccionarAgente ? { agentId: preseleccionarAgente.id, agentName: preseleccionarAgente.name, role: "SUPERVISOR" } : undefined}
-          onCreated={() => {
-            refresh();
-            setShowForm(false);
-            setPreseleccionarAgente(null);
-          }}
-        />
       )}
 
       <div className="panel">
