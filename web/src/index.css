@@ -463,6 +463,11 @@ tbody tr:last-child td { border-bottom: none; }
 .badge.pos { background: var(--green-soft); color: var(--green); }
 .badge.neg { background: var(--red-soft); color: var(--red); }
 .badge.neutral { background: rgba(141, 150, 184, 0.14); color: var(--text-dim); }
+/* Un "deal" (% rakeback/rebate asignado) no es una ganancia ni una pérdida — usa un tono propio,
+   más apagado, para no competir visualmente con los badges pos/neg que sí marcan plata a favor o
+   en contra (ver lista de Agentes, columna "% Rakeback / Rebate"). */
+.badge.deal { background: rgba(122, 143, 255, 0.14); color: var(--accent, #7a8fff); }
+.badge { white-space: nowrap; }
 
 /* ---------- login ---------- */
 

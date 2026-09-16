@@ -169,7 +169,7 @@ export default function Agentes() {
               </thead>
               <tbody>
                 {agentesFiltrados.map((a) => (
-                  <tr key={a.id} style={a.active === false ? { opacity: 0.55 } : undefined}>
+                  <tr key={a.id} style={{ verticalAlign: "top", ...(a.active === false ? { opacity: 0.55 } : {}) }}>
                     <td>
                       {a.name}
                       {a.active === false && <span className="badge neutral" style={{ marginLeft: 8 }}>Dado de baja</span>}
@@ -184,7 +184,7 @@ export default function Agentes() {
                           title="Ver/editar los deals de este agente"
                         >
                           {dealsPorAgente[a.id].map((d) => (
-                            <span key={d.id} className="badge pos" style={{ fontSize: 11.5 }}>
+                            <span key={d.id} className="badge deal" style={{ fontSize: 11.5 }}>
                               {d.club_name}: {pct(d.rakeback_pct)} / {pct(d.rebate_pct)}
                             </span>
                           ))}
