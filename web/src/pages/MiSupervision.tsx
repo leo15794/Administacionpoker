@@ -74,6 +74,32 @@ export default function MiSupervision() {
         </div>
       )}
 
+      {data.movimientos_referidos && data.movimientos_referidos.length > 0 && (
+        <div className="panel">
+          <h3>Historial de comisiones por referido</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Detalle de cada acreditación, semana por semana.
+          </div>
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            <table>
+              <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th></tr></thead>
+              <tbody>
+                {data.movimientos_referidos.map((m: any) => (
+                  <tr key={m.id}>
+                    <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
+                    <td>{m.agente_referido_name}</td>
+                    <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
+                    <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : "Corrección"}</span></td>
+                    <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{usd(m.amount)}</td>
+                    <td>{usd(m.resulting_saldo)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="panel">
         <h3>Agentes a cargo</h3>
         {data.agentes.length === 0 ? (

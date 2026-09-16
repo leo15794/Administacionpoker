@@ -65,6 +65,7 @@ export const api = {
   // usuario — se gestiona desde Usuarios y permisos, dentro de la edición del usuario
   // Supervisor (ver PanelSupervisor en Usuarios.tsx).
   referidosDeSupervisor: (userId: string) => request(`/users/${userId}/referidos`),
+  movimientosReferidos: (userId: string) => request(`/users/${userId}/referidos/movimientos`),
   crearReferido: (userId: string, data: { agenteReferidoId: string; porcentaje: number }) =>
     request(`/users/${userId}/referidos`, { method: "POST", body: JSON.stringify(data) }),
   actualizarReferido: (id: string, data: { porcentaje?: number; active?: boolean }) =>

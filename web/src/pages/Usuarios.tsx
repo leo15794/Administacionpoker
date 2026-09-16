@@ -152,11 +152,14 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
   const supervisor = agentes.find((a) => a.id === supervisorAgentId);
   const supervisorName: string | undefined = supervisor?.name;
   const [referidos, setReferidos] = useState<any[]>([]);
+  const [movimientos, setMovimientos] = useState<any[]>([]);
+  const [verHistorial, setVerHistorial] = useState(false);
   const [filtro, setFiltro] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function refrescarReferidos() {
     api.referidosDeSupervisor(usuario.id).then(setReferidos);
+    api.movimientosReferidos(usuario.id).then(setMovimientos);
   }
 
   useEffect(() => {
@@ -258,6 +261,33 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
         </table>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 8 }}>{msg.text}</div>}
+
+      <button type="button" className="btn secondary small" style={{ marginTop: 12 }} onClick={() => setVerHistorial((v) => !v)}>
+        {verHistorial ? "Ocultar historial de comisiones" : `Ver historial de comisiones (${movimientos.length})`}
+      </button>
+      {verHistorial && (
+        movimientos.length === 0 ? (
+          <div className="muted" style={{ marginTop: 8 }}>Todavía no se acreditó ninguna comisión.</div>
+        ) : (
+          <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8 }}>
+            <table>
+              <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th></tr></thead>
+              <tbody>
+                {movimientos.map((m) => (
+                  <tr key={m.id}>
+                    <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
+                    <td>{m.agente_referido_name}</td>
+                    <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
+                    <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : "Corrección"}</span></td>
+                    <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{m.amount}</td>
+                    <td>{m.resulting_saldo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
     </div>
   );
 }

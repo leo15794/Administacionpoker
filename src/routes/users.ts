@@ -221,6 +221,24 @@ usersRouter.get("/:id/referidos", requireAuth, requireAdmin, async (req, res) =>
   res.json(r.rows);
 });
 
+// Historial detallado: cada acreditación (o corrección) de comisión por referido, con el
+// agente y la semana del cierre que la generó — incluye referidos ya desactivados, para que
+// el historial no desaparezca si en algún momento se corta la comisión a futuro.
+usersRouter.get("/:id/referidos/movimientos", requireAuth, requireAdmin, async (req, res) => {
+  const r = await pool.query(
+    `SELECT m.*, a.name as agente_referido_name, wc.week_start, wc.week_end
+     FROM supervisor_referido_movements m
+     JOIN supervisor_referidos r ON r.id = m.referido_id
+     JOIN agents a ON a.id = r.agente_referido_id
+     LEFT JOIN weekly_closings wc ON wc.id = m.weekly_closing_id
+     WHERE r.supervisor_user_id = $1
+     ORDER BY m.occurred_at DESC
+     LIMIT 300`,
+    [req.params.id]
+  );
+  res.json(r.rows);
+});
+
 const crearReferidoSchema = z.object({
   agenteReferidoId: z.string().min(1),
   porcentaje: z.number().gt(0).lte(100),
