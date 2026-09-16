@@ -374,6 +374,10 @@ export default function Usuarios() {
     refresh();
   }
 
+  // Agentes tipo Supervisor disponibles para corregir un "supervisor mal cargado" con un
+  // par de clicks, sin tener que ir a editar el agente afectado por separado.
+  const supervisoresValidos = agentes.filter((a: any) => a.account_type === "SUPERVISOR");
+
   async function eliminarUsuario(u: any) {
     if (!confirm(`¿Eliminar el usuario "${u.email}"? Esto borra el acceso al portal (y su configuración de Supervisor si tenía) — no toca el historial de cierres/movimientos del agente, eso queda intacto. No se puede deshacer.`)) return;
     try {
@@ -401,15 +405,36 @@ export default function Usuarios() {
           <h3>⚠ Supervisores mal cargados</h3>
           <div className="muted" style={{ marginBottom: 10 }}>
             Estos agentes tienen un supervisor cargado que no coincide con ningún agente activo de tipo
-            "Supervisor". Si alguno de sus clubes tiene el rebate con destino "Rakeback supervisor", el
-            cierre semanal se va a bloquear hasta que lo corrijas — entrá al usuario Supervisor
-            correspondiente (o creálo) y volvé a tildarlo como "A cargo".
+            "Supervisor" — puede ser un nombre mal escrito, un agente que no es tipo Supervisor, o uno dado
+            de baja. Corregilo acá mismo (elegí el supervisor correcto, o quitáselo) sin tener que entrar a
+            editar cada agente por separado.
           </div>
           <table>
-            <thead><tr><th>Agente</th><th>Supervisor cargado (no válido)</th></tr></thead>
+            <thead><tr><th>Agente</th><th>Supervisor cargado (no válido)</th><th>Corregir a</th></tr></thead>
             <tbody>
               {supervisoresInvalidos.map((a: any) => (
-                <tr key={a.id}><td>{a.name}</td><td>{a.supervisor}</td></tr>
+                <tr key={a.id}>
+                  <td>{a.name}</td>
+                  <td className="muted">{a.supervisor}</td>
+                  <td>
+                    <select
+                      defaultValue=""
+                      style={{ fontSize: 12.5 }}
+                      onChange={async (e) => {
+                        const valor = e.target.value;
+                        if (!valor) return;
+                        await api.editarAgente(a.id, { supervisor: valor === "__quitar__" ? null : valor });
+                        refreshAgentes();
+                      }}
+                    >
+                      <option value="" disabled>Elegir...</option>
+                      {supervisoresValidos.map((s: any) => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                      <option value="__quitar__">— Quitarle el supervisor —</option>
+                    </select>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
