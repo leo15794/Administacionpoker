@@ -32,8 +32,8 @@ export default function Login() {
         <div className="sub">Sistema de gestión de agentes</div>
         <form onSubmit={onSubmit}>
           <div className="field">
-            <label>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
+            <label>Usuario</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" autoComplete="username" />
           </div>
           <div className="field">
             <label>Contraseña</label>

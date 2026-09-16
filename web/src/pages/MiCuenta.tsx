@@ -3,11 +3,19 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 
 export default function MiCuenta() {
+  const [misAgentes, setMisAgentes] = useState<any[]>([]);
+  const [agentId, setAgentId] = useState<string>("");
   const [data, setData] = useState<any>(null);
 
+  // La mayoría de los logins tienen una sola cuenta — el selector solo aparece si de verdad hay
+  // más de una asociada (ver Usuarios y permisos → "Agentes/clubes que puede ver").
   useEffect(() => {
-    api.miCuenta().then(setData);
+    api.misAgentes().then(setMisAgentes).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.miCuenta(agentId || undefined).then(setData);
+  }, [agentId]);
 
   if (!data) return <div className="muted">Cargando...</div>;
 
@@ -20,6 +28,16 @@ export default function MiCuenta() {
           <h2>Hola, {data.agente.name}</h2>
           <div className="muted">Sistema: {data.agente.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}{data.agente.supervisor ? ` · Supervisor: ${data.agente.supervisor}` : ""}</div>
         </div>
+        {misAgentes.length > 1 && (
+          <div className="field" style={{ margin: 0 }}>
+            <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Ver cuenta de</label>
+            <select value={agentId || data.agente.id} onChange={(e) => setAgentId(e.target.value)}>
+              {misAgentes.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="kpi-grid">

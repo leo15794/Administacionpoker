@@ -1,10 +1,60 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import Modal from "../components/Modal";
+
+// Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
+// para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
+// mismo login desde "Mi cuenta" (selector cuando tiene más de una).
+function SelectorAgentes({
+  agentes,
+  seleccionados,
+  onChange,
+}: {
+  agentes: any[];
+  seleccionados: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [filtro, setFiltro] = useState("");
+  const filtrados = filtro.trim()
+    ? agentes.filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()))
+    : agentes;
+
+  function toggle(id: string) {
+    onChange(seleccionados.includes(id) ? seleccionados.filter((x) => x !== id) : [...seleccionados, id]);
+  }
+
+  return (
+    <div className="field">
+      <label>Agentes/clubes que puede ver</label>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+        El primero que tildes queda como cuenta principal (la que usa para entrar). Si tildás más de uno, en
+        "Mi cuenta" le aparece un selector para elegir cuál mirar.
+      </div>
+      <input
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+        placeholder="Buscar agente..."
+        style={{ width: "100%", marginBottom: 8 }}
+      />
+      <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
+        {filtrados.map((a) => (
+          <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
+            <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggle(a.id)} />
+            {a.name}
+            {seleccionados[0] === a.id && <span className="badge neutral" style={{ fontSize: 10 }}>Principal</span>}
+          </label>
+        ))}
+        {filtrados.length === 0 && <div className="muted">Sin resultados.</div>}
+      </div>
+    </div>
+  );
+}
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editando, setEditando] = useState<any | null>(null);
 
   function refresh() {
     api.usuarios().then(setUsuarios);
@@ -30,26 +80,29 @@ export default function Usuarios() {
       <div className="topbar">
         <div>
           <h2>Usuarios y permisos</h2>
-          <div className="muted">ADMIN ve y administra todo. AGENTE solo ve su propia cuenta (Mi cuenta), nunca la de otro.</div>
+          <div className="muted">
+            ADMIN ve y administra todo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
+          </div>
         </div>
         <button className="btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar formulario" : "+ Nuevo usuario"}</button>
       </div>
 
-      {showForm && <NuevoUsuario agentes={agentes} onCreated={refresh} />}
+      {showForm && <NuevoUsuario agentes={agentes} onCreated={() => { refresh(); setShowForm(false); }} />}
 
       <div className="panel">
         <table>
           <thead>
-            <tr><th>Email</th><th>Agente</th><th>Rol</th><th>Estado</th><th></th></tr>
+            <tr><th>Usuario</th><th>Agentes/clubes</th><th>Rol</th><th>Estado</th><th></th></tr>
           </thead>
           <tbody>
             {usuarios.map((u) => (
               <tr key={u.id}>
                 <td>{u.email}</td>
-                <td>{u.agent_name}</td>
+                <td className="muted">{(u.agentes ?? []).map((a: any) => a.name).join(", ")}</td>
                 <td><span className={`badge ${u.role === "ADMIN" ? "pos" : "neutral"}`}>{u.role}</span></td>
                 <td><span className={`badge ${u.active ? "pos" : "neg"}`}>{u.active ? "Activo" : "Desactivado"}</span></td>
                 <td className="row-actions">
+                  <button className="btn secondary small" onClick={() => setEditando(u)}>Editar</button>
                   <button className="btn secondary small" onClick={() => toggleRole(u)}>
                     Hacer {u.role === "ADMIN" ? "agente" : "admin"}
                   </button>
@@ -62,12 +115,25 @@ export default function Usuarios() {
           </tbody>
         </table>
       </div>
+
+      {editando && (
+        <Modal title={`Editar usuario — ${editando.email}`} onClose={() => setEditando(null)} wide>
+          <EditarUsuario
+            usuario={editando}
+            agentes={agentes}
+            onDone={() => {
+              setEditando(null);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
 
 function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () => void }) {
-  const [agentId, setAgentId] = useState("");
+  const [agentIds, setAgentIds] = useState<string[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"ADMIN" | "AGENT">("AGENT");
@@ -77,15 +143,16 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!agentId || !email.trim() || password.length < 6) {
-      return setMsg({ ok: false, text: "Agente, email y una contraseña de al menos 6 caracteres son obligatorios." });
+    if (agentIds.length === 0 || !email.trim() || password.length < 6) {
+      return setMsg({ ok: false, text: "Al menos un agente, un usuario y una contraseña de al menos 6 caracteres son obligatorios." });
     }
     setLoading(true);
     try {
-      await api.crearUsuario({ agentId, email: email.trim(), password, role });
+      await api.crearUsuario({ agentIds, email: email.trim(), password, role });
       setMsg({ ok: true, text: `Usuario ${email} creado.` });
       setEmail("");
       setPassword("");
+      setAgentIds([]);
       onCreated();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo crear el usuario." });
@@ -100,15 +167,8 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <div className="field">
-            <label>Agente asociado</label>
-            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">Elegir...</option>
-              {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+            <label>Usuario (email o texto libre)</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" placeholder="Ej: juan123 o juan@mail.com" />
           </div>
           <div className="field">
             <label>Contraseña</label>
@@ -117,14 +177,63 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
           <div className="field">
             <label>Rol</label>
             <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-              <option value="AGENT">Agente (solo su cuenta)</option>
+              <option value="AGENT">Agente (solo sus cuentas)</option>
               <option value="ADMIN">Admin (control total)</option>
             </select>
           </div>
         </div>
+        <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-        <button className="btn" disabled={loading}>{loading ? "Creando..." : "Crear usuario"}</button>
+        <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Creando..." : "Crear usuario"}</button>
       </form>
     </div>
+  );
+}
+
+function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: any[]; onDone: () => void }) {
+  const [email, setEmail] = useState(usuario.email);
+  const [password, setPassword] = useState("");
+  const [agentIds, setAgentIds] = useState<string[]>((usuario.agentes ?? []).map((a: any) => a.id));
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!email.trim() || agentIds.length === 0) {
+      return setMsg({ ok: false, text: "El usuario y al menos un agente son obligatorios." });
+    }
+    if (password && password.length < 6) {
+      return setMsg({ ok: false, text: "La nueva contraseña tiene que tener al menos 6 caracteres." });
+    }
+    setLoading(true);
+    try {
+      const data: any = { email: email.trim(), agentIds };
+      if (password) data.password = password;
+      await api.actualizarUsuario(usuario.id, data);
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Usuario (email o texto libre)</label>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" />
+        </div>
+        <div className="field">
+          <label>Nueva contraseña (dejar en blanco para no cambiarla)</label>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••" />
+        </div>
+      </div>
+      <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Guardando..." : "Guardar cambios"}</button>
+    </form>
   );
 }

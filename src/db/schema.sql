@@ -768,3 +768,19 @@ CREATE TABLE IF NOT EXISTS liquidaciones_guardadas (
   created_by            TEXT
 );
 CREATE INDEX IF NOT EXISTS liquidaciones_guardadas_week_idx ON liquidaciones_guardadas(week_start DESC);
+
+-- Un mismo login de portal ahora puede ver más de un agente/club (15/09/2026) — ej. una persona
+-- que tiene identidades separadas en varios clubes (mismo caso de fondo que Cuenta de socio de
+-- Juan, pero para el PORTAL en vez del ledger interno). agent_users.agent_id se mantiene como
+-- "cuenta principal" (la que usa el login/JWT por default) — esta tabla es el AGREGADO de todo
+-- lo que ese login puede elegir ver desde el selector de "Mi cuenta".
+CREATE TABLE IF NOT EXISTS agent_user_agents (
+  user_id  TEXT NOT NULL REFERENCES agent_users(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  PRIMARY KEY (user_id, agent_id)
+);
+-- Backfill idempotente: todo usuario que ya existía queda con su único agente de siempre
+-- también acá — cero cambio de comportamiento hasta que un admin le agregue más desde Usuarios.
+INSERT INTO agent_user_agents (user_id, agent_id)
+  SELECT id, agent_id FROM agent_users
+  ON CONFLICT DO NOTHING;

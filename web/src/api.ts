@@ -53,7 +53,10 @@ export const api = {
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
   supervisores: () => request("/dashboard/supervisores"),
   bancados: () => request("/dashboard/bancados"),
-  miCuenta: () => request("/portal/mi-cuenta"),
+  miCuenta: (agentId?: string) => request(`/portal/mi-cuenta${agentId ? `?agentId=${agentId}` : ""}`),
+  // Qué agentes/clubes puede ver el login actual — para el selector en "Mi cuenta" cuando tiene
+  // más de uno asociado (ver Usuarios y permisos → "Agentes/clubes que puede ver").
+  misAgentes: () => request("/portal/mis-agentes"),
   // Mismo shape que miCuenta pero para que un admin vea el estado de cuenta de CUALQUIER agente
   // (saldo por club, garantía, cierres y movimientos) en vez de solo el historial crudo.
   cuentaDeAgente: (agentId: string) => request(`/catalog/agents/${agentId}/cuenta`),
@@ -384,10 +387,14 @@ export const api = {
 
   // Usuarios de acceso (login) y permisos
   usuarios: () => request("/users"),
-  crearUsuario: (data: { agentId: string; email: string; password: string; role: "ADMIN" | "AGENT" }) =>
+  // agentIds: uno o varios — el primero queda como "cuenta principal" (la que usa el login por
+  // default), el resto solo agrega opciones al selector de "Mi cuenta" de ese usuario.
+  crearUsuario: (data: { agentIds: string[]; email: string; password: string; role: "ADMIN" | "AGENT" }) =>
     request("/users", { method: "POST", body: JSON.stringify(data) }),
-  actualizarUsuario: (id: string, data: { role?: "ADMIN" | "AGENT"; active?: boolean; password?: string }) =>
-    request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  actualizarUsuario: (
+    id: string,
+    data: { email?: string; role?: "ADMIN" | "AGENT"; active?: boolean; password?: string; agentIds?: string[] }
+  ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   aplicarCierre: (data: {
     agentId: string;
