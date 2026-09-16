@@ -320,7 +320,7 @@ function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any;
                     <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
                     <td>{m.agente_referido_name}</td>
                     <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
-                    <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : "Corrección"}</span></td>
+                    <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}</span></td>
                     <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{m.amount}</td>
                     <td>{m.resulting_saldo}</td>
                   </tr>
