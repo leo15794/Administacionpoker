@@ -76,63 +76,73 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
 // Placeholder mínimo hasta tener las reglas de negocio del rol Supervisor (16/09/2026): por
 // ahora solo LEE, no agrega ninguna acción nueva.
 portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res) => {
-  const agent = await pool.query(
-    `SELECT id, name, account_type, COALESCE(SUM(b.amount), 0) as saldo_total
-     FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
-     WHERE a.id = $1
-     GROUP BY a.id, a.name, a.account_type`,
-    [req.user!.agentId]
-  );
-  if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
-  if (agent.rows[0].account_type !== "SUPERVISOR") {
-    return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+  // Envuelto en try/catch a propósito: Express 4 NO atrapa solo un throw async como este (sin
+  // este try/catch, si cualquiera de las queries de abajo fallaba, el request se quedaba
+  // colgado para siempre del lado del navegador — "Cargando..." eterno, sin ningún error visible
+  // ni en pantalla ni en los logs). Con esto, cualquier falla real muestra un error claro en vez
+  // de tildarse.
+  try {
+    const agent = await pool.query(
+      `SELECT id, name, account_type, COALESCE(SUM(b.amount), 0) as saldo_total
+       FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
+       WHERE a.id = $1
+       GROUP BY a.id, a.name, a.account_type`,
+      [req.user!.agentId]
+    );
+    if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
+    if (agent.rows[0].account_type !== "SUPERVISOR") {
+      return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+    }
+    const supervisor = agent.rows[0];
+
+    const agentesACargo = await pool.query(
+      `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
+       FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
+       WHERE a.active = true AND a.supervisor = $1
+       GROUP BY a.id, a.name, a.account_type
+       ORDER BY a.name`,
+      [supervisor.name]
+    );
+    const rakebackAcreditado = await pool.query(
+      `SELECT COALESCE(SUM(rebate), 0) as total FROM weekly_closings
+       WHERE supervisor_agent_id = $1 AND status <> 'REVERTIDO'`,
+      [supervisor.id]
+    );
+
+    // Comisión por referido: cuelga del LOGIN, no de la cuenta principal (agent_id) — así no
+    // depende de qué agente tenga marcado como "cuenta principal" este usuario.
+    const referidos = await pool.query(
+      `SELECT r.id, r.porcentaje, r.saldo, a.name as agente_referido_name
+       FROM supervisor_referidos r JOIN agents a ON a.id = r.agente_referido_id
+       WHERE r.supervisor_user_id = $1 AND r.active = true ORDER BY a.name`,
+      [req.user!.userId]
+    );
+
+    // Historial detallado de movimientos (comisiones acreditadas + correcciones), con la semana
+    // del cierre que las generó — incluye referidos ya desactivados, para que el historial no
+    // desaparezca si se corta una comisión a futuro.
+    const movimientos = await pool.query(
+      `SELECT m.*, a.name as agente_referido_name, wc.week_start, wc.week_end
+       FROM supervisor_referido_movements m
+       JOIN supervisor_referidos r ON r.id = m.referido_id
+       JOIN agents a ON a.id = r.agente_referido_id
+       LEFT JOIN weekly_closings wc ON wc.id = m.weekly_closing_id
+       WHERE r.supervisor_user_id = $1
+       ORDER BY m.occurred_at DESC
+       LIMIT 300`,
+      [req.user!.userId]
+    );
+
+    res.json({
+      supervisor,
+      agentes: agentesACargo.rows,
+      rakeback_centralizado_acreditado: Number(rakebackAcreditado.rows[0].total),
+      referidos: referidos.rows,
+      saldo_referidos_total: referidos.rows.reduce((acc: number, r: any) => acc + Number(r.saldo), 0),
+      movimientos_referidos: movimientos.rows,
+    });
+  } catch (err: any) {
+    console.error("Error en /portal/mi-supervision:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar la supervisión." });
   }
-  const supervisor = agent.rows[0];
-
-  const agentesACargo = await pool.query(
-    `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
-     FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
-     WHERE a.active = true AND a.supervisor = $1
-     GROUP BY a.id, a.name, a.account_type
-     ORDER BY a.name`,
-    [supervisor.name]
-  );
-  const rakebackAcreditado = await pool.query(
-    `SELECT COALESCE(SUM(rebate), 0) as total FROM weekly_closings
-     WHERE supervisor_agent_id = $1 AND status <> 'REVERTIDO'`,
-    [supervisor.id]
-  );
-
-  // Comisión por referido: cuelga del LOGIN, no de la cuenta principal (agent_id) — así no
-  // depende de qué agente tenga marcado como "cuenta principal" este usuario.
-  const referidos = await pool.query(
-    `SELECT r.id, r.porcentaje, r.saldo, a.name as agente_referido_name
-     FROM supervisor_referidos r JOIN agents a ON a.id = r.agente_referido_id
-     WHERE r.supervisor_user_id = $1 AND r.active = true ORDER BY a.name`,
-    [req.user!.userId]
-  );
-
-  // Historial detallado de movimientos (comisiones acreditadas + correcciones), con la semana
-  // del cierre que las generó — incluye referidos ya desactivados, para que el historial no
-  // desaparezca si se corta una comisión a futuro.
-  const movimientos = await pool.query(
-    `SELECT m.*, a.name as agente_referido_name, wc.week_start, wc.week_end
-     FROM supervisor_referido_movements m
-     JOIN supervisor_referidos r ON r.id = m.referido_id
-     JOIN agents a ON a.id = r.agente_referido_id
-     LEFT JOIN weekly_closings wc ON wc.id = m.weekly_closing_id
-     WHERE r.supervisor_user_id = $1
-     ORDER BY m.occurred_at DESC
-     LIMIT 300`,
-    [req.user!.userId]
-  );
-
-  res.json({
-    supervisor,
-    agentes: agentesACargo.rows,
-    rakeback_centralizado_acreditado: Number(rakebackAcreditado.rows[0].total),
-    referidos: referidos.rows,
-    saldo_referidos_total: referidos.rows.reduce((acc: number, r: any) => acc + Number(r.saldo), 0),
-    movimientos_referidos: movimientos.rows,
-  });
 });
