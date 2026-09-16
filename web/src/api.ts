@@ -52,6 +52,8 @@ export const api = {
   agentes: (includeInactive?: boolean) => request(`/dashboard/agentes${includeInactive ? "?includeInactive=true" : ""}`),
   agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
   supervisores: () => request("/dashboard/supervisores"),
+  comisionesReferidos: () => request("/dashboard/comisiones-referidos"),
+  pagarComisionesReferido: (userId: string) => request(`/dashboard/comisiones-referidos/${userId}/pagar`, { method: "POST" }),
   bancados: () => request("/dashboard/bancados"),
   miCuenta: (agentId?: string) => request(`/portal/mi-cuenta${agentId ? `?agentId=${agentId}` : ""}`),
   // Qué agentes/clubes puede ver el login actual — para el selector en "Mi cuenta" cuando tiene

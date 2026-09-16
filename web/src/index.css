@@ -204,6 +204,19 @@ a { color: inherit; }
   box-shadow: inset 0 2px 0 var(--accent);
 }
 
+/* Separador de sección del menú (Operación / Plata / Administración) — agrupa los ítems para
+   que el sidebar no sea una lista plana de 15 cosas sueltas; el orden dentro de cada sección
+   se sigue pudiendo arrastrar igual que antes, pero no se puede mezclar entre secciones. */
+.nav-section + .nav-section { margin-top: 10px; }
+.nav-section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.45;
+  padding: 10px 10px 4px;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding-top: 14px;

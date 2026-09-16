@@ -87,6 +87,11 @@ const icon = {
       <path d="M9 15l2 2 4-4" />
     </svg>
   ),
+  comisionesReferidos: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><path d="m8 16 8-8" /><circle cx="9" cy="9" r="0.5" fill="currentColor" /><circle cx="15" cy="15" r="0.5" fill="currentColor" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -143,24 +148,31 @@ function getInitialCollapsed() {
 // Ítems del menú de ADMIN, en su orden por default — se puede reordenar arrastrando (ver
 // navOrder más abajo), y ese orden queda guardado por navegador (localStorage), no es una
 // preferencia del usuario en la base — cada uno arma el menú a su gusto en su propia máquina.
-const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string }[] = [
-  { key: "resumen", to: "/dashboard", end: true, icon: "resumen", label: "Resumen" },
-  { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración" },
-  { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento" },
-  { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales" },
-  { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club" },
-  { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados" },
-  { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet" },
-  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería" },
-  { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías" },
-  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos" },
-  { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios" },
-  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período" },
-  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones" },
-  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas" },
-  { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos" },
+const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string; group: "operacion" | "plata" | "administracion" }[] = [
+  { key: "resumen", to: "/dashboard", end: true, icon: "resumen", label: "Resumen", group: "operacion" },
+  { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración", group: "administracion" },
+  { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento", group: "operacion" },
+  { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales", group: "operacion" },
+  { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "operacion" },
+  { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
+  { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "plata" },
+  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "plata" },
+  { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "plata" },
+  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "plata" },
+  { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "plata" },
+  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período", group: "plata" },
+  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "plata" },
+  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas", group: "plata" },
+  { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "administracion" },
+  { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "plata" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
+
+const NAV_GROUPS: { key: "operacion" | "plata" | "administracion"; label: string }[] = [
+  { key: "operacion", label: "Operación" },
+  { key: "plata", label: "Plata" },
+  { key: "administracion", label: "Administración" },
+];
 
 function getInitialNavOrder(): string[] {
   try {
@@ -189,6 +201,9 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     const origenKey = dragKey.current;
     setDragOverKey(null);
     if (!origenKey || origenKey === destinoKey) return;
+    const origenItem = NAV_ITEMS.find((i) => i.key === origenKey);
+    const destinoItem = NAV_ITEMS.find((i) => i.key === destinoKey);
+    if (!origenItem || !destinoItem || origenItem.group !== destinoItem.group) return;
     setNavOrder((prev) => {
       const next = prev.filter((k) => k !== origenKey);
       const idx = next.indexOf(destinoKey);
@@ -270,35 +285,44 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         <nav>
           {role === "ADMIN" ? (
             <>
-              {navOrder.map((key) => {
-                const item = NAV_ITEMS.find((i) => i.key === key);
-                if (!item) return null;
+              {NAV_GROUPS.map((grupo) => {
+                const keysDelGrupo = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
+                if (keysDelGrupo.length === 0) return null;
                 return (
-                  <div
-                    key={item.key}
-                    className={`nav-drag-item ${dragOverKey === item.key ? "drag-over" : ""}`}
-                    draggable={!collapsed}
-                    onDragStart={() => {
-                      dragKey.current = item.key;
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      if (dragOverKey !== item.key) setDragOverKey(item.key);
-                    }}
-                    onDragLeave={() => setDragOverKey((k) => (k === item.key ? null : k))}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      moverNav(item.key);
-                    }}
-                    onDragEnd={() => {
-                      dragKey.current = null;
-                      setDragOverKey(null);
-                    }}
-                  >
-                    <NavLink to={item.to} end={item.end} draggable={false} className="nav-link" title={item.label}>
-                      {!collapsed && <span className="nav-drag-handle" title="Arrastrar para reordenar">⠿</span>}
-                      {icon[item.icon]} {!collapsed && item.label}
-                    </NavLink>
+                  <div key={grupo.key} className="nav-section">
+                    {!collapsed && <div className="nav-section-label">{grupo.label}</div>}
+                    {keysDelGrupo.map((key) => {
+                      const item = NAV_ITEMS.find((i) => i.key === key);
+                      if (!item) return null;
+                      return (
+                        <div
+                          key={item.key}
+                          className={`nav-drag-item ${dragOverKey === item.key ? "drag-over" : ""}`}
+                          draggable={!collapsed}
+                          onDragStart={() => {
+                            dragKey.current = item.key;
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (dragOverKey !== item.key) setDragOverKey(item.key);
+                          }}
+                          onDragLeave={() => setDragOverKey((k) => (k === item.key ? null : k))}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            moverNav(item.key);
+                          }}
+                          onDragEnd={() => {
+                            dragKey.current = null;
+                            setDragOverKey(null);
+                          }}
+                        >
+                          <NavLink to={item.to} end={item.end} draggable={false} className="nav-link" title={item.label}>
+                            {!collapsed && <span className="nav-drag-handle" title="Arrastrar para reordenar">⠿</span>}
+                            {icon[item.icon]} {!collapsed && item.label}
+                          </NavLink>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

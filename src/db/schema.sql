@@ -828,7 +828,7 @@ CREATE TABLE IF NOT EXISTS supervisor_referido_movements (
   id                 TEXT PRIMARY KEY,
   referido_id        TEXT NOT NULL REFERENCES supervisor_referidos(id),
   weekly_closing_id  TEXT REFERENCES weekly_closings(id),
-  type               TEXT NOT NULL CHECK (type IN ('COMISION','CORRECCION')),
+  type               TEXT NOT NULL CHECK (type IN ('COMISION','CORRECCION','PAGO')),
   amount             NUMERIC NOT NULL,
   resulting_saldo    NUMERIC NOT NULL,
   notes              TEXT,

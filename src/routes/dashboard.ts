@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { listAllBalances } from "../repo/ledger.js";
 import { listClosings } from "../repo/closings.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
+import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
 
@@ -226,6 +227,23 @@ dashboardRouter.get("/supervisores", requireAuth, requireAdmin, async (_req, res
   const supervisoresInvalidos = agentesPorSupervisor.rows.filter((a) => !nombresSupervisoresValidos.has(a.supervisor));
 
   res.json({ supervisores: result, supervisoresInvalidos });
+});
+
+// Pantalla dedicada "Comisiones por referido" (18/09/2026): antes había que entrar a editar
+// cada usuario supervisor en Usuarios y permisos para ver esto — quedaba incómodo para algo que
+// se consulta seguido. Acá se ve TODO junto (todos los supervisores con comisión activa) y se
+// puede pagar de una, cruzando el total contra Wallet.
+dashboardRouter.get("/comisiones-referidos", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listarComisionesReferidos());
+});
+
+dashboardRouter.post("/comisiones-referidos/:userId/pagar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    const r = await pagarComisionesReferido(req.params.userId, req.user?.email ?? null);
+    res.json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo registrar el pago." });
+  }
 });
 
 dashboardRouter.get("/agentes/:id/deals", requireAuth, requireAdmin, async (req, res) => {

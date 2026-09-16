@@ -6,6 +6,7 @@ import Agentes from "./pages/Agentes";
 import Movimientos from "./pages/Movimientos";
 import Cierres from "./pages/Cierres";
 import Usuarios from "./pages/Usuarios";
+import ComisionesReferidos from "./pages/ComisionesReferidos";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Adelantos from "./pages/Adelantos";
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="resumen-club" element={<ResumenClub />} />
           <Route path="jugadores-bancados" element={<JugadoresBancados />} />
           <Route path="usuarios" element={<Usuarios />} />
+          <Route path="comisiones-referidos" element={<ComisionesReferidos />} />
         </Route>
 
         <Route
