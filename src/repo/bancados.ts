@@ -260,7 +260,7 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
        pago_jugador_total, ganancia_banca_mesas, rakeback_banca_total, rakeback_banca_pct_snapshot,
        union_share_total, union_share_pct_snapshot, capital_anterior, capital_despues,
        pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
-     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
     [
       id,
       input.playerId,
