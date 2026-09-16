@@ -194,6 +194,16 @@ a { color: inherit; }
 }
 .nav-link.active svg { opacity: 1; }
 
+/* Ítems del menú arrastrables (reordenar a gusto) — el handle "⠿" solo se marca más visible
+   al pasar el mouse por la fila entera, no hace falta acertarle justo al ícono. */
+.nav-drag-item { cursor: grab; }
+.nav-drag-item:active { cursor: grabbing; }
+.nav-drag-handle { opacity: 0.3; font-size: 12px; line-height: 1; }
+.nav-drag-item:hover .nav-drag-handle { opacity: 0.7; }
+.nav-drag-item.drag-over > .nav-link {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding-top: 14px;

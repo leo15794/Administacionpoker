@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -140,10 +140,76 @@ function getInitialCollapsed() {
   }
 }
 
+// Ítems del menú de ADMIN, en su orden por default — se puede reordenar arrastrando (ver
+// navOrder más abajo), y ese orden queda guardado por navegador (localStorage), no es una
+// preferencia del usuario en la base — cada uno arma el menú a su gusto en su propia máquina.
+const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string }[] = [
+  { key: "resumen", to: "/dashboard", end: true, icon: "resumen", label: "Resumen" },
+  { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración" },
+  { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento" },
+  { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales" },
+  { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club" },
+  { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados" },
+  { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet" },
+  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería" },
+  { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías" },
+  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos" },
+  { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios" },
+  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período" },
+  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones" },
+  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas" },
+  { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos" },
+];
+const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
+
+function getInitialNavOrder(): string[] {
+  try {
+    const raw = localStorage.getItem("dp_nav_order");
+    if (!raw) return DEFAULT_NAV_ORDER;
+    const stored: string[] = JSON.parse(raw);
+    // Si algún día se agrega/saca un ítem del menú, esto no lo pierde ni lo hace desaparecer:
+    // descarta keys guardadas que ya no existen y agrega al final las nuevas que falten.
+    const vigentes = stored.filter((k) => DEFAULT_NAV_ORDER.includes(k));
+    const faltantes = DEFAULT_NAV_ORDER.filter((k) => !vigentes.includes(k));
+    return [...vigentes, ...faltantes];
+  } catch {
+    return DEFAULT_NAV_ORDER;
+  }
+}
+
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
   const nav = useNavigate();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
+  const dragKey = useRef<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  function moverNav(destinoKey: string) {
+    const origenKey = dragKey.current;
+    setDragOverKey(null);
+    if (!origenKey || origenKey === destinoKey) return;
+    setNavOrder((prev) => {
+      const next = prev.filter((k) => k !== origenKey);
+      const idx = next.indexOf(destinoKey);
+      next.splice(idx, 0, origenKey);
+      try {
+        localStorage.setItem("dp_nav_order", JSON.stringify(next));
+      } catch {
+        /* localStorage no disponible — el orden igual se aplica en esta sesión */
+      }
+      return next;
+    });
+  }
+
+  function restablecerNavOrder() {
+    setNavOrder(DEFAULT_NAV_ORDER);
+    try {
+      localStorage.removeItem("dp_nav_order");
+    } catch {
+      /* no pasa nada */
+    }
+  }
 
   useEffect(() => {
     applyTheme(theme);
@@ -204,21 +270,48 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" }) {
         <nav>
           {role === "ADMIN" ? (
             <>
-              <NavLink to="/dashboard" end className="nav-link" title="Resumen">{icon.resumen} {!collapsed && "Resumen"}</NavLink>
-              <NavLink to="/dashboard/agentes" className="nav-link" title="Administración">{icon.agentes} {!collapsed && "Administración"}</NavLink>
-              <NavLink to="/dashboard/movimientos" className="nav-link" title="Cargar movimiento">{icon.movimientos} {!collapsed && "Cargar movimiento"}</NavLink>
-              <NavLink to="/dashboard/cierres" className="nav-link" title="Cierres semanales">{icon.cierres} {!collapsed && "Cierres semanales"}</NavLink>
-              <NavLink to="/dashboard/resumen-club" className="nav-link" title="Resumen por club">{icon.resumenClub} {!collapsed && "Resumen por club"}</NavLink>
-              <NavLink to="/dashboard/jugadores-bancados" className="nav-link" title="Jugadores bancados">{icon.jugadoresBancados} {!collapsed && "Jugadores bancados"}</NavLink>
-              <NavLink to="/dashboard/wallet" className="nav-link" title="Wallet">{icon.wallet} {!collapsed && "Wallet"}</NavLink>
-              <NavLink to="/dashboard/tesoreria" className="nav-link" title="Tesorería">{icon.tesoreria} {!collapsed && "Tesorería"}</NavLink>
-              <NavLink to="/dashboard/garantias" className="nav-link" title="Garantías">{icon.garantias} {!collapsed && "Garantías"}</NavLink>
-              <NavLink to="/dashboard/adelantos" className="nav-link" title="Adelantos de rakeback">{icon.adelantos} {!collapsed && "Adelantos"}</NavLink>
-              <NavLink to="/dashboard/cuentas-socios" className="nav-link" title="Cuentas de socios">{icon.cuentasSocios} {!collapsed && "Cuentas de socios"}</NavLink>
-              <NavLink to="/dashboard/ganancias-por-periodo" className="nav-link" title="Ganancias por período">{icon.gananciasPeriodo} {!collapsed && "Ganancias por período"}</NavLink>
-              <NavLink to="/dashboard/liquidaciones" className="nav-link" title="Liquidaciones">{icon.liquidaciones} {!collapsed && "Liquidaciones"}</NavLink>
-              <NavLink to="/dashboard/stock-deudas" className="nav-link" title="Stock y deudas">{icon.stockDeudas} {!collapsed && "Stock y deudas"}</NavLink>
-              <NavLink to="/dashboard/usuarios" className="nav-link" title="Usuarios y permisos">{icon.usuarios} {!collapsed && "Usuarios y permisos"}</NavLink>
+              {navOrder.map((key) => {
+                const item = NAV_ITEMS.find((i) => i.key === key);
+                if (!item) return null;
+                return (
+                  <div
+                    key={item.key}
+                    className={`nav-drag-item ${dragOverKey === item.key ? "drag-over" : ""}`}
+                    draggable={!collapsed}
+                    onDragStart={() => {
+                      dragKey.current = item.key;
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverKey !== item.key) setDragOverKey(item.key);
+                    }}
+                    onDragLeave={() => setDragOverKey((k) => (k === item.key ? null : k))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      moverNav(item.key);
+                    }}
+                    onDragEnd={() => {
+                      dragKey.current = null;
+                      setDragOverKey(null);
+                    }}
+                  >
+                    <NavLink to={item.to} end={item.end} draggable={false} className="nav-link" title={item.label}>
+                      {!collapsed && <span className="nav-drag-handle" title="Arrastrar para reordenar">⠿</span>}
+                      {icon[item.icon]} {!collapsed && item.label}
+                    </NavLink>
+                  </div>
+                );
+              })}
+              {!collapsed && (
+                <button
+                  className="nav-link"
+                  onClick={restablecerNavOrder}
+                  style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer", font: "inherit", border: "none", opacity: 0.6, fontSize: 12 }}
+                  title="Vuelve el menú al orden original"
+                >
+                  Restablecer orden del menú
+                </button>
+              )}
             </>
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
