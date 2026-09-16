@@ -145,7 +145,7 @@ function FilaAgenteSupervisor({
   );
 }
 
-function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] }) {
+function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any; agentes: any[]; supervisoresData: any[] }) {
   // "A cargo" SÍ depende de la cuenta principal (agents.supervisor se resuelve por nombre de
   // agente — mecanismo que ya existía antes de esta feature). "% comisión por referido" NO
   // depende de eso: cuelga directo del login (usuario.id), a propósito, para no obligar a que
@@ -224,13 +224,19 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
   }
 
   const agentesACargoConDetalle = otrosAgentes.filter((a) => aCargoIds.has(a.id));
+  const rakebackCentralizado = supervisoresData.find((s) => s.id === supervisorAgentId)?.rakeback_centralizado_acreditado ?? 0;
+  const saldoReferidosTotal = referidos.reduce((acc, r) => acc + Number(r.saldo), 0);
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
       <div className="topbar" style={{ marginBottom: 4 }}>
         <h3 style={{ margin: 0 }}>Configuración de Supervisor — {usuario.email}</h3>
         {supervisor && (
-          <span className={`badge ${Number(supervisor.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(supervisor.saldo_total)}</span>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <span className={`badge ${Number(supervisor.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(supervisor.saldo_total)}</span>
+            <span className="badge neutral">Rakeback centralizado: {usd(rakebackCentralizado)}</span>
+            <span className="badge neutral">Comisión por referido: {usd(saldoReferidosTotal)}</span>
+          </div>
         )}
       </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
@@ -330,6 +336,7 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [supervisoresInvalidos, setSupervisoresInvalidos] = useState<any[]>([]);
+  const [supervisoresData, setSupervisoresData] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
 
@@ -339,10 +346,14 @@ export default function Usuarios() {
 
   function refreshAgentes() {
     api.agentes().then(setAgentes);
-    // Alerta que antes vivía en Administración → Agentes → Supervisores (16/09/2026: se
-    // unificó todo acá para no tener la config de un supervisor repartida en dos pantallas).
-    // Agentes con un agents.supervisor cargado que no matchea a ningún agente Supervisor activo.
-    api.supervisores().then((d: any) => setSupervisoresInvalidos(d.supervisoresInvalidos ?? []));
+    // Antes vivía en Administración → Agentes → Supervisores (16/09/2026: se unificó todo acá
+    // para no tener la config de un supervisor repartida en dos pantallas) — de ahí sale la
+    // alerta de "mal cargados" Y el rakeback centralizado acreditado que se muestra en el
+    // panel de cada supervisor (PanelSupervisor lo busca en supervisoresData por agent_id).
+    api.supervisores().then((d: any) => {
+      setSupervisoresInvalidos(d.supervisoresInvalidos ?? []);
+      setSupervisoresData(d.supervisores ?? []);
+    });
   }
 
   useEffect(() => {
@@ -443,6 +454,7 @@ export default function Usuarios() {
           <EditarUsuario
             usuario={editando}
             agentes={agentes}
+            supervisoresData={supervisoresData}
             onDone={() => {
               setEditando(null);
               refresh();
@@ -527,7 +539,7 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
   );
 }
 
-function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: any[]; onDone: () => void }) {
+function EditarUsuario({ usuario, agentes, supervisoresData, onDone }: { usuario: any; agentes: any[]; supervisoresData: any[]; onDone: () => void }) {
   const [email, setEmail] = useState(usuario.email);
   const [password, setPassword] = useState("");
   const [agentIds, setAgentIds] = useState<string[]>((usuario.agentes ?? []).map((a: any) => a.id));
@@ -584,7 +596,7 @@ function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: an
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Guardando..." : "Guardar cambios"}</button>
       {usuario.role === "SUPERVISOR" && (
-        <PanelSupervisor usuario={usuario} agentes={agentes} />
+        <PanelSupervisor usuario={usuario} agentes={agentes} supervisoresData={supervisoresData} />
       )}
     </form>
   );
