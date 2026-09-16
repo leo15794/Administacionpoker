@@ -29,6 +29,8 @@ const configSchema = z.object({
   pctJugador: z.number().min(0).max(1),
   pctBanca: z.number().min(0).max(1),
   rakebackPct: z.number().min(0).max(1),
+  rakebackBancaPct: z.number().min(0).max(1).optional().default(0),
+  unionSharePct: z.number().min(0).max(1).optional().default(0),
   capitalInicial: z.number(),
   makeupInicial: z.number().min(0),
   moneda: z.string().optional(),
@@ -47,9 +49,6 @@ bancadosRouter.get("/estado/:playerId", requireAuth, requireAdmin, async (req, r
   const config = await getBancadoConfig(req.params.playerId);
   if (!config) return res.status(404).json({ error: "Este jugador todavía no tiene configurada la banca." });
   const estado = await getEstadoBancado(req.params.playerId, {
-    pctJugador: Number(config.pct_jugador),
-    pctBanca: Number(config.pct_banca),
-    rakebackPct: Number(config.rakeback_pct),
     capitalInicial: Number(config.capital_inicial),
     makeupInicial: Number(config.makeup_inicial),
   });

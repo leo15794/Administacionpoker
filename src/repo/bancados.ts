@@ -10,6 +10,8 @@ export interface BancadoConfigInput {
   pctJugador: number;
   pctBanca: number;
   rakebackPct: number;
+  rakebackBancaPct: number;
+  unionSharePct: number;
   capitalInicial: number;
   makeupInicial: number;
   moneda?: string;
@@ -26,12 +28,14 @@ export async function getBancadoConfig(playerId: string) {
 export async function upsertBancadoConfig(playerId: string, input: BancadoConfigInput) {
   const r = await pool.query(
     `INSERT INTO bancado_config
-       (player_id, pct_jugador, pct_banca, rakeback_pct, capital_inicial, makeup_inicial, moneda, regla, observaciones, recuperacion_makeup, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
+       (player_id, pct_jugador, pct_banca, rakeback_pct, rakeback_banca_pct, union_share_pct, capital_inicial, makeup_inicial, moneda, regla, observaciones, recuperacion_makeup, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())
      ON CONFLICT (player_id) DO UPDATE SET
        pct_jugador = EXCLUDED.pct_jugador,
        pct_banca = EXCLUDED.pct_banca,
        rakeback_pct = EXCLUDED.rakeback_pct,
+       rakeback_banca_pct = EXCLUDED.rakeback_banca_pct,
+       union_share_pct = EXCLUDED.union_share_pct,
        capital_inicial = EXCLUDED.capital_inicial,
        makeup_inicial = EXCLUDED.makeup_inicial,
        moneda = EXCLUDED.moneda,
@@ -45,6 +49,8 @@ export async function upsertBancadoConfig(playerId: string, input: BancadoConfig
       input.pctJugador,
       input.pctBanca,
       input.rakebackPct,
+      input.rakebackBancaPct,
+      input.unionSharePct,
       input.capitalInicial,
       input.makeupInicial,
       input.moneda ?? "USD",
@@ -60,7 +66,12 @@ export async function upsertBancadoConfig(playerId: string, input: BancadoConfig
 // jugador, o los valores iniciales de la config si todavía no cerró ninguna semana — nunca se
 // guarda aparte (a diferencia de la planilla, que tiene ESTADO_BANCADOS como hoja separada):
 // se deriva siempre del historial real, así nunca puede quedar desincronizado.
-export async function getEstadoBancado(playerId: string, config: BancadoConfigInput): Promise<BancadoEstado> {
+// Solo necesita capital/makeup inicial (nunca los % nuevos ni los viejos) — se tipa con Pick
+// para no obligar a tocar cada llamado cada vez que se agrega un % más a la config.
+export async function getEstadoBancado(
+  playerId: string,
+  config: Pick<BancadoConfigInput, "capitalInicial" | "makeupInicial">
+): Promise<BancadoEstado> {
   const r = await pool.query(
     `SELECT capital_despues, makeup_nuevo FROM bancado_historial
      WHERE player_id = $1 AND status <> 'REVERTIDO'
@@ -81,6 +92,7 @@ export interface BancadoResumen {
   rakeGeneradoTotal: number;
   rakebackBancadoTotal: number;
   rakeBancaTotal: number;
+  rakebackBancaTotal: number;
   semanasCerradas: number;
 }
 
@@ -89,6 +101,7 @@ export async function getResumenBancado(playerId: string): Promise<BancadoResume
     `SELECT
        COALESCE(SUM(rake_total), 0) as rake_generado_total,
        COALESCE(SUM(rakeback_total), 0) as rakeback_bancado_total,
+       COALESCE(SUM(rakeback_banca_total), 0) as rakeback_banca_total,
        COUNT(*) as semanas_cerradas
      FROM bancado_historial
      WHERE player_id = $1 AND status <> 'REVERTIDO'`,
@@ -101,6 +114,7 @@ export async function getResumenBancado(playerId: string): Promise<BancadoResume
     rakeGeneradoTotal,
     rakebackBancadoTotal,
     rakeBancaTotal: rakeGeneradoTotal - rakebackBancadoTotal,
+    rakebackBancaTotal: Number(row?.rakeback_banca_total ?? 0),
     semanasCerradas: Number(row?.semanas_cerradas ?? 0),
   };
 }
@@ -121,6 +135,8 @@ export interface ResumenBancadoJugador {
   resultadoMesasTotal: number;
   gananciaJugadorTotal: number;
   gananciaEmpresaTotal: number;
+  rakebackBancaTotal: number;
+  unionShareTotal: number;
   capitalActual: number;
   makeupActual: number;
 }
@@ -135,7 +151,9 @@ export async function listResumenBancados(): Promise<ResumenBancadoJugador[]> {
             COUNT(*) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL') as semanas_cerradas,
             COALESCE(SUM(h.resultado_mesas) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as resultado_mesas_total,
             COALESCE(SUM(h.pago_jugador_total) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as ganancia_jugador_total,
-            COALESCE(SUM(h.ganancia_banca_mesas) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as ganancia_empresa_total
+            COALESCE(SUM(h.ganancia_banca_mesas) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as ganancia_empresa_total,
+            COALESCE(SUM(h.rakeback_banca_total) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as rakeback_banca_total,
+            COALESCE(SUM(h.union_share_total) FILTER (WHERE h.tipo = 'CIERRE_SEMANAL'), 0) as union_share_total
      FROM bancado_historial h
      JOIN players p ON p.id = h.player_id
      JOIN clubs c ON c.id = h.club_id
@@ -165,6 +183,8 @@ export async function listResumenBancados(): Promise<ResumenBancadoJugador[]> {
       resultadoMesasTotal: Number(r.resultado_mesas_total),
       gananciaJugadorTotal: Number(r.ganancia_jugador_total),
       gananciaEmpresaTotal: Number(r.ganancia_empresa_total),
+      rakebackBancaTotal: Number(r.rakeback_banca_total),
+      unionShareTotal: Number(r.union_share_total),
       capitalActual: estado ? Number(estado.capital_despues) : 0,
       makeupActual: estado ? Number(estado.makeup_nuevo) : 0,
     };
@@ -199,6 +219,8 @@ async function prepararCalculo(playerId: string, origen: BancadoOrigen) {
     pctJugador: Number(config.pct_jugador),
     pctBanca: Number(config.pct_banca),
     rakebackPct: Number(config.rakeback_pct),
+    rakebackBancaPct: Number(config.rakeback_banca_pct ?? 0),
+    unionSharePct: Number(config.union_share_pct ?? 0),
     capitalInicial: Number(config.capital_inicial),
     makeupInicial: Number(config.makeup_inicial),
   };
@@ -235,9 +257,10 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
        id, player_id, agent_id, club_id, tipo, week_start, week_end,
        resultado_mesas, rake_total, rakeback_total, makeup_anterior, perdida_agrega_makeup,
        rakeback_a_makeup, rakeback_excedente_jugador, makeup_nuevo, pago_jugador_mesas,
-       pago_jugador_total, ganancia_banca_mesas, capital_anterior, capital_despues,
+       pago_jugador_total, ganancia_banca_mesas, rakeback_banca_total, rakeback_banca_pct_snapshot,
+       union_share_total, union_share_pct_snapshot, capital_anterior, capital_despues,
        pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
-     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
     [
       id,
       input.playerId,
@@ -256,6 +279,10 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
       calc.pagoJugadorMesas,
       calc.pagoJugadorTotal,
       calc.gananciaBancaMesas,
+      calc.rakebackBancaTotal,
+      config.rakeback_banca_pct ?? 0,
+      calc.unionShareTotal,
+      config.union_share_pct ?? 0,
       calc.capitalAnterior,
       calc.capitalDespues,
       config.pct_jugador,
@@ -297,9 +324,6 @@ export async function registrarRecargaCapital(input: RecargaCapitalInput) {
   if (!player) throw new Error("Jugador no encontrado.");
 
   const estado = await getEstadoBancado(input.playerId, {
-    pctJugador: Number(config.pct_jugador),
-    pctBanca: Number(config.pct_banca),
-    rakebackPct: Number(config.rakeback_pct),
     capitalInicial: Number(config.capital_inicial),
     makeupInicial: Number(config.makeup_inicial),
   });
@@ -312,10 +336,11 @@ export async function registrarRecargaCapital(input: RecargaCapitalInput) {
        id, player_id, agent_id, club_id, tipo, week_start, week_end,
        resultado_mesas, rake_total, rakeback_total, makeup_anterior, perdida_agrega_makeup,
        rakeback_a_makeup, rakeback_excedente_jugador, makeup_nuevo, pago_jugador_mesas,
-       pago_jugador_total, ganancia_banca_mesas, capital_anterior, capital_despues,
+       pago_jugador_total, ganancia_banca_mesas, rakeback_banca_total, rakeback_banca_pct_snapshot,
+       union_share_total, union_share_pct_snapshot, capital_anterior, capital_despues,
        pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
-     ) VALUES ($1,$2,$3,$4,'RECARGA_CAPITAL',$5,$5,$6,0,0,$7,0,0,0,$7,0,0,0,$8,$9,
-               $10,$11,$12,$13,$14)`,
+     ) VALUES ($1,$2,$3,$4,'RECARGA_CAPITAL',$5,$5,$6,0,0,$7,0,0,0,$7,0,0,0,0,$8,0,$9,$10,$11,
+               $12,$13,$14,$15,$16)`,
     [
       id,
       input.playerId,
@@ -324,6 +349,8 @@ export async function registrarRecargaCapital(input: RecargaCapitalInput) {
       input.fecha,
       input.monto,
       estado.makeupActual,
+      config.rakeback_banca_pct ?? 0,
+      config.union_share_pct ?? 0,
       capitalAnterior,
       capitalDespues,
       config.pct_jugador,

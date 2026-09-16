@@ -276,6 +276,8 @@ export default function JugadoresBancados() {
                   <th>Resultado mesas total</th>
                   <th>Ganancia total jugador</th>
                   <th>Ganancia total empresa</th>
+                  <th>Rakeback Banca (acum.)</th>
+                  <th title="Informativo, no mueve plata">% Unión (acum., info.)</th>
                   <th>Capital actual</th>
                   <th>Makeup actual</th>
                 </tr>
@@ -290,6 +292,8 @@ export default function JugadoresBancados() {
                     <td>{usd(r.resultadoMesasTotal)}</td>
                     <td><span className={`badge ${Number(r.gananciaJugadorTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaJugadorTotal)}</span></td>
                     <td><span className={`badge ${Number(r.gananciaEmpresaTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaEmpresaTotal)}</span></td>
+                    <td className="muted">{usd(r.rakebackBancaTotal)}</td>
+                    <td className="muted">{usd(r.unionShareTotal)}</td>
                     <td><strong>{usd(r.capitalActual)}</strong></td>
                     <td className="muted">{usd(r.makeupActual)}</td>
                   </tr>
@@ -461,6 +465,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
   const [pctJugador, setPctJugador] = useState("50");
   const [pctBanca, setPctBanca] = useState("50");
   const [rakebackPct, setRakebackPct] = useState("0");
+  const [rakebackBancaPct, setRakebackBancaPct] = useState("0");
+  const [unionSharePct, setUnionSharePct] = useState("80");
   const [capitalInicial, setCapitalInicial] = useState("0");
   const [makeupInicial, setMakeupInicial] = useState("0");
   const [moneda, setMoneda] = useState("USD");
@@ -497,6 +503,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
         setPctJugador(String(Number(r.config.pct_jugador) * 100));
         setPctBanca(String(Number(r.config.pct_banca) * 100));
         setRakebackPct(String(Number(r.config.rakeback_pct) * 100));
+        setRakebackBancaPct(String(Number(r.config.rakeback_banca_pct ?? 0) * 100));
+        setUnionSharePct(String(Number(r.config.union_share_pct ?? 0.8) * 100));
         setCapitalInicial(String(r.config.capital_inicial));
         setMakeupInicial(String(r.config.makeup_inicial));
         setMoneda(r.config.moneda ?? "USD");
@@ -528,6 +536,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
         pctJugador: (Number(pctJugador) || 0) / 100,
         pctBanca: (Number(pctBanca) || 0) / 100,
         rakebackPct: (Number(rakebackPct) || 0) / 100,
+        rakebackBancaPct: (Number(rakebackBancaPct) || 0) / 100,
+        unionSharePct: (Number(unionSharePct) || 0) / 100,
         capitalInicial: Number(capitalInicial) || 0,
         makeupInicial: Number(makeupInicial) || 0,
         moneda,
@@ -689,8 +699,16 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
               <input value={pctBanca} onChange={(e) => setPctBanca(e.target.value)} type="number" step="0.01" />
             </div>
             <div className="field">
-              <label>% Rakeback</label>
+              <label>Rakeback Jugador (%)</label>
               <input value={rakebackPct} onChange={(e) => setRakebackPct(e.target.value)} type="number" step="0.01" />
+            </div>
+            <div className="field">
+              <label title="% independiente sobre el rake total que vuelve a la banca en vez de al jugador — no tiene que sumar 100% con el rakeback del jugador.">Rakeback Banca (%)</label>
+              <input value={rakebackBancaPct} onChange={(e) => setRakebackBancaPct(e.target.value)} type="number" step="0.01" />
+            </div>
+            <div className="field">
+              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total — solo informativo, no genera ningún movimiento de Wallet/Tesorería.">% Unión sobre rake total (informativo)</label>
+              <input value={unionSharePct} onChange={(e) => setUnionSharePct(e.target.value)} type="number" step="0.01" />
             </div>
             <div className="field">
               <label>Capital inicial (USD)</label>
@@ -734,7 +752,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
               <span>Capital actual: <strong>{usd(estado?.capitalActual ?? 0)}</strong></span>
               <span>Makeup actual: <strong className={Number(estado?.makeupActual ?? 0) > 0 ? "neg" : "pos"}>{usd(estado?.makeupActual ?? 0)}</strong></span>
-              <span className="muted">% Jugador {(Number(config.pct_jugador) * 100).toFixed(1)}% · % Banca {(Number(config.pct_banca) * 100).toFixed(1)}% · % Rakeback {(Number(config.rakeback_pct) * 100).toFixed(1)}%</span>
+              <span className="muted">% Jugador {(Number(config.pct_jugador) * 100).toFixed(1)}% · % Banca {(Number(config.pct_banca) * 100).toFixed(1)}% · Rakeback Jugador {(Number(config.rakeback_pct) * 100).toFixed(1)}% · Rakeback Banca {(Number(config.rakeback_banca_pct ?? 0) * 100).toFixed(1)}% · % Unión (informativo) {(Number(config.union_share_pct ?? 0) * 100).toFixed(1)}%</span>
             </div>
           </div>
 
@@ -812,7 +830,9 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   <tr><td>Pago jugador por mesas</td><td>{usd(previa.pagoJugadorMesas)}</td></tr>
                   <tr><td>RB excedente para jugador</td><td>{usd(previa.rakebackExcedenteJugador)}</td></tr>
                   <tr><td><strong>Pago total jugador</strong></td><td><strong>{usd(previa.pagoJugadorTotal)}</strong></td></tr>
-                  <tr><td>Ganancia banca mesas</td><td>{usd(previa.gananciaBancaMesas)}</td></tr>
+                  <tr><td>Rakeback Banca</td><td>{usd(previa.rakebackBancaTotal)}</td></tr>
+                  <tr><td><strong>Ganancia banca (mesas + Rakeback Banca)</strong></td><td><strong>{usd(previa.gananciaBancaMesas)}</strong></td></tr>
+                  <tr><td className="muted">% Unión sobre este rake (informativo)</td><td className="muted">{usd(previa.unionShareTotal)}</td></tr>
                   <tr><td>Capital después</td><td>{usd(previa.capitalDespues)}</td></tr>
                 </tbody>
               </table>
@@ -842,11 +862,15 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   const totalRake = activas.reduce((acc: number, h: any) => acc + Number(h.rake_total), 0);
                   const totalRakeback = activas.reduce((acc: number, h: any) => acc + Number(h.rakeback_total), 0);
                   const totalRakeBanca = totalRake - totalRakeback;
+                  const totalRakebackBanca = activas.reduce((acc: number, h: any) => acc + Number(h.rakeback_banca_total ?? 0), 0);
+                  const totalUnionShare = activas.reduce((acc: number, h: any) => acc + Number(h.union_share_total ?? 0), 0);
                   return (
                     <div className="muted" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 10 }}>
                       <span>Rake generado total (acumulado): <strong>{usd(totalRake)}</strong></span>
                       <span>Rakeback Bancado (acumulado): <strong>{usd(totalRakeback)}</strong></span>
                       <span>Rake Banca (acumulado): <strong>{usd(totalRakeBanca)}</strong></span>
+                      <span>Rakeback Banca (acumulado): <strong>{usd(totalRakebackBanca)}</strong></span>
+                      <span title="Informativo, no mueve plata">% Unión (acumulado, informativo): <strong>{usd(totalUnionShare)}</strong></span>
                     </div>
                   );
                 })()}
@@ -855,8 +879,9 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                     <table className="table-compact">
                       <thead>
                         <tr>
-                          <th>Semana</th><th>Tipo</th><th>Resultado</th><th>Rake generado</th>
+                          <th>Semana</th><th>Tipo</th><th>Resultado</th><th>Rake total</th>
                           <th>Rakeback total</th><th>RB → Makeup</th><th>RB → Jugador</th><th>Rake Banca</th>
+                          <th>Rakeback Banca</th><th title="% que la Unión reconoce sobre el rake total — informativo">Unión (info.)</th>
                           <th>Makeup (ant. → nuevo)</th><th>Pago mesas</th><th>Pago total jugador</th>
                           <th>Capital (ant. → después)</th><th></th>
                         </tr>
@@ -878,6 +903,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                             <td className="muted">{usd(h.rakeback_a_makeup)}</td>
                             <td className="muted">{usd(h.rakeback_excedente_jugador)}</td>
                             <td>{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
+                            <td>{usd(h.rakeback_banca_total ?? 0)}</td>
+                            <td className="muted">{usd(h.union_share_total ?? 0)}</td>
                             <td className="muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
                             <td className="muted">{usd(h.pago_jugador_mesas)}</td>
                             <td>{usd(h.pago_jugador_total)}</td>

@@ -15,6 +15,13 @@ export interface BancadoConfig {
   pctJugador: number; // 0..1
   pctBanca: number; // 0..1
   rakebackPct: number; // 0..1
+  // Rakeback Banca (18/09/2026): % independiente del rakebackPct de arriba — no tienen que sumar
+  // 1 entre sí. Es la parte del rake total que vuelve como rakeback pero le queda a la banca (no
+  // al jugador), y se suma como ganancia real de la banca.
+  rakebackBancaPct: number; // 0..1
+  // % que "la Unión" le reconoce a la banca sobre el rake total (ej. 0.80) — puramente
+  // informativo, no mueve plata en el sistema.
+  unionSharePct: number; // 0..1
   capitalInicial: number;
   makeupInicial: number;
 }
@@ -41,6 +48,10 @@ export interface BancadoCierreCalculado {
   pagoJugadorMesas: number;
   pagoJugadorTotal: number;
   gananciaBancaMesas: number;
+  // Rakeback Banca de esta semana (real, ya incluido dentro de gananciaBancaMesas — ver más
+  // abajo) y el % informativo de la Unión sobre el rake total (no se suma a ninguna ganancia).
+  rakebackBancaTotal: number;
+  unionShareTotal: number;
   capitalAnterior: number;
   capitalDespues: number;
 }
@@ -71,7 +82,16 @@ export function calcularCierreBancado(
   const pagoJugadorTotal = pagoJugadorMesas + rakebackExcedenteJugador;
 
   // En una pérdida, la banca absorbe el 100% (no se reparte por %banca).
-  const gananciaBancaMesas = resultado >= 0 ? resultado * cfg.pctBanca : resultado;
+  const gananciaBancaMesasPuras = resultado >= 0 ? resultado * cfg.pctBanca : resultado;
+
+  // Rakeback Banca: % independiente sobre el rake total (no depende de si hubo pérdida o
+  // ganancia en mesas, ni del makeup) — se suma directo como ganancia real de la banca.
+  const rakebackBancaTotal = Math.max(0, origen.rakeTotal * cfg.rakebackBancaPct);
+  const gananciaBancaMesas = gananciaBancaMesasPuras + rakebackBancaTotal;
+
+  // Puramente informativo — nunca mueve plata, solo para ver cuánto le corresponde reclamar a
+  // la Unión sobre el rake total de esta semana.
+  const unionShareTotal = origen.rakeTotal * cfg.unionSharePct;
 
   // El "capital" es el saldo acumulado del JUGADOR (no la caja de la banca): crece con el
   // resultado de mesas de esta semana, punto — no se le resta lo que se le paga esta semana
@@ -92,6 +112,8 @@ export function calcularCierreBancado(
     pagoJugadorMesas: redondear(pagoJugadorMesas),
     pagoJugadorTotal: redondear(pagoJugadorTotal),
     gananciaBancaMesas: redondear(gananciaBancaMesas),
+    rakebackBancaTotal: redondear(rakebackBancaTotal),
+    unionShareTotal: redondear(unionShareTotal),
     capitalAnterior: redondear(capitalAnterior),
     capitalDespues: redondear(capitalDespues),
   };

@@ -568,6 +568,16 @@ CREATE TABLE IF NOT EXISTS bancado_config (
   pct_jugador          NUMERIC(6,4) NOT NULL,
   pct_banca            NUMERIC(6,4) NOT NULL,
   rakeback_pct         NUMERIC(6,4) NOT NULL DEFAULT 0,
+  -- Rakeback Banca (18/09/2026): % INDEPENDIENTE del rakeback del jugador de arriba (no suman
+  -- 100% entre sí, cada uno se calcula sobre el rake total por separado) — es la parte del rake
+  -- que vuelve como rakeback pero queda para la banca en vez de para el jugador. Se suma como
+  -- ganancia real de la banca (ver engine/bancados.ts).
+  rakeback_banca_pct   NUMERIC(6,4) NOT NULL DEFAULT 0,
+  -- % que "la Unión" (o quien corresponda) le da a la banca sobre el rake total generado (ej.
+  -- 80%) — puramente INFORMATIVO, no mueve plata en el sistema (no genera ningún movimiento de
+  -- Wallet/Tesorería), es solo para que quede visible cuánto de eso le corresponde reclamar.
+  -- Configurable por jugador porque puede cambiar según el club/acuerdo.
+  union_share_pct      NUMERIC(6,4) NOT NULL DEFAULT 0,
   capital_inicial      NUMERIC(18,4) NOT NULL DEFAULT 0,
   makeup_inicial       NUMERIC(18,4) NOT NULL DEFAULT 0,
   moneda               TEXT NOT NULL DEFAULT 'USD',
@@ -610,6 +620,13 @@ CREATE TABLE IF NOT EXISTS bancado_historial (
   pago_jugador_mesas          NUMERIC(18,4) NOT NULL,
   pago_jugador_total          NUMERIC(18,4) NOT NULL,
   ganancia_banca_mesas        NUMERIC(18,4) NOT NULL,
+  -- Rakeback Banca de esta semana (real, ya sumado dentro de ganancia_banca_mesas) y el %
+  -- informativo de la Unión sobre el rake total de esta semana (no suma a ninguna ganancia,
+  -- solo se guarda para verlo). Ver engine/bancados.ts.
+  rakeback_banca_total        NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rakeback_banca_pct_snapshot NUMERIC(6,4) NOT NULL DEFAULT 0,
+  union_share_total           NUMERIC(18,4) NOT NULL DEFAULT 0,
+  union_share_pct_snapshot    NUMERIC(6,4) NOT NULL DEFAULT 0,
   capital_anterior             NUMERIC(18,4) NOT NULL,
   capital_despues              NUMERIC(18,4) NOT NULL,
   pct_jugador_snapshot        NUMERIC(6,4) NOT NULL,

@@ -342,6 +342,8 @@ export const api = {
       pctJugador: number;
       pctBanca: number;
       rakebackPct: number;
+      rakebackBancaPct: number;
+      unionSharePct: number;
       capitalInicial: number;
       makeupInicial: number;
       moneda?: string;
