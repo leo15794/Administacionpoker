@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -13,6 +14,12 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
  */
 export default function ResumenClub() {
   const { alertDialog } = useConfirmDialog();
+  // Deep-link desde Resumen financiero (fila de "Cierre semanal" → ver el desglose):
+  // ?club=<clubId>&week=<weekStart> — precarga ese club y esa semana en vez de los defaults
+  // (primer club de la lista / semana más reciente).
+  const [searchParams] = useSearchParams();
+  const clubObjetivo = searchParams.get("club");
+  const weekObjetivo = searchParams.get("week");
   const [clubes, setClubes] = useState<any[]>([]);
   const [clubId, setClubId] = useState("");
   const [semanas, setSemanas] = useState<any[]>([]);
@@ -27,16 +34,20 @@ export default function ResumenClub() {
   useEffect(() => {
     api.clubes().then((cs: any[]) => {
       setClubes(cs);
-      if (cs.length > 0) setClubId(cs[0].id);
+      if (clubObjetivo && cs.some((c) => c.id === clubObjetivo)) setClubId(clubObjetivo);
+      else if (cs.length > 0) setClubId(cs[0].id);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!clubId) return;
     api.semanasResumenClub(clubId).then((s: any[]) => {
       setSemanas(s);
-      setWeekStart(s[0]?.week_start ?? "");
+      if (weekObjetivo && s.some((sem) => sem.week_start === weekObjetivo)) setWeekStart(weekObjetivo);
+      else setWeekStart(s[0]?.week_start ?? "");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubId]);
 
   useEffect(() => {
@@ -174,36 +185,90 @@ export default function ResumenClub() {
                 </button>
               )}
             </div>
-            <table>
-              <tbody>
-                <tr><td>Rake total</td><td>{usd(resumen.rakeTotal)}</td></tr>
-                <tr><td>Comisiones / rakeback agentes</td><td>{usd(resumen.comisionesAgentes)}</td></tr>
-                {resumen.rebateTotal !== 0 && <tr><td>Rebate total</td><td>{usd(resumen.rebateTotal)}</td></tr>}
-                <tr><td><strong>Ganancia por rake</strong></td><td><strong>{usd(resumen.gananciaPorRake)}</strong></td></tr>
-                {resumen.rodeoPagadoAgentes !== 0 && <tr><td className="muted">Rodeo pagado agentes (ya incluido en el cierre de cada agente)</td><td className="muted">{usd(resumen.rodeoPagadoAgentes)}</td></tr>}
-                {resumen.gananciaRodeoClub !== 0 && <tr><td>Ganancia Rodeo Club</td><td>{usd(resumen.gananciaRodeoClub)}</td></tr>}
-                <tr>
-                  <td>Ingreso por ventas</td>
-                  <td>
-                    {editandoExtras ? (
-                      <input type="number" step="0.01" value={ventasInput} onChange={(e) => setVentasInput(e.target.value)} style={{ width: 120 }} />
-                    ) : (
-                      usd(resumen.ingresoPorVentas)
-                    )}
-                  </td>
-                </tr>
-                {resumen.tasaSemanalFija !== 0 && <tr><td>Tasa semanal fija</td><td>{usd(resumen.tasaSemanalFija)}</td></tr>}
-                {editandoExtras && (
+            <div className="muted" style={{ marginBottom: 12 }}>
+              Cómo se arma la Ganancia Neta de esta semana: todo lo que sumó menos todo lo que restó. La "Comisión del
+              club/plataforma" no entra en ninguna de las dos columnas porque nunca fue plata nuestra — es la parte del
+              rake que se queda el club, no algo que ganamos ni que perdimos.
+            </div>
+            {(() => {
+              // gananciaPorRake ya viene neto (rake*ratio - rakeback) sumado de todos los agentes —
+              // se reconstruye la parte bruta (rake*ratio, "nuestra parte del rake") sumándole de
+              // vuelta el rakeback, así se puede mostrar cada lado por separado sin duplicar nada.
+              const nuestraParteDelRake = Number(resumen.gananciaPorRake) + Number(resumen.comisionesAgentes);
+              const ingresos: { label: string; monto: number }[] = [
+                { label: "Rake generado — nuestra parte", monto: nuestraParteDelRake },
+              ];
+              if (Number(resumen.gananciaRodeoClub) !== 0) ingresos.push({ label: "Ganancia Rodeo Club", monto: Number(resumen.gananciaRodeoClub) });
+              if (Number(resumen.ingresoPorVentas) !== 0) ingresos.push({ label: "Ingreso por ventas", monto: Number(resumen.ingresoPorVentas) });
+              if (Number(resumen.tasaSemanalFija) > 0) ingresos.push({ label: "Tasa semanal fija", monto: Number(resumen.tasaSemanalFija) });
+
+              const egresos: { label: string; monto: number }[] = [
+                { label: "Rakeback pagado a agentes", monto: Number(resumen.comisionesAgentes) },
+              ];
+              if (Number(resumen.tasaSemanalFija) < 0) egresos.push({ label: "Tasa semanal fija", monto: Math.abs(Number(resumen.tasaSemanalFija)) });
+
+              const totalIngresos = ingresos.reduce((s, f) => s + f.monto, 0);
+              const totalEgresos = egresos.reduce((s, f) => s + f.monto, 0);
+
+              return (
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+                  <div style={{ flex: "1 1 280px" }}>
+                    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué nos hizo ganar</div>
+                    <table>
+                      <tbody>
+                        {ingresos.map((f) => (
+                          <tr key={f.label}><td>{f.label}</td><td className="pos">{usd(f.monto)}</td></tr>
+                        ))}
+                        <tr><td><strong>Total ingresos</strong></td><td className="pos"><strong>{usd(totalIngresos)}</strong></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ flex: "1 1 280px" }}>
+                    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué nos hizo perder</div>
+                    <table>
+                      <tbody>
+                        {egresos.map((f) => (
+                          <tr key={f.label}><td>{f.label}</td><td className="neg">{usd(f.monto)}</td></tr>
+                        ))}
+                        <tr><td><strong>Total egresos</strong></td><td className="neg"><strong>{usd(totalEgresos)}</strong></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+            {resumen.rebateTotal !== 0 && (
+              <div className="muted" style={{ marginBottom: 10 }}>
+                Rebate total de la semana: {usd(resumen.rebateTotal)} — informativo, no está restado de la Ganancia Neta de abajo.
+              </div>
+            )}
+            {resumen.rodeoPagadoAgentes !== 0 && (
+              <div className="muted" style={{ marginBottom: 10 }}>
+                Rodeo pagado a agentes: {usd(resumen.rodeoPagadoAgentes)} — ya incluido en el cierre final de cada agente, no es un costo aparte del club.
+              </div>
+            )}
+            {editandoExtras && (
+              <table style={{ marginBottom: 10 }}>
+                <tbody>
+                  <tr>
+                    <td>Ingreso por ventas</td>
+                    <td><input type="number" step="0.01" value={ventasInput} onChange={(e) => setVentasInput(e.target.value)} style={{ width: 120 }} /></td>
+                  </tr>
                   <tr>
                     <td>Observaciones</td>
                     <td><input type="text" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} style={{ width: 220 }} /></td>
                   </tr>
-                )}
+                </tbody>
+              </table>
+            )}
+            <table>
+              <tbody>
                 <tr className="panel" style={{ background: "rgba(120,200,120,0.08)" }}>
-                  <td><strong>GANANCIA NETA</strong></td>
+                  <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
                   <td><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
                 </tr>
-                <tr><td>Cierre total agentes</td><td>{usd(resumen.cierreTotalAgentes)}</td></tr>
+                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
+                <tr><td className="muted">Cierre total agentes</td><td className="muted">{usd(resumen.cierreTotalAgentes)}</td></tr>
               </tbody>
             </table>
             {editandoExtras && (

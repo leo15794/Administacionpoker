@@ -270,7 +270,7 @@ export default function ResumenFinanciero() {
                         key={`${e.categoria}_${e.id}`}
                         className={e.enlace ? "row-click" : undefined}
                         onClick={e.enlace ? () => nav(e.enlace) : undefined}
-                        title={e.enlace ? "Ver en Cierres" : undefined}
+                        title={e.enlace ? "Ver el desglose (qué sumó y qué restó)" : undefined}
                       >
                         <td className="muted">{new Date(e.fecha + "T00:00:00").toLocaleDateString("es-AR")}</td>
                         <td><span className="badge neutral">{CATEGORIA_LABEL[e.categoria] ?? e.categoria}</span></td>
