@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import MovimientosHistorial from "./MovimientosHistorial";
+import { useConfirmDialog } from "./ConfirmProvider";
 
 // Agrupa los cierres (uno por club) en un bloque por semana — mismo criterio que la pestaña
 // "Estado de cuenta del agente" de la planilla vieja: un total de la semana (suma de todos los
@@ -122,6 +123,7 @@ async function generarPdf(agente: any, saldos: any[], cierres: any[], totalNeto:
  * saldo por club, garantía ni cierres — acá se ve todo junto, como el propio agente lo vería.
  */
 export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
+  const { alertDialog } = useConfirmDialog();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [generandoPdf, setGenerandoPdf] = useState(false);
@@ -166,7 +168,7 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
             try {
               await generarPdf(data.agente, data.saldos, data.cierres, totalNeto, data.garantia);
             } catch (err: any) {
-              alert(err.message || "No se pudo generar el PDF.");
+              await alertDialog(err.message || "No se pudo generar el PDF.");
             } finally {
               setGenerandoPdf(false);
             }

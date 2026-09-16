@@ -682,6 +682,11 @@ select option {
 .modal-close:hover { color: var(--text); background: var(--panel-2); }
 .modal-body { padding: 16px 20px 22px; }
 
+/* Confirm/alert propios (reemplazan confirm()/alert() nativos del navegador) */
+.confirm-backdrop { z-index: 80; }
+.confirm-box { width: 420px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
 /* ---------- clickable rows / search ---------- */
 
 .row-click { cursor: pointer; }

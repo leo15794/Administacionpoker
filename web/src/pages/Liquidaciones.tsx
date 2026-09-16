@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
 // agente+club con lo que generó en rakeback esa semana, un total, y (abajo) lo que
@@ -101,6 +102,7 @@ async function generarPdf(input: PdfInput) {
 }
 
 export default function Liquidaciones() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [agentes, setAgentes] = useState<any[]>([]);
   const [filtro, setFiltro] = useState("");
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
@@ -199,7 +201,7 @@ export default function Liquidaciones() {
   async function aplicarCruces() {
     const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
     if (ids.length === 0) return;
-    if (!confirm(`Se va a descontar ${usd(totalCruzado)} de ${ids.length} adelanto(s) — esto los consume de verdad, no se puede deshacer desde acá (habría que corregirlo en Adelantos). ¿Confirmás?`)) return;
+    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzado)} de ${ids.length} adelanto(s) — esto los consume de verdad, no se puede deshacer desde acá (habría que corregirlo en Adelantos). ¿Confirmás?`))) return;
     setAplicando(true);
     try {
       for (const id of ids) {
@@ -213,7 +215,7 @@ export default function Liquidaciones() {
       setAplicado((prev) => prev + totalCruzado);
       refrescarLiquidacion(true);
     } catch (err: any) {
-      alert(err.message || "No se pudo aplicar el cruce.");
+      await alertDialog(err.message || "No se pudo aplicar el cruce.");
     } finally {
       setAplicando(false);
     }
@@ -302,7 +304,7 @@ export default function Liquidaciones() {
                     setGuardado(true);
                     refrescarHistorial();
                   } catch (err: any) {
-                    alert(err.message || "No se pudo guardar la liquidación.");
+                    await alertDialog(err.message || "No se pudo guardar la liquidación.");
                   } finally {
                     setGuardando(false);
                   }
@@ -329,7 +331,7 @@ export default function Liquidaciones() {
                       nota,
                     });
                   } catch (err: any) {
-                    alert(err.message || "No se pudo generar el PDF.");
+                    await alertDialog(err.message || "No se pudo generar el PDF.");
                   } finally {
                     setGenerandoPdf(false);
                   }
@@ -527,7 +529,7 @@ export default function Liquidaciones() {
                           adelantosAplicados: Number(h.adelantos_aplicados),
                           adelantosManual: Number(h.adelantos_manual),
                           nota: h.nota || "",
-                        }).catch((err: any) => alert(err.message || "No se pudo generar el PDF."))
+                        }).catch((err: any) => alertDialog(err.message || "No se pudo generar el PDF."))
                       }
                     >
                       Descargar PDF
@@ -536,13 +538,13 @@ export default function Liquidaciones() {
                       className="btn danger small"
                       disabled={borrandoHist === h.id}
                       onClick={async () => {
-                        if (!confirm(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto NO afecta ningún adelanto ya cruzado ni ningún cierre — solo borra este registro/foto.`)) return;
+                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto NO afecta ningún adelanto ya cruzado ni ningún cierre — solo borra este registro/foto.`))) return;
                         setBorrandoHist(h.id);
                         try {
                           await api.eliminarLiquidacionGuardada(h.id);
                           refrescarHistorial();
                         } catch (err: any) {
-                          alert(err.message || "No se pudo eliminar.");
+                          await alertDialog(err.message || "No se pudo eliminar.");
                         } finally {
                           setBorrandoHist(null);
                         }

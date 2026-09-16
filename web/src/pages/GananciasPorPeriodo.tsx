@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 // Recreación de las pestañas GANANCIAS_POR_PERIODO + AJUSTES EXTRAORDINARIOS de la planilla
 // (15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre ("Agosto 2026") y, al
@@ -11,6 +12,7 @@ import Modal from "../components/Modal";
 // la ganancia de DigiPlayers).
 
 export default function GananciasPorPeriodo() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [periodos, setPeriodos] = useState<any[] | null>(null);
   const [ajustes, setAjustes] = useState<any[] | null>(null);
   const [error, setError] = useState("");
@@ -31,52 +33,52 @@ export default function GananciasPorPeriodo() {
   }, []);
 
   async function cerrar(p: any) {
-    if (!confirm(`¿Cerrar el período "${p.name}"? Se congelan los números y se consume una cuota de cada ajuste extraordinario todavía activo. Se puede reabrir después si hace falta.`)) return;
+    if (!(await confirmDialog(`¿Cerrar el período "${p.name}"? Se congelan los números y se consume una cuota de cada ajuste extraordinario todavía activo. Se puede reabrir después si hace falta.`))) return;
     setBusy(p.id);
     try {
       await api.cerrarPeriodo(p.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo cerrar el período.");
+      await alertDialog(err.message || "No se pudo cerrar el período.");
     } finally {
       setBusy(null);
     }
   }
 
   async function reabrir(p: any) {
-    if (!confirm(`¿Reabrir el período "${p.name}"? Le devuelve la cuota consumida a cada ajuste que tocó. Solo hacé esto en orden — del más nuevo cerrado hacia atrás.`)) return;
+    if (!(await confirmDialog(`¿Reabrir el período "${p.name}"? Le devuelve la cuota consumida a cada ajuste que tocó. Solo hacé esto en orden — del más nuevo cerrado hacia atrás.`))) return;
     setBusy(p.id);
     try {
       await api.reabrirPeriodo(p.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo reabrir el período.");
+      await alertDialog(err.message || "No se pudo reabrir el período.");
     } finally {
       setBusy(null);
     }
   }
 
   async function eliminarPeriodo(p: any) {
-    if (!confirm(`¿Eliminar el período "${p.name}"? No se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar el período "${p.name}"? No se puede deshacer.`))) return;
     setBusy(p.id);
     try {
       await api.eliminarPeriodo(p.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el período.");
+      await alertDialog(err.message || "No se pudo eliminar el período.");
     } finally {
       setBusy(null);
     }
   }
 
   async function eliminarAjuste(a: any) {
-    if (!confirm(`¿Eliminar el ajuste "${a.descripcion}"? No se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar el ajuste "${a.descripcion}"? No se puede deshacer.`))) return;
     setBusy(a.id);
     try {
       await api.eliminarAjusteExtraordinario(a.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el ajuste.");
+      await alertDialog(err.message || "No se pudo eliminar el ajuste.");
     } finally {
       setBusy(null);
     }
@@ -351,6 +353,7 @@ function NuevoPeriodoForm({ onDone }: { onDone: () => void }) {
 }
 
 function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [periodo, setPeriodo] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
@@ -371,28 +374,28 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
   if (!periodo) return <div className="muted">Cargando...</div>;
 
   async function cerrar() {
-    if (!confirm(`¿Cerrar "${periodo.name}"? Se congelan los números.`)) return;
+    if (!(await confirmDialog(`¿Cerrar "${periodo.name}"? Se congelan los números.`))) return;
     setBusy(true);
     try {
       await api.cerrarPeriodo(id);
       load();
       onChanged();
     } catch (err: any) {
-      alert(err.message || "No se pudo cerrar el período.");
+      await alertDialog(err.message || "No se pudo cerrar el período.");
     } finally {
       setBusy(false);
     }
   }
 
   async function reabrir() {
-    if (!confirm(`¿Reabrir "${periodo.name}"?`)) return;
+    if (!(await confirmDialog(`¿Reabrir "${periodo.name}"?`))) return;
     setBusy(true);
     try {
       await api.reabrirPeriodo(id);
       load();
       onChanged();
     } catch (err: any) {
-      alert(err.message || "No se pudo reabrir el período.");
+      await alertDialog(err.message || "No se pudo reabrir el período.");
     } finally {
       setBusy(false);
     }

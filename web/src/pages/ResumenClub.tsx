@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 /**
  * "Resumen por club" — reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion
@@ -11,6 +12,7 @@ import { usd, pct, dateShort } from "../fmt";
  * fee fijo semanal del club si tiene, ej. Tasa semanal GG).
  */
 export default function ResumenClub() {
+  const { alertDialog } = useConfirmDialog();
   const [clubes, setClubes] = useState<any[]>([]);
   const [clubId, setClubId] = useState("");
   const [semanas, setSemanas] = useState<any[]>([]);
@@ -67,7 +69,7 @@ export default function ResumenClub() {
       setResumen(r);
       setEditandoExtras(false);
     } catch (err: any) {
-      alert(err.message || "No se pudo guardar.");
+      await alertDialog(err.message || "No se pudo guardar.");
     } finally {
       setGuardando(false);
     }

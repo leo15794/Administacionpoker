@@ -18,6 +18,7 @@ import JugadoresBancados from "./pages/JugadoresBancados";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 import { api } from "./api";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -27,8 +28,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <ConfirmProvider>
+      <BrowserRouter>
+        <Routes>
         <Route path="/login" element={<Login />} />
 
         <Route
@@ -79,7 +81,8 @@ export default function App() {
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </ConfirmProvider>
   );
 }

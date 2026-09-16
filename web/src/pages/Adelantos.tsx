@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -23,6 +24,7 @@ const TIPO_LABEL: Record<string, string> = {
 // de en qué club se originó ESE adelanto puntual — nunca limita contra qué club se compensa
 // después. Es el concepto "Adelanto de rakeback" que la planilla suma en Agentes nos deben.
 export default function Adelantos() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [adelantos, setAdelantos] = useState<any[] | null>(null);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
@@ -43,13 +45,13 @@ export default function Adelantos() {
   // Borrado real (no "Baja"): saca el adelanto y todo su historial de movimientos, para cuando
   // nunca debió cargarse (duplicado, agente equivocado, etc.).
   async function eliminarAdelanto(a: any) {
-    if (!confirm(`¿Eliminar este adelanto de ${a.agent_name}${a.club_origen_name ? ` (${a.club_origen_name})` : ""}? Esto borra también su historial de movimientos — no se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar este adelanto de ${a.agent_name}${a.club_origen_name ? ` (${a.club_origen_name})` : ""}? Esto borra también su historial de movimientos — no se puede deshacer.`))) return;
     setBorrando(a.id);
     try {
       await api.eliminarAdelanto(a.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el adelanto.");
+      await alertDialog(err.message || "No se pudo eliminar el adelanto.");
     } finally {
       setBorrando(null);
     }
@@ -65,13 +67,13 @@ export default function Adelantos() {
   // como el historial ya viene ordenado más nuevo primero, alcanza con marcar la primera
   // aparición de cada advance_id.
   async function eliminarMovimiento(m: any) {
-    if (!confirm(`¿Eliminar este movimiento (${TIPO_LABEL[m.type] ?? m.type} de ${m.agent_name}, ${usd(m.amount)})? Deja el adelanto como estaba antes de este movimiento. Es para corregir cargas de prueba, no se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar este movimiento (${TIPO_LABEL[m.type] ?? m.type} de ${m.agent_name}, ${usd(m.amount)})? Deja el adelanto como estaba antes de este movimiento. Es para corregir cargas de prueba, no se puede deshacer.`))) return;
     setBorrandoMov(m.id);
     try {
       await api.eliminarMovimientoAdelanto(m.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el movimiento.");
+      await alertDialog(err.message || "No se pudo eliminar el movimiento.");
     } finally {
       setBorrandoMov(null);
     }

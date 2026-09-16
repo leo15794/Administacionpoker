@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 function num(n: number | string | null | undefined) {
   if (n === null || n === undefined) return "—";
@@ -19,6 +20,7 @@ type Tab = "resumen" | "deudas" | "prepago" | "consolidado" | "cuentas";
 // El conteo de stock se edita y elimina directo (control 100%, pedido explícito del usuario),
 // porque es un dato que se re-confirma club por club todo el tiempo, no un movimiento de plata.
 export default function StockDeudas() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [tab, setTab] = useState<Tab>("resumen");
   const [stock, setStock] = useState<any[] | null>(null);
   const [resumen, setResumen] = useState<any | null>(null);
@@ -47,13 +49,13 @@ export default function StockDeudas() {
   }, []);
 
   async function eliminar(s: any) {
-    if (!confirm(`¿Eliminar el stock cargado de "${s.agent_name}" en ${s.club_name}?\n\nNo se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar el stock cargado de "${s.agent_name}" en ${s.club_name}?\n\nNo se puede deshacer.`))) return;
     setBorrando(s.id);
     try {
       await api.eliminarStock(s.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar.");
+      await alertDialog(err.message || "No se pudo eliminar.");
     } finally {
       setBorrando(null);
     }

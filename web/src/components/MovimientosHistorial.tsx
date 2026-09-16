@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
+import { useConfirmDialog } from "./ConfirmProvider";
 
 const TIPO_LABEL: Record<string, string> = {
   CARGA: "Carga",
@@ -19,6 +20,7 @@ function truncar(texto: string, max = 140) {
 }
 
 export default function MovimientosHistorial({ agentId, clubId }: { agentId?: string; clubId?: string }) {
+  const { alertDialog, promptDialog } = useConfirmDialog();
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   const [borrando, setBorrando] = useState<string | null>(null);
@@ -34,14 +36,14 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
   }, [agentId, clubId]);
 
   async function onRevertir(id: string) {
-    const motivo = prompt("¿Por qué revertís este movimiento? (queda registrado en el historial)") ?? undefined;
-    if (motivo === undefined) return; // canceló el prompt
+    const motivo = await promptDialog("¿Por qué revertís este movimiento? (queda registrado en el historial)");
+    if (motivo === null) return; // canceló el prompt
     setBorrando(id);
     try {
       await api.revertirMovimiento(id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo revertir el movimiento.");
+      await alertDialog(err.message || "No se pudo revertir el movimiento.");
     } finally {
       setBorrando(null);
     }

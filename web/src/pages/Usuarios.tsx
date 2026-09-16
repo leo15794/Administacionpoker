@@ -3,6 +3,7 @@ import { api } from "../api";
 import Modal from "../components/Modal";
 import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
 import { usd } from "../fmt";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
 // para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
@@ -146,6 +147,7 @@ function FilaAgenteSupervisor({
 }
 
 function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any; agentes: any[]; supervisoresData: any[] }) {
+  const { confirmDialog } = useConfirmDialog();
   // "A cargo" SÍ depende de la cuenta principal (agents.supervisor se resuelve por nombre de
   // agente — mecanismo que ya existía antes de esta feature). "% comisión por referido" NO
   // depende de eso: cuelga directo del login (usuario.id), a propósito, para no obligar a que
@@ -177,7 +179,7 @@ function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any;
 
   async function toggleACargo(a: any) {
     if (a.supervisor && a.supervisor !== supervisorName) {
-      if (!confirm(`${a.name} ya tiene cargado como supervisor a "${a.supervisor}". ¿Reasignarlo a ${supervisorName}?`)) return;
+      if (!(await confirmDialog(`${a.name} ya tiene cargado como supervisor a "${a.supervisor}". ¿Reasignarlo a ${supervisorName}?`))) return;
     }
     await api.editarAgente(a.id, { supervisor: a.supervisor === supervisorName ? null : supervisorName ?? null });
     window.dispatchEvent(new Event("digiplayers:agentes-actualizados"));
@@ -192,7 +194,7 @@ function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any;
       // Lo dejaron vacío: si tenía comisión cargada, se desactiva (el saldo ya acumulado queda
       // como está, solo se corta la acreditación automática a futuro).
       if (existente) {
-        if (!confirm(`¿Sacarle a ${agente.name} la comisión por referido? El saldo ya acumulado (${existente.saldo}) queda como está, solo se corta la acreditación a futuro.`)) {
+        if (!(await confirmDialog(`¿Sacarle a ${agente.name} la comisión por referido? El saldo ya acumulado (${existente.saldo}) queda como está, solo se corta la acreditación a futuro.`))) {
           refrescarReferidos(); // restaura el input al valor que tenía
           return;
         }
@@ -333,6 +335,7 @@ function PanelSupervisor({ usuario, agentes, supervisoresData }: { usuario: any;
 }
 
 export default function Usuarios() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [supervisoresInvalidos, setSupervisoresInvalidos] = useState<any[]>([]);
@@ -379,12 +382,12 @@ export default function Usuarios() {
   const supervisoresValidos = agentes.filter((a: any) => a.account_type === "SUPERVISOR");
 
   async function eliminarUsuario(u: any) {
-    if (!confirm(`¿Eliminar el usuario "${u.email}"? Esto borra el acceso al portal (y su configuración de Supervisor si tenía) — no toca el historial de cierres/movimientos del agente, eso queda intacto. No se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar el usuario "${u.email}"? Esto borra el acceso al portal (y su configuración de Supervisor si tenía) — no toca el historial de cierres/movimientos del agente, eso queda intacto. No se puede deshacer.`))) return;
     try {
       await api.eliminarUsuario(u.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el usuario.");
+      await alertDialog(err.message || "No se pudo eliminar el usuario.");
     }
   }
 

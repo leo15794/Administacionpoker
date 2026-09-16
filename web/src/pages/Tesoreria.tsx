@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 const LEDGER_LABEL: Record<string, string> = {
   WALLET_MANOS: "Wallet USDT",
@@ -14,6 +15,7 @@ function estaRevertido(m: any) {
 }
 
 export default function Tesoreria() {
+  const { alertDialog, promptDialog } = useConfirmDialog();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState(false);
@@ -26,15 +28,15 @@ export default function Tesoreria() {
 
   async function revertir(m: any) {
     const detalle = m.source === "ajuste" ? m.observation : `${m.agent_name} (${m.type})`;
-    const motivo = prompt(`Revertir movimiento:\n\n${detalle}\n${m.direction === "INGRESO" ? "+" : "-"}${m.amount}\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
-    if (motivo === undefined) return;
+    const motivo = await promptDialog(`Revertir movimiento:\n\n${detalle}\n${m.direction === "INGRESO" ? "+" : "-"}${m.amount}\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`);
+    if (motivo === null) return;
     setBorrando(m.id);
     try {
       if (m.source === "ajuste") await api.revertirAjusteTesoreria(m.id, motivo || undefined);
       else await api.revertirMovimiento(m.id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo revertir el movimiento.");
+      await alertDialog(err.message || "No se pudo revertir el movimiento.");
     } finally {
       setBorrando(null);
     }

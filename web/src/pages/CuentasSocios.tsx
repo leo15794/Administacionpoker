@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 const CATEGORY_LABEL: Record<string, string> = {
   COMPENSACION: "Compensación",
@@ -23,6 +24,7 @@ const CATEGORIES = Object.keys(CATEGORY_LABEL) as (keyof typeof CATEGORY_LABEL)[
 // nuestros propios cierres, y retiros/gastos/ajustes de los movimientos cargados acá con esa
 // categoría, sin importar a qué cuenta pertenezcan.
 export default function CuentasSocios() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [cuentas, setCuentas] = useState<any[] | null>(null);
   const [agregados, setAgregados] = useState<any | null>(null);
   const [error, setError] = useState("");
@@ -54,27 +56,27 @@ export default function CuentasSocios() {
   }
 
   async function eliminarCuenta(c: any) {
-    if (!confirm(`¿Eliminar la cuenta "${c.name}"? Esto borra también todos sus movimientos (${c.movimientos}) — no se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar la cuenta "${c.name}"? Esto borra también todos sus movimientos (${c.movimientos}) — no se puede deshacer.`))) return;
     setBorrando(c.id);
     try {
       await api.eliminarCuentaSocio(c.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar la cuenta.");
+      await alertDialog(err.message || "No se pudo eliminar la cuenta.");
     } finally {
       setBorrando(null);
     }
   }
 
   async function eliminarMovimiento(m: any) {
-    if (!confirm(`¿Eliminar este movimiento de ${m.account_name}?\n\n${m.concept} — ${usd(m.amount)}\n\nNo se puede deshacer.`)) return;
+    if (!(await confirmDialog(`¿Eliminar este movimiento de ${m.account_name}?\n\n${m.concept} — ${usd(m.amount)}\n\nNo se puede deshacer.`))) return;
     setBorrando(m.id);
     try {
       await api.eliminarMovimientoCuentaSocio(m.id);
       refresh();
       cargarMovimientos(m.account_id);
     } catch (err: any) {
-      alert(err.message || "No se pudo eliminar el movimiento.");
+      await alertDialog(err.message || "No se pudo eliminar el movimiento.");
     } finally {
       setBorrando(null);
     }

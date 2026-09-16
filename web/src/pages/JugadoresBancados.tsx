@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 /**
  * "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que hay que excluir
@@ -13,6 +14,7 @@ import { usd, dateShort } from "../fmt";
  * propio) — esto es un JUGADOR individual dentro del roster de un agente normal.
  */
 export default function JugadoresBancados() {
+  const { confirmDialog, alertDialog, promptDialog } = useConfirmDialog();
   const [bancados, setBancados] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
@@ -58,14 +60,14 @@ export default function JugadoresBancados() {
     const avisoPago = h.wallet_pagado_at
       ? "\n\n⚠️ Este cierre ya se pagó en la Wallet — revertirlo NO deshace ese movimiento, hay que anotarlo aparte si corresponde."
       : "";
-    const motivo = prompt(`Revertir el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)${avisoPago}`) ?? undefined;
-    if (motivo === undefined) return;
+    const motivo = await promptDialog(`Revertir el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)${avisoPago}`);
+    if (motivo === null) return;
     setAccionandoGlobal(h.id);
     try {
       await api.revertirCierreBancado(h.id, motivo || undefined);
       refreshHistorial();
     } catch (err: any) {
-      alert(err.message || "No se pudo revertir.");
+      await alertDialog(err.message || "No se pudo revertir.");
     } finally {
       setAccionandoGlobal(null);
     }
@@ -74,7 +76,7 @@ export default function JugadoresBancados() {
   // BORRADO REAL — solo para limpiar datos de prueba. Sobre plata real siempre "Revertir",
   // nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
   async function borrarGlobal(h: any) {
-    const confirmacion = prompt(
+    const confirmacion = await promptDialog(
       `Esto BORRA DEL TODO el cierre de banca de ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}) — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
     );
     if (confirmacion !== "BORRAR") return;
@@ -83,24 +85,24 @@ export default function JugadoresBancados() {
       await api.eliminarCierreBancadoDefinitivo(h.id);
       refreshHistorial();
     } catch (err: any) {
-      alert(err.message || "No se pudo borrar.");
+      await alertDialog(err.message || "No se pudo borrar.");
     } finally {
       setAccionandoGlobal(null);
     }
   }
 
   async function pagarGlobal(h: any) {
-    const ok = confirm(
+    const ok = await confirmDialog(
       `Registrar el pago de ${usd(h.pago_jugador_total)} a ${h.player_name} (semana ${dateShort(h.week_start)} - ${dateShort(h.week_end)}) como un EGRESO en la Wallet (WALLET_MANOS), con fecha de hoy.\n\n¿Confirmás?`
     );
     if (!ok) return;
     setAccionandoGlobal(h.id);
     try {
       const r = await api.pagarCierreBancado(h.id);
-      if (r.alreadyPaid) alert("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
+      if (r.alreadyPaid) await alertDialog("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
       refreshHistorial();
     } catch (err: any) {
-      alert(err.message || "No se pudo registrar el pago.");
+      await alertDialog(err.message || "No se pudo registrar el pago.");
     } finally {
       setAccionandoGlobal(null);
     }
@@ -137,7 +139,7 @@ export default function JugadoresBancados() {
         setResultados((rs) => rs.map((r) => (r.id === playerId ? { ...r, bancado: true } : r)));
       }
     } catch (err: any) {
-      alert(err.message || "No se pudo actualizar el jugador.");
+      await alertDialog(err.message || "No se pudo actualizar el jugador.");
     } finally {
       setMarcando(null);
     }
@@ -448,6 +450,7 @@ function FilaBancado({
 }
 
 function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplicado: () => void }) {
+  const { confirmDialog, alertDialog, promptDialog } = useConfirmDialog();
   const [config, setConfig] = useState<any | null>(null);
   const [estado, setEstado] = useState<any | null>(null);
   const [historialAbierto, setHistorialAbierto] = useState(true);
@@ -534,7 +537,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
       setEditandoConfig(false);
       cargarTodo();
     } catch (err: any) {
-      alert(err.message || "No se pudo guardar la configuración.");
+      await alertDialog(err.message || "No se pudo guardar la configuración.");
     } finally {
       setGuardandoConfig(false);
     }
@@ -624,30 +627,30 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
     const avisoPago = h.wallet_pagado_at
       ? "\n\n⚠️ Este cierre ya se pagó en la Wallet — revertirlo NO deshace ese movimiento, hay que anotarlo aparte si corresponde."
       : "";
-    const motivo = prompt(`¿Por qué se revierte este cierre de banca? (queda en el historial, no se borra nada)${avisoPago}`) ?? undefined;
-    if (motivo === undefined) return;
+    const motivo = await promptDialog(`¿Por qué se revierte este cierre de banca? (queda en el historial, no se borra nada)${avisoPago}`);
+    if (motivo === null) return;
     try {
       await api.revertirCierreBancado(h.id, motivo || undefined);
       cargarTodo();
       onCierreAplicado();
     } catch (err: any) {
-      alert(err.message || "No se pudo revertir.");
+      await alertDialog(err.message || "No se pudo revertir.");
     }
   }
 
   async function pagar(h: any) {
-    const ok = confirm(
+    const ok = await confirmDialog(
       `Registrar el pago de ${usd(h.pago_jugador_total)} como un EGRESO en la Wallet (WALLET_MANOS), con fecha de hoy.\n\n¿Confirmás?`
     );
     if (!ok) return;
     setPagando(h.id);
     try {
       const r = await api.pagarCierreBancado(h.id);
-      if (r.alreadyPaid) alert("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
+      if (r.alreadyPaid) await alertDialog("Este cierre ya estaba pagado — no se duplicó el movimiento en Wallet.");
       cargarTodo();
       onCierreAplicado();
     } catch (err: any) {
-      alert(err.message || "No se pudo registrar el pago.");
+      await alertDialog(err.message || "No se pudo registrar el pago.");
     } finally {
       setPagando(null);
     }
@@ -656,7 +659,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
   // BORRADO REAL — solo para limpiar datos de prueba. Sobre plata real siempre "Revertir",
   // nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
   async function borrarDefinitivo(id: string) {
-    const confirmacion = prompt(
+    const confirmacion = await promptDialog(
       'Esto BORRA DEL TODO este cierre de banca — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:'
     );
     if (confirmacion !== "BORRAR") return;
@@ -665,7 +668,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
       cargarTodo();
       onCierreAplicado();
     } catch (err: any) {
-      alert(err.message || "No se pudo borrar.");
+      await alertDialog(err.message || "No se pudo borrar.");
     }
   }
 

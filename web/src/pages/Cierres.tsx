@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 export default function Cierres() {
+  const { alertDialog, promptDialog } = useConfirmDialog();
   const [cierres, setCierres] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
@@ -69,10 +71,10 @@ export default function Cierres() {
       (c) => c.week_start === semanaABorrar && (!clubABorrar || c.club_id === clubABorrar)
     ).length;
     if (cantidad === 0) {
-      alert("No hay cierres cargados con ese filtro.");
+      await alertDialog("No hay cierres cargados con ese filtro.");
       return;
     }
-    const confirmacion = prompt(
+    const confirmacion = await promptDialog(
       `Esto BORRA DEL TODO ${cantidad} cierre(s) de la semana ${dateShort(semanaABorrar)}${club ? ` en ${club.name}` : " (todos los clubes)"} — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
     );
     if (confirmacion !== "BORRAR") return;
@@ -80,11 +82,11 @@ export default function Cierres() {
     try {
       const r = await api.eliminarCierresSemanaDefinitivo(semanaABorrar, clubABorrar || undefined);
       if (r.errores?.length > 0) {
-        alert(`Se borraron ${r.borrados} de ${r.total} cierre(s). ${r.errores.length} no se pudieron borrar automáticamente (revisalos a mano):\n\n${r.errores.map((e: any) => e.message).join("\n")}`);
+        await alertDialog(`Se borraron ${r.borrados} de ${r.total} cierre(s). ${r.errores.length} no se pudieron borrar automáticamente (revisalos a mano):\n\n${r.errores.map((e: any) => e.message).join("\n")}`);
       }
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo borrar la semana.");
+      await alertDialog(err.message || "No se pudo borrar la semana.");
     } finally {
       setBorrandoSemana(false);
     }
@@ -96,14 +98,14 @@ export default function Cierres() {
   }
 
   async function revertirCierre(c: any) {
-    const motivo = prompt(`Revertir cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`) ?? undefined;
-    if (motivo === undefined) return;
+    const motivo = await promptDialog(`Revertir cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)}).\n\n¿Por qué lo revertís? (queda en el historial, no se borra nada)`);
+    if (motivo === null) return;
     setBorrando(c.id);
     try {
       await api.revertirCierre(c.id, motivo || undefined);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo revertir el cierre.");
+      await alertDialog(err.message || "No se pudo revertir el cierre.");
     } finally {
       setBorrando(null);
     }
@@ -112,7 +114,7 @@ export default function Cierres() {
   // BORRADO REAL — solo para limpiar datos de PRUEBA. Sobre plata real siempre "Revertir"
   // (arriba), nunca esto. Pide escribir "BORRAR" literal para no tocarlo por error de un clic.
   async function borrarDefinitivo(c: any) {
-    const confirmacion = prompt(
+    const confirmacion = await promptDialog(
       `Esto BORRA DEL TODO el cierre de ${c.agent_name} en ${c.club_name} (semana ${dateShort(c.week_start)} - ${dateShort(c.week_end)}) — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
     );
     if (confirmacion !== "BORRAR") return;
@@ -121,7 +123,7 @@ export default function Cierres() {
       await api.eliminarCierreDefinitivo(c.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo borrar el cierre.");
+      await alertDialog(err.message || "No se pudo borrar el cierre.");
     } finally {
       setBorrando(null);
     }
@@ -754,6 +756,7 @@ type FilaImport = {
 // motor de vista previa/aplicar que el formulario manual, fila por fila, así nunca puede dar
 // un número distinto al que se aplicaría cargando el cierre a mano.
 function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => void }) {
+  const { alertDialog } = useConfirmDialog();
   const [file, setFile] = useState<File | null>(null);
   // Tiny GG: cada super agente baja su propio archivo — se suben varios juntos, a diferencia de
   // "file" (SUPREMA/GG) que es un solo .xlsx con varias hojas adentro.
@@ -945,7 +948,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       await api.asignarAgenteImportado({ playerExternalId: playerId, clubId, agentId, reason: "Asignado manualmente desde el importador de cierres." });
       await confirmarClubesYProcesar(); // recalcula todo con la asignación ya guardada
     } catch (err: any) {
-      alert(err.message || "No se pudo guardar la asignación.");
+      await alertDialog(err.message || "No se pudo guardar la asignación.");
     } finally {
       setGuardandoAsignacion(null);
     }
@@ -963,7 +966,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       await api.crearAgenteImportado({ name: agentNameRaw, agentIdRaw });
       await confirmarClubesYProcesar();
     } catch (err: any) {
-      alert(err.message || "No se pudo crear el agente.");
+      await alertDialog(err.message || "No se pudo crear el agente.");
     } finally {
       setCreandoAgente(null);
     }

@@ -5,6 +5,7 @@ import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -17,6 +18,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 };
 
 export default function Agentes() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
   // Todos los deals vigentes, agrupados por agente — para pintar el % en la lista principal
@@ -57,7 +59,7 @@ export default function Agentes() {
       await api.editarAgente(a.id, { active: true });
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo reactivar al agente.");
+      await alertDialog(err.message || "No se pudo reactivar al agente.");
     }
   }
 
@@ -65,12 +67,12 @@ export default function Agentes() {
   // deals, etc.), así que este botón nunca puede tirar abajo un agente con historial real; el
   // confirm es solo para evitar un click accidental sobre un agente que sí se puede borrar.
   async function eliminarAgente(a: any) {
-    if (!confirm(`¿Borrar definitivamente a "${a.name}"? Esto NO se puede deshacer. Solo funciona si el agente no tiene ningún historial real (si lo tiene, el sistema va a rechazar el borrado y te va a decir por qué).`)) return;
+    if (!(await confirmDialog(`¿Borrar definitivamente a "${a.name}"? Esto NO se puede deshacer. Solo funciona si el agente no tiene ningún historial real (si lo tiene, el sistema va a rechazar el borrado y te va a decir por qué).`))) return;
     try {
       await api.eliminarAgente(a.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo borrar al agente.");
+      await alertDialog(err.message || "No se pudo borrar al agente.");
     }
   }
 
@@ -84,22 +86,22 @@ export default function Agentes() {
   // Dar de baja: NUNCA borra nada — el agente/club deja de listarse como activo (no puede
   // recibir cierres/movimientos nuevos), pero su historial ya cargado queda intacto.
   async function darDeBajaAgente(a: any) {
-    if (!confirm(`¿Dar de baja a "${a.name}"? Deja de aparecer para cargar cierres nuevos, pero su historial se conserva igual.`)) return;
+    if (!(await confirmDialog(`¿Dar de baja a "${a.name}"? Deja de aparecer para cargar cierres nuevos, pero su historial se conserva igual.`))) return;
     try {
       await api.editarAgente(a.id, { active: false });
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo dar de baja al agente.");
+      await alertDialog(err.message || "No se pudo dar de baja al agente.");
     }
   }
 
   async function darDeBajaClub(c: any) {
-    if (!confirm(`¿Dar de baja el club "${c.name}"? Deja de estar disponible para cargar cierres nuevos, pero su historial se conserva igual.`)) return;
+    if (!(await confirmDialog(`¿Dar de baja el club "${c.name}"? Deja de estar disponible para cargar cierres nuevos, pero su historial se conserva igual.`))) return;
     try {
       await api.configurarClub(c.id, { active: false });
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo dar de baja al club.");
+      await alertDialog(err.message || "No se pudo dar de baja al club.");
     }
   }
 
@@ -526,6 +528,7 @@ const RULE_LABELS: Record<string, string> = {
 };
 
 function ReglasAgente({ agentId, clubes }: { agentId: string; clubes: any[] }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [reglas, setReglas] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [terminando, setTerminando] = useState<string | null>(null);
@@ -539,13 +542,13 @@ function ReglasAgente({ agentId, clubes }: { agentId: string; clubes: any[] }) {
   }, [agentId]);
 
   async function terminar(regla: any) {
-    if (!confirm(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}"? El agente vuelve a la fórmula genérica desde ahora (no borra el historial).`)) return;
+    if (!(await confirmDialog(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}"? El agente vuelve a la fórmula genérica desde ahora (no borra el historial).`))) return;
     setTerminando(regla.id);
     try {
       await api.terminarRegla(regla.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo terminar la regla.");
+      await alertDialog(err.message || "No se pudo terminar la regla.");
     } finally {
       setTerminando(null);
     }
@@ -661,6 +664,7 @@ function NuevaRegla({ agentId, clubes, onCreated }: { agentId: string; clubes: a
 // a buscar cuáles tienen algo activo. Misma lógica que ReglasAgente/NuevaRegla (versionado,
 // nunca se edita en el lugar), solo que acá el agente también se elige en el formulario.
 function ReglasGlobal({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [reglas, setReglas] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -677,13 +681,13 @@ function ReglasGlobal({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   }, []);
 
   async function terminar(regla: any) {
-    if (!confirm(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}" de ${regla.agent_name}? Vuelve a la fórmula genérica desde ahora (no borra el historial).`)) return;
+    if (!(await confirmDialog(`¿Terminar la regla "${RULE_LABELS[regla.rule_key] ?? regla.rule_key}" de ${regla.agent_name}? Vuelve a la fórmula genérica desde ahora (no borra el historial).`))) return;
     setTerminando(regla.id);
     try {
       await api.terminarRegla(regla.id);
       refresh();
     } catch (err: any) {
-      alert(err.message || "No se pudo terminar la regla.");
+      await alertDialog(err.message || "No se pudo terminar la regla.");
     } finally {
       setTerminando(null);
     }
@@ -822,6 +826,7 @@ const PLATFORM_LABELS: Record<string, string> = { SUPREMA: "SupremaPoker", GG: "
 const PLATFORM_ORDER = ["SUPREMA", "GG", "XPOKER"];
 
 function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [arbol, setArbol] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [clubesAbiertos, setClubesAbiertos] = useState<Record<string, boolean>>({});
@@ -857,7 +862,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   }
 
   async function eliminarJugador(clave: string, playerId: string, nombre: string) {
-    if (!confirm(`¿Eliminar a "${nombre}" de este club? No borra ningún cierre ni movimiento, solo la ficha del jugador — se puede recargar a mano después.`)) return;
+    if (!(await confirmDialog(`¿Eliminar a "${nombre}" de este club? No borra ningún cierre ni movimiento, solo la ficha del jugador — se puede recargar a mano después.`))) return;
     setEliminandoJugador(playerId);
     try {
       await api.eliminarJugador(playerId);
@@ -871,12 +876,12 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   async function moverAgente(clubId: string, agentId: string, agentName: string, toClubId: string) {
     if (!toClubId) return;
     const clubDestino = clubes.find((c) => c.id === toClubId)?.name ?? toClubId;
-    if (!confirm(`¿Mover TODOS los jugadores de "${agentName}" a "${clubDestino}"? No toca ningún cierre ni movimiento del ledger, solo el club del jugador en el catálogo.`)) return;
+    if (!(await confirmDialog(`¿Mover TODOS los jugadores de "${agentName}" a "${clubDestino}"? No toca ningún cierre ni movimiento del ledger, solo el club del jugador en el catálogo.`))) return;
     setMoviendoAgente(`${clubId}|${agentId}`);
     try {
       const r = await api.moverAgenteDeClub(clubId, agentId, toClubId);
       if (r.saltados > 0) {
-        alert(`Se movieron ${r.movidos} de ${r.total} jugadores. ${r.saltados} se saltearon porque ya existía un jugador con ese mismo ID en "${clubDestino}" — revisalos a mano.`);
+        await alertDialog(`Se movieron ${r.movidos} de ${r.total} jugadores. ${r.saltados} se saltearon porque ya existía un jugador con ese mismo ID en "${clubDestino}" — revisalos a mano.`);
       }
       refresh();
     } finally {
