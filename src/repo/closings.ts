@@ -288,6 +288,34 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       [newId("bal"), input.agentId, input.clubId, montoAgente]
     );
 
+    // Comisión por referido de supervisor (16/09/2026): si ESTE agente (el que se está
+    // cerrando) tiene un referidor activo cargado, se acredita automáticamente su % sobre el
+    // rake total de este cierre — saldo separado del propio agente, nunca tocando su balance
+    // ni su liquidación. FOR UPDATE para que dos cierres del mismo agente referido en paralelo
+    // nunca puedan pisarse el saldo acumulado.
+    const referidoRes = await client.query(
+      `SELECT * FROM supervisor_referidos WHERE agente_referido_id = $1 AND active = true FOR UPDATE`,
+      [input.agentId]
+    );
+    if (referidoRes.rows[0] && Number(calc.rakeTotal)) {
+      const referido = referidoRes.rows[0];
+      const comision = Number(calc.rakeTotal) * (Number(referido.porcentaje) / 100);
+      const nuevoSaldo = Number(referido.saldo) + comision;
+      await client.query(`UPDATE supervisor_referidos SET saldo = $1, updated_at = now() WHERE id = $2`, [nuevoSaldo, referido.id]);
+      await client.query(
+        `INSERT INTO supervisor_referido_movements (id, referido_id, weekly_closing_id, type, amount, resulting_saldo, notes)
+         VALUES ($1,$2,$3,'COMISION',$4,$5,$6)`,
+        [
+          newId("refmov"),
+          referido.id,
+          id,
+          comision,
+          nuevoSaldo,
+          `Comisión por cierre semanal ${input.weekStart} al ${input.weekEnd} (rake total ${calc.rakeTotal} × ${referido.porcentaje}%).`,
+        ]
+      );
+    }
+
     await client.query(input.preview ? "ROLLBACK" : "COMMIT");
     return {
       id,
@@ -573,6 +601,32 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
     }
   }
 
+  // Comisión por referido de supervisor: si este cierre había generado una acreditación
+  // automática, se descuenta del saldo corriente y se deja un movimiento CORRECCION de rastro
+  // (nunca se borra el histórico, mismo criterio que el resto de este archivo).
+  const refMovRes = await pool.query(
+    `SELECT * FROM supervisor_referido_movements WHERE weekly_closing_id = $1 AND type = 'COMISION'`,
+    [closingId]
+  );
+  for (const rm of refMovRes.rows) {
+    const upd = await pool.query(
+      `UPDATE supervisor_referidos SET saldo = saldo - $1, updated_at = now() WHERE id = $2 RETURNING saldo`,
+      [rm.amount, rm.referido_id]
+    );
+    await pool.query(
+      `INSERT INTO supervisor_referido_movements (id, referido_id, weekly_closing_id, type, amount, resulting_saldo, notes)
+       VALUES ($1,$2,$3,'CORRECCION',$4,$5,$6)`,
+      [
+        newId("refmov"),
+        rm.referido_id,
+        closingId,
+        -Number(rm.amount),
+        upd.rows[0]?.saldo ?? 0,
+        motivo ? `Reversión de cierre revertido: ${motivo}` : "Reversión de cierre revertido.",
+      ]
+    );
+  }
+
   // Módulo de bancados: la "memoria" (deuda) es un valor corrido semana a semana, no un
   // movimiento del ledger — revertir el movimiento de arriba no la toca. Se restaura acá al
   // valor que tenía ANTES de este cierre (bancado_debt_before). Esto asume que se revierten
@@ -685,7 +739,21 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
       if (wc.rodeo_detalle?.memoriaAnterior !== undefined) {
         await restaurarMemoriaRodeoTx(wc.agent_id, wc.club_id, Number(wc.rodeo_detalle.memoriaAnterior));
       }
+
+      // Comisión por referido de supervisor: si seguía activo, deshace el saldo acreditado por
+      // este cierre (sin generar rastro, mismo criterio que el resto de esta rama "sigue activo").
+      const refMovActivo = await client.query(
+        `SELECT * FROM supervisor_referido_movements WHERE weekly_closing_id = $1 AND type = 'COMISION'`,
+        [closingId]
+      );
+      for (const rm of refMovActivo.rows) {
+        await client.query(`UPDATE supervisor_referidos SET saldo = saldo - $1, updated_at = now() WHERE id = $2`, [rm.amount, rm.referido_id]);
+      }
     }
+
+    // Borra del todo el rastro de comisión de referido de este cierre (tanto la acreditación
+    // original como, si ya estaba revertido, su CORRECCION de reversa).
+    await client.query(`DELETE FROM supervisor_referido_movements WHERE weekly_closing_id = $1`, [closingId]);
 
     // IDs de movimientos a borrar del todo: el de este cierre, el del supervisor (si tenía), y
     // — solo si ya estaba revertido — sus respectivas reversas (que si no, no existen: en la

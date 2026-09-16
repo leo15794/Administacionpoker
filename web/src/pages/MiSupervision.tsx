@@ -47,7 +47,32 @@ export default function MiSupervision() {
           <div className="label">Agentes a cargo</div>
           <div className="value">{data.agentes.length}</div>
         </div>
+        <div className="kpi-card">
+          <div className="label">Comisión por referido acumulada</div>
+          <div className="value">{usd(data.saldo_referidos_total ?? 0)}</div>
+        </div>
       </div>
+
+      {data.referidos && data.referidos.length > 0 && (
+        <div className="panel">
+          <h3>Comisiones por referido</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            % fijo sobre el rake semanal de cada agente, acreditado automáticamente en cada cierre suyo — saldo separado de su propia liquidación.
+          </div>
+          <table>
+            <thead><tr><th>Agente referido</th><th>%</th><th>Saldo acumulado</th></tr></thead>
+            <tbody>
+              {data.referidos.map((r: any) => (
+                <tr key={r.id}>
+                  <td>{r.agente_referido_name}</td>
+                  <td>{r.porcentaje}%</td>
+                  <td>{usd(r.saldo)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="panel">
         <h3>Agentes a cargo</h3>

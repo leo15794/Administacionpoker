@@ -793,3 +793,39 @@ INSERT INTO agent_user_agents (user_id, agent_id)
 -- que se recrea acá de forma idempotente.
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
 ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR'));
+
+-- Comisión por referido de supervisor (16/09/2026): un supervisor puede tener % configurado
+-- sobre el rake semanal de un agente que ÉL REFIRIÓ (distinto de rebate_destino=RAKEBACK_SUPERVISOR,
+-- que es para agentes administrativamente A CARGO del supervisor vía agents.supervisor). Se
+-- auto-acredita en cada cierre semanal del agente referido (ver aplicarCierreSemanal), separado
+-- de la liquidación propia de ese agente — mismo espíritu que la planilla vieja (hoja MEMORIA_URIEL):
+-- comisión = rake semanal del referido × %, tracked como saldo corriente.
+-- Un agente referido solo puede tener UN referidor activo a la vez (evita ambigüedad de a quién
+-- le corresponde el % si hubiera más de uno).
+CREATE TABLE IF NOT EXISTS supervisor_referidos (
+  id                    TEXT PRIMARY KEY,
+  supervisor_agent_id   TEXT NOT NULL REFERENCES agents(id),
+  agente_referido_id    TEXT NOT NULL REFERENCES agents(id),
+  porcentaje            NUMERIC NOT NULL CHECK (porcentaje > 0 AND porcentaje <= 100),
+  saldo                 NUMERIC NOT NULL DEFAULT 0,
+  active                BOOLEAN NOT NULL DEFAULT true,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS supervisor_referidos_activo_unico
+  ON supervisor_referidos (agente_referido_id) WHERE active;
+
+-- Histórico de movimientos del saldo de referido (mismo patrón que rakeback_advance_movements):
+-- COMISION = acreditación automática por un cierre semanal; CORRECCION = ajuste manual o
+-- reversa de un cierre revertido.
+CREATE TABLE IF NOT EXISTS supervisor_referido_movements (
+  id                 TEXT PRIMARY KEY,
+  referido_id        TEXT NOT NULL REFERENCES supervisor_referidos(id),
+  weekly_closing_id  TEXT REFERENCES weekly_closings(id),
+  type               TEXT NOT NULL CHECK (type IN ('COMISION','CORRECCION')),
+  amount             NUMERIC NOT NULL,
+  resulting_saldo    NUMERIC NOT NULL,
+  notes              TEXT,
+  occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_supervisor_referido_movements_wc ON supervisor_referido_movements(weekly_closing_id);

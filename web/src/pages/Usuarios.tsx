@@ -50,6 +50,149 @@ function SelectorAgentes({
   );
 }
 
+// Panel de configuración de negocio de un Supervisor — vive acá (no en una pantalla aparte)
+// para que, como pidió Leo, "quede todo en el mismo lugar" al crear/editar ese usuario.
+// Dos cosas separadas, aunque se editen juntas:
+//  1. "Agentes a cargo": asigna/quita agents.supervisor (mecanismo YA existente, el mismo que
+//     usa Administración → Agentes → Supervisores) — decide a quién le llega el rakeback
+//     centralizado cuando un club tiene rebate_destino = RAKEBACK_SUPERVISOR.
+//  2. "Comisiones por referido": % fijo sobre el rake semanal de un agente puntual (no
+//     necesariamente a cargo), que se acredita SOLO como saldo separado, automático en cada
+//     cierre de ese agente (ver supervisor_referidos / aplicarCierreSemanal).
+function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: string; agentes: any[] }) {
+  const supervisor = agentes.find((a) => a.id === supervisorAgentId);
+  const supervisorName: string | undefined = supervisor?.name;
+  const [referidos, setReferidos] = useState<any[]>([]);
+  const [agenteReferidoId, setAgenteReferidoId] = useState("");
+  const [porcentaje, setPorcentaje] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  function refrescarReferidos() {
+    api.referidosDeSupervisor(supervisorAgentId).then(setReferidos);
+  }
+
+  useEffect(() => {
+    refrescarReferidos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supervisorAgentId]);
+
+  const otrosAgentes = agentes.filter((a) => a.id !== supervisorAgentId);
+  const aCargo = otrosAgentes.filter((a) => a.supervisor === supervisorName);
+
+  async function agregarReferido(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    const pct = Number(porcentaje);
+    if (!agenteReferidoId || !pct || pct <= 0 || pct > 100) {
+      return setMsg({ ok: false, text: "Elegí un agente y un % entre 0 y 100." });
+    }
+    try {
+      await api.crearReferido(supervisorAgentId, { agenteReferidoId, porcentaje: pct });
+      setAgenteReferidoId("");
+      setPorcentaje("");
+      refrescarReferidos();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo agregar." });
+    }
+  }
+
+  async function cambiarPorcentaje(r: any, nuevo: string) {
+    const pct = Number(nuevo);
+    if (!pct || pct <= 0 || pct > 100) return;
+    await api.actualizarReferido(r.id, { porcentaje: pct });
+    refrescarReferidos();
+  }
+
+  async function quitarReferido(r: any) {
+    if (!confirm(`¿Dejar de acreditarle a ${supervisorName} comisión por ${r.agente_referido_name}? El saldo ya acumulado (${r.saldo}) queda como está, solo se corta la acreditación automática a futuro.`)) return;
+    await api.actualizarReferido(r.id, { active: false });
+    refrescarReferidos();
+  }
+
+  async function toggleACargo(a: any) {
+    if (a.supervisor && a.supervisor !== supervisorName) {
+      if (!confirm(`${a.name} ya tiene cargado como supervisor a "${a.supervisor}". ¿Reasignarlo a ${supervisorName}?`)) return;
+    }
+    await api.editarAgente(a.id, { supervisor: a.supervisor === supervisorName ? null : supervisorName ?? null });
+    // Fuerza refresco del listado de agentes en el padre recargando la página de datos: como
+    // "agentes" viene por props, alcanza con refrescar el propio array local vía window event
+    // simple — más simple: recargar toda la lista de usuarios/agentes del padre.
+    window.dispatchEvent(new Event("digiplayers:agentes-actualizados"));
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <h3>Configuración de Supervisor — {supervisorName}</h3>
+
+      <div style={{ marginBottom: 18 }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+          Agentes a cargo (rakeback centralizado — mismo dato que Administración → Agentes → Supervisores).
+        </div>
+        <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
+          {otrosAgentes.map((a) => (
+            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
+              <input type="checkbox" checked={aCargo.includes(a)} onChange={() => toggleACargo(a)} />
+              {a.name}
+              {a.supervisor && a.supervisor !== supervisorName && (
+                <span className="badge neutral" style={{ fontSize: 10 }}>a cargo de {a.supervisor}</span>
+              )}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+          Comisiones por referido: % fijo sobre el rake semanal de un agente, acreditado solo (saldo
+          separado, se ve en "Mi supervisión") en cada cierre de ese agente.
+        </div>
+        {referidos.length > 0 && (
+          <table style={{ marginBottom: 10 }}>
+            <thead><tr><th>Agente referido</th><th>%</th><th>Saldo acumulado</th><th></th></tr></thead>
+            <tbody>
+              {referidos.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.agente_referido_name}</td>
+                  <td>
+                    <input
+                      type="number"
+                      defaultValue={r.porcentaje}
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      style={{ width: 70 }}
+                      onBlur={(e) => cambiarPorcentaje(r, e.target.value)}
+                    />
+                  </td>
+                  <td>{r.saldo}</td>
+                  <td><button type="button" className="btn secondary small" onClick={() => quitarReferido(r)}>Quitar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <form onSubmit={agregarReferido} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+            <label style={{ fontSize: 12 }}>Nuevo agente referido</label>
+            <select value={agenteReferidoId} onChange={(e) => setAgenteReferidoId(e.target.value)}>
+              <option value="">Elegir agente...</option>
+              {otrosAgentes.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ width: 90, marginBottom: 0 }}>
+            <label style={{ fontSize: 12 }}>%</label>
+            <input type="number" min={0} max={100} step="0.1" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} />
+          </div>
+          <button className="btn secondary small" style={{ marginBottom: 0 }}>+ Agregar</button>
+        </form>
+        {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 8 }}>{msg.text}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
@@ -60,9 +203,15 @@ export default function Usuarios() {
     api.usuarios().then(setUsuarios);
   }
 
+  function refreshAgentes() {
+    api.agentes().then(setAgentes);
+  }
+
   useEffect(() => {
     refresh();
-    api.agentes().then(setAgentes);
+    refreshAgentes();
+    window.addEventListener("digiplayers:agentes-actualizados", refreshAgentes);
+    return () => window.removeEventListener("digiplayers:agentes-actualizados", refreshAgentes);
   }, []);
 
   async function toggleActive(u: any) {
@@ -239,6 +388,9 @@ function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: an
       <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Guardando..." : "Guardar cambios"}</button>
+      {usuario.role === "SUPERVISOR" && usuario.agent_id && (
+        <PanelSupervisor supervisorAgentId={usuario.agent_id} agentes={agentes} />
+      )}
     </form>
   );
 }

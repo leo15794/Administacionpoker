@@ -103,9 +103,20 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     [supervisor.id]
   );
 
+  // Comisión por referido: agentes que este supervisor refirió (no necesariamente a cargo
+  // administrativamente) — saldo separado, se acredita solo al cerrarse cada semana del referido.
+  const referidos = await pool.query(
+    `SELECT r.id, r.porcentaje, r.saldo, a.name as agente_referido_name
+     FROM supervisor_referidos r JOIN agents a ON a.id = r.agente_referido_id
+     WHERE r.supervisor_agent_id = $1 AND r.active = true ORDER BY a.name`,
+    [supervisor.id]
+  );
+
   res.json({
     supervisor,
     agentes: agentesACargo.rows,
     rakeback_centralizado_acreditado: Number(rakebackAcreditado.rows[0].total),
+    referidos: referidos.rows,
+    saldo_referidos_total: referidos.rows.reduce((acc: number, r: any) => acc + Number(r.saldo), 0),
   });
 });
