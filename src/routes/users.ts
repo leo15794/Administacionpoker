@@ -154,6 +154,39 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
   }
 });
 
+// Borrado real de un login de portal. No toca el agente ni su historial de cierres/movimientos
+// (eso es del negocio, no del acceso) — solo borra la CUENTA DE ACCESO: agent_user_agents
+// (cascada), su configuración de comisiones por referido si era Supervisor (referidos +
+// movimientos, cascada manual porque los movimientos no tienen ON DELETE CASCADE — se
+// preserva el criterio de no dejar rastros huérfanos), y la fila de agent_users.
+usersRouter.delete("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  if (req.params.id === req.user?.userId) {
+    return res.status(400).json({ error: "No podés eliminar tu propio usuario." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const check = await client.query(`SELECT id, email FROM agent_users WHERE id = $1`, [req.params.id]);
+    if (check.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+    await client.query(
+      `DELETE FROM supervisor_referido_movements WHERE referido_id IN (SELECT id FROM supervisor_referidos WHERE supervisor_user_id = $1)`,
+      [req.params.id]
+    );
+    await client.query(`DELETE FROM supervisor_referidos WHERE supervisor_user_id = $1`, [req.params.id]);
+    await client.query(`DELETE FROM agent_users WHERE id = $1`, [req.params.id]);
+    await client.query("COMMIT");
+    res.json({ ok: true, email: check.rows[0].email });
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ============================================================
 // Comisión por referido de supervisor (16/09/2026)
 // Cuelga del LOGIN (no de un agente): un supervisor puede tener % configurado sobre el rake

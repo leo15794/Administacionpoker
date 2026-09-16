@@ -407,6 +407,7 @@ export const api = {
     id: string,
     data: { email?: string; role?: "ADMIN" | "AGENT" | "SUPERVISOR"; active?: boolean; password?: string; agentIds?: string[] }
   ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  eliminarUsuario: (id: string) => request(`/users/${id}`, { method: "DELETE" }),
 
   aplicarCierre: (data: {
     agentId: string;

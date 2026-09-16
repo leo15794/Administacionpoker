@@ -232,6 +232,16 @@ export default function Usuarios() {
     refresh();
   }
 
+  async function eliminarUsuario(u: any) {
+    if (!confirm(`¿Eliminar el usuario "${u.email}"? Esto borra el acceso al portal (y su configuración de Supervisor si tenía) — no toca el historial de cierres/movimientos del agente, eso queda intacto. No se puede deshacer.`)) return;
+    try {
+      await api.eliminarUsuario(u.id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el usuario.");
+    }
+  }
+
   return (
     <div>
       <div className="topbar">
@@ -269,6 +279,7 @@ export default function Usuarios() {
                   <button className="btn secondary small" onClick={() => toggleActive(u)}>
                     {u.active ? "Desactivar" : "Activar"}
                   </button>
+                  <button className="btn danger small" onClick={() => eliminarUsuario(u)}>Eliminar</button>
                 </td>
               </tr>
             ))}
