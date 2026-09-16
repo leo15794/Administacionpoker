@@ -30,6 +30,10 @@ const usuarioField = z.string().trim().min(3, "Mínimo 3 caracteres.");
 
 const createSchema = z.object({
   agentIds: z.array(z.string()).min(1, "Elegí al menos un agente."),
+  // Cuenta de acceso por defecto (la que usa el login/JWT al entrar): elegida explícitamente
+  // por el admin, no "la primera que se tildó" — para un login con varios agentes, todos
+  // pesan igual en el selector de arriba, esto es una decisión aparte.
+  defaultAgentId: z.string().min(1),
   email: usuarioField,
   password: z.string().min(6),
   role: z.enum(["ADMIN", "AGENT", "SUPERVISOR"]),
@@ -37,17 +41,18 @@ const createSchema = z.object({
 usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { agentIds, email, password, role } = parsed.data;
+  const { agentIds, defaultAgentId, email, password, role } = parsed.data;
+  if (!agentIds.includes(defaultAgentId)) {
+    return res.status(400).json({ error: "La cuenta de acceso por defecto tiene que ser uno de los agentes tildados." });
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const hash = await bcrypt.hash(password, 10);
     const id = newId("user");
-    // agentIds[0] queda como "cuenta principal" (agent_id de agent_users) — la que usa el login
-    // por default; el resto (y esta misma) quedan además en agent_user_agents para el selector.
     await client.query(
       `INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
-      [id, agentIds[0], email, hash, role]
+      [id, defaultAgentId, email, hash, role]
     );
     for (const agentId of agentIds) {
       await client.query(
@@ -72,15 +77,27 @@ const updateSchema = z.object({
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
   agentIds: z.array(z.string()).min(1).optional(),
+  // Cuenta de acceso por defecto: si se manda agentIds, hay que decir cuál de esos usar como
+  // agent_id — ya no se infiere "la primera tildada" (todas pesan igual en ese selector).
+  defaultAgentId: z.string().min(1).optional(),
 });
 usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { email, role, active, password, agentIds } = parsed.data;
+  const { email, role, active, password, agentIds, defaultAgentId } = parsed.data;
 
   // Nunca dejar que un admin se saque su propio acceso por error (quedaría el sistema sin admin).
   if (req.params.id === req.user?.userId && (active === false || role === "AGENT")) {
     return res.status(400).json({ error: "No podés quitarte tu propio acceso de administrador." });
+  }
+
+  if (agentIds !== undefined) {
+    if (!defaultAgentId) {
+      return res.status(400).json({ error: "Falta indicar la cuenta de acceso por defecto." });
+    }
+    if (!agentIds.includes(defaultAgentId)) {
+      return res.status(400).json({ error: "La cuenta de acceso por defecto tiene que ser uno de los agentes tildados." });
+    }
   }
 
   const sets: string[] = [];
@@ -102,11 +119,9 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
     sets.push(`password_hash = $${i++}`);
     values.push(await bcrypt.hash(password, 10));
   }
-  // agentIds[0] pisa también la "cuenta principal" (agent_id) — mantiene consistente cuál usa
-  // el JWT/login por default con lo que se ve en el selector de "Mi cuenta".
-  if (agentIds !== undefined) {
+  if (defaultAgentId !== undefined) {
     sets.push(`agent_id = $${i++}`);
-    values.push(agentIds[0]);
+    values.push(defaultAgentId);
   }
 
   if (sets.length === 0 && agentIds === undefined) return res.status(400).json({ error: "Nada para actualizar." });

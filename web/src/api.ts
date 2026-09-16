@@ -401,11 +401,19 @@ export const api = {
   usuarios: () => request("/users"),
   // agentIds: uno o varios — el primero queda como "cuenta principal" (la que usa el login por
   // default), el resto solo agrega opciones al selector de "Mi cuenta" de ese usuario.
-  crearUsuario: (data: { agentIds: string[]; email: string; password: string; role: "ADMIN" | "AGENT" | "SUPERVISOR" }) =>
+  crearUsuario: (data: { agentIds: string[]; defaultAgentId: string; email: string; password: string; role: "ADMIN" | "AGENT" | "SUPERVISOR" }) =>
     request("/users", { method: "POST", body: JSON.stringify(data) }),
   actualizarUsuario: (
     id: string,
-    data: { email?: string; role?: "ADMIN" | "AGENT" | "SUPERVISOR"; active?: boolean; password?: string; agentIds?: string[] }
+    data: {
+      email?: string;
+      role?: "ADMIN" | "AGENT" | "SUPERVISOR";
+      active?: boolean;
+      password?: string;
+      agentIds?: string[];
+      // Obligatorio si se manda agentIds: cuál de esos usar como cuenta de acceso por defecto.
+      defaultAgentId?: string;
+    }
   ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   eliminarUsuario: (id: string) => request(`/users/${id}`, { method: "DELETE" }),
 

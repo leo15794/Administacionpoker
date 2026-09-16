@@ -4,7 +4,9 @@ import Modal from "../components/Modal";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
 // para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
-// mismo login desde "Mi cuenta" (selector cuando tiene más de una).
+// mismo login desde "Mi cuenta" (selector cuando tiene más de una). A propósito NO hay ninguna
+// jerarquía acá — todas las cuentas tildadas pesan igual, cuál es la de acceso "por defecto" se
+// elige aparte (ver SelectorCuentaDefault) para no depender del orden en que se tildó cada una.
 function SelectorAgentes({
   agentes,
   seleccionados,
@@ -27,8 +29,7 @@ function SelectorAgentes({
     <div className="field">
       <label>Agentes/clubes que puede ver</label>
       <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-        El primero que tildes queda como cuenta principal (la que usa para entrar). Si tildás más de uno, en
-        "Mi cuenta" le aparece un selector para elegir cuál mirar.
+        Si tildás más de uno, en "Mi cuenta" le aparece un selector para elegir cuál mirar — todos pesan igual acá.
       </div>
       <input
         value={filtro}
@@ -41,11 +42,49 @@ function SelectorAgentes({
           <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
             <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggle(a.id)} />
             {a.name}
-            {seleccionados[0] === a.id && <span className="badge neutral" style={{ fontSize: 10 }}>Principal</span>}
           </label>
         ))}
         {filtrados.length === 0 && <div className="muted">Sin resultados.</div>}
       </div>
+    </div>
+  );
+}
+
+// Cuál de los agentes tildados arriba usa el login/JWT por defecto al entrar — decisión
+// explícita y separada del checklist (no "la primera que se tildó"). Si el que estaba elegido
+// deja de estar tildado, cae solo al primero que quede disponible.
+function SelectorCuentaDefault({
+  agentes,
+  seleccionados,
+  value,
+  onChange,
+}: {
+  agentes: any[];
+  seleccionados: string[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const opciones = agentes.filter((a) => seleccionados.includes(a.id));
+  useEffect(() => {
+    if (opciones.length > 0 && !opciones.some((a) => a.id === value)) {
+      onChange(opciones[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seleccionados.join(",")]);
+
+  if (opciones.length <= 1) return null;
+
+  return (
+    <div className="field">
+      <label>Cuenta de acceso por defecto</label>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+        Con cuál de las tildadas arriba entra al loguearse — puede cambiar cuál mirar después desde "Mi cuenta".
+      </div>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {opciones.map((a) => (
+          <option key={a.id} value={a.id}>{a.name}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -305,11 +344,19 @@ export default function Usuarios() {
 
 function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () => void }) {
   const [agentIds, setAgentIds] = useState<string[]>([]);
+  const [defaultAgentId, setDefaultAgentId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR">("AGENT");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function cambiarAgentIds(ids: string[]) {
+    setAgentIds(ids);
+    // Con uno solo tildado, ese mismo es la cuenta por defecto sin necesidad de elegir nada.
+    if (ids.length === 1) setDefaultAgentId(ids[0]);
+    else if (!ids.includes(defaultAgentId)) setDefaultAgentId("");
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -317,13 +364,18 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
     if (agentIds.length === 0 || !email.trim() || password.length < 6) {
       return setMsg({ ok: false, text: "Al menos un agente, un usuario y una contraseña de al menos 6 caracteres son obligatorios." });
     }
+    const defaultId = defaultAgentId || agentIds[0];
+    if (!defaultId) {
+      return setMsg({ ok: false, text: "Elegí cuál va a ser la cuenta de acceso por defecto." });
+    }
     setLoading(true);
     try {
-      await api.crearUsuario({ agentIds, email: email.trim(), password, role });
+      await api.crearUsuario({ agentIds, defaultAgentId: defaultId, email: email.trim(), password, role });
       setMsg({ ok: true, text: `Usuario ${email} creado.` });
       setEmail("");
       setPassword("");
       setAgentIds([]);
+      setDefaultAgentId("");
       onCreated();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo crear el usuario." });
@@ -354,7 +406,8 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
             </select>
           </div>
         </div>
-        <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
+        <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={cambiarAgentIds} />
+        <SelectorCuentaDefault agentes={agentes} seleccionados={agentIds} value={defaultAgentId} onChange={setDefaultAgentId} />
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
         <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Creando..." : "Crear usuario"}</button>
       </form>
@@ -365,16 +418,16 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
 function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: any[]; onDone: () => void }) {
   const [email, setEmail] = useState(usuario.email);
   const [password, setPassword] = useState("");
-  const [agentIds, setAgentIds] = useState<string[]>(
-    (() => {
-      const ids = (usuario.agentes ?? []).map((a: any) => a.id);
-      // La cuenta principal real (usuario.agent_id) siempre va primero, sea cual sea el
-      // orden en que vino la lista agregada del backend.
-      return usuario.agent_id ? [usuario.agent_id, ...ids.filter((id: string) => id !== usuario.agent_id)] : ids;
-    })()
-  );
+  const [agentIds, setAgentIds] = useState<string[]>((usuario.agentes ?? []).map((a: any) => a.id));
+  const [defaultAgentId, setDefaultAgentId] = useState<string>(usuario.agent_id ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function cambiarAgentIds(ids: string[]) {
+    setAgentIds(ids);
+    if (ids.length === 1) setDefaultAgentId(ids[0]);
+    else if (!ids.includes(defaultAgentId)) setDefaultAgentId("");
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -385,9 +438,13 @@ function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: an
     if (password && password.length < 6) {
       return setMsg({ ok: false, text: "La nueva contraseña tiene que tener al menos 6 caracteres." });
     }
+    const defaultId = defaultAgentId || agentIds[0];
+    if (!defaultId) {
+      return setMsg({ ok: false, text: "Elegí cuál va a ser la cuenta de acceso por defecto." });
+    }
     setLoading(true);
     try {
-      const data: any = { email: email.trim(), agentIds };
+      const data: any = { email: email.trim(), agentIds, defaultAgentId: defaultId };
       if (password) data.password = password;
       await api.actualizarUsuario(usuario.id, data);
       onDone();
@@ -410,7 +467,8 @@ function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: an
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="••••••" />
         </div>
       </div>
-      <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
+      <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={cambiarAgentIds} />
+      <SelectorCuentaDefault agentes={agentes} seleccionados={agentIds} value={defaultAgentId} onChange={setDefaultAgentId} />
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Guardando..." : "Guardar cambios"}</button>
       {usuario.role === "SUPERVISOR" && (
