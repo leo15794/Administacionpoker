@@ -794,17 +794,23 @@ INSERT INTO agent_user_agents (user_id, agent_id)
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
 ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR'));
 
--- Comisión por referido de supervisor (16/09/2026): un supervisor puede tener % configurado
--- sobre el rake semanal de un agente que ÉL REFIRIÓ (distinto de rebate_destino=RAKEBACK_SUPERVISOR,
--- que es para agentes administrativamente A CARGO del supervisor vía agents.supervisor). Se
--- auto-acredita en cada cierre semanal del agente referido (ver aplicarCierreSemanal), separado
--- de la liquidación propia de ese agente — mismo espíritu que la planilla vieja (hoja MEMORIA_URIEL):
--- comisión = rake semanal del referido × %, tracked como saldo corriente.
+-- Comisión por referido de supervisor (16/09/2026, corregido el mismo día): un supervisor
+-- puede tener % configurado sobre el rake semanal de un agente que ÉL REFIRIÓ (distinto de
+-- rebate_destino=RAKEBACK_SUPERVISOR, que es para agentes administrativamente A CARGO del
+-- supervisor vía agents.supervisor). Se auto-acredita en cada cierre semanal del agente
+-- referido (ver aplicarCierreSemanal), separado de la liquidación propia de ese agente — mismo
+-- espíritu que la planilla vieja (hoja MEMORIA_URIEL): comisión = rake semanal del referido × %,
+-- tracked como saldo corriente.
+-- A PROPÓSITO cuelga del LOGIN (agent_users), no de un agente: a diferencia de "agentes a
+-- cargo" (que sí necesita un agente real porque agents.supervisor se resuelve por nombre), esto
+-- es pura configuración de "quién cobra qué %" y no debe depender de cuál sea la cuenta
+-- principal (agent_id) de ese login — evita tener que inventar un agente dummy solo para que
+-- el supervisor pueda cobrar una comisión.
 -- Un agente referido solo puede tener UN referidor activo a la vez (evita ambigüedad de a quién
 -- le corresponde el % si hubiera más de uno).
 CREATE TABLE IF NOT EXISTS supervisor_referidos (
   id                    TEXT PRIMARY KEY,
-  supervisor_agent_id   TEXT NOT NULL REFERENCES agents(id),
+  supervisor_user_id    TEXT NOT NULL REFERENCES agent_users(id) ON DELETE CASCADE,
   agente_referido_id    TEXT NOT NULL REFERENCES agents(id),
   porcentaje            NUMERIC NOT NULL CHECK (porcentaje > 0 AND porcentaje <= 100),
   saldo                 NUMERIC NOT NULL DEFAULT 0,

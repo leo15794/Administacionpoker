@@ -61,13 +61,14 @@ export const api = {
   // hasta tener las reglas de negocio completas del rol).
   miSupervision: () => request("/portal/mi-supervision"),
   // Comisión por referido de supervisor: agente referido + % sobre su rake semanal, auto-
-  // acreditado en cada cierre. Se gestiona desde Usuarios y permisos, dentro de la edición del
-  // usuario Supervisor (ver PanelSupervisor en Usuarios.tsx).
-  referidosDeSupervisor: (agentId: string) => request(`/catalog/agents/${agentId}/referidos`),
-  crearReferido: (agentId: string, data: { agenteReferidoId: string; porcentaje: number }) =>
-    request(`/catalog/agents/${agentId}/referidos`, { method: "POST", body: JSON.stringify(data) }),
+  // acreditado en cada cierre. Cuelga del LOGIN (userId), no de la cuenta principal del
+  // usuario — se gestiona desde Usuarios y permisos, dentro de la edición del usuario
+  // Supervisor (ver PanelSupervisor en Usuarios.tsx).
+  referidosDeSupervisor: (userId: string) => request(`/users/${userId}/referidos`),
+  crearReferido: (userId: string, data: { agenteReferidoId: string; porcentaje: number }) =>
+    request(`/users/${userId}/referidos`, { method: "POST", body: JSON.stringify(data) }),
   actualizarReferido: (id: string, data: { porcentaje?: number; active?: boolean }) =>
-    request(`/catalog/referidos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    request(`/users/referidos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // Mismo shape que miCuenta pero para que un admin vea el estado de cuenta de CUALQUIER agente
   // (saldo por club, garantía, cierres y movimientos) en vez de solo el historial crudo.
   cuentaDeAgente: (agentId: string) => request(`/catalog/agents/${agentId}/cuenta`),

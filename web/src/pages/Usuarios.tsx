@@ -59,7 +59,12 @@ function SelectorAgentes({
 //  2. "Comisiones por referido": % fijo sobre el rake semanal de un agente puntual (no
 //     necesariamente a cargo), que se acredita SOLO como saldo separado, automático en cada
 //     cierre de ese agente (ver supervisor_referidos / aplicarCierreSemanal).
-function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: string; agentes: any[] }) {
+function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] }) {
+  // "Agentes a cargo" SÍ depende de la cuenta principal (agents.supervisor se resuelve por
+  // nombre de agente — mecanismo que ya existía antes de esta feature). "Comisiones por
+  // referido" NO depende de eso: cuelga directo del login (usuario.id), a propósito, para no
+  // obligar a que exista un agente dedicado solo para poder cobrar una comisión.
+  const supervisorAgentId: string | undefined = usuario.agent_id;
   const supervisor = agentes.find((a) => a.id === supervisorAgentId);
   const supervisorName: string | undefined = supervisor?.name;
   const [referidos, setReferidos] = useState<any[]>([]);
@@ -68,16 +73,16 @@ function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: st
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function refrescarReferidos() {
-    api.referidosDeSupervisor(supervisorAgentId).then(setReferidos);
+    api.referidosDeSupervisor(usuario.id).then(setReferidos);
   }
 
   useEffect(() => {
     refrescarReferidos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supervisorAgentId]);
+  }, [usuario.id]);
 
   const otrosAgentes = agentes.filter((a) => a.id !== supervisorAgentId);
-  const aCargo = otrosAgentes.filter((a) => a.supervisor === supervisorName);
+  const aCargo = supervisorName ? otrosAgentes.filter((a) => a.supervisor === supervisorName) : [];
 
   async function agregarReferido(e: React.FormEvent) {
     e.preventDefault();
@@ -87,7 +92,7 @@ function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: st
       return setMsg({ ok: false, text: "Elegí un agente y un % entre 0 y 100." });
     }
     try {
-      await api.crearReferido(supervisorAgentId, { agenteReferidoId, porcentaje: pct });
+      await api.crearReferido(usuario.id, { agenteReferidoId, porcentaje: pct });
       setAgenteReferidoId("");
       setPorcentaje("");
       refrescarReferidos();
@@ -122,11 +127,12 @@ function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: st
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
-      <h3>Configuración de Supervisor — {supervisorName}</h3>
+      <h3>Configuración de Supervisor — {usuario.email}</h3>
 
       <div style={{ marginBottom: 18 }}>
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
           Agentes a cargo (rakeback centralizado — mismo dato que Administración → Agentes → Supervisores).
+          {!supervisorName && " Para usar esto, la cuenta principal de este usuario (arriba) tiene que ser un agente con tipo de cuenta Supervisor."}
         </div>
         <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
           {otrosAgentes.map((a) => (
@@ -144,7 +150,8 @@ function PanelSupervisor({ supervisorAgentId, agentes }: { supervisorAgentId: st
       <div>
         <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
           Comisiones por referido: % fijo sobre el rake semanal de un agente, acreditado solo (saldo
-          separado, se ve en "Mi supervisión") en cada cierre de ese agente.
+          separado, se ve en "Mi supervisión") en cada cierre de ese agente. Esto no depende de la
+          cuenta principal — queda cargado directo a este usuario.
         </div>
         {referidos.length > 0 && (
           <table style={{ marginBottom: 10 }}>
@@ -347,7 +354,14 @@ function NuevoUsuario({ agentes, onCreated }: { agentes: any[]; onCreated: () =>
 function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: any[]; onDone: () => void }) {
   const [email, setEmail] = useState(usuario.email);
   const [password, setPassword] = useState("");
-  const [agentIds, setAgentIds] = useState<string[]>((usuario.agentes ?? []).map((a: any) => a.id));
+  const [agentIds, setAgentIds] = useState<string[]>(
+    (() => {
+      const ids = (usuario.agentes ?? []).map((a: any) => a.id);
+      // La cuenta principal real (usuario.agent_id) siempre va primero, sea cual sea el
+      // orden en que vino la lista agregada del backend.
+      return usuario.agent_id ? [usuario.agent_id, ...ids.filter((id: string) => id !== usuario.agent_id)] : ids;
+    })()
+  );
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -388,8 +402,8 @@ function EditarUsuario({ usuario, agentes, onDone }: { usuario: any; agentes: an
       <SelectorAgentes agentes={agentes} seleccionados={agentIds} onChange={setAgentIds} />
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading} style={{ marginTop: 10 }}>{loading ? "Guardando..." : "Guardar cambios"}</button>
-      {usuario.role === "SUPERVISOR" && usuario.agent_id && (
-        <PanelSupervisor supervisorAgentId={usuario.agent_id} agentes={agentes} />
+      {usuario.role === "SUPERVISOR" && (
+        <PanelSupervisor usuario={usuario} agentes={agentes} />
       )}
     </form>
   );

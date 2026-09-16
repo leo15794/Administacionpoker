@@ -153,3 +153,72 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
     client.release();
   }
 });
+
+// ============================================================
+// Comisión por referido de supervisor (16/09/2026)
+// Cuelga del LOGIN (no de un agente): un supervisor puede tener % configurado sobre el rake
+// semanal de un agente que él refirió, auto-acreditado en cada cierre semanal de ese agente
+// (ver src/repo/closings.ts) como saldo separado. A propósito NO depende de cuál sea la cuenta
+// principal de este login — eso es un tema de permisos/visualización aparte.
+// ============================================================
+
+usersRouter.get("/:id/referidos", requireAuth, requireAdmin, async (req, res) => {
+  const r = await pool.query(
+    `SELECT r.*, a.name as agente_referido_name
+     FROM supervisor_referidos r JOIN agents a ON a.id = r.agente_referido_id
+     WHERE r.supervisor_user_id = $1 AND r.active = true
+     ORDER BY a.name`,
+    [req.params.id]
+  );
+  res.json(r.rows);
+});
+
+const crearReferidoSchema = z.object({
+  agenteReferidoId: z.string().min(1),
+  porcentaje: z.number().gt(0).lte(100),
+});
+usersRouter.post("/:id/referidos", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = crearReferidoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { agenteReferidoId, porcentaje } = parsed.data;
+  try {
+    const id = newId("refsup");
+    const r = await pool.query(
+      `INSERT INTO supervisor_referidos (id, supervisor_user_id, agente_referido_id, porcentaje)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [id, req.params.id, agenteReferidoId, porcentaje]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err: any) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Ese agente ya tiene un referidor activo — desactivalo primero si querés cambiarlo de supervisor." });
+    }
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const editarReferidoSchema = z.object({
+  porcentaje: z.number().gt(0).lte(100).optional(),
+  active: z.boolean().optional(),
+});
+usersRouter.patch("/referidos/:refId", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = editarReferidoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const sets: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (parsed.data.porcentaje !== undefined) {
+    sets.push(`porcentaje = $${i++}`);
+    values.push(parsed.data.porcentaje);
+  }
+  if (parsed.data.active !== undefined) {
+    sets.push(`active = $${i++}`);
+    values.push(parsed.data.active);
+  }
+  if (sets.length === 0) return res.status(400).json({ error: "Nada para actualizar." });
+  sets.push(`updated_at = now()`);
+  values.push(req.params.refId);
+  const r = await pool.query(`UPDATE supervisor_referidos SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`, values);
+  if (r.rows.length === 0) return res.status(404).json({ error: "No se encontró ese referido." });
+  res.json(r.rows[0]);
+});

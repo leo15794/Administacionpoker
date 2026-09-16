@@ -103,13 +103,13 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     [supervisor.id]
   );
 
-  // Comisión por referido: agentes que este supervisor refirió (no necesariamente a cargo
-  // administrativamente) — saldo separado, se acredita solo al cerrarse cada semana del referido.
+  // Comisión por referido: cuelga del LOGIN, no de la cuenta principal (agent_id) — así no
+  // depende de qué agente tenga marcado como "cuenta principal" este usuario.
   const referidos = await pool.query(
     `SELECT r.id, r.porcentaje, r.saldo, a.name as agente_referido_name
      FROM supervisor_referidos r JOIN agents a ON a.id = r.agente_referido_id
-     WHERE r.supervisor_agent_id = $1 AND r.active = true ORDER BY a.name`,
-    [supervisor.id]
+     WHERE r.supervisor_user_id = $1 AND r.active = true ORDER BY a.name`,
+    [req.user!.userId]
   );
 
   res.json({
