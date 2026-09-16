@@ -92,6 +92,11 @@ const icon = {
       <circle cx="12" cy="12" r="9" /><path d="m8 16 8-8" /><circle cx="9" cy="9" r="0.5" fill="currentColor" /><circle cx="15" cy="15" r="0.5" fill="currentColor" />
     </svg>
   ),
+  resumenFinanciero: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -165,6 +170,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas", group: "plata" },
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "administracion" },
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "plata" },
+  { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "plata" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
 

@@ -109,6 +109,10 @@ export const api = {
   },
   tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" } = {}) =>
     request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
+  // Resumen financiero (18/09/2026): ganancias generadas + ingresos/egresos reales de todo el
+  // sistema, filtrable por rango de fechas — ver repo/resumenFinanciero.ts.
+  resumenFinanciero: (desde: string, hasta: string) =>
+    request(`/dashboard/resumen-financiero?desde=${desde}&hasta=${hasta}`),
   // Revierten (nunca borran) — ver nota de ledger inmutable: el original queda en el
   // historial marcado como revertido y se genera un movimiento/ajuste opuesto.
   revertirMovimiento: (id: string, motivo?: string) =>

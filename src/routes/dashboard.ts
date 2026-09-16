@@ -7,6 +7,7 @@ import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treas
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
+import { getResumenFinanciero } from "../repo/resumenFinanciero.js";
 
 export const dashboardRouter = Router();
 
@@ -294,6 +295,23 @@ dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) 
 // Tesorería real: agrega treasury_entries (automáticas, generadas por movimientos de
 // agentes) + treasury_adjustments (manuales, cargadas a mano acá) por ledger y por
 // custodio, para saber cuánto hay circulando y con quién sin tener que buscarlo a mano.
+// Resumen financiero (18/09/2026): ganancias generadas + ingresos/egresos reales, filtrable
+// por rango de fechas — ver repo/resumenFinanciero.ts para el detalle de qué junta y por qué.
+const resumenFinancieroSchema = z.object({
+  desde: z.string().min(1),
+  hasta: z.string().min(1),
+});
+dashboardRouter.get("/resumen-financiero", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = resumenFinancieroSchema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "Faltan las fechas del rango (desde/hasta)." });
+  try {
+    const r = await getResumenFinanciero(parsed.data.desde, parsed.data.hasta);
+    res.json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo calcular el resumen financiero." });
+  }
+});
+
 dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) => {
   // Filtro opcional por ledger (ej. ?ledger=WALLET_MANOS para la pestaña de Wallet, que
   // necesita ver todo el historial real importado y no solo los últimos 150 de golpe).
