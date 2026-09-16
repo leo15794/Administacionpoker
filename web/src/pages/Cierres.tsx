@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, Fragment } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
@@ -7,6 +7,13 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 
 export default function Cierres() {
   const { alertDialog, promptDialog } = useConfirmDialog();
+  // Deep-link desde otras pantallas (ej. Resumen financiero → "ver en Cierres" de una fila de
+  // Ganancia cierres semanales): ?week=YYYY-MM-DD&club=<clubId> — expande esa semana aunque no
+  // sea la más reciente, resalta sus filas (todas si no vino club, o solo las de ese club) y
+  // hace scroll hasta ahí apenas cargan los cierres.
+  const [searchParams] = useSearchParams();
+  const weekObjetivo = searchParams.get("week");
+  const clubObjetivo = searchParams.get("club");
   const [cierres, setCierres] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
   const [clubes, setClubes] = useState<any[]>([]);
@@ -43,8 +50,24 @@ export default function Cierres() {
     if (colapsoInicial.current || cierres.length === 0) return;
     colapsoInicial.current = true;
     const semanas = Array.from(new Set(cierres.map((c) => c.week_start)));
-    setSemanasColapsadas(new Set(semanas.slice(1)));
-  }, [cierres]);
+    // La semana objetivo del deep-link queda siempre expandida, sea o no la más reciente.
+    setSemanasColapsadas(new Set(semanas.slice(1).filter((s) => s !== weekObjetivo)));
+  }, [cierres, weekObjetivo]);
+
+  // Scroll + resaltado hasta la semana (y club, si vino) del deep-link — una sola vez, apenas
+  // el DOM tiene esa fila renderizada (no antes: la semana recién se expandió arriba).
+  const yaHizoScroll = useRef(false);
+  useEffect(() => {
+    if (!weekObjetivo || yaHizoScroll.current || cierres.length === 0) return;
+    const id = requestAnimationFrame(() => {
+      const el = document.getElementById(`semana-${weekObjetivo}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        yaHizoScroll.current = true;
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [cierres, weekObjetivo, semanasColapsadas]);
 
   function toggleSemanaColapsada(weekStart: string) {
     setSemanasColapsadas((prev) => {
@@ -242,7 +265,8 @@ export default function Cierres() {
               return (
                 <Fragment key={g.weekStart}>
                   <tr
-                    className="row-click"
+                    id={`semana-${g.weekStart}`}
+                    className={`row-click${g.weekStart === weekObjetivo && !clubObjetivo ? " fila-destacada" : ""}`}
                     onClick={() => toggleSemanaColapsada(g.weekStart)}
                     style={{ background: "rgba(255,255,255,0.04)" }}
                   >
@@ -265,9 +289,13 @@ export default function Cierres() {
                       const tieneDesglose =
                         c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null;
                       const abierto = expandido.has(c.id);
+                      const esFilaObjetivo = g.weekStart === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
                       return (
                         <Fragment key={c.id}>
-                          <tr style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                          <tr
+                            className={esFilaObjetivo ? "fila-destacada" : undefined}
+                            style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
+                          >
                             <td>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 {tieneDesglose && (

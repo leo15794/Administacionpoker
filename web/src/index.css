@@ -705,6 +705,16 @@ select option {
 .row-click { cursor: pointer; }
 .row-click:hover td { background: rgba(99, 102, 241, 0.08) !important; }
 
+/* Fila/bloque marcado al llegar desde un link externo (ej. Resumen financiero → Cierres, con
+   ?week=&club= en la URL) — mismo acento que el resto de la UI, con un pulso corto para que el
+   ojo lo encuentre apenas carga la pantalla sin quedar parpadeando para siempre. */
+@keyframes fila-destacada-pulso {
+  0%, 100% { background: rgba(99, 102, 241, 0.22); }
+  50% { background: rgba(99, 102, 241, 0.08); }
+}
+.fila-destacada { animation: fila-destacada-pulso 1.4s ease-in-out 3; box-shadow: inset 3px 0 0 var(--accent); }
+.fila-destacada td { position: relative; }
+
 .search-input {
   width: 100%;
   max-width: 280px;

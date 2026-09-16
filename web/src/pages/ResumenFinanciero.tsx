@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd } from "../fmt";
 import { exportCsv } from "../csv";
@@ -54,6 +55,7 @@ function labelPeriodo(periodo: string, gran: Granularidad) {
 }
 
 export default function ResumenFinanciero() {
+  const nav = useNavigate();
   const [desde, setDesde] = useState(inicioDeMes());
   const [hasta, setHasta] = useState(hoyIso());
   const [granularidad, setGranularidad] = useState<Granularidad>("dia");
@@ -159,7 +161,12 @@ export default function ResumenFinanciero() {
                 {usd(data.totales.walletNeto)}
               </div>
             </div>
-            <div className="panel" style={{ flex: "1 1 200px" }}>
+            <div
+              className="panel row-click"
+              style={{ flex: "1 1 200px" }}
+              onClick={() => nav("/dashboard/cierres")}
+              title="Ver el historial de Cierres"
+            >
               <div className="muted">Ganancia cierres semanales</div>
               <div style={{ fontSize: 20, fontWeight: 700 }}>{usd(data.totales.gananciaCierres)}</div>
             </div>
@@ -210,7 +217,17 @@ export default function ResumenFinanciero() {
                         <td className={f.walletIngresos - f.walletEgresos >= 0 ? "pos" : "neg"}>
                           {usd(f.walletIngresos - f.walletEgresos)}
                         </td>
-                        <td>{usd(f.gananciaCierres)}</td>
+                        <td
+                          className={granularidad === "semana" && f.gananciaCierres !== 0 ? "row-click" : undefined}
+                          onClick={
+                            granularidad === "semana" && f.gananciaCierres !== 0
+                              ? () => nav(`/dashboard/cierres?week=${f.periodo}`)
+                              : undefined
+                          }
+                          title={granularidad === "semana" && f.gananciaCierres !== 0 ? "Ver esa semana en Cierres" : undefined}
+                        >
+                          {usd(f.gananciaCierres)}
+                        </td>
                         <td>{usd(f.gananciaBancados)}</td>
                         <td className="muted">{usd(f.comisionesAcreditadas)}</td>
                         <td className="muted">{usd(f.comisionesPagadas)}</td>
@@ -249,7 +266,12 @@ export default function ResumenFinanciero() {
                   </thead>
                   <tbody>
                     {eventosFiltrados.map((e: any) => (
-                      <tr key={`${e.categoria}_${e.id}`}>
+                      <tr
+                        key={`${e.categoria}_${e.id}`}
+                        className={e.enlace ? "row-click" : undefined}
+                        onClick={e.enlace ? () => nav(e.enlace) : undefined}
+                        title={e.enlace ? "Ver en Cierres" : undefined}
+                      >
                         <td className="muted">{new Date(e.fecha + "T00:00:00").toLocaleDateString("es-AR")}</td>
                         <td><span className="badge neutral">{CATEGORIA_LABEL[e.categoria] ?? e.categoria}</span></td>
                         <td className="muted">{e.subcategoria}</td>

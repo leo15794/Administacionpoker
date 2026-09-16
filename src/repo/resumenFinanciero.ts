@@ -33,6 +33,9 @@ export interface ResumenFinancieroEvento {
   tipo: "INGRESO" | "EGRESO" | "GANANCIA" | "CORRECCION";
   monto: number; // siempre con signo: positivo = a favor, negativo = en contra
   detalle: string;
+  // Deep-link opcional a la pantalla donde vive el detalle real de este evento (ej. un cierre
+  // semanal → Cierres, con la semana/club marcados) — ver Cierres.tsx (?week=&club=).
+  enlace?: string;
 }
 
 function toFecha(d: string | Date): string {
@@ -152,6 +155,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
       tipo: "GANANCIA",
       monto: round2(r.gananciaNeta),
       detalle: `${r.agentesConCierre} agente(s) — rake ${round2(r.rakeTotal)}, rakeback ${round2(r.comisionesAgentes)}${r.gananciaRodeoClub ? `, rodeo club ${round2(r.gananciaRodeoClub)}` : ""}${r.ingresoPorVentas ? `, ventas ${round2(r.ingresoPorVentas)}` : ""}`,
+      enlace: `/dashboard/cierres?week=${r.weekStart}&club=${r.clubId}`,
     });
   }
 
