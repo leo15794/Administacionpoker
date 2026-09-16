@@ -6,9 +6,12 @@
 //  - WALLET: ingresos/egresos reales de Wallet/Caja — tanto los ajustes manuales
 //    (treasury_adjustments) como los automáticos que genera un movimiento de agente
 //    (treasury_entries), mismo criterio que ya usa la pantalla de Tesorería.
-//  - CIERRE_SEMANAL: la ganancia que genera cada cierre semanal de agente (rake - rakeback -
-//    rebate) — plata que el sistema ya reconoce como ganancia aunque no se haya retirado a
-//    Wallet todavía.
+//  - CIERRE_SEMANAL: la "Ganancia Neta" de cada club+semana con cierres cargados — EXACTAMENTE
+//    la misma cuenta que ya usa el Resumen ejecutivo y el Resumen por club (repo/clubResumen.ts,
+//    getResumenClubSemanal: rake*ratio del club - rakeback + ganancia de rodeo del club +
+//    ingreso por ventas + tasa semanal fija), para que nunca muestre un número distinto al de
+//    esas pantallas. Es plata que el sistema ya reconoce como ganancia aunque no se haya
+//    retirado a Wallet todavía.
 //  - BANCADO: la ganancia de cada cierre semanal de banca (ganancia_banca_mesas, que ya incluye
 //    el Rakeback Banca — ver engine/bancados.ts).
 //  - COMISION_REFERIDO: cada acreditación (COMISION), corrección (CORRECCION) o pago (PAGO) de
@@ -20,6 +23,7 @@
 // una pregunta distinta ("¿cuánto generamos?" vs "¿cuánta plata entró o salió de verdad?"), por
 // eso el front nunca sonda todo junto en un solo total, siempre por categoría.
 import { pool } from "../db/pool.js";
+import { getResumenClubSemanal } from "./clubResumen.js";
 
 export interface ResumenFinancieroEvento {
   id: string;
@@ -55,7 +59,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
   hastaExclusivo.setUTCDate(hastaExclusivo.getUTCDate() + 1);
   const hastaParam = hastaExclusivo.toISOString().slice(0, 10);
 
-  const [ajustes, automaticos, cierres, bancados, comisiones] = await Promise.all([
+  const [ajustes, automaticos, clubesSemana, bancados, comisiones] = await Promise.all([
     pool.query(
       `SELECT id, occurred_at, ledger, direction, amount, reason
        FROM treasury_adjustments
@@ -74,15 +78,13 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
        ORDER BY t.occurred_at`,
       [desde, hastaParam]
     ),
+    // Distinct club+semana con cierres cargados en el rango — la Ganancia Neta se calcula UNA
+    // vez por club+semana (getResumenClubSemanal ya suma todos los agentes de ese club esa
+    // semana más rodeo/ventas/tasa fija), nunca por cierre individual de agente.
     pool.query(
-      `SELECT wc.id, wc.week_start, wc.rake_total, wc.rakeback, wc.rebate,
-              a.name as agent_name, c.name as club_name
-       FROM weekly_closings wc
-       JOIN agents a ON a.id = wc.agent_id
-       JOIN clubs c ON c.id = wc.club_id
-       WHERE wc.status IN ('APLICADO','CORREGIDO')
-         AND wc.week_start >= $1 AND wc.week_start < $2
-       ORDER BY wc.week_start`,
+      `SELECT DISTINCT club_id, week_start FROM weekly_closings
+       WHERE status IN ('APLICADO','CORREGIDO') AND week_start >= $1 AND week_start < $2
+       ORDER BY week_start`,
       [desde, hastaParam]
     ),
     pool.query(
@@ -107,6 +109,12 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
       [desde, hastaParam]
     ),
   ]);
+
+  // getResumenClubSemanal no es una simple query — hay que llamarla una vez por cada club+semana
+  // distinto encontrado arriba (mismo camino que ya recorre el Resumen ejecutivo).
+  const resumenesClubSemana = await Promise.all(
+    clubesSemana.rows.map((r) => getResumenClubSemanal(r.club_id, toFecha(r.week_start)))
+  );
 
   const eventos: ResumenFinancieroEvento[] = [];
 
@@ -134,16 +142,16 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     });
   }
 
-  for (const row of cierres.rows) {
-    const ganancia = round2(Number(row.rake_total) - Number(row.rakeback) - Number(row.rebate));
+  for (const r of resumenesClubSemana) {
+    if (!r) continue;
     eventos.push({
-      id: row.id,
-      fecha: toFecha(row.week_start),
+      id: `${r.clubId}_${r.weekStart}`,
+      fecha: r.weekStart,
       categoria: "CIERRE_SEMANAL",
-      subcategoria: `Cierre semanal — ${row.club_name}`,
+      subcategoria: `Cierre semanal — ${r.clubName}`,
       tipo: "GANANCIA",
-      monto: ganancia,
-      detalle: `${row.agent_name} — rake ${row.rake_total}, rakeback ${row.rakeback}, rebate ${row.rebate}`,
+      monto: round2(r.gananciaNeta),
+      detalle: `${r.agentesConCierre} agente(s) — rake ${round2(r.rakeTotal)}, rakeback ${round2(r.comisionesAgentes)}${r.gananciaRodeoClub ? `, rodeo club ${round2(r.gananciaRodeoClub)}` : ""}${r.ingresoPorVentas ? `, ventas ${round2(r.ingresoPorVentas)}` : ""}`,
     });
   }
 
