@@ -83,7 +83,7 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
   // de tildarse.
   try {
     const agent = await pool.query(
-      `SELECT id, name, account_type, COALESCE(SUM(b.amount), 0) as saldo_total
+      `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
        FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
        WHERE a.id = $1
        GROUP BY a.id, a.name, a.account_type`,
