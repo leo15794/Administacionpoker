@@ -381,6 +381,15 @@ export default function Usuarios() {
   // par de clicks, sin tener que ir a editar el agente afectado por separado.
   const supervisoresValidos = agentes.filter((a: any) => a.account_type === "SUPERVISOR");
 
+  // Agentes tipo Supervisor que NO tienen un usuario de acceso creado (agent_id de ningún
+  // login apunta a ellos) — sin esto, sus "agentes a cargo" quedaban invisibles después de
+  // unificar la vieja pestaña Administración → Agentes → Supervisores acá adentro, porque el
+  // panel de supervisor solo se abre editando un USUARIO (Leo lo encontró probando: "no creo
+  // un usuario para cada uno, están asignados pero no lo podemos ver").
+  const supervisoresSinUsuario = supervisoresData.filter(
+    (s) => !usuarios.some((u) => u.agent_id === s.id)
+  );
+
   async function eliminarUsuario(u: any) {
     if (!(await confirmDialog(`¿Eliminar el usuario "${u.email}"? Esto borra el acceso al portal (y su configuración de Supervisor si tenía) — no toca el historial de cierres/movimientos del agente, eso queda intacto. No se puede deshacer.`))) return;
     try {
@@ -441,6 +450,60 @@ export default function Usuarios() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {supervisoresSinUsuario.length > 0 && (
+        <div className="panel">
+          <h3>Supervisores sin usuario de acceso</h3>
+          <div className="muted" style={{ marginBottom: 14 }}>
+            Estos agentes son de tipo "Supervisor" y pueden tener agentes a cargo, pero todavía no tienen un
+            usuario de acceso al portal — por eso no aparecen en la tabla de abajo. Acá ves su árbol (a cargo,
+            saldo propio, rakeback centralizado), igual que antes en Administración → Agentes → Supervisores.
+            Si además querés que puedan entrar al portal o cobrar comisión por referido, creales un usuario
+            de acceso con esta cuenta como principal.
+          </div>
+          {supervisoresSinUsuario.map((s) => (
+            <div key={s.id} style={{ marginBottom: 22 }}>
+              <div className="topbar" style={{ marginBottom: 8 }}>
+                <h4 style={{ margin: 0 }}>{s.name}</h4>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <span className="muted">Rakeback centralizado acreditado: <strong>{usd(s.rakeback_centralizado_acreditado)}</strong></span>
+                  <span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>Saldo propio: {usd(s.saldo_total)}</span>
+                </div>
+              </div>
+              <table>
+                <thead><tr><th></th><th>Tipo de cuenta</th><th>Saldo propio</th></tr></thead>
+                <tbody>
+                  <FilaAgenteConJugadores
+                    agente={s}
+                    extraCols={
+                      <>
+                        <td><span className="badge neutral">Supervisor</span></td>
+                        <td><span className={`badge ${Number(s.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(s.saldo_total)}</span></td>
+                      </>
+                    }
+                  />
+                  {(s.agentes ?? []).length === 0 ? (
+                    <tr><td colSpan={3} className="muted" style={{ fontSize: 13 }}>Sin agentes a cargo.</td></tr>
+                  ) : (
+                    s.agentes.map((a: any) => (
+                      <FilaAgenteConJugadores
+                        key={a.id}
+                        agente={a}
+                        extraCols={
+                          <>
+                            <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type as keyof typeof ACCOUNT_TYPE_LABELS] ?? a.account_type}</span></td>
+                            <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
+                          </>
+                        }
+                      />
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       )}
 
