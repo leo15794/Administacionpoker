@@ -91,24 +91,68 @@ function SelectorCuentaDefault({
 
 // Panel de configuración de negocio de un Supervisor — vive acá (no en una pantalla aparte)
 // para que, como pidió Leo, "quede todo en el mismo lugar" al crear/editar ese usuario.
-// Dos cosas separadas, aunque se editen juntas:
-//  1. "Agentes a cargo": asigna/quita agents.supervisor (mecanismo YA existente, el mismo que
-//     usa Administración → Agentes → Supervisores) — decide a quién le llega el rakeback
-//     centralizado cuando un club tiene rebate_destino = RAKEBACK_SUPERVISOR.
-//  2. "Comisiones por referido": % fijo sobre el rake semanal de un agente puntual (no
-//     necesariamente a cargo), que se acredita SOLO como saldo separado, automático en cada
-//     cierre de ese agente (ver supervisor_referidos / aplicarCierreSemanal).
+// UNA sola tabla, un renglón por agente — no dos selectores separados para lo mismo:
+//  - "A cargo": asigna/quita agents.supervisor (mecanismo YA existente, el mismo que usa
+//    Administración → Agentes → Supervisores) — decide a quién le llega el rakeback
+//    centralizado cuando un club tiene rebate_destino = RAKEBACK_SUPERVISOR.
+//  - "% comisión por referido": cargás un % ahí mismo, sin re-elegir el agente en otro lado.
+//    Se acredita SOLO como saldo separado, automático en cada cierre de ese agente (ver
+//    supervisor_referidos / aplicarCierreSemanal) — un agente puede estar "a cargo", tener
+//    comisión por referido, las dos cosas, o ninguna: son independientes entre sí.
+function FilaAgenteSupervisor({
+  agente,
+  aCargo,
+  supervisorName,
+  referido,
+  onToggleACargo,
+  onGuardarPorcentaje,
+}: {
+  agente: any;
+  aCargo: boolean;
+  supervisorName: string | undefined;
+  referido: any | undefined;
+  onToggleACargo: () => void;
+  onGuardarPorcentaje: (valor: string) => void;
+}) {
+  return (
+    <tr>
+      <td>
+        {agente.name}
+        {agente.supervisor && agente.supervisor !== supervisorName && (
+          <span className="badge neutral" style={{ fontSize: 10, marginLeft: 6 }}>a cargo de {agente.supervisor}</span>
+        )}
+      </td>
+      <td style={{ textAlign: "center" }}>
+        <input type="checkbox" checked={aCargo} onChange={onToggleACargo} />
+      </td>
+      <td>
+        <input
+          type="number"
+          key={referido?.porcentaje ?? "vacio"}
+          defaultValue={referido?.porcentaje ?? ""}
+          min={0}
+          max={100}
+          step="0.1"
+          placeholder="—"
+          style={{ width: 70 }}
+          onBlur={(e) => onGuardarPorcentaje(e.target.value)}
+        />
+      </td>
+      <td className="muted">{referido ? referido.saldo : "—"}</td>
+    </tr>
+  );
+}
+
 function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] }) {
-  // "Agentes a cargo" SÍ depende de la cuenta principal (agents.supervisor se resuelve por
-  // nombre de agente — mecanismo que ya existía antes de esta feature). "Comisiones por
-  // referido" NO depende de eso: cuelga directo del login (usuario.id), a propósito, para no
-  // obligar a que exista un agente dedicado solo para poder cobrar una comisión.
+  // "A cargo" SÍ depende de la cuenta principal (agents.supervisor se resuelve por nombre de
+  // agente — mecanismo que ya existía antes de esta feature). "% comisión por referido" NO
+  // depende de eso: cuelga directo del login (usuario.id), a propósito, para no obligar a que
+  // exista un agente dedicado solo para poder cobrar una comisión.
   const supervisorAgentId: string | undefined = usuario.agent_id;
   const supervisor = agentes.find((a) => a.id === supervisorAgentId);
   const supervisorName: string | undefined = supervisor?.name;
   const [referidos, setReferidos] = useState<any[]>([]);
-  const [agenteReferidoId, setAgenteReferidoId] = useState("");
-  const [porcentaje, setPorcentaje] = useState("");
+  const [filtro, setFiltro] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function refrescarReferidos() {
@@ -121,120 +165,99 @@ function PanelSupervisor({ usuario, agentes }: { usuario: any; agentes: any[] })
   }, [usuario.id]);
 
   const otrosAgentes = agentes.filter((a) => a.id !== supervisorAgentId);
-  const aCargo = supervisorName ? otrosAgentes.filter((a) => a.supervisor === supervisorName) : [];
-
-  async function agregarReferido(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    const pct = Number(porcentaje);
-    if (!agenteReferidoId || !pct || pct <= 0 || pct > 100) {
-      return setMsg({ ok: false, text: "Elegí un agente y un % entre 0 y 100." });
-    }
-    try {
-      await api.crearReferido(usuario.id, { agenteReferidoId, porcentaje: pct });
-      setAgenteReferidoId("");
-      setPorcentaje("");
-      refrescarReferidos();
-    } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo agregar." });
-    }
-  }
-
-  async function cambiarPorcentaje(r: any, nuevo: string) {
-    const pct = Number(nuevo);
-    if (!pct || pct <= 0 || pct > 100) return;
-    await api.actualizarReferido(r.id, { porcentaje: pct });
-    refrescarReferidos();
-  }
-
-  async function quitarReferido(r: any) {
-    if (!confirm(`¿Dejar de acreditarle a ${supervisorName} comisión por ${r.agente_referido_name}? El saldo ya acumulado (${r.saldo}) queda como está, solo se corta la acreditación automática a futuro.`)) return;
-    await api.actualizarReferido(r.id, { active: false });
-    refrescarReferidos();
-  }
+  const filtrados = filtro.trim()
+    ? otrosAgentes.filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()))
+    : otrosAgentes;
+  const aCargoIds = new Set(supervisorName ? otrosAgentes.filter((a) => a.supervisor === supervisorName).map((a) => a.id) : []);
 
   async function toggleACargo(a: any) {
     if (a.supervisor && a.supervisor !== supervisorName) {
       if (!confirm(`${a.name} ya tiene cargado como supervisor a "${a.supervisor}". ¿Reasignarlo a ${supervisorName}?`)) return;
     }
     await api.editarAgente(a.id, { supervisor: a.supervisor === supervisorName ? null : supervisorName ?? null });
-    // Fuerza refresco del listado de agentes en el padre recargando la página de datos: como
-    // "agentes" viene por props, alcanza con refrescar el propio array local vía window event
-    // simple — más simple: recargar toda la lista de usuarios/agentes del padre.
     window.dispatchEvent(new Event("digiplayers:agentes-actualizados"));
+  }
+
+  async function guardarPorcentaje(agente: any, valor: string) {
+    setMsg(null);
+    const existente = referidos.find((r) => r.agente_referido_id === agente.id);
+    const valorLimpio = valor.trim();
+
+    if (!valorLimpio) {
+      // Lo dejaron vacío: si tenía comisión cargada, se desactiva (el saldo ya acumulado queda
+      // como está, solo se corta la acreditación automática a futuro).
+      if (existente) {
+        if (!confirm(`¿Sacarle a ${agente.name} la comisión por referido? El saldo ya acumulado (${existente.saldo}) queda como está, solo se corta la acreditación a futuro.`)) {
+          refrescarReferidos(); // restaura el input al valor que tenía
+          return;
+        }
+        await api.actualizarReferido(existente.id, { active: false });
+        refrescarReferidos();
+      }
+      return;
+    }
+
+    const pct = Number(valorLimpio);
+    if (!pct || pct <= 0 || pct > 100) {
+      setMsg({ ok: false, text: `El % de ${agente.name} tiene que ser un número entre 0 y 100.` });
+      refrescarReferidos();
+      return;
+    }
+    try {
+      if (existente) {
+        if (pct !== Number(existente.porcentaje)) {
+          await api.actualizarReferido(existente.id, { porcentaje: pct });
+        }
+      } else {
+        await api.crearReferido(usuario.id, { agenteReferidoId: agente.id, porcentaje: pct });
+      }
+      refrescarReferidos();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar." });
+      refrescarReferidos();
+    }
   }
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
       <h3>Configuración de Supervisor — {usuario.email}</h3>
-
-      <div style={{ marginBottom: 18 }}>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-          Agentes a cargo (rakeback centralizado — mismo dato que Administración → Agentes → Supervisores).
-          {!supervisorName && " Para usar esto, la cuenta principal de este usuario (arriba) tiene que ser un agente con tipo de cuenta Supervisor."}
-        </div>
-        <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
-          {otrosAgentes.map((a) => (
-            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
-              <input type="checkbox" checked={aCargo.includes(a)} onChange={() => toggleACargo(a)} />
-              {a.name}
-              {a.supervisor && a.supervisor !== supervisorName && (
-                <span className="badge neutral" style={{ fontSize: 10 }}>a cargo de {a.supervisor}</span>
-              )}
-            </label>
-          ))}
-        </div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+        Por cada agente: tildá "A cargo" si el rakeback centralizado de ese club le llega a este supervisor
+        (mismo dato que Administración → Agentes → Supervisores{!supervisorName && " — necesita que la cuenta principal de este usuario sea un agente tipo Supervisor"}),
+        y/o cargale un % en "Comisión por referido" para que cobre ese % del rake semanal de ese agente en cada
+        cierre (saldo separado, visible en "Mi supervisión") — son dos cosas independientes, un agente puede
+        tener una, la otra, las dos, o ninguna.
       </div>
-
-      <div>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-          Comisiones por referido: % fijo sobre el rake semanal de un agente, acreditado solo (saldo
-          separado, se ve en "Mi supervisión") en cada cierre de ese agente. Esto no depende de la
-          cuenta principal — queda cargado directo a este usuario.
-        </div>
-        {referidos.length > 0 && (
-          <table style={{ marginBottom: 10 }}>
-            <thead><tr><th>Agente referido</th><th>%</th><th>Saldo acumulado</th><th></th></tr></thead>
-            <tbody>
-              {referidos.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.agente_referido_name}</td>
-                  <td>
-                    <input
-                      type="number"
-                      defaultValue={r.porcentaje}
-                      min={0}
-                      max={100}
-                      step="0.1"
-                      style={{ width: 70 }}
-                      onBlur={(e) => cambiarPorcentaje(r, e.target.value)}
-                    />
-                  </td>
-                  <td>{r.saldo}</td>
-                  <td><button type="button" className="btn secondary small" onClick={() => quitarReferido(r)}>Quitar</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <form onSubmit={agregarReferido} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-            <label style={{ fontSize: 12 }}>Nuevo agente referido</label>
-            <select value={agenteReferidoId} onChange={(e) => setAgenteReferidoId(e.target.value)}>
-              <option value="">Elegir agente...</option>
-              {otrosAgentes.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ width: 90, marginBottom: 0 }}>
-            <label style={{ fontSize: 12 }}>%</label>
-            <input type="number" min={0} max={100} step="0.1" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} />
-          </div>
-          <button className="btn secondary small" style={{ marginBottom: 0 }}>+ Agregar</button>
-        </form>
-        {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 8 }}>{msg.text}</div>}
+      <input
+        value={filtro}
+        onChange={(e) => setFiltro(e.target.value)}
+        placeholder="Buscar agente..."
+        style={{ width: "100%", marginBottom: 8 }}
+      />
+      <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+        <table>
+          <thead>
+            <tr><th>Agente</th><th>A cargo</th><th>Comisión por referido (%)</th><th>Saldo acumulado</th></tr>
+          </thead>
+          <tbody>
+            {filtrados.map((a) => (
+              <FilaAgenteSupervisor
+                key={a.id}
+                agente={a}
+                aCargo={aCargoIds.has(a.id)}
+                supervisorName={supervisorName}
+                referido={referidos.find((r) => r.agente_referido_id === a.id)}
+                onToggleACargo={() => toggleACargo(a)}
+                onGuardarPorcentaje={(valor) => guardarPorcentaje(a, valor)}
+              />
+            ))}
+            {filtrados.length === 0 && (
+              <tr><td colSpan={4} className="muted">Sin resultados.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
+      {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 8 }}>{msg.text}</div>}
     </div>
   );
 }
