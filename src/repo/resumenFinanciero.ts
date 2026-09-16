@@ -260,5 +260,45 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
   const porSemana = agrupar((f) => lunesDe(f));
   const porMes = agrupar((f) => f.slice(0, 7));
 
-  return { desde, hasta, totales, eventos, porDia, porSemana, porMes };
+  // Desglose de la Ganancia cierres semanales (pedido explícito de Leo, 18/9/2026: "necesito un
+  // desglose de todos los ingresos que generaron ganancia y todos los egresos que generaron
+  // pérdida"): mismos componentes que ya muestra Resumen por club para un club+semana puntual
+  // (ver ResumenClub.tsx), pero sumados entre TODOS los clubes y semanas del rango elegido —
+  // para no tener que ir club por club para entender de dónde sale el número total.
+  let rakeNuestraParte = 0;
+  let rodeoClub = 0;
+  let ventas = 0;
+  let tasaFijaPositiva = 0;
+  let tasaFijaNegativa = 0;
+  let rakebackAgentes = 0;
+  for (const r of resumenesClubSemana) {
+    if (!r) continue;
+    rakeNuestraParte += Number(r.gananciaPorRake) + Number(r.comisionesAgentes);
+    rodeoClub += Number(r.gananciaRodeoClub);
+    ventas += Number(r.ingresoPorVentas);
+    rakebackAgentes += Number(r.comisionesAgentes);
+    if (Number(r.tasaSemanalFija) > 0) tasaFijaPositiva += Number(r.tasaSemanalFija);
+    else if (Number(r.tasaSemanalFija) < 0) tasaFijaNegativa += Math.abs(Number(r.tasaSemanalFija));
+  }
+  const desgloseIngresos: { label: string; monto: number }[] = [
+    { label: "Rake generado — nuestra parte", monto: round2(rakeNuestraParte) },
+  ];
+  if (rodeoClub !== 0) desgloseIngresos.push({ label: "Ganancia Rodeo Club", monto: round2(rodeoClub) });
+  if (ventas !== 0) desgloseIngresos.push({ label: "Ingreso por ventas", monto: round2(ventas) });
+  if (tasaFijaPositiva !== 0) desgloseIngresos.push({ label: "Tasa semanal fija", monto: round2(tasaFijaPositiva) });
+  const desgloseEgresos: { label: string; monto: number }[] = [
+    { label: "Rakeback pagado a agentes", monto: round2(rakebackAgentes) },
+  ];
+  if (tasaFijaNegativa !== 0) desgloseEgresos.push({ label: "Tasa semanal fija", monto: round2(tasaFijaNegativa) });
+  const desgloseTotalIngresos = round2(desgloseIngresos.reduce((s, f) => s + f.monto, 0));
+  const desgloseTotalEgresos = round2(desgloseEgresos.reduce((s, f) => s + f.monto, 0));
+  const desgloseCierres = {
+    ingresos: desgloseIngresos,
+    egresos: desgloseEgresos,
+    totalIngresos: desgloseTotalIngresos,
+    totalEgresos: desgloseTotalEgresos,
+    gananciaNeta: round2(desgloseTotalIngresos - desgloseTotalEgresos),
+  };
+
+  return { desde, hasta, totales, eventos, porDia, porSemana, porMes, desgloseCierres };
 }

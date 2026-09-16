@@ -182,6 +182,52 @@ export default function ResumenFinanciero() {
             </div>
           </div>
 
+          {data.desgloseCierres && (data.desgloseCierres.ingresos.length > 0 || data.desgloseCierres.egresos.length > 0) && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: "0 0 4px" }}>Cómo se compone la Ganancia cierres semanales</h4>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Todo lo que sumó y todo lo que restó, sumado entre todos los clubes y semanas del rango elegido
+                (desde {new Date(desde + "T00:00:00").toLocaleDateString("es-AR")} hasta{" "}
+                {new Date(hasta + "T00:00:00").toLocaleDateString("es-AR")}). Para el desglose de un club y una semana
+                puntual, hacé clic en esa fila más abajo, en "Detalle de cada movimiento".
+              </div>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+                <div style={{ flex: "1 1 280px" }}>
+                  <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué generó ingresos</div>
+                  <table>
+                    <tbody>
+                      {data.desgloseCierres.ingresos.map((f: any) => (
+                        <tr key={f.label}><td>{f.label}</td><td className="pos">{usd(f.monto)}</td></tr>
+                      ))}
+                      <tr><td><strong>Total ingresos</strong></td><td className="pos"><strong>{usd(data.desgloseCierres.totalIngresos)}</strong></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ flex: "1 1 280px" }}>
+                  <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué generó egresos</div>
+                  <table>
+                    <tbody>
+                      {data.desgloseCierres.egresos.map((f: any) => (
+                        <tr key={f.label}><td>{f.label}</td><td className="neg">{usd(f.monto)}</td></tr>
+                      ))}
+                      <tr><td><strong>Total egresos</strong></td><td className="neg"><strong>{usd(data.desgloseCierres.totalEgresos)}</strong></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <table>
+                <tbody>
+                  <tr>
+                    <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
+                    <td className={data.desgloseCierres.gananciaNeta >= 0 ? "pos" : "neg"}>
+                      <strong>{usd(data.desgloseCierres.gananciaNeta)}</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="topbar" style={{ marginBottom: 10 }}>
               <h4 style={{ margin: 0 }}>Desglose por período</h4>
