@@ -1,4 +1,5 @@
 import { pool, newId } from "../db/pool.js";
+import type { PoolClient } from "pg";
 import { registrarAjusteTesoreria } from "./treasury.js";
 
 // Vista "todo junto" de comisiones por referido para la pantalla dedicada (Comisiones por
@@ -81,6 +82,49 @@ export async function pagarComisionesReferido(userId: string, createdBy?: string
 
     await client.query("COMMIT");
     return { walletMovementId: movementId, total };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
+ * Borra UN movimiento puntual del historial de comisión por referido (ej. una acreditación o un
+ * pago cargado de más durante pruebas) — mismo criterio que eliminarMovimientoAdelanto (ver
+ * repo/advances.ts): solo se puede borrar el MÁS RECIENTE de ese referido, porque el saldo
+ * corriente (supervisor_referidos.saldo) es una suma acumulada y borrar uno del medio lo
+ * desincronizaría. No revierte el cierre semanal que haya generado una COMISION — si ese
+ * cierre sigue aplicado, esto solo corrige la comisión, no el cierre en sí.
+ */
+export async function eliminarMovimientoReferido(movementId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const movRes = await client.query(`SELECT * FROM supervisor_referido_movements WHERE id = $1 FOR UPDATE`, [movementId]);
+    const mov = movRes.rows[0];
+    if (!mov) throw new Error("No se encontró ese movimiento.");
+
+    const ultimo = await client.query(
+      `SELECT id FROM supervisor_referido_movements WHERE referido_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.referido_id]
+    );
+    if (ultimo.rows[0]?.id !== movementId) {
+      throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE de este referido — borralos en orden, del más nuevo hacia atrás.");
+    }
+
+    const anterior = await client.query(
+      `SELECT resulting_saldo FROM supervisor_referido_movements
+       WHERE referido_id = $1 AND id <> $2 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.referido_id, movementId]
+    );
+    const saldoPrevio = anterior.rows[0] ? Number(anterior.rows[0].resulting_saldo) : 0;
+
+    await client.query(`UPDATE supervisor_referidos SET saldo = $1, updated_at = now() WHERE id = $2`, [saldoPrevio, mov.referido_id]);
+    await client.query(`DELETE FROM supervisor_referido_movements WHERE id = $1`, [movementId]);
+    await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

@@ -16,6 +16,7 @@ export default function ComisionesReferidos() {
   const [verHistorial, setVerHistorial] = useState<string | null>(null);
   const [historiales, setHistoriales] = useState<Record<string, any[]>>({});
   const [cargandoHistorial, setCargandoHistorial] = useState<string | null>(null);
+  const [borrandoMov, setBorrandoMov] = useState<string | null>(null);
 
   function refresh() {
     setError("");
@@ -40,6 +41,34 @@ export default function ComisionesReferidos() {
       } finally {
         setCargandoHistorial(null);
       }
+    }
+  }
+
+  // Solo se puede borrar el movimiento MÁS RECIENTE de cada referido (ver nota del backend) —
+  // para corregir una acreditación o un pago cargado de más, sin desincronizar el saldo corrido.
+  async function eliminarMovimiento(supervisorUserId: string, m: any) {
+    const tipoLabel = m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección";
+    if (
+      !(await confirmDialog(
+        `¿Borrar este movimiento (${tipoLabel} de ${m.agente_referido_name}, ${usd(m.amount)})? Deja el saldo del referido como estaba antes de este movimiento. Es para corregir cargas de prueba, no se puede deshacer.${
+          m.week_start ? " No revierte el cierre semanal que lo generó, solo la comisión." : ""
+        }`,
+        { danger: true }
+      ))
+    )
+      return;
+    setBorrandoMov(m.id);
+    try {
+      await api.eliminarMovimientoReferido(m.id);
+      setHistoriales((h) => {
+        const { [supervisorUserId]: _omit, ...resto } = h;
+        return resto;
+      });
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo borrar el movimiento.");
+    } finally {
+      setBorrandoMov(null);
     }
   }
 
@@ -140,22 +169,44 @@ export default function ComisionesReferidos() {
               ) : (
                 <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8 }}>
                   <table>
-                    <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th></tr></thead>
+                    <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th><th></th></tr></thead>
                     <tbody>
-                      {historiales[s.userId].map((m: any) => (
-                        <tr key={m.id}>
-                          <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
-                          <td>{m.agente_referido_name}</td>
-                          <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
-                          <td>
-                            <span className={`badge ${m.type === "COMISION" ? "pos" : m.type === "PAGO" ? "neutral" : "neutral"}`}>
-                              {m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}
-                            </span>
-                          </td>
-                          <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{m.amount}</td>
-                          <td>{m.resulting_saldo}</td>
-                        </tr>
-                      ))}
+                      {(() => {
+                        const vistos = new Set<string>();
+                        return historiales[s.userId].map((m: any) => {
+                          // El historial viene ordenado más nuevo primero — la primera vez que
+                          // aparece un referido_id es su movimiento más reciente, el único
+                          // borrable individualmente (ver nota del backend).
+                          const esElMasReciente = !vistos.has(m.referido_id);
+                          vistos.add(m.referido_id);
+                          return (
+                            <tr key={m.id}>
+                              <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
+                              <td>{m.agente_referido_name}</td>
+                              <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
+                              <td>
+                                <span className={`badge ${m.type === "COMISION" ? "pos" : m.type === "PAGO" ? "neutral" : "neutral"}`}>
+                                  {m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}
+                                </span>
+                              </td>
+                              <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{m.amount}</td>
+                              <td>{m.resulting_saldo}</td>
+                              <td>
+                                {esElMasReciente && (
+                                  <button
+                                    className="btn danger small"
+                                    disabled={borrandoMov === m.id}
+                                    onClick={() => eliminarMovimiento(s.userId, m)}
+                                    title="Borrar este movimiento puntual (deja el saldo como estaba antes) — para corregir pruebas"
+                                  >
+                                    {borrandoMov === m.id ? "..." : "Borrar"}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>

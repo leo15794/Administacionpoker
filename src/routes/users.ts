@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { pool, newId } from "../db/pool.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { eliminarMovimientoReferido } from "../repo/supervisorReferidos.js";
 
 export const usersRouter = Router();
 
@@ -237,6 +238,18 @@ usersRouter.get("/:id/referidos/movimientos", requireAuth, requireAdmin, async (
     [req.params.id]
   );
   res.json(r.rows);
+});
+
+// Borra UN movimiento puntual del historial de comisión por referido (solo el más reciente de
+// ese referido — ver nota en repo/supervisorReferidos.ts) — para corregir una acreditación o un
+// pago cargado de más sin tener que pelearse con una corrección a mano.
+usersRouter.delete("/referidos/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarMovimientoReferido(req.params.id);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo borrar el movimiento." });
+  }
 });
 
 const crearReferidoSchema = z.object({
