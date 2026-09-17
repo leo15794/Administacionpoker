@@ -159,7 +159,15 @@ export async function resolvePlayerAgent(
   }
 
   if (row.agentIdRaw) {
-    const a = await pool.query(`SELECT id, name FROM agents WHERE external_id = $1 AND active = true`, [row.agentIdRaw]);
+    // ORDER BY + LIMIT 1 puramente defensivo: external_id tiene UNIQUE en el schema, así que
+    // en teoría nunca hay dos activos con el mismo valor — pero si alguna vez lo hay (drift de
+    // schema, dato viejo de antes de que existiera la constraint), evita que la fila devuelta
+    // dependa del orden físico en el que Postgres la encuentre (y por lo tanto de que un UPDATE
+    // cualquiera sobre esa fila "la arregle" reordenándola, en vez de por una causa real).
+    const a = await pool.query(
+      `SELECT id, name FROM agents WHERE external_id = $1 AND active = true ORDER BY updated_at DESC LIMIT 1`,
+      [row.agentIdRaw]
+    );
     if (a.rows[0]) return { agentId: a.rows[0].id, agentName: a.rows[0].name, resolvedBy: "external_id" };
   }
 
