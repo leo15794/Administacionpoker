@@ -1,5 +1,16 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
 import "dotenv/config";
+
+// Por defecto, node-postgres devuelve las columnas DATE (oid 1082, ej. week_start, week_end,
+// entry_date) como un objeto Date a medianoche UTC. Eso rompe la UI: el front convierte esa
+// fecha a texto con toLocaleDateString() en el huso horario del NAVEGADOR (Argentina, UTC-3),
+// y medianoche UTC menos 3 horas cae en el DIA ANTERIOR -> la fecha se muestra corrida un día
+// (bug reportado por Leo en "Jugadores bancados" al ejecutar un cierre, 17/09/2026). Un DATE de
+// Postgres no tiene hora ni huso horario, así que la única forma correcta de manejarlo es como
+// texto plano "YYYY-MM-DD" de punta a punta — nunca como instante. Esto NO afecta a las
+// columnas TIMESTAMPTZ (occurred_at, created_at, etc.), que siguen llegando como Date y
+// convirtiéndose bien a la hora local.
+types.setTypeParser(1082, (val: string) => val);
 
 // Neon (y la mayoría de los Postgres serverless) requieren SSL. En local (Postgres
 // propio) no hace falta, así que se activa solo si la URL no apunta a localhost.
