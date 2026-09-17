@@ -87,8 +87,15 @@ export async function analizarImportacionTinyGG(
 
     let entry = clubesMap.get(club.id);
     if (!entry) {
-      entry = { clubId: club.id, clubName: club.name, sheetName: archivo.fileName, agentes: [], sinAgente: [], bancados: [] };
+      entry = { clubId: club.id, clubName: club.name, sheetName: archivo.fileName, agentes: [], sinAgente: [], bancados: [], tinyRebateUnion: [] };
       clubesMap.set(club.id, entry);
+    }
+    if (p.rebateUnion) {
+      entry.tinyRebateUnion!.push({
+        fileName: archivo.fileName,
+        superAgentNickname: p.superAgentNicknameRaw,
+        ...p.rebateUnion,
+      });
     }
     let agentesMap = agentesMapPorClub.get(club.id);
     if (!agentesMap) {

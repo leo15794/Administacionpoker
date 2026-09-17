@@ -61,6 +61,20 @@ export interface JugadorBancadoOmitido {
   rake: number;
 }
 
+/** Un item por archivo/super agente de Tiny que alimentó este club (ver repo/importsTinyGG.ts
+ * y engine/importTinyGG.ts::TinyRebateUnionInfo) — solo lo llenan los imports de Tiny, el resto
+ * de las plataformas deja este array vacío. */
+export interface TinyRebateUnionPorArchivo {
+  fileName: string;
+  superAgentNickname: string | null;
+  rgPreRakeExclJp: number | null;
+  rebateUnionCalculado: number;
+  rebateUnionTiny: number | null;
+  rakeTotalRingGame: number | null;
+  ratePct: number | null;
+  rakeShare: number | null;
+}
+
 export interface ClubImportado {
   clubId: string;
   clubName: string;
@@ -68,6 +82,8 @@ export interface ClubImportado {
   agentes: AgenteAgregado[];
   sinAgente: JugadorSinAgente[];
   bancados: JugadorBancadoOmitido[];
+  /** Solo Tiny — ver TinyRebateUnionPorArchivo. Vacío para el resto de las plataformas. */
+  tinyRebateUnion?: TinyRebateUnionPorArchivo[];
 }
 
 export interface ResultadoImportacion {

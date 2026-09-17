@@ -820,6 +820,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // archivo — se omiten del agregado del agente (ver repo/imports.ts) y se informan acá para
   // que el total que quedó afuera del cierre no desaparezca en silencio.
   const [bancadosPorClub, setBancadosPorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
+  // Rebate Unión de Tiny (18/09/2026, pedido de Leo): lo que Tiny/la Unión nos reconoce a
+  // NOSOTROS (nunca a los agentes) — un cálculo aparte del rebate por agente, a nivel de todo
+  // el super agente. Solo se llena para plataforma TINY (ver repo/importsTinyGG.ts).
+  const [tinyRebateUnionPorClub, setTinyRebateUnionPorClub] = useState<
+    { clubId: string; clubName: string; items: any[] }[]
+  >([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
   const [guardandoAsignacion, setGuardandoAsignacion] = useState<string | null>(null);
@@ -960,6 +966,40 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       }
       nuevasFilas.sort((a, b) => a.clubName.localeCompare(b.clubName) || a.agentName.localeCompare(b.agentName));
       setFilas(nuevasFilas);
+
+      // Rebate Unión de Tiny: convierte a USD con la misma tasa que el resto de esta corrida y
+      // le suma, por club, la Σ del rebate que ya le vamos a pagar a CADA agente (rebatePct ×
+      // (resultado + rakeTotal), la misma fórmula que aplica calcularCierre) — así se puede ver
+      // de una si lo que Tiny nos reconoce alcanza para cubrir lo que salimos a pagar nosotros.
+      if (plataforma === "TINY") {
+        const rebateAgentesPorClub = new Map<string, number>();
+        for (const f of nuevasFilas) {
+          const rebateFila = (f.resultado + f.rakeTotal) * f.rebatePct;
+          rebateAgentesPorClub.set(f.clubId, (rebateAgentesPorClub.get(f.clubId) ?? 0) + rebateFila);
+        }
+        setTinyRebateUnionPorClub(
+          (r.clubes || [])
+            .filter((c: any) => (c.tinyRebateUnion?.length ?? 0) > 0)
+            .map((c: any) => ({
+              clubId: c.clubId,
+              clubName: c.clubName,
+              items: c.tinyRebateUnion.map((u: any) => ({
+                ...u,
+                rgPreRakeExclJp: u.rgPreRakeExclJp != null ? u.rgPreRakeExclJp / tasa : null,
+                rebateUnionCalculado: u.rebateUnionCalculado / tasa,
+                rebateUnionTiny: u.rebateUnionTiny != null ? u.rebateUnionTiny / tasa : null,
+                rakeTotalRingGame: u.rakeTotalRingGame != null ? u.rakeTotalRingGame / tasa : null,
+                rakeShare: u.rakeShare != null ? u.rakeShare / tasa : null,
+              })),
+              rebateAgentesTotal: rebateAgentesPorClub.get(c.clubId) ?? 0,
+              baseAgentesTotal: nuevasFilas
+                .filter((f) => f.clubId === c.clubId)
+                .reduce((s, f) => s + f.resultado + f.rakeTotal, 0),
+            }))
+        );
+      } else {
+        setTinyRebateUnionPorClub([]);
+      }
     } catch (err: any) {
       setAnalisisError(err.message || "No se pudo procesar el archivo.");
     } finally {
@@ -1401,6 +1441,66 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                     ))}
                   </tbody>
                 </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tinyRebateUnionPorClub.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h4>Rebate Union de Tiny (conciliacion)</h4>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Rebate Union: lo que Tiny/la Union nos reconoce a NOSOTROS por super agente, calculado sobre el RG Pre-rake
+            P&amp;L (excl. JP) del archivo -- 10% si esa base es negativa, 0 si es positiva o cero. Es un calculo
+            INDEPENDIENTE del rebate que nosotros les pagamos a cada agente (columna "Suma Rebate agentes"); nunca se
+            reparte directo a los agentes. Diferencia = Rebate Union - Suma Rebate agentes: positiva es margen extra
+            para nosotros, negativa es costo extra que absorbemos.
+          </div>
+          {tinyRebateUnionPorClub.map((grupo: any) => {
+            const diferencia = grupo.items.reduce((s: number, it: any) => s + it.rebateUnionCalculado, 0) - grupo.rebateAgentesTotal;
+            const baseUnionTotal = grupo.items.reduce((s: number, it: any) => s + (it.rgPreRakeExclJp ?? 0), 0);
+            return (
+              <div key={grupo.clubId} style={{ marginBottom: 14 }}>
+                <div className="muted">{grupo.clubName}</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Super agente (archivo)</th>
+                      <th>RG Pre-rake excl. JP</th>
+                      <th>Rebate Union (nuestro)</th>
+                      <th>Rebate Union (Tiny)</th>
+                      <th>Rake share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grupo.items.map((it: any, idx: number) => (
+                      <tr key={idx}>
+                        <td>{it.superAgentNickname ?? it.fileName}</td>
+                        <td>{it.rgPreRakeExclJp != null ? usd(it.rgPreRakeExclJp) : "-"}</td>
+                        <td>{usd(it.rebateUnionCalculado)}</td>
+                        <td>
+                          {it.rebateUnionTiny != null ? usd(it.rebateUnionTiny) : "-"}
+                          {it.rebateUnionTiny != null && Math.abs(it.rebateUnionTiny - it.rebateUnionCalculado) > 0.5 && (
+                            <span className="neg" style={{ marginLeft: 6 }}>difiere</span>
+                          )}
+                        </td>
+                        <td>{it.rakeShare != null ? usd(it.rakeShare) : "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  Suma Rebate agentes (lo que pagamos nosotros): <strong>{usd(grupo.rebateAgentesTotal)}</strong>
+                  {" - "}
+                  Diferencia (Rebate Union menos Suma Rebate agentes):{" "}
+                  <strong className={diferencia >= 0 ? "pos" : "neg"}>{usd(diferencia)}</strong>
+                  {" - "}
+                  Base: RG Pre-rake excl. JP {usd(baseUnionTotal)} vs Suma(W/L+Rake) agentes {usd(grupo.baseAgentesTotal)}
+                  {Math.abs(baseUnionTotal - grupo.baseAgentesTotal) > 0.5 && (
+                    <span className="neg" style={{ marginLeft: 6 }}>bases distintas</span>
+                  )}
+                </div>
               </div>
             );
           })}

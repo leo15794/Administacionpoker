@@ -36,11 +36,33 @@
 import ExcelJS from "exceljs";
 import type { SupremaPlayerRow } from "./importSuprema.js";
 
+export interface TinyRebateUnionInfo {
+  /** "RG Pre-rake P&L (excl. JP)" que Tiny reporta en la hoja 4 (fila "返利/Rebate") — la base
+   * del rebate que Tiny/la Unión nos reconoce a NOSOTROS (nunca a los agentes). null si no se
+   * pudo parsear el texto de esa fila (formato cambiado, hoja 4 vacía, etc.). */
+  rgPreRakeExclJp: number | null;
+  /** Nuestro cálculo, independiente del de Tiny: base < 0 ? -base * 10% : 0. */
+  rebateUnionCalculado: number;
+  /** El monto que Tiny puso en la columna "金額 (Amount)" de esa misma fila — para cruzar
+   * contra rebateUnionCalculado. null si no se encontró la fila de rebate. */
+  rebateUnionTiny: number | null;
+  /** Rake total de Ring Game (hoja 1, "Ring Game總服務費") — base del rake share. */
+  rakeTotalRingGame: number | null;
+  /** % que Tiny nos reconoce sobre ese rake (hoja 1, "服務費分潤百分比 / Service Fee Rate"),
+   * normalmente 0.70. */
+  ratePct: number | null;
+  /** rakeTotalRingGame × ratePct, ya calculado por Tiny en la hoja 1 ("分潤金額 / Revenue"). */
+  rakeShare: number | null;
+}
+
 export interface TinyGGParsedFile {
   fileName: string;
   superAgentIdRaw: string | null;
   superAgentNicknameRaw: string | null;
   rows: SupremaPlayerRow[];
+  /** null cuando ni la hoja "1.超級代理總覽" ni la "4.額外交收" tenían nada reconocible —
+   * sigue permitiendo importar el cierre igual, solo no hay con qué cruzar el rebate Unión. */
+  rebateUnion: TinyRebateUnionInfo | null;
 }
 
 export interface TinyGGParseError {
@@ -134,6 +156,54 @@ function buscarColumnaIdentidad(
   return null;
 }
 
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Hoja "1.超級代理總覽", sección "Weekly Settlement": la fila "Ring Game總服務費 (Ring Game
+ * Rake)" trae el rake total, el % que nos reconoce Tiny ("服務費分潤百分比 / Service Fee Rate",
+ * normalmente 70%) y el monto ya calculado — todo esto YA LO CALCULA TINY, acá solo se lee.
+ */
+function parsearRakeShare(ws: ExcelJS.Worksheet | null): { rakeTotal: number; ratePct: number; rakeShare: number } | null {
+  if (!ws) return null;
+  const limite = Math.max(ws.rowCount, 30);
+  for (let r = 1; r <= limite; r++) {
+    const etiqueta = normText(ws.getCell(r, 1).value);
+    if (etiqueta && etiqueta.toLowerCase().includes("ring game rake")) {
+      const rakeTotal = toNumber(ws.getCell(r, 2).value);
+      const rateTxt = normText(ws.getCell(r, 3).value) ?? "";
+      const ratePct = round2((Number(rateTxt.replace("%", "").trim()) || 0) / 100 * 10000) / 10000;
+      const rakeShare = toNumber(ws.getCell(r, 4).value);
+      return { rakeTotal, ratePct, rakeShare };
+    }
+  }
+  return null;
+}
+
+/**
+ * Hoja "4.額外交收", sección "客製額外交收 (Custom Extra Settlements)": busca la fila de tipo
+ * "返利 (Rebate)" y lee el monto que Tiny ya calculó (columna Amount) más la base que usó,
+ * embebida como texto en la columna "詳細原因 (Reason)" — ej. "RG Pre-rake P&L (excl. JP) :
+ * 69,310.55 ≥ 0, no rebate this week". Nunca se recalcula la base desde cero acá (no hay
+ * columna de Jackpot separada en las otras hojas) — se toma tal cual la reporta Tiny.
+ */
+function parsearRebateUnion(ws: ExcelJS.Worksheet | null): { base: number | null; montoTiny: number | null } | null {
+  if (!ws) return null;
+  const limite = Math.max(ws.rowCount, 40);
+  for (let r = 1; r <= limite; r++) {
+    const tipo = normText(ws.getCell(r, 2).value);
+    if (tipo && (tipo.includes("返利") || tipo.toLowerCase().includes("rebate"))) {
+      const montoTiny = toNumber(ws.getCell(r, 6).value);
+      const razon = normText(ws.getCell(r, 7).value) ?? "";
+      const m = razon.match(/pre-rake\s*p&l\s*\(excl\.?\s*jp\)\s*:?\s*(-?[\d,]+(?:\.\d+)?)/i);
+      const base = m ? Number(m[1].replace(/,/g, "")) : null;
+      return { base, montoTiny };
+    }
+  }
+  return null;
+}
+
 export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise<TinyGGParseOutcome> {
   const wb = new ExcelJS.Workbook();
   try {
@@ -145,6 +215,7 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
   const wsResumen = buscarHoja(wb, "超級代理總覽");
   const wsAgentes = buscarHoja(wb, "代理數據統計");
   const wsJugadores = buscarHoja(wb, "玩家數據");
+  const wsExtra = buscarHoja(wb, "額外交收");
   if (!wsAgentes || !wsJugadores) {
     return {
       error: {
@@ -279,7 +350,22 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
     };
   }
 
+  const rakeShareInfo = parsearRakeShare(wsResumen);
+  const rebateInfo = parsearRebateUnion(wsExtra);
+  const rebateUnion: TinyRebateUnionInfo | null =
+    rakeShareInfo || rebateInfo
+      ? {
+          rgPreRakeExclJp: rebateInfo?.base ?? null,
+          rebateUnionCalculado:
+            rebateInfo?.base != null && rebateInfo.base < 0 ? round2(-rebateInfo.base * 0.1) : 0,
+          rebateUnionTiny: rebateInfo?.montoTiny ?? null,
+          rakeTotalRingGame: rakeShareInfo?.rakeTotal ?? null,
+          ratePct: rakeShareInfo?.ratePct ?? null,
+          rakeShare: rakeShareInfo?.rakeShare ?? null,
+        }
+      : null;
+
   return {
-    parsed: { fileName, superAgentIdRaw, superAgentNicknameRaw, rows },
+    parsed: { fileName, superAgentIdRaw, superAgentNicknameRaw, rows, rebateUnion },
   };
 }
