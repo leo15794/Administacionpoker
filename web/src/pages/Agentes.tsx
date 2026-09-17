@@ -173,6 +173,19 @@ export default function Agentes() {
                     <td>
                       {a.name}
                       {a.active === false && <span className="badge neutral" style={{ marginLeft: 8 }}>Dado de baja</span>}
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                        {a.external_id ? (
+                          <>ID plataforma: {a.external_id}</>
+                        ) : (
+                          <span
+                            style={{ cursor: "pointer", textDecoration: "underline dotted" }}
+                            title="Sin ID de plataforma cargado: si el nombre del archivo no matchea exacto, la importación puede no reconocer a este agente o crear uno duplicado. Click para cargarlo."
+                            onClick={() => setEditando(a)}
+                          >
+                            Sin ID de plataforma
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>{a.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                     <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[(a.account_type as AccountType) ?? a.default_system] ?? a.account_type}</span></td>
@@ -330,6 +343,7 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
   const [supervisor, setSupervisor] = useState(agente.supervisor ?? "");
   const [accountType, setAccountType] = useState<AccountType>((agente.account_type as AccountType) ?? agente.default_system);
   const [personKey, setPersonKey] = useState(agente.person_key ?? "");
+  const [externalId, setExternalId] = useState(agente.external_id ?? "");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -345,6 +359,7 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         supervisor: supervisor.trim() || null,
         accountType,
         personKey: personKey.trim() || null,
+        externalId: externalId.trim() || null,
       });
       onSaved();
     } catch (err: any) {
@@ -380,6 +395,21 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         <div className="field">
           <label>Supervisor (opcional)</label>
           <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>ID en la plataforma (opcional)</label>
+          <input
+            value={externalId}
+            onChange={(e) => setExternalId(e.target.value)}
+            placeholder="Ej: 91 (Agent ID del reporte)"
+          />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            El "Agent ID" que trae el archivo de la plataforma (Suprema, Tiny, etc.). Si se
+            carga acá, la importación reconoce a este agente por ese ID aunque el nombre del
+            archivo venga distinto, con typos o espacios de más — evita que se le asigne el %
+            equivocado (default) o que se cree un agente duplicado por error. Si se deja vacío,
+            se completa solo la primera vez que el nombre matchee bien.
+          </div>
         </div>
         <div className="field">
           <label>Cuenta de socio (opcional)</label>

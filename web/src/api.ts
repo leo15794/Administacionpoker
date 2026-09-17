@@ -173,6 +173,9 @@ export const api = {
       defaultSystem?: "PREPAGO" | "WIN_LOSE";
       supervisor?: string | null;
       accountType?: AccountType;
+      // ID del agente en la plataforma de origen (ej. "Agent ID" del reporte Suprema/Tiny) —
+      // permite que el importador lo reconozca aunque el nombre venga distinto o con typos.
+      externalId?: string | null;
       // Dar de baja (no borra nada: el agente deja de aparecer para cargar cierres nuevos,
       // pero su historial de movimientos/cierres queda intacto).
       active?: boolean;
