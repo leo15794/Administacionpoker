@@ -394,7 +394,7 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
        rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
        rate_snapshot, rule_applied, status, observation, routed_to_partner_account_id,
        rodeo, rodeo_club_share, rodeo_detalle, jugadores, ring_game, mtt, sng)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
     [
       id,
       input.agentId,
