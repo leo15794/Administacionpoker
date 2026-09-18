@@ -267,8 +267,20 @@ export default function ResumenClub() {
                   <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
                   <td><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
                 </tr>
+                <tr><td className="muted">Agentes</td><td className="muted">{resumen.agentesConCierre}</td></tr>
+                <tr><td className="muted">Jugadores</td><td className="muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
+                <tr><td className="muted">Resultado</td><td className={Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.resultadoTotal)}</td></tr>
                 <tr><td className="muted">Rake total generado por el club</td><td className="muted">{usd(resumen.rakeTotal)}</td></tr>
+                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className="muted">{usd(resumen.comisionesAgentes)}</td></tr>
                 <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
+                <tr>
+                  <td className="muted">Ajuste manual (tickets promocionales)</td>
+                  <td className={Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}>
+                    {usd(resumen.ajusteManualTotal)}
+                  </td>
+                </tr>
+                <tr><td className="muted">Ingreso por ventas</td><td className="muted">{usd(resumen.ingresoPorVentas)}</td></tr>
+                <tr><td className="muted">Tasa semanal fija (Tasas)</td><td className="muted">{usd(resumen.tasaSemanalFija)}</td></tr>
                 <tr><td className="muted">Cierre total agentes</td><td className="muted">{usd(resumen.cierreTotalAgentes)}</td></tr>
               </tbody>
             </table>

@@ -43,6 +43,10 @@ export interface FilaAgenteResumenClub {
   rodeoClubShare: number;
   gananciaPorRake: number;
   cierreFinalAgente: number;
+  // "Ajuste manual" (18/09/2026, tickets promocionales): ya viene incluido en cierreFinalAgente
+  // (lo suma/resta el motor, ver engine/cierre.ts) -- se expone aparte solo para mostrarlo como
+  // renglón informativo en el resumen del club, igual que rodeoAgente.
+  ajusteManual: number;
 }
 
 export interface ResumenClubSemanal {
@@ -64,6 +68,11 @@ export interface ResumenClubSemanal {
   gananciaNeta: number;
   cierreTotalAgentes: number;
   agentesConCierre: number;
+  // Totales agregados para el resumen final (18/09/2026, pedido de Leo: que el resumen del
+  // club muestre los mismos datos que venía anotando a mano en su planilla).
+  jugadoresTotal: number | null;
+  resultadoTotal: number;
+  ajusteManualTotal: number;
 }
 
 export async function getResumenClubSemanal(clubId: string, weekStart: string): Promise<ResumenClubSemanal | null> {
@@ -76,7 +85,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
             wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share,
-            wc.jugadores, wc.ring_game, wc.mtt, wc.sng,
+            wc.jugadores, wc.ring_game, wc.mtt, wc.sng, wc.ajuste_manual,
             (SELECT d.club_payout_ratio_override FROM agent_club_deals d
              WHERE d.agent_id = wc.agent_id AND d.club_id = wc.club_id AND d.valid_to IS NULL
              ORDER BY d.valid_from DESC LIMIT 1) as ratio_override
@@ -96,6 +105,9 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   let gananciaRodeoClub = 0;
   let gananciaPorRake = 0;
   let cierreTotalAgentes = 0;
+  let jugadoresTotal: number | null = null;
+  let resultadoTotal = 0;
+  let ajusteManualTotal = 0;
   let weekEnd: string | null = null;
   for (const r of cierresRes.rows) {
     const rake = Number(r.rake_total);
@@ -120,6 +132,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
       rodeoClubShare: Number(r.rodeo_club_share),
       gananciaPorRake: gananciaFila,
       cierreFinalAgente: Number(r.final_closing),
+      ajusteManual: Number(r.ajuste_manual ?? 0),
     });
     rakeTotal += rake;
     comisionesAgentes += rakeback;
@@ -129,6 +142,9 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     gananciaRodeoClub += Number(r.rodeo_club_share);
     gananciaPorRake += gananciaFila;
     cierreTotalAgentes += Number(r.final_closing);
+    if (r.jugadores !== null) jugadoresTotal = (jugadoresTotal ?? 0) + Number(r.jugadores);
+    resultadoTotal += Number(r.result);
+    ajusteManualTotal += Number(r.ajuste_manual ?? 0);
     if (!weekEnd) weekEnd = r.week_end;
   }
 
@@ -158,6 +174,9 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     gananciaNeta: gananciaPorRake + gananciaRodeoClub + ingresoPorVentas + tasaSemanalFija,
     cierreTotalAgentes,
     agentesConCierre: filas.length,
+    jugadoresTotal,
+    resultadoTotal,
+    ajusteManualTotal,
   };
 }
 
