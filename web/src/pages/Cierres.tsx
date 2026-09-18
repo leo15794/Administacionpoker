@@ -810,7 +810,7 @@ type FilaImport = {
   // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD cargado a mano fila
   // por fila en esta misma grilla — se suma/resta directo al cierre final del agente (ver
   // engine/cierre.ts). ajusteManualNota es obligatoria si el monto no es 0.
-  ajusteManual: number;
+  ajusteManual: string;
   ajusteManualNota: string;
   included: boolean;
   previewLoading: boolean;
@@ -997,7 +997,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
-            ajusteManual: 0,
+            ajusteManual: "0",
             ajusteManualNota: "",
             // CAMBIO (18/09/2026): ya no existe el % default de club — si no hay deal cargado
             // para este agente+club, arranca DESTILDADA (no entra en el lote a aplicar) para que
@@ -1098,7 +1098,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // "Cierre final (vista previa)" se queda mostrando el numero viejo, calculado sin el ajuste,
   // hasta que alguien vuelva a tocar "Calcular vista previa de todos" sin darse cuenta de que
   // hace falta.
-  function setAjusteManualFila(key: string, ajusteManual: number) {
+  function setAjusteManualFila(key: string, ajusteManual: string) {
     setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManual, previewResult: null, previewError: null } : f)));
   }
 
@@ -1146,7 +1146,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: f.ringGame,
             mtt: f.mtt,
             sng: f.sngOtros,
-            ajusteManual: f.ajusteManual || undefined,
+            ajusteManual: Number(f.ajusteManual) || undefined,
             ajusteManualNota: f.ajusteManualNota.trim() || undefined,
           });
           setFilas((fs) =>
@@ -1183,7 +1183,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const sinConfigurarCount = filas.filter((f) => f.configSource !== "deal").length;
   // Ajuste manual cargado sin nota: bloquea aplicar, igual que una fila sin deal — para que
   // quede rastreable en el historial por que se cargo cada ticket promocional.
-  const hayIncluidasSinNotaAjuste = incluidas.some((f) => (f.ajusteManual || 0) !== 0 && !f.ajusteManualNota.trim());
+  const hayIncluidasSinNotaAjuste = incluidas.some((f) => (Number(f.ajusteManual) || 0) !== 0 && !f.ajusteManualNota.trim());
   const totalCierreFinal = incluidas.reduce((sum, f) => sum + Number(f.previewResult?.calc?.finalClosing ?? 0), 0);
 
   async function aplicarTodo() {
@@ -1211,7 +1211,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           ringGame: f.ringGame,
           mtt: f.mtt,
           sng: f.sngOtros,
-          ajusteManual: f.ajusteManual || undefined,
+          ajusteManual: Number(f.ajusteManual) || undefined,
           ajusteManualNota: f.ajusteManualNota.trim() || undefined,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
@@ -1656,12 +1656,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       step="0.01"
                       value={f.ajusteManual}
                       disabled={!!f.applyResult}
-                      onChange={(e) => setAjusteManualFila(f.key, Number(e.target.value) || 0)}
+                      onChange={(e) => setAjusteManualFila(f.key, e.target.value)}
                       style={{ width: 72 }}
                     />
                   </td>
                   <td>
-                    {f.ajusteManual !== 0 && (
+                    {(Number(f.ajusteManual) || 0) !== 0 && (
                       <input
                         type="text"
                         placeholder="Motivo (obligatorio)"
