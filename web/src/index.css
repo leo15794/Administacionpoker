@@ -409,6 +409,20 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 
 /* ---------- tables ---------- */
 
+/* Envoltorio con scroll horizontal para tablas anchas (ej. "Cierres a aplicar" con muchas
+   columnas) -- sin esto, una tabla mas ancha que el panel se desborda visualmente por fuera
+   del fondo blanco en vez de quedarse contenida con scroll. */
+.table-scroll { overflow-x: auto; }
+
+/* Utilidades genericas de color para montos -- positivo en verde, negativo en rojo, en
+   cualquier tabla o texto (no solo dentro de .kpi-card o .badge). */
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+/* El signo "-" nunca se separa del monto: sin esto, un currency negativo angosto puede
+   partirse en dos lineas ("-" arriba, "US$ 1.234,56" abajo) por el espacio que Intl mete
+   despues del simbolo de moneda. */
+.money { white-space: nowrap; }
+
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th {
   text-align: left;

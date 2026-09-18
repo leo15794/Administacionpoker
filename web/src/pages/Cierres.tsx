@@ -5,6 +5,15 @@ import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 
+// Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
+// entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
+// columna angosta, el navegador puede usar como punto de corte).
+function Monto({ value }: { value: number | string | null | undefined }) {
+  if (value == null) return <span className="muted">-</span>;
+  const n = Number(value);
+  return <span className={`money ${n >= 0 ? "pos" : "neg"}`}>{usd(n)}</span>;
+}
+
 export default function Cierres() {
   const { alertDialog, promptDialog } = useConfirmDialog();
   // Deep-link desde otras pantallas (ej. Resumen financiero → "ver en Cierres" de una fila de
@@ -1085,12 +1094,16 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, included: !f.included } : f)));
   }
 
+  // Cambiar el ajuste manual (o su nota) invalida la vista previa de esa fila -- si no, el
+  // "Cierre final (vista previa)" se queda mostrando el numero viejo, calculado sin el ajuste,
+  // hasta que alguien vuelva a tocar "Calcular vista previa de todos" sin darse cuenta de que
+  // hace falta.
   function setAjusteManualFila(key: string, ajusteManual: number) {
-    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManual } : f)));
+    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManual, previewResult: null, previewError: null } : f)));
   }
 
   function setAjusteManualNotaFila(key: string, ajusteManualNota: string) {
-    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManualNota } : f)));
+    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManualNota, previewResult: null, previewError: null } : f)));
   }
 
   async function previsualizarTodo() {
@@ -1578,6 +1591,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
               </button>
             </div>
           </div>
+          <div className="table-scroll">
           <table style={{ marginTop: 10 }}>
             <thead>
               <tr>
@@ -1592,9 +1606,16 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td>{f.clubName}</td>
                   <td>{f.agentName}</td>
                   <td>{f.jugadores}</td>
-                  <td>{usd(f.resultado)}</td>
-                  <td>{usd(f.rakeTotal)}</td>
-                  <td>{(f.rakebackPct * 100).toFixed(1)}%</td>
+                  <td><Monto value={f.resultado} /></td>
+                  <td><Monto value={f.rakeTotal} /></td>
+                  <td>
+                    <div className="muted" style={{ fontSize: 12 }}>{(f.rakebackPct * 100).toFixed(1)}%</div>
+                    {(() => {
+                      const calc = f.applyResult?.calc ?? f.previewResult?.calc;
+                      if (!calc || calc.rakeback == null) return null;
+                      return <strong><Monto value={calc.rakeback} /></strong>;
+                    })()}
+                  </td>
                   <td>
                     {(f.rebatePct * 100).toFixed(1)}%
                     {(() => {
@@ -1603,7 +1624,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       return (
                         <span className="muted">
                           {" "}
-                          · {usd(calc.rebate)}
+                          · <Monto value={calc.rebate} />
                         </span>
                       );
                     })()}
@@ -1622,7 +1643,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       <span title="Solo SupremaPoker: se le suma al cierre la parte del agente ya neta de su memoria por jugador.">
                         {f.rodeoJugadores.length} jug.
                         {(f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo) != null && (
-                          <> · {usd(f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo)}</>
+                          <> · <Monto value={f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo} /></>
                         )}
                       </span>
                     ) : (
@@ -1636,7 +1657,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       value={f.ajusteManual}
                       disabled={!!f.applyResult}
                       onChange={(e) => setAjusteManualFila(f.key, Number(e.target.value) || 0)}
-                      style={{ width: 90 }}
+                      style={{ width: 72 }}
                     />
                   </td>
                   <td>
@@ -1647,18 +1668,18 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                         value={f.ajusteManualNota}
                         disabled={!!f.applyResult}
                         onChange={(e) => setAjusteManualNotaFila(f.key, e.target.value)}
-                        style={{ width: 140 }}
+                        style={{ width: 110 }}
                       />
                     )}
                   </td>
                   <td>
                     {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}
-                    {f.applyResult && !f.applyResult.alreadyApplied && <span className="badge pos">Aplicado: {usd(f.applyResult.calc?.finalClosing)}</span>}
+                    {f.applyResult && !f.applyResult.alreadyApplied && <span className="badge pos">Aplicado: <Monto value={f.applyResult.calc?.finalClosing} /></span>}
                     {!f.applyResult && f.previewLoading && "..."}
                     {!f.applyResult && f.previewError && <span className="error">⚠ {f.previewError}</span>}
                     {!f.applyResult && !f.previewError && f.previewResult && (
-                      <strong style={{ color: Number(f.previewResult.calc?.finalClosing) >= 0 ? "var(--green)" : "var(--red)" }}>
-                        {usd(f.previewResult.calc?.finalClosing)}
+                      <strong>
+                        <Monto value={f.previewResult.calc?.finalClosing} />
                         {f.previewResult.calc?.ruleApplied && <> · {f.previewResult.calc.ruleApplied}</>}
                       </strong>
                     )}
@@ -1668,6 +1689,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
               ))}
             </tbody>
           </table>
+          </div>
 
           {sinConfigurarCount > 0 && (
             <div className="error" style={{ marginTop: 10 }}>
