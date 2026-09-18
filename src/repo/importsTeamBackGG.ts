@@ -123,7 +123,7 @@ export async function analizarImportacionTeamBackGG(
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,
-          configSource: "default_club",
+          configSource: "sin_configurar",
         });
       }
     }

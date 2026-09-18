@@ -272,20 +272,15 @@ export default function Agentes() {
               <table>
                 <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th></th></tr></thead>
                 <tbody>
-                  {deals.map((d) => {
-                    const club = clubes.find((c) => c.id === d.club_id);
-                    const rbEsDefault = club?.default_rakeback_pct != null && Number(club.default_rakeback_pct) === Number(d.rakeback_pct);
-                    const rebateEsDefault = club?.default_rebate_pct != null && Number(club.default_rebate_pct) === Number(d.rebate_pct);
-                    return (
-                      <tr key={d.id}>
-                        <td>{d.club_name}</td>
-                        <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                        <td>{pct(d.rakeback_pct)} {rbEsDefault && <span className="muted" style={{ fontSize: 11 }}>(default)</span>}</td>
-                        <td>{pct(d.rebate_pct)} {rebateEsDefault && <span className="muted" style={{ fontSize: 11 }}>(default)</span>}</td>
-                        <td><button className="btn secondary small" onClick={() => setEditandoDeal(d)}>Editar</button></td>
-                      </tr>
-                    );
-                  })}
+                  {deals.map((d) => (
+                    <tr key={d.id}>
+                      <td>{d.club_name}</td>
+                      <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                      <td>{pct(d.rakeback_pct)}</td>
+                      <td>{pct(d.rebate_pct)}</td>
+                      <td><button className="btn secondary small" onClick={() => setEditandoDeal(d)}>Editar</button></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
               {deals.some((d) => d.notes) && (
@@ -1157,19 +1152,17 @@ function ClubesConfig({
     <div className="panel">
       <h3>Configuración por club ({clubes.length})</h3>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Estos valores son los que hereda cualquier deal agente↔club que no defina su propio %.
+        Cada agente necesita su propio deal por club (Asignar % a agente) — ya no hay un % default de club de respaldo (18/09/2026: se sacó porque tapaba agentes sin configurar en vez de avisar).
       </div>
       <table>
         <thead>
-          <tr><th>Club</th><th>Unidad</th><th>% Rakeback default</th><th>% Rebate default</th><th>Destino rebate</th><th></th></tr>
+          <tr><th>Club</th><th>Unidad</th><th>Destino rebate</th><th></th></tr>
         </thead>
         <tbody>
           {clubes.map((c) => (
             <tr key={c.id}>
               <td>{c.name}</td>
               <td>{c.unit}</td>
-              <td>{c.default_rakeback_pct != null ? pct(c.default_rakeback_pct) : "—"}</td>
-              <td>{c.default_rebate_pct != null ? pct(c.default_rebate_pct) : "—"}</td>
               <td>{c.rebate_destino === "RAKEBACK_SUPERVISOR" ? "Rakeback supervisor" : c.rebate_destino === "SALDO_OPERATIVO" ? "Saldo operativo" : "—"}</td>
               <td className="row-actions">
                 <button className="btn secondary small" onClick={() => onEdit(c)}>Configurar</button>
@@ -1187,8 +1180,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   const [name, setName] = useState(club.name ?? "");
   const [unit, setUnit] = useState<"USD" | "USDT" | "FICHAS">(club.unit ?? "USD");
   const [currentRate, setCurrentRate] = useState(String(club.current_rate ?? 1));
-  const [defaultRakebackPct, setDefaultRakebackPct] = useState(club.default_rakeback_pct != null ? String(Number(club.default_rakeback_pct) * 100) : "");
-  const [defaultRebatePct, setDefaultRebatePct] = useState(club.default_rebate_pct != null ? String(Number(club.default_rebate_pct) * 100) : "");
   const [rebateDestino, setRebateDestino] = useState<"SALDO_OPERATIVO" | "RAKEBACK_SUPERVISOR" | "">(club.rebate_destino ?? "");
   const [feePct, setFeePct] = useState(club.fee_pct != null ? String(Number(club.fee_pct) * 100) : "");
   const [platformPct, setPlatformPct] = useState(club.platform_pct != null ? String(Number(club.platform_pct) * 100) : "");
@@ -1208,8 +1199,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         name: name.trim(),
         unit,
         currentRate: Number(currentRate) || 1,
-        defaultRakebackPct: defaultRakebackPct === "" ? undefined : Number(defaultRakebackPct) / 100,
-        defaultRebatePct: defaultRebatePct === "" ? undefined : Number(defaultRebatePct) / 100,
         rebateDestino: rebateDestino || undefined,
         feePct: feePct === "" ? undefined : Number(feePct) / 100,
         platformPct: platformPct === "" ? undefined : Number(platformPct) / 100,
@@ -1228,7 +1217,7 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
   return (
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Estos valores son los defaults que hereda un deal agente↔club que no define su propio %. Un deal específico siempre pisa esto.
+        Cada agente necesita su propio deal en este club (Asignar % a agente) — ya no hay un % default de respaldo.
       </div>
       <div className="form-grid">
         <div className="field">
@@ -1249,17 +1238,6 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
             <input value={currentRate} onChange={(e) => setCurrentRate(e.target.value)} type="number" step="0.01" />
           </div>
         )}
-        <div className="field">
-          <label>% Rakeback default</label>
-          <input value={defaultRakebackPct} onChange={(e) => setDefaultRakebackPct(e.target.value)} type="number" step="0.01" placeholder="Ej: 70" />
-        </div>
-        <div className="field">
-          <label>% Rebate default</label>
-          <input value={defaultRebatePct} onChange={(e) => setDefaultRebatePct(e.target.value)} type="number" step="0.01" placeholder="Ej: -10 (negativo si se resta)" />
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Puede ser negativo (ej. -10 en TeamBack GG: se resta del resultado+rake) o positivo si en ese club el rebate se suma.
-          </div>
-        </div>
         <div className="field">
           <label>Destino del rebate</label>
           <select value={rebateDestino} onChange={(e) => setRebateDestino(e.target.value as any)}>
@@ -1329,9 +1307,10 @@ function NuevoDeal({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   // "deal" = este agente YA tiene un % propio cargado para este club (se está mostrando su
-  // valor real, no un default) — "default_club" = todavía no tiene nada propio, se está
-  // mostrando el default del club nada más como punto de partida.
-  const [configSource, setConfigSource] = useState<"deal" | "default_club" | null>(null);
+  // valor real) — "sin_configurar" = todavía no tiene NADA cargado para este club (ya no hay
+  // default de club de respaldo, 18/09/2026): el 0/0 que se precarga es solo un punto de
+  // partida en blanco, no un valor real.
+  const [configSource, setConfigSource] = useState<"deal" | "sin_configurar" | null>(null);
 
   // Antes esto solo miraba el default DEL CLUB al elegir club, nunca si el agente ya tenía un
   // deal propio cargado — por eso, al reabrir "Asignar % a agente" para un agente que ya tenía
@@ -1415,7 +1394,7 @@ function NuevoDeal({
             <label>
               % Rakeback{" "}
               {configSource === "deal" && <span className="badge pos" style={{ fontSize: 11 }}>Deal propio ya cargado</span>}
-              {configSource === "default_club" && <span className="badge neutral" style={{ fontSize: 11 }}>Sin deal propio — mostrando default del club</span>}
+              {configSource === "sin_configurar" && <span className="badge neg" style={{ fontSize: 11 }}>Sin configurar — no tiene ningún % cargado todavía</span>}
             </label>
             <input
               value={rakebackPct}

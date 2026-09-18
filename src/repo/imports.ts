@@ -34,7 +34,7 @@ export interface AgenteAgregado {
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
-  configSource: "deal" | "default_club";
+  configSource: "deal" | "sin_configurar";
 }
 
 export interface JugadorSinAgente {
@@ -382,7 +382,7 @@ export async function analizarImportacionSuprema(
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,
-          configSource: "default_club",
+          configSource: "sin_configurar",
         });
       }
     }

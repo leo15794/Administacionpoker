@@ -765,7 +765,7 @@ type FilaImport = {
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
-  configSource: "deal" | "default_club";
+  configSource: "deal" | "sin_configurar";
   // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
   // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
@@ -954,7 +954,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
-            included: true,
+            // CAMBIO (18/09/2026): ya no existe el % default de club — si no hay deal cargado
+            // para este agente+club, arranca DESTILDADA (no entra en el lote a aplicar) para que
+            // no se cuele un cierre en 0%/0% sin que nadie lo haya configurado a propósito. Leo
+            // la sigue viendo en la tabla (con el badge "Sin configurar") para ir a cargarle el
+            // deal y volver a calcular si corresponde.
+            included: a.configSource === "deal",
             previewLoading: false,
             previewResult: null,
             previewError: null,
@@ -1113,6 +1118,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
   const incluidas = filas.filter((f) => f.included);
   const todasPrevisualizadas = incluidas.length > 0 && incluidas.every((f) => f.previewResult && !f.previewError);
+  // Nunca se aplica un lote con alguna fila sin deal cargado, aunque el usuario la haya
+  // vuelto a tildar a mano — ver comentario de "included" más arriba.
+  const hayIncluidasSinConfigurar = incluidas.some((f) => f.configSource !== "deal");
+  const sinConfigurarCount = filas.filter((f) => f.configSource !== "deal").length;
   const totalCierreFinal = incluidas.reduce((sum, f) => sum + Number(f.previewResult?.calc?.finalClosing ?? 0), 0);
 
   async function aplicarTodo() {
@@ -1549,7 +1558,13 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                     })()}
                   </td>
                   <td>
-                    {f.configSource === "deal" ? <span className="badge pos">Deal agente</span> : <span className="badge neutral">Default club</span>}
+                    {f.configSource === "deal" ? (
+                      <span className="badge pos">Deal agente</span>
+                    ) : (
+                      <span className="badge neg" title="No tiene un deal cargado para este club — no se puede aplicar así. Cargale el % en Administración (Asignar % a agente) y volvé a calcular la vista previa.">
+                        Sin configurar
+                      </span>
+                    )}
                   </td>
                   <td>
                     {f.rodeoJugadores.length > 0 ? (
@@ -1581,6 +1596,13 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             </tbody>
           </table>
 
+          {sinConfigurarCount > 0 && (
+            <div className="error" style={{ marginTop: 10 }}>
+              {sinConfigurarCount} fila{sinConfigurarCount === 1 ? "" : "s"} sin deal cargado (badge "Sin configurar") — quedaron
+              destildadas y no entran en este lote. Cargales el % en Administración y volvé a calcular la vista previa para incluirlas.
+            </div>
+          )}
+
           {todasPrevisualizadas && (
             <div className="muted" style={{ marginTop: 10 }}>
               Total a acreditar/cobrar en estos {incluidas.length} cierres: <strong>{usd(totalCierreFinal)}</strong>
@@ -1592,8 +1614,14 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <button
             className="btn"
             style={{ marginTop: 12 }}
-            disabled={!todasPrevisualizadas || aplicandoTodo}
-            title={!todasPrevisualizadas ? "Calculá la vista previa de todos los cierres primero" : undefined}
+            disabled={!todasPrevisualizadas || hayIncluidasSinConfigurar || aplicandoTodo}
+            title={
+              hayIncluidasSinConfigurar
+                ? "Hay filas incluidas sin deal cargado — cargales el % o destildalas antes de aplicar."
+                : !todasPrevisualizadas
+                ? "Calculá la vista previa de todos los cierres primero"
+                : undefined
+            }
             onClick={aplicarTodo}
           >
             {aplicandoTodo ? "Aplicando..." : `Aplicar ${incluidas.length} cierre(s)`}

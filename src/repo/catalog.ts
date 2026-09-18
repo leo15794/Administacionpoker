@@ -526,13 +526,17 @@ export async function resolverConfigVigente(agentId: string, clubId: string, atD
       source: "deal" as const,
     };
   }
-  const clubRes = await pool.query(`SELECT default_rakeback_pct, default_rebate_pct FROM clubs WHERE id = $1`, [clubId]);
+  // CAMBIO (18/09/2026, pedido de Leo): se elimina el fallback al % default del club — traía
+  // problemas porque se aplicaba en silencio (un agente sin deal propio quedaba cerrado con un
+  // número que nadie cargó a propósito para él). Ahora, sin deal, no hay ningún % válido: se
+  // devuelve 0/0 marcado como "sin_configurar" para que el importador/UI lo bloquee en vez de
+  // dejarlo pasar como si fuera una configuración real.
   const agentRes = await pool.query(`SELECT default_system FROM agents WHERE id = $1`, [agentId]);
   return {
     system: (agentRes.rows[0]?.default_system as "PREPAGO" | "WIN_LOSE") ?? "WIN_LOSE",
-    rakebackPct: Number(clubRes.rows[0]?.default_rakeback_pct ?? 0),
-    rebatePct: Number(clubRes.rows[0]?.default_rebate_pct ?? 0),
-    source: "default_club" as const,
+    rakebackPct: 0,
+    rebatePct: 0,
+    source: "sin_configurar" as const,
   };
 }
 

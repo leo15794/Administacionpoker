@@ -159,7 +159,7 @@ export async function analizarImportacionTinyGG(
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,
-          configSource: "default_club",
+          configSource: "sin_configurar",
         });
       }
     }
