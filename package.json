@@ -12,6 +12,8 @@
     "set-password": "tsx src/scripts/set-password.ts",
     "import:historial": "tsx src/scripts/importHistorialAutomatizacion.ts",
     "sync:saldos": "tsx src/scripts/syncSaldosPlanilla.ts",
+    "reset:financiero": "tsx src/scripts/resetDatosFinancieros.ts",
+    "reset:financiero:apply": "tsx src/scripts/resetDatosFinancieros.ts --apply --confirmo",
     "sync:saldos:apply": "tsx src/scripts/syncSaldosPlanilla.ts --apply",
     "ajuste:colgados": "tsx src/scripts/ajustePlanillaColgados.ts",
     "ajuste:colgados:apply": "tsx src/scripts/ajustePlanillaColgados.ts --apply",
