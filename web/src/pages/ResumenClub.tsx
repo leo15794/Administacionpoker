@@ -267,6 +267,7 @@ export default function ResumenClub() {
                   <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
                   <td><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
                 </tr>
+                <tr><td className="muted">Rake total generado por el club</td><td className="muted">{usd(resumen.rakeTotal)}</td></tr>
                 <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
                 <tr><td className="muted">Cierre total agentes</td><td className="muted">{usd(resumen.cierreTotalAgentes)}</td></tr>
               </tbody>
