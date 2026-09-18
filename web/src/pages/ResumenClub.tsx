@@ -274,12 +274,12 @@ export default function ResumenClub() {
                 <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className="muted">{usd(resumen.comisionesAgentes)}</td></tr>
                 <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
                 <tr>
-                  <td className="muted">Ajuste manual (tickets promocionales)</td>
+                  <td className="muted">Ventas/VIP</td>
                   <td className={Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}>
                     {usd(resumen.ajusteManualTotal)}
                   </td>
                 </tr>
-                <tr><td className="muted">Ingreso por ventas</td><td className="muted">{usd(resumen.ingresoPorVentas)}</td></tr>
+                <tr><td className="muted">Ajuste manual Promociones</td><td className="muted">{usd(resumen.ingresoPorVentas)}</td></tr>
                 <tr><td className="muted">Tasa semanal fija (Tasas)</td><td className="muted">{usd(resumen.tasaSemanalFija)}</td></tr>
                 <tr><td className="muted">Cierre total agentes</td><td className="muted">{usd(resumen.cierreTotalAgentes)}</td></tr>
               </tbody>
