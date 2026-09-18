@@ -181,7 +181,7 @@ export default function ResumenClub() {
               <h3 style={{ margin: 0 }}>Resumen del club — {resumen.clubName}</h3>
               {!editandoExtras && (
                 <button className="btn secondary small" onClick={() => setEditandoExtras(true)}>
-                  Cargar Ingreso por ventas
+                  Cargar Ajuste manual Promociones
                 </button>
               )}
             </div>
@@ -199,7 +199,7 @@ export default function ResumenClub() {
                 { label: "Rake generado — nuestra parte", monto: nuestraParteDelRake },
               ];
               if (Number(resumen.gananciaRodeoClub) !== 0) ingresos.push({ label: "Ganancia Rodeo Club", monto: Number(resumen.gananciaRodeoClub) });
-              if (Number(resumen.ingresoPorVentas) !== 0) ingresos.push({ label: "Ingreso por ventas", monto: Number(resumen.ingresoPorVentas) });
+              if (Number(resumen.ingresoPorVentas) !== 0) ingresos.push({ label: "Ajuste manual Promociones", monto: Number(resumen.ingresoPorVentas) });
               if (Number(resumen.tasaSemanalFija) > 0) ingresos.push({ label: "Tasa semanal fija", monto: Number(resumen.tasaSemanalFija) });
 
               const egresos: { label: string; monto: number }[] = [
@@ -251,7 +251,7 @@ export default function ResumenClub() {
               <table style={{ marginBottom: 10 }}>
                 <tbody>
                   <tr>
-                    <td>Ingreso por ventas</td>
+                    <td>Ajuste manual Promociones</td>
                     <td><input type="number" step="0.01" value={ventasInput} onChange={(e) => setVentasInput(e.target.value)} style={{ width: 120 }} /></td>
                   </tr>
                   <tr>
@@ -279,9 +279,22 @@ export default function ResumenClub() {
                     {usd(resumen.ajusteManualTotal)}
                   </td>
                 </tr>
-                <tr><td className="muted">Ajuste manual Promociones</td><td className="muted">{usd(resumen.ingresoPorVentas)}</td></tr>
-                <tr><td className="muted">Tasa semanal fija (Tasas)</td><td className="muted">{usd(resumen.tasaSemanalFija)}</td></tr>
-                <tr><td className="muted">Cierre total agentes</td><td className="muted">{usd(resumen.cierreTotalAgentes)}</td></tr>
+                <tr>
+                  <td className="muted">Ajuste manual Promociones</td>
+                  <td className={Number(resumen.ingresoPorVentas) === 0 ? "muted" : Number(resumen.ingresoPorVentas) >= 0 ? "pos" : "neg"}>
+                    {usd(resumen.ingresoPorVentas)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="muted">Tasa semanal fija (Tasas)</td>
+                  <td className={Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}>
+                    {usd(resumen.tasaSemanalFija)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="muted">Cierre total agentes</td>
+                  <td className={Number(resumen.cierreTotalAgentes) >= 0 ? "pos" : "neg"}>{usd(resumen.cierreTotalAgentes)}</td>
+                </tr>
               </tbody>
             </table>
             {editandoExtras && (
