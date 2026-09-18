@@ -93,7 +93,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     ),
     pool.query(
       `SELECT h.id, h.week_start, h.ganancia_banca_mesas, h.rakeback_banca_total,
-              p.display_name as player_name, c.name as club_name
+              p.display_name as player_name, c.id as club_id, c.name as club_name
        FROM bancado_historial h
        JOIN players p ON p.id = h.player_id
        JOIN clubs c ON c.id = h.club_id
@@ -300,5 +300,43 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     gananciaNeta: round2(desgloseTotalIngresos - desgloseTotalEgresos),
   };
 
-  return { desde, hasta, totales, eventos, porDia, porSemana, porMes, desgloseCierres };
+  // Ganancia por club (pedido de Leo, 18/9/2026: "poder ver los clubes y cada ganancia, asi no
+  // es solamente global") -- mismo criterio que arriba: se suma la Ganancia Neta de cada
+  // club+semana (CIERRE_SEMANAL) más la ganancia de banca de ese club (BANCADO) en el rango
+  // elegido, agrupado por club. No incluye Wallet ni Comisión por referido porque esas dos
+  // categorías no están atadas a un club en particular.
+  const porClubMap = new Map<
+    string,
+    { clubId: string; clubName: string; gananciaCierres: number; gananciaBancados: number; semanas: number }
+  >();
+  for (const r of resumenesClubSemana) {
+    if (!r) continue;
+    let fila = porClubMap.get(r.clubId);
+    if (!fila) {
+      fila = { clubId: r.clubId, clubName: r.clubName, gananciaCierres: 0, gananciaBancados: 0, semanas: 0 };
+      porClubMap.set(r.clubId, fila);
+    }
+    fila.gananciaCierres += Number(r.gananciaNeta);
+    fila.semanas += 1;
+  }
+  for (const row of bancados.rows) {
+    let fila = porClubMap.get(row.club_id);
+    if (!fila) {
+      fila = { clubId: row.club_id, clubName: row.club_name, gananciaCierres: 0, gananciaBancados: 0, semanas: 0 };
+      porClubMap.set(row.club_id, fila);
+    }
+    fila.gananciaBancados += Number(row.ganancia_banca_mesas);
+  }
+  const porClub = [...porClubMap.values()]
+    .map((f) => ({
+      clubId: f.clubId,
+      clubName: f.clubName,
+      semanas: f.semanas,
+      gananciaCierres: round2(f.gananciaCierres),
+      gananciaBancados: round2(f.gananciaBancados),
+      gananciaTotal: round2(f.gananciaCierres + f.gananciaBancados),
+    }))
+    .sort((a, b) => b.gananciaTotal - a.gananciaTotal);
+
+  return { desde, hasta, totales, eventos, porDia, porSemana, porMes, desgloseCierres, porClub };
 }

@@ -228,6 +228,50 @@ export default function ResumenFinanciero() {
             </div>
           )}
 
+          {data.porClub && data.porClub.length > 0 && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: "0 0 4px" }}>Ganancia por club</h4>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Ganancia de cierres semanales + ganancia de banca de cada club, sumada en el rango elegido (desde{" "}
+                {new Date(desde + "T00:00:00").toLocaleDateString("es-AR")} hasta{" "}
+                {new Date(hasta + "T00:00:00").toLocaleDateString("es-AR")}). No incluye Wallet/Caja ni comisiones por
+                referido porque esas no están atadas a un club en particular. Hacé clic en un club para ver su
+                resumen.
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table className="table-compact">
+                  <thead>
+                    <tr>
+                      <th>Club</th>
+                      <th>Semanas con cierres</th>
+                      <th>Ganancia cierres</th>
+                      <th>Ganancia bancados</th>
+                      <th>Ganancia total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.porClub.map((c: any) => (
+                      <tr
+                        key={c.clubId}
+                        className="row-click"
+                        onClick={() => nav(`/dashboard/resumen-club?club=${c.clubId}`)}
+                        title="Ver el resumen de este club"
+                      >
+                        <td>{c.clubName}</td>
+                        <td className="muted">{c.semanas}</td>
+                        <td className={c.gananciaCierres >= 0 ? "pos" : "neg"}>{usd(c.gananciaCierres)}</td>
+                        <td className={c.gananciaBancados === 0 ? "muted" : c.gananciaBancados >= 0 ? "pos" : "neg"}>
+                          {usd(c.gananciaBancados)}
+                        </td>
+                        <td className={c.gananciaTotal >= 0 ? "pos" : "neg"}><strong>{usd(c.gananciaTotal)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="topbar" style={{ marginBottom: 10 }}>
               <h4 style={{ margin: 0 }}>Desglose por período</h4>
