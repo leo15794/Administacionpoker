@@ -13,6 +13,7 @@
 // de weekly_closings — se guardan ahi desde la importacion (ver engine/importSuprema.ts,
 // repo/imports.ts). NULL en cierres cargados antes de este cambio o de otras plataformas.
 import { pool, newId } from "../db/pool.js";
+import { getResumenTinyExtra } from "./tinyResumen.js";
 
 // A que "familia" de formula pertenece un club, para que el frontend elija que columnas
 // mostrar en la tabla por agente (cada familia tiene columnas distintas en la planilla real).
@@ -161,6 +162,20 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   const ingresoPorVentas = Number(extrasRes.rows[0]?.ingreso_por_ventas ?? 0);
   const tasaSemanalFija = Number(club.weekly_fixed_fee);
 
+  // Tiny GG (18/09/2026, bug reportado por Leo: "Ganancia Neta" le daba 6.70 pero la cuenta
+  // real (contra su planilla) da 5.55): la formula generica de arriba (gananciaPorRake +
+  // gananciaRodeoClub + ingresoPorVentas + tasaSemanalFija) asume que la ganancia del club sale
+  // de un % fijo sobre el rake -- eso NO aplica a Tiny. Para Tiny la ganancia real es la del
+  // Settlement (ver repo/tinyResumen.ts, formula confirmada contra la planilla "TINY - CIERRE
+  // SEMANAL"), asi que se pisa gananciaNeta con ese valor para que todo el sistema (esta
+  // pantalla, el PDF, el dashboard, Resumen financiero) muestre un solo numero consistente en
+  // vez de dos "ganancias" distintas para el mismo club/semana.
+  let gananciaNeta = gananciaPorRake + gananciaRodeoClub + ingresoPorVentas + tasaSemanalFija;
+  if (clubFamily === "TINY") {
+    const tinyExtra = await getResumenTinyExtra(clubId, weekStart);
+    if (tinyExtra) gananciaNeta = tinyExtra.gananciaNuestraUsdt;
+  }
+
   return {
     clubId: club.id,
     clubName: club.name,
@@ -177,7 +192,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     gananciaPorRake,
     ingresoPorVentas,
     tasaSemanalFija,
-    gananciaNeta: gananciaPorRake + gananciaRodeoClub + ingresoPorVentas + tasaSemanalFija,
+    gananciaNeta,
     cierreTotalAgentes,
     agentesConCierre: filas.length,
     jugadoresTotal,

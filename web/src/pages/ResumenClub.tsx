@@ -413,12 +413,20 @@ export default function ResumenClub() {
                 </button>
               )}
             </div>
-            <div className="muted" style={{ marginBottom: 12 }}>
-              Cómo se arma la Ganancia Neta de esta semana: todo lo que sumó menos todo lo que restó. La "Comisión del
-              club/plataforma" no entra en ninguna de las dos columnas porque nunca fue plata nuestra — es la parte del
-              rake que se queda el club, no algo que ganamos ni que perdimos.
-            </div>
-            {(() => {
+            {resumen.clubFamily === "TINY" ? (
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Tiny no reparte un % fijo del rake como los demás clubes: la Ganancia Neta de abajo sale del Settlement
+                (lo que nos liquida la Unión/GG) menos lo que le pagamos a los agentes — ver el desglose completo en el
+                panel "Tiny · Cierre semanal" más abajo.
+              </div>
+            ) : (
+              <div className="muted" style={{ marginBottom: 12 }}>
+                Cómo se arma la Ganancia Neta de esta semana: todo lo que sumó menos todo lo que restó. La "Comisión del
+                club/plataforma" no entra en ninguna de las dos columnas porque nunca fue plata nuestra — es la parte del
+                rake que se queda el club, no algo que ganamos ni que perdimos.
+              </div>
+            )}
+            {resumen.clubFamily !== "TINY" && (() => {
               // gananciaPorRake ya viene neto (rake*ratio - rakeback) sumado de todos los agentes —
               // se reconstruye la parte bruta (rake*ratio, "nuestra parte del rake") sumándole de
               // vuelta el rakeback, así se puede mostrar cada lado por separado sin duplicar nada.
