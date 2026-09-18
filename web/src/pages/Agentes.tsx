@@ -1264,12 +1264,16 @@ function ConfigurarClub({ club, onSaved }: { club: any; onSaved: () => void }) {
         <select value={importPlatform} onChange={(e) => setImportPlatform(e.target.value)}>
           <option value="">Sin especificar</option>
           <option value="SUPREMA">SupremaPoker</option>
+          <option value="TINY_GG">Tiny GG</option>
         </select>
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          Solo a modo de referencia — no hace falta completarlo para poder elegir este club al importar un archivo.
+          Para la mayoría de los clubes esto es solo informativo. Para Tiny GG es <strong>obligatorio</strong> ponerlo en
+          "Tiny GG" — el sistema usa este campo (no el nombre del club) para saber que a este club le corresponde el
+          cálculo especial de Tiny (panel "Tiny · Cierre semanal", Ganancia Neta por Settlement). Normalmente se
+          completa solo la primera vez que se importa un archivo de Tiny para este club, pero si un club quedó creado
+          antes de eso (o el archivo no se llegó a asociar bien), hay que elegirlo acá a mano.
           Un mismo club real que opera en más de una red (ej. "Fénix" en GG y en Suprema) se maneja como un registro de
-          club separado por plataforma, así el importador nunca mezcla cierres de redes distintas. Se completa solo
-          cuando elegís este club en el importador de Suprema.
+          club separado por plataforma, así el importador nunca mezcla cierres de redes distintas.
         </div>
       </div>
       <div className="field">
