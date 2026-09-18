@@ -53,6 +53,11 @@ export interface TinyRebateUnionInfo {
   ratePct: number | null;
   /** rakeTotalRingGame × ratePct, ya calculado por Tiny en la hoja 1 ("分潤金額 / Revenue"). */
   rakeShare: number | null;
+  /** Hoja 1, fila "當週交收金額 (Weekly Settlement)" -- TOTAL DE CONTROL que Tiny reporta por
+   * super agente (18/09/2026, pedido de Leo: "asi cuando nos liquidan a nosotros sabemos si lo
+   * hicieron bien"). Se usa solo para comparar contra nuestro Settlement calculado en el
+   * resumen del club -- nunca para calcular nada. null si no se encontro la fila. */
+  weeklySettlementOficial: number | null;
 }
 
 export interface TinyGGParsedFile {
@@ -182,6 +187,25 @@ function parsearRakeShare(ws: ExcelJS.Worksheet | null): { rakeTotal: number; ra
 }
 
 /**
+ * Hoja "1.超級代理總覽", fila "當週交收金額 (Weekly Settlement)": un TOTAL DE CONTROL que Tiny
+ * reporta por super agente -- no es plata que se le paga a nadie (ver nota al principio del
+ * archivo), pero es el numero contra el que se puede chequear que la liquidacion real de Tiny
+ * coincide con lo que nosotros calculamos (ver getResumenTiny en repo/tinyResumen.ts).
+ */
+function parsearWeeklySettlementOficial(ws: ExcelJS.Worksheet | null): number | null {
+  if (!ws) return null;
+  const limite = Math.max(ws.rowCount, 30);
+  for (let r = 1; r <= limite; r++) {
+    const etiqueta = normText(ws.getCell(r, 1).value);
+    if (etiqueta && etiqueta.includes("當週交收金額")) {
+      const v = ws.getCell(r, 4).value;
+      return v === null || v === undefined || v === "" ? null : toNumber(v);
+    }
+  }
+  return null;
+}
+
+/**
  * Hoja "4.額外交收", sección "客製額外交收 (Custom Extra Settlements)": busca la fila de tipo
  * "返利 (Rebate)" y lee el monto que Tiny ya calculó (columna Amount) más la base que usó,
  * embebida como texto en la columna "詳細原因 (Reason)" — ej. "RG Pre-rake P&L (excl. JP) :
@@ -272,6 +296,11 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
     }
     return null;
   })();
+  // BBJ Contribution (18/09/2026, pedido de Leo): "Bad Beat Jackpot" > "Contribution Fee" en la
+  // hoja de jugadores -- informativo (se muestra en el resumen del club), nunca entra en el
+  // calculo del cierre de ningun agente. Opcional: si el archivo no trae esta columna, se
+  // importa igual con bbjContribution en 0 para todos.
+  const colBBJ = buscarColumnaDeGrupo(wsJugadores, 4, 5, maxColJ, "bad beat jackpot", "contribution fee");
 
   const faltantes: string[] = [];
   if (!colAgentId) faltantes.push("Agent ID");
@@ -303,6 +332,7 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
     const memberNick = colMemberNick ? normText(wsJugadores.getCell(r, colMemberNick).value) ?? memberId : memberId;
     const resultado = toNumber(wsJugadores.getCell(r, colResultado!).value);
     const rake = toNumber(wsJugadores.getCell(r, colRake!).value);
+    const bbj = colBBJ ? toNumber(wsJugadores.getCell(r, colBBJ).value) : 0;
 
     if (agentIdRaw) {
       const acc = sumaPorSubAgente.get(agentIdRaw) ?? { rake: 0, resultado: 0 };
@@ -318,6 +348,7 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
       agentNameRaw,
       resultado,
       rake,
+      bbjContribution: bbj,
       rodeo: 0, // no existe "Rodeo" en esta plataforma
       role: null,
       subAgentIdRaw: null,
@@ -352,8 +383,9 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
 
   const rakeShareInfo = parsearRakeShare(wsResumen);
   const rebateInfo = parsearRebateUnion(wsExtra);
+  const weeklySettlementOficial = parsearWeeklySettlementOficial(wsResumen);
   const rebateUnion: TinyRebateUnionInfo | null =
-    rakeShareInfo || rebateInfo
+    rakeShareInfo || rebateInfo || weeklySettlementOficial != null
       ? {
           rgPreRakeExclJp: rebateInfo?.base ?? null,
           rebateUnionCalculado:
@@ -362,6 +394,7 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
           rakeTotalRingGame: rakeShareInfo?.rakeTotal ?? null,
           ratePct: rakeShareInfo?.ratePct ?? null,
           rakeShare: rakeShareInfo?.rakeShare ?? null,
+          weeklySettlementOficial,
         }
       : null;
 

@@ -75,6 +75,9 @@ const closingSchema = z.object({
   // motor tolera null (queda igual guardado en weekly_closings.ajuste_manual_nota).
   ajusteManual: z.number().optional(),
   ajusteManualNota: z.string().nullable().optional(),
+  // Solo Tiny GG (18/09/2026): "BBJ Contribution" del reporte, ya sumado por agente en la previa
+  // de importacion -- informativo, no afecta ningun calculo (ver repo/closings.ts).
+  bbjContribution: z.number().optional(),
 });
 
 movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, res) => {

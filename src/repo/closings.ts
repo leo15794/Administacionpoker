@@ -57,6 +57,9 @@ export interface AplicarCierreInput {
   ringGame?: number;
   mtt?: number;
   sng?: number;
+  /** Solo Tiny GG (18/09/2026): "BBJ Contribution" del reporte, ya sumado por agente en la
+   * previa de importacion -- informativo, nunca entra en ningun calculo de plata. */
+  bbjContribution?: number;
   /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
   specialRule?: SpecialRule | null;
@@ -230,8 +233,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
          rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
          rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id, rodeo, rodeo_club_share, rodeo_detalle,
-         jugadores, ring_game, mtt, sng, ajuste_manual, ajuste_manual_nota)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
+         jugadores, ring_game, mtt, sng, ajuste_manual, ajuste_manual_nota, bbj_contribution)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`,
       [
         id,
         input.agentId,
@@ -268,6 +271,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.sng ?? null,
         calc.ajusteManual,
         calc.ajusteManualNota,
+        input.bbjContribution ?? 0,
       ]
     );
 
@@ -406,8 +410,8 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
        rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
        rate_snapshot, rule_applied, status, observation, routed_to_partner_account_id,
        rodeo, rodeo_club_share, rodeo_detalle, jugadores, ring_game, mtt, sng,
-       ajuste_manual, ajuste_manual_nota)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+       ajuste_manual, ajuste_manual_nota, bbj_contribution)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
     [
       id,
       input.agentId,
@@ -442,6 +446,7 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
       input.sng ?? null,
       calc.ajusteManual,
       calc.ajusteManualNota,
+      input.bbjContribution ?? 0,
     ]
   );
 

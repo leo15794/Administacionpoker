@@ -16,9 +16,15 @@ import { pool, newId } from "../db/pool.js";
 
 // A que "familia" de formula pertenece un club, para que el frontend elija que columnas
 // mostrar en la tabla por agente (cada familia tiene columnas distintas en la planilla real).
-export type ClubFamily = "SUPREMA" | "GG" | "FENIX_GG" | "XPOKER" | "OTRO";
+export type ClubFamily = "SUPREMA" | "GG" | "FENIX_GG" | "XPOKER" | "TINY" | "OTRO";
 
-function familiaDeClub(nombre: string): ClubFamily {
+// Tiny GG (18/09/2026): se detecta por import_platform en vez de por nombre -- a diferencia de
+// los demas clubes (nombres fijos tipo "TeamBack GG"), el club de Tiny lo nombra Leo como
+// quiera desde "Configurar clubes", pero import_platform se setea solo a 'TINY_GG' la primera
+// vez que se importa un archivo de esa plataforma (ver repo/importsTinyGG.ts) -- mucho mas
+// confiable que adivinar por nombre.
+function familiaDeClub(nombre: string, importPlatform: string | null): ClubFamily {
+  if (importPlatform === "TINY_GG") return "TINY";
   if (nombre === "TeamBack Suprema" || nombre === "Fénix Suprema") return "SUPREMA";
   if (nombre === "TeamBack GG") return "GG";
   if (nombre === "Fénix GG") return "FENIX_GG";
@@ -76,11 +82,11 @@ export interface ResumenClubSemanal {
 }
 
 export async function getResumenClubSemanal(clubId: string, weekStart: string): Promise<ResumenClubSemanal | null> {
-  const clubRes = await pool.query(`SELECT id, name, platform_pct, weekly_fixed_fee FROM clubs WHERE id = $1`, [clubId]);
+  const clubRes = await pool.query(`SELECT id, name, platform_pct, weekly_fixed_fee, import_platform FROM clubs WHERE id = $1`, [clubId]);
   if (clubRes.rows.length === 0) return null;
   const club = clubRes.rows[0];
   const ratioDefaultClub = 1 - Number(club.platform_pct);
-  const clubFamily = familiaDeClub(club.name);
+  const clubFamily = familiaDeClub(club.name, club.import_platform ?? null);
 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,

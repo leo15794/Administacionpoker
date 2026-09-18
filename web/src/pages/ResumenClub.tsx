@@ -30,6 +30,9 @@ export default function ResumenClub() {
   const [guardando, setGuardando] = useState(false);
   const [ventasInput, setVentasInput] = useState("0");
   const [observaciones, setObservaciones] = useState("");
+  // Resumen extra de Tiny GG (18/09/2026): Settlement/Rebate Union/Rake share -- ver
+  // repo/tinyResumen.ts. Solo se pide (y se muestra) cuando el club es de familia TINY.
+  const [tinyExtra, setTinyExtra] = useState<any>(null);
 
   useEffect(() => {
     api.clubes().then((cs: any[]) => {
@@ -56,11 +59,15 @@ export default function ResumenClub() {
       return;
     }
     setError("");
+    setTinyExtra(null);
     api
       .resumenClub(clubId, weekStart)
       .then((r: any) => {
         setResumen(r);
         setVentasInput(String(r.ingresoPorVentas));
+        if (r.clubFamily === "TINY") {
+          api.resumenTinyExtra(clubId, weekStart).then(setTinyExtra).catch(() => setTinyExtra(null));
+        }
       })
       .catch((e: any) => setError(e.message));
   }, [clubId, weekStart]);
@@ -306,6 +313,105 @@ export default function ResumenClub() {
               </div>
             )}
           </div>
+
+          {resumen.clubFamily === "TINY" && (
+            <div className="panel">
+              <h3>Tiny · Cierre semanal</h3>
+              <div className="muted" style={{ marginBottom: 12 }}>
+                A diferencia de los demas clubes, la ganancia de Tiny no sale de un % fijo sobre el rake: sale de la
+                diferencia entre lo que la Union/GG nos liquida a nosotros (Settlement) y lo que nosotros les pagamos a
+                los agentes (Cierre agentes).
+              </div>
+              {!tinyExtra ? (
+                <div className="muted">Sin datos de Rebate Union/Settlement guardados para esta semana todavia.</div>
+              ) : (
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 320px" }}>
+                    <table>
+                      <tbody>
+                        <tr><td className="muted">Agentes</td><td className="muted">{tinyExtra.agentesConCierre}</td></tr>
+                        <tr><td className="muted">Jugadores</td><td className="muted">{tinyExtra.jugadoresTotal ?? "-"}</td></tr>
+                        <tr>
+                          <td className="muted">Resultado Tiny</td>
+                          <td className={Number(tinyExtra.resultadoTiny) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.resultadoTiny)}</td>
+                        </tr>
+                        <tr><td className="muted">Rake Tiny</td><td className={Number(tinyExtra.rakeTiny) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.rakeTiny)}</td></tr>
+                        <tr><td className="muted">BBJ Contribution</td><td className="muted">{usd(tinyExtra.bbjContribution)}</td></tr>
+                        <tr>
+                          <td className="muted">Base rebate global</td>
+                          <td className={tinyExtra.baseRebateGlobal == null ? "muted" : Number(tinyExtra.baseRebateGlobal) >= 0 ? "pos" : "neg"}>
+                            {tinyExtra.baseRebateGlobal == null ? "-" : usd(tinyExtra.baseRebateGlobal)}
+                          </td>
+                        </tr>
+                        <tr><td className="muted">Rebate global</td><td className="pos">{usd(tinyExtra.rebateGlobal)}</td></tr>
+                        <tr><td className="muted">Rake share (Tiny)</td><td className="pos">{usd(tinyExtra.rakeShareTotal)}</td></tr>
+                        <tr>
+                          <td><strong>Settlement Tiny</strong></td>
+                          <td><strong className={Number(tinyExtra.settlementTiny) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.settlementTiny)}</strong></td>
+                        </tr>
+                        <tr><td className="muted">Rate semanal</td><td className="muted">{tinyExtra.rateSemanal ?? "-"}</td></tr>
+                        <tr>
+                          <td><strong>Settlement USDT</strong></td>
+                          <td><strong className={Number(tinyExtra.settlementUsdt) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.settlementUsdt)}</strong></td>
+                        </tr>
+                        <tr><td className="muted">USDT absoluto</td><td className="muted">{usd(Math.abs(Number(tinyExtra.settlementUsdt)))}</td></tr>
+                        <tr>
+                          <td className="muted">Movimiento</td>
+                          <td className="muted">{Number(tinyExtra.settlementUsdt) < 0 ? "Pagar a Tiny" : "Tiny nos paga"}</td>
+                        </tr>
+                        <tr>
+                          <td className="muted">Diferencia cierre Tiny</td>
+                          <td className={tinyExtra.diferenciaCierreTiny == null ? "muted" : Math.abs(tinyExtra.diferenciaCierreTiny) < 0.01 ? "muted" : "neg"}>
+                            {tinyExtra.diferenciaCierreTiny == null ? "Sin dato oficial de Tiny" : usd(tinyExtra.diferenciaCierreTiny)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Estado control</strong></td>
+                          <td>
+                            <span className={`badge ${tinyExtra.estadoControl === "OK" ? "pos" : tinyExtra.estadoControl === "REVISAR" ? "neg" : "neutral"}`}>
+                              {tinyExtra.estadoControl === "SIN_DATO" ? "Sin dato" : tinyExtra.estadoControl}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ flex: "1 1 320px" }}>
+                    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Resumen Tiny</div>
+                    <table>
+                      <tbody>
+                        <tr><td className="muted">Semana activa</td><td className="muted">{dateShort(resumen.weekStart)} al {dateShort(resumen.weekEnd ?? resumen.weekStart)}</td></tr>
+                        <tr><td className="muted">Rate semanal</td><td className="muted">{tinyExtra.rateSemanal ?? "-"}</td></tr>
+                        <tr><td className="muted">Settlement Tiny</td><td className={Number(tinyExtra.settlementTiny) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.settlementTiny)}</td></tr>
+                        <tr><td className="muted">Settlement USDT</td><td className={Number(tinyExtra.settlementUsdt) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.settlementUsdt)}</td></tr>
+                        <tr><td className="muted">Rebate plataforma USDT</td><td className="pos">{tinyExtra.rateSemanal ? usd(tinyExtra.rebateGlobal / tinyExtra.rateSemanal) : "-"}</td></tr>
+                        <tr><td className="muted">Rake share plataforma USDT</td><td className="pos">{tinyExtra.rateSemanal ? usd(tinyExtra.rakeShareTotal / tinyExtra.rateSemanal) : "-"}</td></tr>
+                        <tr><td className="muted">Cierre agentes USDT</td><td className={Number(tinyExtra.cierreAgentesUsdt) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.cierreAgentesUsdt)}</td></tr>
+                        <tr>
+                          <td><strong>Ganancia nuestra USDT</strong></td>
+                          <td><strong className={Number(tinyExtra.gananciaNuestraUsdt) >= 0 ? "pos" : "neg"}>{usd(tinyExtra.gananciaNuestraUsdt)}</strong></td>
+                        </tr>
+                        <tr>
+                          <td className="muted">Control conciliación</td>
+                          <td className={tinyExtra.diferenciaCierreTiny == null ? "muted" : Math.abs(tinyExtra.diferenciaCierreTiny) < 0.01 ? "muted" : "neg"}>
+                            {tinyExtra.diferenciaCierreTiny == null ? "-" : usd(tinyExtra.diferenciaCierreTiny)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="muted">Estado</td>
+                          <td>
+                            <span className={`badge ${tinyExtra.estadoControl === "OK" ? "pos" : tinyExtra.estadoControl === "REVISAR" ? "neg" : "neutral"}`}>
+                              {tinyExtra.estadoControl === "SIN_DATO" ? "Sin dato" : tinyExtra.estadoControl}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

@@ -859,3 +859,37 @@ CREATE INDEX IF NOT EXISTS idx_supervisor_referido_movements_wc ON supervisor_re
 -- acá para que se vean en el historial de cada cierre, con su motivo.
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ajuste_manual NUMERIC(18,4) NOT NULL DEFAULT 0;
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ajuste_manual_nota TEXT;
+
+-- Resumen de club para Tiny GG (18/09/2026, pedido de Leo): a diferencia de los demas clubes,
+-- la ganancia del club en Tiny no sale de un % fijo sobre el rake -- sale de la diferencia entre
+-- lo que la Union/GG nos liquida a nosotros (Settlement) y lo que nosotros les pagamos a los
+-- agentes (Cierre agentes). Dos piezas nuevas de datos hacen falta para reconstruir eso despues:
+--
+-- 1) BBJ Contribution por agente (informativo, viene del reporte de Tiny, nunca afecta el pago
+--    de ningun agente) -- se guarda junto al resto del cierre, igual que jugadores/ring_game.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS bbj_contribution NUMERIC(18,4) NOT NULL DEFAULT 0;
+
+-- 2) El Rebate Union / Rake share de Tiny (hoy se calculan al importar y se muestran en el panel
+--    de conciliacion de la pantalla de Cierres, pero se pierden apenas se cierra esa pantalla).
+--    Se guarda una fila por archivo/super agente (un club+semana puede tener varios, ver
+--    repo/importsTinyGG.ts) para no perder el desglose, con upsert idempotente por si se vuelve
+--    a aplicar la misma semana (mismo criterio que weekly_closings: reintentar nunca duplica).
+CREATE TABLE IF NOT EXISTS tiny_rebate_union (
+  id                       TEXT PRIMARY KEY,
+  club_id                  TEXT NOT NULL REFERENCES clubs(id),
+  week_start               DATE NOT NULL,
+  week_end                 DATE NOT NULL,
+  file_name                TEXT NOT NULL,
+  super_agent_nickname     TEXT,
+  rg_pre_rake_excl_jp      NUMERIC(18,4),
+  rebate_union_calculado   NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rebate_union_tiny        NUMERIC(18,4),
+  rake_total_ring_game     NUMERIC(18,4),
+  rate_pct                 NUMERIC(6,4),
+  rake_share               NUMERIC(18,4),
+  weekly_settlement_oficial NUMERIC(18,4),
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (club_id, week_start, file_name)
+);
+CREATE INDEX IF NOT EXISTS idx_tiny_rebate_union_club_semana ON tiny_rebate_union(club_id, week_start);

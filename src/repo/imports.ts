@@ -23,6 +23,9 @@ export interface AgenteAgregado {
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  // Solo Tiny GG (18/09/2026): suma de "BBJ Contribution" de todos los jugadores de este agente
+  // -- informativo, no afecta el calculo del cierre. undefined para el resto de plataformas.
+  bbjContribution?: number;
   /** "Rodeo" (solo SupremaPoker): lista cruda por jugador (Player ID + baseRodeo del archivo,
    * signo: + = perdió, - = ganó). NUNCA es un total pre-sumado — el monto real que le toca al
    * agente depende de la memoria arrastrada de cada jugador individual, y esa memoria solo se
@@ -73,6 +76,7 @@ export interface TinyRebateUnionPorArchivo {
   rakeTotalRingGame: number | null;
   ratePct: number | null;
   rakeShare: number | null;
+  weeklySettlementOficial: number | null;
 }
 
 export interface ClubImportado {

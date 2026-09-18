@@ -59,6 +59,9 @@ export interface SupremaPlayerRow {
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  // Solo Tiny GG (18/09/2026): "Bad Beat Jackpot > Contribution Fee" del reporte -- informativo,
+  // nunca afecta el calculo del cierre de ningun agente. undefined para el resto de plataformas.
+  bbjContribution?: number;
   rodeo: number;
   // Informativos (columnas opcionales) — no afectan el cálculo de plata, ver nota en
   // OPTIONAL_HEADERS. role: "MEMBER" | "AGENT" | "SUPERAGENT" tal cual lo manda Suprema.

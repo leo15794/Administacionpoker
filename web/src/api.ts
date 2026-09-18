@@ -460,6 +460,8 @@ export const api = {
     ajusteManual?: number;
     // Obligatorio en la UI si ajusteManual != 0 (ver Cierres.tsx), para que quede rastreable.
     ajusteManualNota?: string | null;
+    // Solo Tiny GG: informativo, ver repo/closings.ts.
+    bbjContribution?: number;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
   // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
@@ -483,6 +485,8 @@ export const api = {
     sng?: number;
     ajusteManual?: number;
     ajusteManualNota?: string | null;
+    // Solo Tiny GG: informativo, ver repo/closings.ts.
+    bbjContribution?: number;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,
@@ -576,6 +580,27 @@ export const api = {
     ingresoPorVentas: number;
     observaciones?: string;
   }) => request("/dashboard/resumen-club/extras", { method: "POST", body: JSON.stringify(data) }),
+
+  // Resumen de club para Tiny GG (18/09/2026) — ver repo/tinyResumen.ts. Complementa a
+  // resumenClub (que sigue trayendo el desglose por agente y el Cierre total agentes).
+  resumenTinyExtra: (clubId: string, weekStart: string) =>
+    request(`/dashboard/resumen-club/tiny-extra?clubId=${clubId}&weekStart=${weekStart}`),
+  guardarTinyRebateUnion: (data: {
+    clubId: string;
+    weekStart: string;
+    weekEnd: string;
+    items: {
+      fileName: string;
+      superAgentNickname: string | null;
+      rgPreRakeExclJp: number | null;
+      rebateUnionCalculado: number;
+      rebateUnionTiny: number | null;
+      rakeTotalRingGame: number | null;
+      ratePct: number | null;
+      rakeShare: number | null;
+      weeklySettlementOficial: number | null;
+    }[];
+  }) => request("/dashboard/resumen-club/tiny-rebate-union", { method: "POST", body: JSON.stringify(data) }),
 
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),

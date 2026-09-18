@@ -7,6 +7,7 @@ import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treas
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
+import { getResumenTinyExtra, guardarTinyRebateUnion } from "../repo/tinyResumen.js";
 import { getResumenFinanciero } from "../repo/resumenFinanciero.js";
 
 export const dashboardRouter = Router();
@@ -492,6 +493,54 @@ dashboardRouter.post("/resumen-club/extras", requireAuth, requireAdmin, async (r
   try {
     const r = await upsertClubWeeklyExtras({ ...parsed.data, createdBy: req.user?.email ?? null });
     res.status(201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ============ Resumen de club para Tiny GG (18/09/2026) ============
+// Ver repo/tinyResumen.ts para la explicacion completa de las formulas (Settlement, Rebate
+// Union, Rake share) -- este resumen no reemplaza al de arriba, lo COMPLEMENTA: el desglose por
+// agente y el total de "Cierre total agentes" siguen viniendo de /resumen-club de siempre.
+dashboardRouter.get("/resumen-club/tiny-extra", requireAuth, requireAdmin, async (req, res) => {
+  const clubId = req.query.clubId;
+  const weekStart = req.query.weekStart;
+  if (typeof clubId !== "string" || typeof weekStart !== "string") {
+    return res.status(400).json({ error: "Falta clubId o weekStart." });
+  }
+  const extra = await getResumenTinyExtra(clubId, weekStart);
+  res.json(extra); // null si no hay cierres esa semana -- el frontend lo trata como "sin datos"
+});
+
+const tinyRebateUnionSchema = z.object({
+  clubId: z.string(),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  items: z.array(
+    z.object({
+      fileName: z.string(),
+      superAgentNickname: z.string().nullable(),
+      rgPreRakeExclJp: z.number().nullable(),
+      rebateUnionCalculado: z.number(),
+      rebateUnionTiny: z.number().nullable(),
+      rakeTotalRingGame: z.number().nullable(),
+      ratePct: z.number().nullable(),
+      rakeShare: z.number().nullable(),
+      weeklySettlementOficial: z.number().nullable(),
+    })
+  ),
+});
+
+// Se llama UNA VEZ por club, justo despues de aplicar todos los cierres de una corrida de
+// importacion de Tiny (ver Cierres.tsx::aplicarTodo) -- reusa exactamente los mismos datos que
+// ya se calcularon y se muestran en el panel "Rebate Union de Tiny" de esa pantalla, asi no hay
+// que volver a leer ningun archivo. Idempotente (upsert por club+semana+archivo).
+dashboardRouter.post("/resumen-club/tiny-rebate-union", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = tinyRebateUnionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    await guardarTinyRebateUnion(parsed.data.clubId, parsed.data.weekStart, parsed.data.weekEnd, parsed.data.items);
+    res.status(201).json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

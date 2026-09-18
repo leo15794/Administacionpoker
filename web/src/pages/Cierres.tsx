@@ -800,6 +800,8 @@ type FilaImport = {
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  // Solo Tiny GG (18/09/2026): informativo, se guarda junto al cierre pero no afecta el pago.
+  bbjContribution?: number;
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
@@ -868,6 +870,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // el super agente. Solo se llena para plataforma TINY (ver repo/importsTinyGG.ts).
   const [tinyRebateUnionPorClub, setTinyRebateUnionPorClub] = useState<
     { clubId: string; clubName: string; items: any[] }[]
+  >([]);
+  // Version SIN dividir por la tasa (moneda propia de Tiny) -- es lo que se guarda al aplicar
+  // (ver aplicarTodo), nunca la version de arriba que ya esta convertida a USD para mostrar.
+  const [tinyRebateUnionRawPorClub, setTinyRebateUnionRawPorClub] = useState<
+    { clubId: string; weekEnd: string; items: any[] }[]
   >([]);
   const [filas, setFilas] = useState<FilaImport[]>([]);
   const [asignando, setAsignando] = useState<Record<string, string>>({}); // playerId|clubId -> agentId elegido
@@ -992,6 +999,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: a.ringGame !== undefined ? Math.round((a.ringGame / tasa) * 100) / 100 : undefined,
             mtt: a.mtt !== undefined ? Math.round((a.mtt / tasa) * 100) / 100 : undefined,
             sngOtros: a.sngOtros !== undefined ? Math.round((a.sngOtros / tasa) * 100) / 100 : undefined,
+            bbjContribution: a.bbjContribution,
             system: a.system,
             rakebackPct: a.rakebackPct,
             rebatePct: a.rebatePct,
@@ -1022,6 +1030,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       // (resultado + rakeTotal), la misma fórmula que aplica calcularCierre) — así se puede ver
       // de una si lo que Tiny nos reconoce alcanza para cubrir lo que salimos a pagar nosotros.
       if (plataforma === "TINY") {
+        setTinyRebateUnionRawPorClub(
+          (r.clubes || [])
+            .filter((c: any) => (c.tinyRebateUnion?.length ?? 0) > 0)
+            .map((c: any) => ({ clubId: c.clubId, weekEnd, items: c.tinyRebateUnion }))
+        );
         const rebateAgentesPorClub = new Map<string, number>();
         for (const f of nuevasFilas) {
           const rebateFila = (f.resultado + f.rakeTotal) * f.rebatePct;
@@ -1049,6 +1062,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         );
       } else {
         setTinyRebateUnionPorClub([]);
+        setTinyRebateUnionRawPorClub([]);
       }
     } catch (err: any) {
       setAnalisisError(err.message || "No se pudo procesar el archivo.");
@@ -1146,6 +1160,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: f.ringGame,
             mtt: f.mtt,
             sng: f.sngOtros,
+            bbjContribution: f.bbjContribution,
             ajusteManual: Number(f.ajusteManual) || undefined,
             ajusteManualNota: f.ajusteManualNota.trim() || undefined,
           });
@@ -1211,6 +1226,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           ringGame: f.ringGame,
           mtt: f.mtt,
           sng: f.sngOtros,
+          bbjContribution: f.bbjContribution,
           ajusteManual: Number(f.ajusteManual) || undefined,
           ajusteManualNota: f.ajusteManualNota.trim() || undefined,
         });
@@ -1219,6 +1235,37 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       } catch (err: any) {
         errores++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyError: err.message || "Error al aplicar." } : row)));
+      }
+    }
+    // Rebate Union de Tiny (18/09/2026): se guarda UNA VEZ por club, recien aca (nunca en la
+    // vista previa) -- reusa los mismos datos que ya se calcularon al analizar el archivo, asi
+    // no hay que volver a leer ningun excel. Solo para los clubes que de verdad tuvieron algun
+    // cierre aplicado en este lote (si el usuario destildo todo un club, no se guarda nada de
+    // el). Si esto falla no se revierte nada de lo ya aplicado -- se avisa aparte.
+    if (plataforma === "TINY" && tinyRebateUnionRawPorClub.length > 0) {
+      const clubesConAlgunaFilaAplicada = new Set(incluidas.map((f) => f.clubId));
+      const erroresGuardado: string[] = [];
+      for (const grupo of tinyRebateUnionRawPorClub) {
+        if (!clubesConAlgunaFilaAplicada.has(grupo.clubId)) continue;
+        try {
+          await api.guardarTinyRebateUnion({
+            clubId: grupo.clubId,
+            weekStart,
+            weekEnd: grupo.weekEnd,
+            items: grupo.items,
+          });
+        } catch (err: any) {
+          erroresGuardado.push(err.message || "error desconocido");
+        }
+      }
+      if (erroresGuardado.length > 0) {
+        setResumenAplicacion(
+          `Listo: ${ok} cierre(s) aplicados, ${yaAplicados} ya existían, ${errores} con error. ` +
+            `Ademas, no se pudo guardar el Rebate Union para el resumen del club: ${erroresGuardado.join("; ")}.`
+        );
+        onDone();
+        setAplicandoTodo(false);
+        return;
       }
     }
     setAplicandoTodo(false);

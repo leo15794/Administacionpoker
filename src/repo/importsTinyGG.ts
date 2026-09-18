@@ -148,6 +148,7 @@ export async function analizarImportacionTinyGG(
         acc.jugadores += 1;
         acc.resultado += row.resultado;
         acc.rakeTotal += row.rake;
+        acc.bbjContribution = (acc.bbjContribution ?? 0) + (row.bbjContribution ?? 0);
       } else {
         agentesMap.set(resolucion.agentId, {
           agentId: resolucion.agentId,
@@ -155,6 +156,7 @@ export async function analizarImportacionTinyGG(
           jugadores: 1,
           resultado: row.resultado,
           rakeTotal: row.rake,
+          bbjContribution: row.bbjContribution ?? 0,
           rodeoJugadores: [], // no existe "Rodeo" en esta plataforma
           system: "WIN_LOSE",
           rakebackPct: 0,
@@ -174,6 +176,7 @@ export async function analizarImportacionTinyGG(
         ...acc,
         resultado: Math.round(acc.resultado * 100) / 100,
         rakeTotal: Math.round(acc.rakeTotal * 100) / 100,
+        bbjContribution: Math.round((acc.bbjContribution ?? 0) * 100) / 100,
         system: cfg.system,
         rakebackPct: cfg.rakebackPct,
         rebatePct: cfg.rebatePct,
