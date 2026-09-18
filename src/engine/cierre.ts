@@ -22,6 +22,14 @@ export interface ClosingInput {
    * del rebate), y aplica igual aunque el agente tenga una regla especial vigente. Por defecto 0
    * para cualquier cierre que no venga de una importación Suprema. */
   rodeo?: number;
+  /** Ajuste manual (18/09/2026, pedido de Leo: "tickets promocionales" que se le cargan a un
+   * agente a mano al momento del cierre — nunca salen de ningún cálculo automático). Se suma
+   * (o resta, si viene negativo) directo al cierre final, después de todo lo demás — nunca se
+   * multiplica por ningún % ni se desvía a un supervisor, igual que Rodeo. Por defecto 0. */
+  ajusteManual?: number;
+  /** Motivo del ajuste manual (ej. "Ticket promocional torneo X, jugador Y") — obligatorio en
+   * la UI si ajusteManual != 0 (ver Cierres.tsx), para que quede rastreable en el historial. */
+  ajusteManualNota?: string | null;
 }
 
 export type SpecialRule =
@@ -51,6 +59,8 @@ export interface ClosingResult {
   rebate: number;
   adjustedResult: number;
   rodeo: number;
+  ajusteManual: number;
+  ajusteManualNota: string | null;
   finalClosing: number;
   ruleApplied: string | null;
   /** Solo seteado por TINY_GG_REBATE_CONDICIONAL: Resultado + Rake + Fee de Bad Beat Jackpot —
@@ -66,6 +76,8 @@ export interface ClosingResult {
  */
 export function calcularCierre(input: ClosingInput): ClosingResult {
   const rodeo = input.rodeo ?? 0;
+  const ajusteManual = input.ajusteManual ?? 0;
+  const ajusteManualNota = input.ajusteManualNota ?? null;
 
   if (input.specialRule?.key === "MANZUR_75_RAKE") {
     // Regla crítica documentada (BIT-068): Manzur en Fénix GG se liquida SIEMPRE
@@ -81,7 +93,9 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
       rebate: 0,
       adjustedResult,
       rodeo,
-      finalClosing: adjustedResult + rodeo,
+      ajusteManual,
+      ajusteManualNota,
+      finalClosing: adjustedResult + rodeo + ajusteManual,
       ruleApplied: "MANZUR_75_RAKE",
     };
   }
@@ -105,7 +119,9 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
       rebate,
       adjustedResult,
       rodeo,
-      finalClosing: adjustedResult + rodeo,
+      ajusteManual,
+      ajusteManualNota,
+      finalClosing: adjustedResult + rodeo + ajusteManual,
       ruleApplied: "TINY_GG_REBATE_CONDICIONAL",
       tinyBaseRebate,
     };
@@ -130,7 +146,9 @@ export function calcularCierre(input: ClosingInput): ClosingResult {
     rebate,
     adjustedResult,
     rodeo,
-    finalClosing: adjustedResult + rodeo,
+    ajusteManual,
+    ajusteManualNota,
+    finalClosing: adjustedResult + rodeo + ajusteManual,
     ruleApplied: null,
   };
 }

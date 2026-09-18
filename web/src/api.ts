@@ -455,6 +455,11 @@ export const api = {
     ringGame?: number;
     mtt?: number;
     sng?: number;
+    // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD que se suma/resta
+    // directo al cierre final del agente, cargado a mano en la grilla — ver engine/cierre.ts.
+    ajusteManual?: number;
+    // Obligatorio en la UI si ajusteManual != 0 (ver Cierres.tsx), para que quede rastreable.
+    ajusteManualNota?: string | null;
   }) => request("/movements/cierre-semanal", { method: "POST", body: JSON.stringify(data) }),
   // Corre la misma lógica que aplicarCierre (idempotencia, reglas especiales, supervisor,
   // memoria de bancado, y ahora memoria de rodeo) pero nunca escribe nada (rollback) — para
@@ -476,6 +481,8 @@ export const api = {
     ringGame?: number;
     mtt?: number;
     sng?: number;
+    ajusteManual?: number;
+    ajusteManualNota?: string | null;
   }) => request("/movements/cierre-semanal/preview", { method: "POST", body: JSON.stringify(data) }),
 
   // Importador de cierres (BIT-nueva): analiza un archivo semanal (hoy formato SupremaPoker,

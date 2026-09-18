@@ -439,6 +439,12 @@ function NuevoCierre({
   // importacion de archivo), es un monto directo que el usuario tipea y se suma al cierre tal
   // cual, igual que ya pasa con rakeTotal/rakebackPct en este mismo formulario.
   const [rodeoManual, setRodeoManual] = useState("0");
+  // Ajuste manual ("tickets promocionales", 18/09/2026, pedido de Leo): monto libre en USD que
+  // se carga a mano y se suma/resta directo al cierre final del agente — nunca sale de ningun
+  // calculo automatico (ver engine/cierre.ts). La nota es obligatoria si el monto no es 0, para
+  // que quede rastreable en el historial por que se cargo.
+  const [ajusteManual, setAjusteManual] = useState("0");
+  const [ajusteManualNota, setAjusteManualNota] = useState("");
   const [observation, setObservation] = useState("");
   // Clubes en fichas (hoy: X-Poker — ver Configuración → Clubes, campo "Unidad"): el reporte de
   // la plataforma viene en fichas, no en USD, y el valor de la ficha puede cambiar de una semana
@@ -520,10 +526,16 @@ function NuevoCierre({
       rakebackPct: (Number(rakebackPct) || 0) / 100,
       rebatePct: (Number(rebatePct) || 0) / 100,
       rodeoManual: Number(rodeoManual) || 0,
+      ajusteManual: Number(ajusteManual) || 0,
+      ajusteManualNota: ajusteManualNota.trim() || undefined,
       observation: observation.trim() || undefined,
       rateSnapshot: esFichas ? tasa : undefined,
     };
   }
+
+  // Si hay ajuste manual cargado, la nota es obligatoria (para que quede rastreable en el
+  // historial) — bloquea tanto la vista previa como el aplicar, igual que los demas requisitos.
+  const ajusteManualSinNota = (Number(ajusteManual) || 0) !== 0 && !ajusteManualNota.trim();
 
   const claveActual = JSON.stringify(armarPayload());
   // Vista previa vigente = se calculó con exactamente los valores que hay cargados ahora.
@@ -532,6 +544,10 @@ function NuevoCierre({
   async function calcularVistaPrevia() {
     if (!agentId || !clubId || !weekStart || !weekEnd) {
       setPreviewError("Agente, club y fechas de la semana son obligatorios.");
+      return;
+    }
+    if (ajusteManualSinNota) {
+      setPreviewError("Cargaste un ajuste manual: la nota (motivo) es obligatoria.");
       return;
     }
     setPreviewLoading(true);
@@ -698,6 +714,19 @@ function NuevoCierre({
               Solo si este club paga Rodeo (SupremaPoker) y este cierre no viene de una importación de archivo — se suma directo, sin memoria automática.
             </span>
           </div>
+          <div className="field">
+            <label>Ajuste manual (tickets promocionales, opcional, USD)</label>
+            <input value={ajusteManual} onChange={(e) => { setAjusteManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Monto libre que se suma (o resta, si es negativo) directo al cierre final del agente — ej. tickets promocionales asignados a mano. Requiere nota.
+            </span>
+          </div>
+          {Number(ajusteManual) !== 0 && (
+            <div className="field">
+              <label>Nota del ajuste manual (obligatoria)</label>
+              <input value={ajusteManualNota} onChange={(e) => { setAjusteManualNota(e.target.value); invalidarPreview(); }} placeholder="Ej: ticket promocional torneo X" />
+            </div>
+          )}
         </div>
         <div className="field">
           <label>Observación (opcional)</label>
@@ -769,6 +798,11 @@ type FilaImport = {
   // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
   // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
+  // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD cargado a mano fila
+  // por fila en esta misma grilla — se suma/resta directo al cierre final del agente (ver
+  // engine/cierre.ts). ajusteManualNota es obligatoria si el monto no es 0.
+  ajusteManual: number;
+  ajusteManualNota: string;
   included: boolean;
   previewLoading: boolean;
   previewResult: any | null;
@@ -954,6 +988,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
+            ajusteManual: 0,
+            ajusteManualNota: "",
             // CAMBIO (18/09/2026): ya no existe el % default de club — si no hay deal cargado
             // para este agente+club, arranca DESTILDADA (no entra en el lote a aplicar) para que
             // no se cuele un cierre en 0%/0% sin que nadie lo haya configurado a propósito. Leo
@@ -1049,6 +1085,14 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, included: !f.included } : f)));
   }
 
+  function setAjusteManualFila(key: string, ajusteManual: number) {
+    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManual } : f)));
+  }
+
+  function setAjusteManualNotaFila(key: string, ajusteManualNota: string) {
+    setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, ajusteManualNota } : f)));
+  }
+
   async function previsualizarTodo() {
     setPrevisualizandoTodo(true);
     setResumenAplicacion(null);
@@ -1089,6 +1133,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: f.ringGame,
             mtt: f.mtt,
             sng: f.sngOtros,
+            ajusteManual: f.ajusteManual || undefined,
+            ajusteManualNota: f.ajusteManualNota.trim() || undefined,
           });
           setFilas((fs) =>
             fs.map((row) =>
@@ -1122,6 +1168,9 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // vuelto a tildar a mano — ver comentario de "included" más arriba.
   const hayIncluidasSinConfigurar = incluidas.some((f) => f.configSource !== "deal");
   const sinConfigurarCount = filas.filter((f) => f.configSource !== "deal").length;
+  // Ajuste manual cargado sin nota: bloquea aplicar, igual que una fila sin deal — para que
+  // quede rastreable en el historial por que se cargo cada ticket promocional.
+  const hayIncluidasSinNotaAjuste = incluidas.some((f) => (f.ajusteManual || 0) !== 0 && !f.ajusteManualNota.trim());
   const totalCierreFinal = incluidas.reduce((sum, f) => sum + Number(f.previewResult?.calc?.finalClosing ?? 0), 0);
 
   async function aplicarTodo() {
@@ -1149,6 +1198,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           ringGame: f.ringGame,
           mtt: f.mtt,
           sng: f.sngOtros,
+          ajusteManual: f.ajusteManual || undefined,
+          ajusteManualNota: f.ajusteManualNota.trim() || undefined,
         });
         if (r.alreadyApplied) yaAplicados++; else ok++;
         setFilas((fs) => fs.map((row) => (row.key === f.key ? { ...row, applyLoading: false, applyResult: r } : row)));
@@ -1531,7 +1582,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             <thead>
               <tr>
                 <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
-                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Cierre final (vista previa)</th>
+                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
             <tbody>
@@ -1579,6 +1630,28 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                     )}
                   </td>
                   <td>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={f.ajusteManual}
+                      disabled={!!f.applyResult}
+                      onChange={(e) => setAjusteManualFila(f.key, Number(e.target.value) || 0)}
+                      style={{ width: 90 }}
+                    />
+                  </td>
+                  <td>
+                    {f.ajusteManual !== 0 && (
+                      <input
+                        type="text"
+                        placeholder="Motivo (obligatorio)"
+                        value={f.ajusteManualNota}
+                        disabled={!!f.applyResult}
+                        onChange={(e) => setAjusteManualNotaFila(f.key, e.target.value)}
+                        style={{ width: 140 }}
+                      />
+                    )}
+                  </td>
+                  <td>
                     {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}
                     {f.applyResult && !f.applyResult.alreadyApplied && <span className="badge pos">Aplicado: {usd(f.applyResult.calc?.finalClosing)}</span>}
                     {!f.applyResult && f.previewLoading && "..."}
@@ -1603,6 +1676,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             </div>
           )}
 
+          {hayIncluidasSinNotaAjuste && (
+            <div className="error" style={{ marginTop: 10 }}>
+              Hay filas incluidas con un ajuste manual cargado pero sin nota — completá el motivo antes de aplicar.
+            </div>
+          )}
+
           {todasPrevisualizadas && (
             <div className="muted" style={{ marginTop: 10 }}>
               Total a acreditar/cobrar en estos {incluidas.length} cierres: <strong>{usd(totalCierreFinal)}</strong>
@@ -1614,10 +1693,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <button
             className="btn"
             style={{ marginTop: 12 }}
-            disabled={!todasPrevisualizadas || hayIncluidasSinConfigurar || aplicandoTodo}
+            disabled={!todasPrevisualizadas || hayIncluidasSinConfigurar || hayIncluidasSinNotaAjuste || aplicandoTodo}
             title={
               hayIncluidasSinConfigurar
                 ? "Hay filas incluidas sin deal cargado — cargales el % o destildalas antes de aplicar."
+                : hayIncluidasSinNotaAjuste
+                ? "Hay filas con un ajuste manual cargado pero sin nota — completá el motivo antes de aplicar."
                 : !todasPrevisualizadas
                 ? "Calculá la vista previa de todos los cierres primero"
                 : undefined

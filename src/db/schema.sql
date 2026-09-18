@@ -852,3 +852,10 @@ CREATE TABLE IF NOT EXISTS supervisor_referido_movements (
   occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_supervisor_referido_movements_wc ON supervisor_referido_movements(weekly_closing_id);
+
+-- Ajuste manual por cierre semanal (18/09/2026, pedido de Leo): "tickets promocionales" que se
+-- cargan a mano en la grilla de cierre, agente por agente — nunca salen de un cálculo
+-- automático. Se suman/restan directo al cierre final (ver engine/cierre.ts) y quedan guardados
+-- acá para que se vean en el historial de cada cierre, con su motivo.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ajuste_manual NUMERIC(18,4) NOT NULL DEFAULT 0;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ajuste_manual_nota TEXT;

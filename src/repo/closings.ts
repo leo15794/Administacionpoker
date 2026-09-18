@@ -43,6 +43,12 @@ export interface AplicarCierreInput {
    * resumen por club va a incluir este monto igual que cualquier otro (rodeo_club_share queda
    * en 0 para estos casos — no hay forma de saber la parte del club sin la memoria real). */
   rodeoManual?: number;
+  /** Ajuste manual ("tickets promocionales", 18/09/2026): se suma/resta directo al cierre
+   * final del agente, después de todo lo demás — ver engine/cierre.ts. Por defecto 0. */
+  ajusteManual?: number;
+  /** Motivo del ajuste — la UI lo exige si ajusteManual != 0 (ver Cierres.tsx), para que quede
+   * rastreable en el historial de cada cierre. */
+  ajusteManualNota?: string | null;
   rateSnapshot?: number;
   /** Desglose por tipo de juego (solo SupremaPoker) para el resumen semanal por club — ver
    * repo/clubResumen.ts. undefined para cualquier cierre que no venga de una importación
@@ -150,6 +156,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       rakebackPct: input.rakebackPct,
       rebatePct: input.rebatePct,
       rodeo: rodeoResultado.agentShare,
+      ajusteManual: input.ajusteManual,
+      ajusteManualNota: input.ajusteManualNota,
       rateSnapshot: input.rateSnapshot ?? 1,
       specialRule,
     });
@@ -185,7 +193,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       // El agente solo recibe resultado + rakeback + rodeo; el rebate se desvía íntegro al
       // supervisor. El Rodeo (SupremaPoker) nunca se desvía — es un bono propio del agente,
       // no una porción del rake como el rebate.
-      montoAgente = calc.result + calc.rakeback + calc.rodeo;
+      montoAgente = calc.result + calc.rakeback + calc.rodeo + calc.ajusteManual;
       montoSupervisor = calc.rebate;
     }
 
@@ -222,8 +230,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
          rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
          rate_snapshot, rule_applied, status, observation, rebate_destino, supervisor_agent_id, supervisor_movement_id, rodeo, rodeo_club_share, rodeo_detalle,
-         jugadores, ring_game, mtt, sng)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+         jugadores, ring_game, mtt, sng, ajuste_manual, ajuste_manual_nota)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
       [
         id,
         input.agentId,
@@ -258,6 +266,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.ringGame ?? null,
         input.mtt ?? null,
         input.sng ?? null,
+        calc.ajusteManual,
+        calc.ajusteManualNota,
       ]
     );
 
@@ -383,6 +393,8 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
     rakebackPct: input.rakebackPct,
     rebatePct: input.rebatePct,
     rodeo: rodeoResultado.agentShare,
+    ajusteManual: input.ajusteManual,
+    ajusteManualNota: input.ajusteManualNota,
     rateSnapshot: input.rateSnapshot ?? 1,
     specialRule,
   });
@@ -393,8 +405,9 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
       (id, agent_id, club_id, week_start, week_end, system, result, rake_total,
        rakeback_pct, rakeback, rebate_pct, rebate, adjusted_result, final_closing,
        rate_snapshot, rule_applied, status, observation, routed_to_partner_account_id,
-       rodeo, rodeo_club_share, rodeo_detalle, jugadores, ring_game, mtt, sng)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+       rodeo, rodeo_club_share, rodeo_detalle, jugadores, ring_game, mtt, sng,
+       ajuste_manual, ajuste_manual_nota)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'APLICADO',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
     [
       id,
       input.agentId,
@@ -427,6 +440,8 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
       input.ringGame ?? null,
       input.mtt ?? null,
       input.sng ?? null,
+      calc.ajusteManual,
+      calc.ajusteManualNota,
     ]
   );
 
