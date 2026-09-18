@@ -217,7 +217,7 @@ export default function ResumenClub() {
                     <table>
                       <tbody>
                         {ingresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className="pos">{usd(f.monto)}</td></tr>
+                          <tr key={f.label}><td>{f.label}</td><td className={f.monto >= 0 ? "pos" : "neg"}>{usd(f.monto)}</td></tr>
                         ))}
                         <tr><td><strong>Total ingresos</strong></td><td className="pos"><strong>{usd(totalIngresos)}</strong></td></tr>
                       </tbody>
@@ -228,7 +228,7 @@ export default function ResumenClub() {
                     <table>
                       <tbody>
                         {egresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className="neg">{usd(f.monto)}</td></tr>
+                          <tr key={f.label}><td>{f.label}</td><td className={f.monto >= 0 ? "neg" : "pos"}>{usd(f.monto)}</td></tr>
                         ))}
                         <tr><td><strong>Total egresos</strong></td><td className="neg"><strong>{usd(totalEgresos)}</strong></td></tr>
                       </tbody>
@@ -270,9 +270,9 @@ export default function ResumenClub() {
                 <tr><td className="muted">Agentes</td><td className="muted">{resumen.agentesConCierre}</td></tr>
                 <tr><td className="muted">Jugadores</td><td className="muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
                 <tr><td className="muted">Resultado</td><td className={Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.resultadoTotal)}</td></tr>
-                <tr><td className="muted">Rake total generado por el club</td><td className="muted">{usd(resumen.rakeTotal)}</td></tr>
-                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className="muted">{usd(resumen.comisionesAgentes)}</td></tr>
-                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
+                <tr><td className="muted">Rake total generado por el club</td><td className={Number(resumen.rakeTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.rakeTotal)}</td></tr>
+                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className={Number(resumen.comisionesAgentes) >= 0 ? "pos" : "neg"}>{usd(resumen.comisionesAgentes)}</td></tr>
+                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className={Number(resumen.comisionPlataformaTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.comisionPlataformaTotal)}</td></tr>
                 <tr>
                   <td className="muted">Ventas/VIP</td>
                   <td className={Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}>
