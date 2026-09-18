@@ -12,6 +12,206 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
  * externos que no salen de ningun cierre — Ganancia Rodeo Club e Ingreso por ventas — mas el
  * fee fijo semanal del club si tiene, ej. Tasa semanal GG).
  */
+
+// Exporta el desglose completo de "Resumen por club" a PDF: por-agente + resumen del club +
+// (si es Tiny) el panel de conciliacion Settlement/Rake share, para poder comparar a mano
+// contra el cierre que nos manda el club/plataforma y encontrar diferencias.
+async function generarPdfResumenClub(resumen: any, tinyExtra: any | null) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const doc = new jsPDF();
+  const margen = 14;
+  let y = 18;
+
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text(
+    `${resumen.clubName} · Resumen semanal ${dateShort(resumen.weekStart)} - ${dateShort(resumen.weekEnd ?? resumen.weekStart)}`,
+    margen,
+    y
+  );
+  y += 9;
+
+  // Tabla por agente (mismas columnas que se ven en pantalla segun la familia del club)
+  if (resumen.filas.length > 0) {
+    if (resumen.clubFamily === "SUPREMA") {
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margen, right: margen },
+        head: [["Agente", "Jugadores", "Resultado", "Rake total", "% RB", "Com. agente", "Com. plataforma", "Ganancia rake", "Cierre final"]],
+        body: resumen.filas.map((f: any) => [
+          f.agentName,
+          f.jugadores ?? "-",
+          usd(f.resultado),
+          usd(f.rakeTotal),
+          pct(f.rakebackPct),
+          usd(f.rakebackAgente),
+          usd(f.comisionPlataforma),
+          usd(f.gananciaPorRake),
+          usd(f.cierreFinalAgente),
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [40, 50, 90] },
+      });
+    } else {
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margen, right: margen },
+        head: [["Agente", "Resultado", "Rake total", "% RB", "Rakeback agente", "Com. plataforma", "Rebate", "Ganancia rake", "Cierre final"]],
+        body: resumen.filas.map((f: any) => [
+          f.agentName,
+          usd(f.resultado),
+          usd(f.rakeTotal),
+          pct(f.rakebackPct),
+          usd(f.rakebackAgente),
+          usd(f.comisionPlataforma),
+          f.rebate !== 0 ? usd(f.rebate) : "-",
+          usd(f.gananciaPorRake),
+          usd(f.cierreFinalAgente),
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [40, 50, 90] },
+      });
+    }
+    y = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  // Resumen del club: mismo desglose ingresos/egresos + tabla final que se ve en pantalla
+  const nuestraParteDelRake = Number(resumen.gananciaPorRake) + Number(resumen.comisionesAgentes);
+  const ingresos: { label: string; monto: number }[] = [
+    { label: "Rake generado — nuestra parte", monto: nuestraParteDelRake },
+  ];
+  if (Number(resumen.gananciaRodeoClub) !== 0) ingresos.push({ label: "Ganancia Rodeo Club", monto: Number(resumen.gananciaRodeoClub) });
+  if (Number(resumen.ingresoPorVentas) !== 0) ingresos.push({ label: "Ajuste manual Promociones", monto: Number(resumen.ingresoPorVentas) });
+  if (Number(resumen.tasaSemanalFija) > 0) ingresos.push({ label: "Tasa semanal fija", monto: Number(resumen.tasaSemanalFija) });
+  const egresos: { label: string; monto: number }[] = [
+    { label: "Rakeback pagado a agentes", monto: Number(resumen.comisionesAgentes) },
+  ];
+  if (Number(resumen.tasaSemanalFija) < 0) egresos.push({ label: "Tasa semanal fija", monto: Math.abs(Number(resumen.tasaSemanalFija)) });
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text("Resumen del club", margen, y);
+  y += 7;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen, right: margen },
+    head: [["Qué nos hizo ganar", "Monto"]],
+    body: [...ingresos.map((f) => [f.label, usd(f.monto)]), ["TOTAL INGRESOS", usd(ingresos.reduce((s, f) => s + f.monto, 0))]],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [40, 120, 60] },
+    tableWidth: 90,
+  });
+  const yIngresos = (doc as any).lastAutoTable.finalY;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen + 96, right: margen },
+    head: [["Qué nos hizo perder", "Monto"]],
+    body: [...egresos.map((f) => [f.label, usd(f.monto)]), ["TOTAL EGRESOS", usd(egresos.reduce((s, f) => s + f.monto, 0))]],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [150, 40, 40] },
+    tableWidth: 90,
+  });
+  const yEgresos = (doc as any).lastAutoTable.finalY;
+
+  y = Math.max(yIngresos, yEgresos) + 10;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen, right: margen },
+    body: [
+      ["GANANCIA NETA (ingresos − egresos)", usd(resumen.gananciaNeta)],
+      ["Agentes", String(resumen.agentesConCierre)],
+      ["Jugadores", resumen.jugadoresTotal ?? "-"],
+      ["Resultado", usd(resumen.resultadoTotal)],
+      ["Rake total generado por el club", usd(resumen.rakeTotal)],
+      ["Comisiones agentes (rakeback pagado)", usd(resumen.comisionesAgentes)],
+      ["Comisión del club/plataforma (no es nuestra)", usd(resumen.comisionPlataformaTotal)],
+      ["Ventas/VIP", usd(resumen.ajusteManualTotal)],
+      ["Ajuste manual Promociones", usd(resumen.ingresoPorVentas)],
+      ["Tasa semanal fija (Tasas)", usd(resumen.tasaSemanalFija)],
+      ["Cierre total agentes", usd(resumen.cierreTotalAgentes)],
+    ],
+    styles: { fontSize: 9 },
+    didParseCell: (data: any) => {
+      if (data.row.index === 0) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fillColor = [230, 245, 230];
+      }
+    },
+  });
+  y = (doc as any).lastAutoTable.finalY + 10;
+
+  // Panel Tiny: la parte pensada especificamente para comparar contra el cierre que nos manda
+  // Tiny/GG y detectar si liquidaron bien -- se resalta Settlement, USDT y la diferencia.
+  if (resumen.clubFamily === "TINY") {
+    if (y > 240) { doc.addPage(); y = 18; }
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text("Tiny · Cierre semanal (conciliación contra Tiny/GG)", margen, y);
+    y += 7;
+
+    if (!tinyExtra) {
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Sin datos de Rebate Union/Settlement guardados para esta semana todavía.", margen, y);
+      y += 8;
+    } else {
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margen, right: margen },
+        body: [
+          ["Agentes", String(tinyExtra.agentesConCierre)],
+          ["Jugadores", tinyExtra.jugadoresTotal ?? "-"],
+          ["Resultado Tiny", usd(tinyExtra.resultadoTiny)],
+          ["Rake Tiny", usd(tinyExtra.rakeTiny)],
+          ["BBJ Contribution", usd(tinyExtra.bbjContribution)],
+          ["Base rebate global", tinyExtra.baseRebateGlobal == null ? "-" : usd(tinyExtra.baseRebateGlobal)],
+          ["Rebate global", usd(tinyExtra.rebateGlobal)],
+          ["Rake share (Tiny)", usd(tinyExtra.rakeShareTotal)],
+          ["Settlement Tiny", usd(tinyExtra.settlementTiny)],
+          ["Rate semanal", tinyExtra.rateSemanal ?? "-"],
+          ["Settlement USDT", usd(tinyExtra.settlementUsdt)],
+          ["Cierre agentes USDT", usd(tinyExtra.cierreAgentesUsdt)],
+          ["Ganancia nuestra USDT", usd(tinyExtra.gananciaNuestraUsdt)],
+          [
+            "Weekly Settlement oficial (Tiny)",
+            tinyExtra.weeklySettlementOficialTotal == null ? "Sin dato oficial de Tiny" : usd(tinyExtra.weeklySettlementOficialTotal),
+          ],
+          [
+            "Diferencia cierre Tiny (nuestro Settlement − oficial)",
+            tinyExtra.diferenciaCierreTiny == null ? "Sin dato oficial de Tiny" : usd(tinyExtra.diferenciaCierreTiny),
+          ],
+          ["Estado control", tinyExtra.estadoControl === "SIN_DATO" ? "Sin dato" : tinyExtra.estadoControl],
+        ],
+        styles: { fontSize: 9 },
+        didParseCell: (data: any) => {
+          if (data.row.index === 8 || data.row.index === 10 || data.row.index >= 13) {
+            data.cell.styles.fontStyle = "bold";
+          }
+          if (data.row.index === 14) {
+            const estado = tinyExtra.estadoControl;
+            data.cell.styles.fillColor = estado === "OK" ? [220, 245, 220] : estado === "REVISAR" ? [250, 220, 220] : [235, 235, 235];
+          }
+        },
+      });
+      y = (doc as any).lastAutoTable.finalY + 6;
+    }
+  }
+
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text(`Generado ${dateShort(new Date().toISOString().slice(0, 10))}`, margen, 290);
+  doc.setTextColor(0);
+
+  const nombreArchivo = `resumen-club_${resumen.clubName.replace(/[^a-z0-9]+/gi, "-")}_${resumen.weekStart}.pdf`;
+  doc.save(nombreArchivo);
+}
+
 export default function ResumenClub() {
   const { alertDialog } = useConfirmDialog();
   // Deep-link desde Resumen financiero (fila de "Cierre semanal" → ver el desglose):
@@ -33,6 +233,7 @@ export default function ResumenClub() {
   // Resumen extra de Tiny GG (18/09/2026): Settlement/Rebate Union/Rake share -- ver
   // repo/tinyResumen.ts. Solo se pide (y se muestra) cuando el club es de familia TINY.
   const [tinyExtra, setTinyExtra] = useState<any>(null);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
 
   useEffect(() => {
     api.clubes().then((cs: any[]) => {
@@ -119,6 +320,26 @@ export default function ResumenClub() {
 
       {resumen && (
         <>
+          <div className="topbar" style={{ marginBottom: 10 }}>
+            <div />
+            <button
+              className="btn secondary small"
+              disabled={generandoPdf}
+              onClick={async () => {
+                setGenerandoPdf(true);
+                try {
+                  await generarPdfResumenClub(resumen, tinyExtra);
+                } catch (err: any) {
+                  await alertDialog(err.message || "No se pudo generar el PDF.");
+                } finally {
+                  setGenerandoPdf(false);
+                }
+              }}
+              title="Exporta este resumen a PDF para comparar contra el cierre que nos manda el club/plataforma"
+            >
+              {generandoPdf ? "Generando..." : "Descargar PDF"}
+            </button>
+          </div>
           <div className="panel">
             <h3>Cierres de la semana ({resumen.filas.length} agente{resumen.filas.length === 1 ? "" : "s"})</h3>
             {resumen.filas.length === 0 ? (
