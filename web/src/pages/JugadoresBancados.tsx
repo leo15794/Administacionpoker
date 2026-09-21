@@ -1216,7 +1216,7 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
               <table>
                 <thead>
                   <tr>
-                    <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th></th>
+                    <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>Ticket promo.</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1246,6 +1246,9 @@ function FilaImportBancado({
 }) {
   const [resultadoMesas, setResultadoMesas] = useState(String(item.resultado));
   const [rakeTotal, setRakeTotal] = useState(String(item.rake));
+  // Ticket promocional (21/09/2026): igual que en el formulario manual -- ver PanelBanca.
+  const [ticketPromocional, setTicketPromocional] = useState("0");
+  const [ticketPromocionalNota, setTicketPromocionalNota] = useState("");
   const [previa, setPrevia] = useState<any | null>(null);
   const [calculando, setCalculando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
@@ -1257,7 +1260,7 @@ function FilaImportBancado({
     setError(null);
     setPrevia(null);
     try {
-      const r = await api.previsualizarCierreBancado(item.playerId, Number(resultadoMesas) || 0, Number(rakeTotal) || 0);
+      const r = await api.previsualizarCierreBancado(item.playerId, Number(resultadoMesas) || 0, Number(rakeTotal) || 0, Number(ticketPromocional) || 0);
       setPrevia(r.calc);
     } catch (err: any) {
       setError(err.message || "No se pudo calcular.");
@@ -1267,6 +1270,10 @@ function FilaImportBancado({
   }
 
   async function confirmar() {
+    if ((Number(ticketPromocional) || 0) !== 0 && !ticketPromocionalNota.trim()) {
+      setError("Cargá una nota para el ticket promocional (obligatoria si el monto no es 0).");
+      return;
+    }
     setCerrando(true);
     setError(null);
     try {
@@ -1276,6 +1283,8 @@ function FilaImportBancado({
         weekEnd,
         resultadoMesas: Number(resultadoMesas) || 0,
         rakeTotal: Number(rakeTotal) || 0,
+        ticketPromocional: Number(ticketPromocional) || undefined,
+        ticketPromocionalNota: ticketPromocionalNota.trim() || undefined,
       });
       if (r.alreadyApplied) {
         setError("Ya había un cierre de banca aplicado para esa semana — no se duplicó.");
@@ -1302,6 +1311,9 @@ function FilaImportBancado({
         <td>
           <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} />
         </td>
+        <td>
+          <input value={ticketPromocional} onChange={(e) => { setTicketPromocional(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} placeholder="0" />
+        </td>
         <td className="row-actions">
           {aplicado ? (
             <span className="badge pos">Cierre aplicado</span>
@@ -1319,16 +1331,32 @@ function FilaImportBancado({
           )}
         </td>
       </tr>
+      {(Number(ticketPromocional) || 0) !== 0 && !aplicado && (
+        <tr>
+          <td></td>
+          <td colSpan={6}>
+            <input
+              value={ticketPromocionalNota}
+              onChange={(e) => setTicketPromocionalNota(e.target.value)}
+              placeholder="Nota del ticket promocional (obligatoria) — ej: ticket torneo X"
+              style={{ width: "100%", maxWidth: 420 }}
+            />
+          </td>
+        </tr>
+      )}
       {(error || previa) && (
         <tr>
           <td></td>
-          <td colSpan={5}>
+          <td colSpan={6}>
             {error && <div className="error">{error}</div>}
             {previa && (
               <div className="muted" style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "4px 0" }}>
                 <span>Rakeback: <strong>{usd(previa.rakebackTotal)}</strong></span>
                 <span>Makeup: {usd(previa.makeupAnterior)} → {usd(previa.makeupNuevo)}</span>
                 <span>Pago total jugador: <strong>{usd(previa.pagoJugadorTotal)}</strong></span>
+                {Number(previa.ticketPromocional) !== 0 && (
+                  <span>Ticket promocional (a nuestro cargo): <strong style={{ color: "var(--danger, #e5484d)" }}>-{usd(previa.ticketPromocional)}</strong></span>
+                )}
                 <span>Ganancia banca mesas: {usd(previa.gananciaBancaMesas)}</span>
                 <span>Capital después: <strong>{usd(previa.capitalDespues)}</strong></span>
               </div>
