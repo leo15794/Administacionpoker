@@ -15,7 +15,12 @@
 //   treasury_entries, treasury_adjustments, bancado_debts, bancado_historial,
 //   rodeo_player_memory, rodeo_agent_memory, audit_snapshots, partner_account_entries,
 //   extraordinary_adjustments, extraordinary_adjustment_applications, liquidaciones_guardadas,
-//   supervisor_referido_movements, account_stock, profit_periods, profit_period_weeks
+//   supervisor_referido_movements, account_stock, profit_periods, profit_period_weeks,
+//   carga_pendientes_cruce, carga_cruce_movements, rakeback_pendiente,
+//   rakeback_pendiente_movements (estas últimas cuatro se listan explícito para que el reporte
+//   muestre sus filas, pero igual se hubieran borrado solas por CASCADE desde ledger_movements/
+//   weekly_closings -- 22/09/2026, agregadas al sumar las cargas de tesorería y el rakeback
+//   pendiente)
 //
 // Tablas que se ACTUALIZAN (no se borran, solo se resetea el saldo a 0):
 //   supervisor_referidos.saldo
@@ -55,6 +60,10 @@ const TABLAS_A_BORRAR = [
   "treasury_entries",
   "ledger_movements",
   "balances",
+  "rakeback_pendiente_movements",
+  "rakeback_pendiente",
+  "carga_cruce_movements",
+  "carga_pendientes_cruce",
   "weekly_closings",
 ];
 
