@@ -149,6 +149,13 @@ async function main() {
     const saldo2 = bal2 ? Number(bal2.amount) : 0;
     ok(`Balance sube a 0 tras pagar 200 en fichas (obtuvo ${saldo2})`, Math.abs(saldo2 - 0) < 0.01);
 
+    const cargaCruceRes = await pool.query(`SELECT * FROM carga_pendientes_cruce WHERE agent_id = $1`, [agentId]);
+    ok(
+      "Pagar en fichas NO abre una carga pendiente de cruce nueva (ya quedó resuelto en rakeback_pendiente)",
+      cargaCruceRes.rows.length === 0,
+      `encontradas: ${cargaCruceRes.rows.length}`
+    );
+
     console.log("\n── Paso 6: pagar los 300 restantes en USDT -- NO tiene que mover el stock ──");
     await pagarPendiente({ pendienteId: miPendiente.id, amount: 300, medio: "USDT" });
     const bal3 = await getBalance(agentId, clubId);

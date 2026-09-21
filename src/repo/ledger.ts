@@ -16,6 +16,13 @@ export interface NewMovement {
   refs?: string[];
   createdBy?: string | null;
   custodian?: string | null; // requerido si paymentMethod = EFECTIVO
+  /** Salta la "nota de crédito" (carga_pendientes_cruce) que una CARGA abre normalmente para
+   * cruzar después en Liquidaciones -- uso exclusivo de pagarPendiente() (repo/rakebackPendiente.ts)
+   * cuando la CARGA es el pago en fichas de un rakeback pendiente que YA está resuelto (queda
+   * marcado `consumed` ahí mismo): no tiene sentido abrir una nota de crédito nueva para algo
+   * que no es un adelanto sino la liquidación misma (Leo, 22/09/2026: "no debería quedar
+   * pendiente de pago porque ya se le acreditaron"). Nunca se usa para una CARGA común. */
+  sinNotaDeCredito?: boolean;
 }
 
 /**
@@ -104,7 +111,7 @@ export async function registrarMovimiento(input: NewMovement) {
     // agente+club — mismo mecanismo que un adelanto de rakeback (amount/consumed), para poder
     // descontarla después en Liquidaciones (ver repo/cargaCruces.ts). Independiente del método
     // de pago (a diferencia de treasury_entries, que solo se genera con USDT/EFECTIVO/ZELLE).
-    if (input.type === "CARGA") {
+    if (input.type === "CARGA" && !input.sinNotaDeCredito) {
       const cargaId = newId("cpc");
       const montoCarga = Math.abs(input.amount);
       await client.query(

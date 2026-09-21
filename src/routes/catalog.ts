@@ -272,7 +272,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   // frontend cae al comportamiento viejo (PAGO/COBRO genérico) para esos casos.
   const closingIds = closings.rows.map((c) => c.id);
   const pendientesRes = await pool.query(
-    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = ANY($1::text[]) AND role = 'AGENTE' AND active = true`,
+    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = ANY($1::text[]) AND role = 'AGENTE' AND active = true AND amount > consumed`,
     [closingIds]
   );
   const pendientePorCierre = new Map(pendientesRes.rows.map((p) => [p.weekly_closing_id, p]));

@@ -72,6 +72,10 @@ export async function pagarPendiente(input: PagarPendienteInput) {
         ? "Pago de rakeback pendiente en fichas."
         : `Pago de rakeback pendiente en ${input.medio}.`),
     createdBy: input.createdBy ?? null,
+    // Esto YA queda resuelto acá abajo (rakeback_pendiente.consumed) -- no tiene que abrir
+    // además una nota de crédito de "carga pendiente de cruce" para volver a aparecer como
+    // pendiente en Liquidaciones (Leo, 22/09/2026).
+    sinNotaDeCredito: input.medio === "FICHAS",
   });
 
   const nuevoConsumed = Number(actual.consumed) + input.amount;
