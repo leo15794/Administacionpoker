@@ -139,6 +139,7 @@ export default function Liquidaciones() {
   // Ventas / tickets promocionales por fila (agente+club) -- keyed por filaKey(f).
   const [ventasPorFila, setVentasPorFila] = useState<Record<string, number>>({});
   const [ticketsPorFila, setTicketsPorFila] = useState<Record<string, number>>({});
+  const [borrandoCarga, setBorrandoCarga] = useState<string | null>(null);
   // Enviar/Recibir (21/09/2026): registra el pago/cobro real contra la wallet, reusando el
   // movimiento CARGA... no, PAGO/COBRO que ya existe en Movimientos -- acá elegimos con qué
   // agente+club de la liquidación se cruza (puede ser multi-agente) y el medio de pago, igual
@@ -336,6 +337,26 @@ export default function Liquidaciones() {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
     } finally {
       setAplicando(false);
+    }
+  }
+
+  // Borrado real de una carga pendiente (ej. cargada de prueba, o al agente/club equivocado) --
+  // no queda en historial, a diferencia de consumirla. Mismo criterio que "Eliminar" en Adelantos.
+  async function eliminarCargaPendiente(cg: any) {
+    if (!(await confirmDialog(`¿Eliminar la carga pendiente de ${cg.agentName} (${cg.clubName}) por ${usd(cg.pendiente)}? Esto la borra del todo (no queda en historial) -- para una carga que nunca debió existir. No se puede deshacer.`))) return;
+    setBorrandoCarga(cg.id);
+    try {
+      await api.eliminarCarga(cg.id);
+      setCrucesCarga((prev) => {
+        const next = { ...prev };
+        delete next[cg.id];
+        return next;
+      });
+      refrescarLiquidacion(true);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar la carga.");
+    } finally {
+      setBorrandoCarga(null);
     }
   }
 
@@ -613,41 +634,53 @@ export default function Liquidaciones() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {data.cargas.map((cg: any) => (
-                    <label key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={cg.id in crucesCarga}
-                        onChange={(e) => {
-                          setGuardado(false);
-                          setCrucesCarga((prev) => {
-                            const next = { ...prev };
-                            if (e.target.checked) {
-                              next[cg.id] = cg.pendiente;
-                            } else {
-                              delete next[cg.id];
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                      <span style={{ minWidth: 260 }}>
-                        {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
-                      </span>
-                      {cg.id in crucesCarga && (
+                    <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
                         <input
-                          type="number"
-                          step="0.01"
-                          min={0}
-                          max={cg.pendiente}
-                          value={crucesCarga[cg.id]}
+                          type="checkbox"
+                          checked={cg.id in crucesCarga}
                           onChange={(e) => {
                             setGuardado(false);
-                            setCrucesCarga((prev) => ({ ...prev, [cg.id]: Math.min(Number(e.target.value) || 0, cg.pendiente) }));
+                            setCrucesCarga((prev) => {
+                              const next = { ...prev };
+                              if (e.target.checked) {
+                                next[cg.id] = cg.pendiente;
+                              } else {
+                                delete next[cg.id];
+                              }
+                              return next;
+                            });
                           }}
-                          style={{ width: 110, textAlign: "right" }}
                         />
-                      )}
-                    </label>
+                        <span style={{ minWidth: 260 }}>
+                          {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
+                        </span>
+                        {cg.id in crucesCarga && (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={cg.pendiente}
+                            value={crucesCarga[cg.id]}
+                            onChange={(e) => {
+                              setGuardado(false);
+                              setCrucesCarga((prev) => ({ ...prev, [cg.id]: Math.min(Number(e.target.value) || 0, cg.pendiente) }));
+                            }}
+                            style={{ width: 110, textAlign: "right" }}
+                          />
+                        )}
+                      </label>
+                      <button
+                        type="button"
+                        className="btn secondary small"
+                        disabled={borrandoCarga === cg.id}
+                        onClick={() => eliminarCargaPendiente(cg)}
+                        title="Borrado real — no queda en el historial. Para una carga que nunca debió cargarse (ej. de prueba)."
+                        style={{ color: "var(--danger, #e5484d)" }}
+                      >
+                        {borrandoCarga === cg.id ? "..." : "Eliminar"}
+                      </button>
+                    </div>
                   ))}
                   <div>
                     <button className="btn secondary small" disabled={totalCruzadoCarga <= 0 || aplicando} onClick={aplicarCrucesCarga} style={{ marginTop: 8 }}>

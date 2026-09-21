@@ -27,7 +27,7 @@ import {
   setJugadorBancado,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
-import { listCargasPendientesPorAgentes, consumirCarga } from "../repo/cargaCruces.js";
+import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga } from "../repo/cargaCruces.js";
 import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -321,6 +321,17 @@ catalogRouter.post("/liquidacion/carga/consumir", requireAuth, requireAdmin, asy
       createdBy: req.user?.email,
     });
     res.status(200).json(carga);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real de una carga pendiente (ej. cargada de prueba, o al agente/club equivocado) --
+// misma idea que DELETE /advances/:id, ver nota en repo/cargaCruces.ts.
+catalogRouter.delete("/liquidacion/carga/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarCarga(req.params.id);
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

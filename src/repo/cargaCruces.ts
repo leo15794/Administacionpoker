@@ -73,3 +73,25 @@ export async function consumirCarga(input: ConsumirCargaInput) {
     client.release();
   }
 }
+
+/**
+ * Borrado real de una carga pendiente y todo su historial de cruces -- para cuando se cargó
+ * mal (ej. de prueba, o al agente/club equivocado) y nunca debió existir. A diferencia de
+ * "consumirCarga" (que representa un cruce real de negocio), esto la saca del todo, mismo
+ * criterio que eliminarAdelanto() en repo/advances.ts.
+ */
+export async function eliminarCarga(cargaId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM carga_cruce_movements WHERE carga_id = $1`, [cargaId]);
+    const r = await client.query(`DELETE FROM carga_pendientes_cruce WHERE id = $1 RETURNING id`, [cargaId]);
+    if (r.rowCount === 0) throw new Error("No se encontró esa carga pendiente.");
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}

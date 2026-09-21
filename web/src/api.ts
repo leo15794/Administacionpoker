@@ -208,6 +208,8 @@ export const api = {
   // que ajustarAdelanto CONSUMO, pero sobre carga_pendientes_cruce (ver repo/cargaCruces.ts).
   consumirCarga: (data: { cargaId: string; amount: number; notes?: string }) =>
     request("/catalog/liquidacion/carga/consumir", { method: "POST", body: JSON.stringify(data) }),
+  // Borrado real de una carga pendiente (ej. cargada de prueba) -- no queda en historial.
+  eliminarCarga: (cargaId: string) => request(`/catalog/liquidacion/carga/${cargaId}`, { method: "DELETE" }),
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
