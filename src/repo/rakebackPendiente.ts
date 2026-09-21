@@ -53,7 +53,13 @@ export async function pagarPendiente(input: PagarPendienteInput) {
 
   const reg = await registrarMovimiento({
     idempotencyKey: `pago_rakeback:${input.pendienteId}:${newId("x")}`,
-    type: input.medio === "FICHAS" ? "CARGA" : "PAGO",
+    // FICHAS = CARGA real (mueve el stock físico). USDT/EFECTIVO/ZELLE = "PAGO_RAKEBACK", un
+    // tipo propio que SÍ genera su entrada de tesorería pero NUNCA toca el balance/stock del
+    // agente (a diferencia de "PAGO", que siempre resta del balance -- ver deltaParaBalance en
+    // repo/ledger.ts). Bug encontrado el 22/09/2026 en el test end-to-end: con "PAGO" común,
+    // pagar rakeback en USDT restaba del balance de fichas, mezclando de nuevo lo que este
+    // cambio entero busca separar.
+    type: input.medio === "FICHAS" ? "CARGA" : "PAGO_RAKEBACK",
     clubId: actual.club_id,
     agentId: actual.agent_id,
     amount: input.amount,

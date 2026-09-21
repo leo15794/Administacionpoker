@@ -13,6 +13,7 @@ const TIPO_LABEL: Record<string, string> = {
   TICKET_PROMOCIONAL: "Ticket promocional",
   AJUSTE: "Ajuste",
   CIERRE_SEMANAL: "Cierre semanal",
+  PAGO_RAKEBACK: "Pago de rakeback pendiente",
 };
 
 function truncar(texto: string, max = 140) {

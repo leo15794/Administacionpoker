@@ -415,6 +415,16 @@ CREATE TABLE IF NOT EXISTS rakeback_pendiente (
   UNIQUE (weekly_closing_id, role)
 );
 
+-- Pago de rakeback pendiente en USDT/efectivo/Zelle (22/09/2026): es un pago financiero real
+-- (genera su entrada de tesorería, igual que un PAGO común) pero NUNCA debe tocar el stock/
+-- balance del agente -- ese es todo el punto de separar el rakeback pendiente del stock físico.
+-- Tipo de movimiento propio (en vez de reusar 'PAGO', que SIEMPRE resta del balance -- ver
+-- deltaParaBalance en repo/ledger.ts) para que quede sin ambigüedad en el ledger, y para que
+-- Revertir/Eliminar funcionen solos sin casos especiales (deltaParaBalance le da delta 0).
+ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
+ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
+  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK'));
+
 -- Historial de esta rakeback pendiente -- mismo patrón que carga_cruce_movements/
 -- rakeback_advance_movements. ALTA se crea sola al aplicar el cierre (ver repo/closings.ts);
 -- PAGO_FICHAS/PAGO_USDT se generan al pagarla (ver repo/rakebackPendiente.ts), cada uno con su

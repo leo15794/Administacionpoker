@@ -149,6 +149,12 @@ function deltaParaBalance(type: string, amount: number, esDestinoDeTransferencia
     case "AJUSTE":
     case "CIERRE_SEMANAL":
       return amount; // el signo ya viene resuelto por el motor de cierre / el caso de uso
+    case "PAGO_RAKEBACK":
+      // Pago financiero (USDT/efectivo/Zelle) de un rakeback pendiente -- nunca toca el
+      // stock/balance del agente (eso es lo que registra rakeback_pendiente aparte). A
+      // propósito NO es lo mismo que "PAGO", que siempre resta del balance -- ver
+      // repo/rakebackPendiente.ts.
+      return 0;
     case "TRANSFERENCIA_ENTRE_CLUBES":
       return esDestinoDeTransferencia ? Math.abs(amount) : -Math.abs(amount);
     default:

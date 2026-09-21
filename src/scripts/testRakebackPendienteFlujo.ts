@@ -52,10 +52,18 @@ async function esperarError(desc: string, fn: () => Promise<any>) {
   }
 }
 
-async function limpiar(agentId: string | null, clubId: string | null) {
+async function limpiar(agentId: string, clubId: string) {
   if (!agentId || !clubId) return;
   await pool.query(`DELETE FROM rakeback_pendiente_movements WHERE agent_id = $1`, [agentId]);
   await pool.query(`DELETE FROM rakeback_pendiente WHERE agent_id = $1`, [agentId]);
+  // Un pago en FICHAS crea una carga_pendientes_cruce que referencia el movimiento (ver
+  // repo/ledger.ts) -- hay que borrarla ANTES del ledger_movements o la FK lo rechaza (bug
+  // encontrado el 22/09/2026 corriendo este mismo test).
+  await pool.query(
+    `DELETE FROM carga_cruce_movements WHERE carga_id IN (SELECT id FROM carga_pendientes_cruce WHERE agent_id = $1)`,
+    [agentId]
+  );
+  await pool.query(`DELETE FROM carga_pendientes_cruce WHERE agent_id = $1`, [agentId]);
   await pool.query(`DELETE FROM treasury_entries WHERE movement_id IN (SELECT id FROM ledger_movements WHERE agent_id = $1)`, [agentId]);
   await pool.query(`DELETE FROM ledger_movements WHERE agent_id = $1`, [agentId]);
   await pool.query(`DELETE FROM balances WHERE agent_id = $1`, [agentId]);
