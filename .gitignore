@@ -7,3 +7,4 @@ web/dist
 web/.env
 .vercel
 web/.vercel
+recalculo-stock-cierres-dry-run.csv
