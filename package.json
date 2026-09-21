@@ -23,6 +23,8 @@
     "import:wallet": "tsx src/scripts/importWalletHistorial.ts",
     "test:cierre": "tsx src/engine/__test__.ts",
     "recalcular:stock": "tsx src/scripts/recalcularStockCierres.ts",
+    "test:rakeback-flujo": "tsx src/scripts/testRakebackPendienteFlujo.ts",
+    "test:rakeback-flujo:run": "tsx src/scripts/testRakebackPendienteFlujo.ts --run",
     "diagnostico:cajerouy": "tsx src/scripts/diagnosticoCajerouyRevertido.ts"
   },
   "dependencies": {
