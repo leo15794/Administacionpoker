@@ -34,11 +34,17 @@ export interface BancadoEstado {
 export interface BancadoOrigen {
   resultadoMesas: number;
   rakeTotal: number;
+  // Ticket promocional (21/09/2026): un regalo que le hacemos a un jugador bancado, pagado por
+  // DigiPlayers -- NO por el bancado. Se resta solo de gananciaBancaMesas (nuestra parte); no
+  // toca pagoJugadorTotal, makeup ni capital -- al bancado le queda todo exactamente igual que
+  // si el ticket no hubiera existido.
+  ticketPromocional?: number;
 }
 
 export interface BancadoCierreCalculado {
   resultadoMesas: number;
   rakeTotal: number;
+  ticketPromocional: number;
   rakebackTotal: number;
   makeupAnterior: number;
   perdidaAgregaMakeup: number;
@@ -87,7 +93,10 @@ export function calcularCierreBancado(
   // Rakeback Banca: % independiente sobre el rake total (no depende de si hubo pérdida o
   // ganancia en mesas, ni del makeup) — se suma directo como ganancia real de la banca.
   const rakebackBancaTotal = Math.max(0, origen.rakeTotal * cfg.rakebackBancaPct);
-  const gananciaBancaMesas = gananciaBancaMesasPuras + rakebackBancaTotal;
+  const ticketPromocional = origen.ticketPromocional ?? 0;
+  // El ticket sale de nuestro bolsillo, no del bancado -- se resta ACA, sobre lo que nos queda
+  // a nosotros, despues de calcular su parte real (que no se toca).
+  const gananciaBancaMesas = gananciaBancaMesasPuras + rakebackBancaTotal - ticketPromocional;
 
   // Puramente informativo — nunca mueve plata, solo para ver cuánto le corresponde reclamar a
   // la Unión sobre el rake total de esta semana.
@@ -103,6 +112,7 @@ export function calcularCierreBancado(
   return {
     resultadoMesas: redondear(resultado),
     rakeTotal: redondear(origen.rakeTotal),
+    ticketPromocional: redondear(ticketPromocional),
     rakebackTotal: redondear(rakebackTotal),
     makeupAnterior: redondear(makeupAnterior),
     perdidaAgregaMakeup: redondear(perdidaAgregaMakeup),

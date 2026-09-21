@@ -480,6 +480,11 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
   const [weekEnd, setWeekEnd] = useState("");
   const [resultadoMesas, setResultadoMesas] = useState("0");
   const [rakeTotal, setRakeTotal] = useState("0");
+  // Ticket promocional (21/09/2026): regalo a este jugador pagado por DigiPlayers, no por el
+  // bancado -- resta solo de nuestra ganancia (ver engine/bancados.ts). Nota obligatoria si el
+  // monto no es 0, misma convencion que el resto de ajustes manuales del sistema.
+  const [ticketPromocional, setTicketPromocional] = useState("0");
+  const [ticketPromocionalNota, setTicketPromocionalNota] = useState("");
   const [observacionesCierre, setObservacionesCierre] = useState("");
   const [previa, setPrevia] = useState<any | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -558,7 +563,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
     setErrorCierre(null);
     setPrevia(null);
     try {
-      const r = await api.previsualizarCierreBancado(jugador.id, Number(resultadoMesas) || 0, Number(rakeTotal) || 0);
+      const r = await api.previsualizarCierreBancado(jugador.id, Number(resultadoMesas) || 0, Number(rakeTotal) || 0, Number(ticketPromocional) || 0);
       setPrevia(r.calc);
     } catch (err: any) {
       setErrorCierre(err.message || "No se pudo calcular.");
@@ -572,6 +577,10 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
       setErrorCierre("Cargá la semana (desde/hasta) antes de confirmar.");
       return;
     }
+    if ((Number(ticketPromocional) || 0) !== 0 && !ticketPromocionalNota.trim()) {
+      setErrorCierre("Cargá una nota para el ticket promocional (obligatoria si el monto no es 0).");
+      return;
+    }
     setCerrando(true);
     setErrorCierre(null);
     try {
@@ -581,6 +590,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
         weekEnd,
         resultadoMesas: Number(resultadoMesas) || 0,
         rakeTotal: Number(rakeTotal) || 0,
+        ticketPromocional: Number(ticketPromocional) || undefined,
+        ticketPromocionalNota: ticketPromocionalNota.trim() || undefined,
         observaciones: observacionesCierre || undefined,
       });
       if (r.alreadyApplied) {
@@ -589,6 +600,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
         setPrevia(null);
         setResultadoMesas("0");
         setRakeTotal("0");
+        setTicketPromocional("0");
+        setTicketPromocionalNota("");
         setObservacionesCierre("");
         cargarTodo();
         onCierreAplicado();
@@ -801,7 +814,20 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                 <label>Rake total (USD)</label>
                 <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); setPrevia(null); }} type="number" step="0.01" />
               </div>
+              <div className="field">
+                <label>Ticket promocional (opcional, USD)</label>
+                <input value={ticketPromocional} onChange={(e) => { setTicketPromocional(e.target.value); setPrevia(null); }} type="number" step="0.01" />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Regalo a este jugador pagado por nosotros (no por el bancado) — poné el monto en negativo. Resta solo de nuestra ganancia; no le cambia nada al bancado (ni pago, ni makeup, ni capital).
+                </span>
+              </div>
             </div>
+            {(Number(ticketPromocional) || 0) !== 0 && (
+              <div className="field">
+                <label>Nota del ticket promocional (obligatoria)</label>
+                <input value={ticketPromocionalNota} onChange={(e) => { setTicketPromocionalNota(e.target.value); setPrevia(null); }} placeholder="Ej: ticket promocional torneo X" />
+              </div>
+            )}
             <div className="field">
               <label>Observaciones (opcional)</label>
               <input value={observacionesCierre} onChange={(e) => setObservacionesCierre(e.target.value)} />
@@ -831,7 +857,10 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   <tr><td>RB excedente para jugador</td><td>{usd(previa.rakebackExcedenteJugador)}</td></tr>
                   <tr><td><strong>Pago total jugador</strong></td><td><strong>{usd(previa.pagoJugadorTotal)}</strong></td></tr>
                   <tr><td>Rakeback Banca</td><td>{usd(previa.rakebackBancaTotal)}</td></tr>
-                  <tr><td><strong>Ganancia banca (mesas + Rakeback Banca)</strong></td><td><strong>{usd(previa.gananciaBancaMesas)}</strong></td></tr>
+                  {Number(previa.ticketPromocional) !== 0 && (
+                    <tr><td>Ticket promocional (a nuestro cargo)</td><td style={{ color: "var(--danger, #e5484d)" }}>-{usd(previa.ticketPromocional)}</td></tr>
+                  )}
+                  <tr><td><strong>Ganancia banca (mesas + Rakeback Banca{Number(previa.ticketPromocional) !== 0 ? " − ticket" : ""})</strong></td><td><strong>{usd(previa.gananciaBancaMesas)}</strong></td></tr>
                   <tr><td className="muted">% Unión sobre este rake (informativo)</td><td className="muted">{usd(previa.unionShareTotal)}</td></tr>
                   <tr><td>Capital después</td><td>{usd(previa.capitalDespues)}</td></tr>
                 </tbody>

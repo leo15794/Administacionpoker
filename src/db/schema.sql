@@ -653,6 +653,11 @@ CREATE INDEX IF NOT EXISTS bancado_historial_player_idx ON bancado_historial(pla
 ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_pagado_at TIMESTAMPTZ;
 ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS wallet_movement_id TEXT;
 
+-- Ticket promocional (21/09/2026, ver engine/bancados.ts) -- regalo a un jugador bancado pagado
+-- por DigiPlayers: resta solo de ganancia_banca_mesas, nunca del pago/capital/makeup del bancado.
+ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS ticket_promocional NUMERIC(18,4) NOT NULL DEFAULT 0;
+ALTER TABLE bancado_historial ADD COLUMN IF NOT EXISTS ticket_promocional_nota TEXT;
+
 -- ============ COMPENSACIÓN DE JUAN — cierres de socio ruteados a cuenta de socio (15/09/2026) ============
 -- Juan es socio/jefe de la operación, no un agente común: sus cierres semanales de póker (y otros
 -- movimientos) no le forman un "balance" propio en la tabla balances — mueven su deuda/saldo

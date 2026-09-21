@@ -362,14 +362,18 @@ export const api = {
     }
   ) => request(`/bancados/config/${playerId}`, { method: "PUT", body: JSON.stringify(data) }),
   bancadoEstado: (playerId: string) => request(`/bancados/estado/${playerId}`),
-  previsualizarCierreBancado: (playerId: string, resultadoMesas: number, rakeTotal: number) =>
-    request(`/bancados/previsualizar`, { method: "POST", body: JSON.stringify({ playerId, resultadoMesas, rakeTotal }) }),
+  previsualizarCierreBancado: (playerId: string, resultadoMesas: number, rakeTotal: number, ticketPromocional?: number) =>
+    request(`/bancados/previsualizar`, { method: "POST", body: JSON.stringify({ playerId, resultadoMesas, rakeTotal, ticketPromocional }) }),
   cerrarCierreBancado: (data: {
     playerId: string;
     weekStart: string;
     weekEnd: string;
     resultadoMesas: number;
     rakeTotal: number;
+    // Ticket promocional (21/09/2026): regalo a un jugador bancado pagado por nosotros -- resta
+    // solo de nuestra ganancia (gananciaBancaMesas), nunca del bancado. Nota obligatoria si no es 0.
+    ticketPromocional?: number;
+    ticketPromocionalNota?: string;
     observaciones?: string;
   }) => request(`/bancados/cerrar`, { method: "POST", body: JSON.stringify(data) }),
   // Recarga/ajuste manual de capital (monto negativo = descuento) — para cuando el jugador

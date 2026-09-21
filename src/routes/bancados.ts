@@ -60,6 +60,7 @@ const origenSchema = z.object({
   playerId: z.string().min(1),
   resultadoMesas: z.number(),
   rakeTotal: z.number(),
+  ticketPromocional: z.number().optional(),
 });
 bancadosRouter.post("/previsualizar", requireAuth, requireAdmin, async (req, res) => {
   const parsed = origenSchema.safeParse(req.body);
@@ -68,6 +69,7 @@ bancadosRouter.post("/previsualizar", requireAuth, requireAdmin, async (req, res
     const r = await previsualizarCierreBancado(parsed.data.playerId, {
       resultadoMesas: parsed.data.resultadoMesas,
       rakeTotal: parsed.data.rakeTotal,
+      ticketPromocional: parsed.data.ticketPromocional,
     });
     res.json(r);
   } catch (err: any) {
@@ -81,6 +83,11 @@ const cerrarSchema = z.object({
   weekEnd: z.string(),
   resultadoMesas: z.number(),
   rakeTotal: z.number(),
+  // Ticket promocional (21/09/2026): regalo pagado por DigiPlayers, no por el bancado -- ver
+  // repo/bancados.ts CierreBancadoInput y engine/bancados.ts. La nota es obligatoria del lado
+  // del frontend si el monto no es 0 (misma convencion que el ajuste manual de Cierres.tsx).
+  ticketPromocional: z.number().optional(),
+  ticketPromocionalNota: z.string().nullable().optional(),
   observaciones: z.string().optional(),
 });
 bancadosRouter.post("/cerrar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {

@@ -197,6 +197,10 @@ export interface CierreBancadoInput {
   weekEnd: string;
   resultadoMesas: number;
   rakeTotal: number;
+  // Ticket promocional (21/09/2026, ver engine/bancados.ts BancadoOrigen) -- opcional, requiere
+  // nota si el monto no es 0 (se valida del lado del frontend, igual que el resto de ajustes).
+  ticketPromocional?: number;
+  ticketPromocionalNota?: string | null;
   observaciones?: string | null;
   createdBy?: string | null;
 }
@@ -236,10 +240,12 @@ export async function previsualizarCierreBancado(playerId: string, origen: Banca
   return { calc, player, cfg };
 }
 
+
 export async function cerrarCierreBancado(input: CierreBancadoInput) {
   const { calc, config, player } = await prepararCalculo(input.playerId, {
     resultadoMesas: input.resultadoMesas,
     rakeTotal: input.rakeTotal,
+    ticketPromocional: input.ticketPromocional,
   });
 
   const existing = await pool.query(
@@ -259,8 +265,9 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
        rakeback_a_makeup, rakeback_excedente_jugador, makeup_nuevo, pago_jugador_mesas,
        pago_jugador_total, ganancia_banca_mesas, rakeback_banca_total, rakeback_banca_pct_snapshot,
        union_share_total, union_share_pct_snapshot, capital_anterior, capital_despues,
-       pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by
-     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
+       pct_jugador_snapshot, pct_banca_snapshot, rakeback_pct_snapshot, observaciones, created_by,
+       ticket_promocional, ticket_promocional_nota
+     ) VALUES ($1,$2,$3,$4,'CIERRE_SEMANAL',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`,
     [
       id,
       input.playerId,
@@ -290,6 +297,8 @@ export async function cerrarCierreBancado(input: CierreBancadoInput) {
       config.rakeback_pct,
       input.observaciones ?? null,
       input.createdBy ?? null,
+      calc.ticketPromocional,
+      input.ticketPromocionalNota ?? null,
     ]
   );
 
