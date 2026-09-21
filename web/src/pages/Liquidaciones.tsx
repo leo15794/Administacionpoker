@@ -550,7 +550,7 @@ export default function Liquidaciones() {
                           setCrucesCarga((prev) => {
                             const next = { ...prev };
                             if (e.target.checked) {
-                              next[cg.id] = Math.min(cg.pendiente, disponibleParaCruzar);
+                              next[cg.id] = cg.pendiente;
                             } else {
                               delete next[cg.id];
                             }
