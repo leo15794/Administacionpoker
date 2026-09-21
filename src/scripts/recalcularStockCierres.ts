@@ -147,8 +147,12 @@ async function main() {
   }
 
   // Agregado por agente+club: cuánto tendría que salir de su balance en total.
+  // Las filas con inconsistencia (ej. el movimiento ya está REVERTIDO) NO entran en los
+  // totales -- el monto guardado ahí no es confiable para calcular cuánto corregir. Quedan
+  // solo en el detalle de "Inconsistencias" de arriba para revisar a mano.
   const porAgenteClub = new Map<string, { agente: string; club: string; total: number }>();
   for (const f of filas) {
+    if (f.inconsistencia) continue;
     if (!f.montoLedgerActual && f.montoLedgerActual !== 0) continue;
     const key = `${f.agentName}||${f.clubName}`;
     const prev = porAgenteClub.get(key) ?? { agente: f.agentName, club: f.clubName, total: 0 };
@@ -157,12 +161,16 @@ async function main() {
   }
   const porSupervisor = new Map<string, { supervisor: string; total: number }>();
   for (const f of filas) {
+    if (f.inconsistencia) continue;
     if (!f.supervisorName || Math.abs(f.pendienteSupervisor) < 0.005) continue;
     const prev = porSupervisor.get(f.supervisorName) ?? { supervisor: f.supervisorName, total: 0 };
     prev.total += f.pendienteSupervisor;
     porSupervisor.set(f.supervisorName, prev);
   }
 
+  if (inconsistentes.length) {
+    console.log(`(los ${inconsistentes.length} cierre(s) con inconsistencia de arriba quedan afuera de los totales de abajo -- revisalos a mano)\n`);
+  }
   console.log("── Total a mover del balance a rakeback pendiente, por agente+club ──");
   let totalGeneral = 0;
   for (const { agente, club, total } of [...porAgenteClub.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total))) {
