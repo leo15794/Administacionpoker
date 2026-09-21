@@ -118,6 +118,19 @@ export default function Liquidaciones() {
   const [crucesCarga, setCrucesCarga] = useState<Record<string, number>>({}); // cargaId -> monto a cruzar
   const [aplicadoCarga, setAplicadoCarga] = useState<number>(0);
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
+  // Enviar/Recibir (21/09/2026): registra el pago/cobro real contra la wallet, reusando el
+  // movimiento CARGA... no, PAGO/COBRO que ya existe en Movimientos -- acá elegimos con qué
+  // agente+club de la liquidación se cruza (puede ser multi-agente) y el medio de pago, igual
+  // que en "Cargar movimiento". Es una acción aparte de "Guardar en historial": se puede enviar
+  // sin guardar y guardar sin enviar.
+  const [movAbierto, setMovAbierto] = useState<"PAGO" | "COBRO" | null>(null);
+  const [movAgenteClub, setMovAgenteClub] = useState("");
+  const [movMonto, setMovMonto] = useState("");
+  const [movMetodo, setMovMetodo] = useState("SIN_TESORERIA");
+  const [movCustodio, setMovCustodio] = useState("");
+  const [movObservacion, setMovObservacion] = useState("");
+  const [registrandoMov, setRegistrandoMov] = useState(false);
+  const [movMsg, setMovMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [nota, setNota] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -179,6 +192,8 @@ export default function Liquidaciones() {
         setCruces({});
         setCrucesCarga({});
         setGuardado(false);
+        setMovAbierto(null);
+        setMovMsg(null);
         if (!preservarAplicado) {
           setAplicado(0);
           setAplicadoCarga(0);
@@ -205,6 +220,45 @@ export default function Liquidaciones() {
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
   const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado - aplicadoCarga - totalCruzadoCarga : 0);
+
+  function abrirMov(tipo: "PAGO" | "COBRO") {
+    setMovAbierto(tipo);
+    setMovMsg(null);
+    setMovMonto(Math.abs(totalAPagar).toFixed(2));
+    if (data && data.filas.length > 0) {
+      setMovAgenteClub(`${data.filas[0].agentId}|${data.filas[0].clubId}`);
+    }
+  }
+
+  async function registrarMov() {
+    if (!movAbierto || !movAgenteClub) return;
+    const [agentId, clubId] = movAgenteClub.split("|");
+    const monto = Number(movMonto);
+    if (!(monto > 0)) return setMovMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
+    if (movMetodo === "EFECTIVO" && !movCustodio.trim()) {
+      return setMovMsg({ ok: false, text: "Un movimiento en efectivo requiere custodio (BIT-051/052)." });
+    }
+    setRegistrandoMov(true);
+    setMovMsg(null);
+    try {
+      await api.crearMovimiento({
+        type: movAbierto,
+        agentId,
+        clubId,
+        amount: monto,
+        paymentMethod: movMetodo,
+        custodian: movMetodo === "EFECTIVO" ? movCustodio.trim() : undefined,
+        occurredAt: new Date().toISOString(),
+        observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+      });
+      setMovMsg({ ok: true, text: `${movAbierto === "PAGO" ? "Pago" : "Cobro"} registrado y aplicado al ledger.` });
+      setMovObservacion("");
+    } catch (err: any) {
+      setMovMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
+    } finally {
+      setRegistrandoMov(false);
+    }
+  }
 
   async function aplicarCruces() {
     const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
@@ -565,6 +619,81 @@ export default function Liquidaciones() {
                 <span className={totalAPagar >= 0 ? "pos" : "neg"}>{usd(totalAPagar)}</span>
               </div>
             </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button type="button" className="btn" onClick={() => abrirMov("PAGO")}>
+                Enviar (pagarle al agente)
+              </button>
+              <button type="button" className="btn" onClick={() => abrirMov("COBRO")}>
+                Recibir (el agente nos debe)
+              </button>
+            </div>
+
+            {movAbierto && (
+              <div className="panel" style={{ marginTop: 10, maxWidth: 460 }}>
+                <h4 style={{ marginTop: 0 }}>
+                  {movAbierto === "PAGO" ? "Registrar pago al agente" : "Registrar cobro al agente"}
+                </h4>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                  Esto registra un movimiento real de {movAbierto === "PAGO" ? "PAGO" : "COBRO"} contra la
+                  wallet (mismo efecto que cargarlo en "Cargar movimiento"). Es independiente de
+                  "Guardar en historial": podés enviar/recibir sin guardar, o guardar sin enviar.
+                </div>
+                <div className="field">
+                  <label>Agente + club</label>
+                  <select value={movAgenteClub} onChange={(e) => setMovAgenteClub(e.target.value)}>
+                    {data.filas.map((f: any) => (
+                      <option key={`${f.agentId}|${f.clubId}`} value={`${f.agentId}|${f.clubId}`}>
+                        {f.agentName} — {f.clubName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Importe (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={movMonto}
+                    onChange={(e) => setMovMonto(e.target.value)}
+                    style={{ width: 150 }}
+                  />
+                </div>
+                <div className="field">
+                  <label>Medio de pago</label>
+                  <select value={movMetodo} onChange={(e) => setMovMetodo(e.target.value)}>
+                    <option value="SIN_TESORERIA">Sin tesorería (interno)</option>
+                    <option value="USDT">USDT</option>
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="ZELLE">Zelle</option>
+                    <option value="OTRO">Otro</option>
+                  </select>
+                </div>
+                {movMetodo === "EFECTIVO" && (
+                  <div className="field">
+                    <label>Custodio del efectivo</label>
+                    <input value={movCustodio} onChange={(e) => setMovCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+                  </div>
+                )}
+                <div className="field">
+                  <label>Observación (opcional)</label>
+                  <input
+                    value={movObservacion}
+                    onChange={(e) => setMovObservacion(e.target.value)}
+                    placeholder={`Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim()}
+                  />
+                </div>
+                {movMsg && <div className={movMsg.ok ? "success" : "error"}>{movMsg.text}</div>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" className="btn" disabled={registrandoMov} onClick={registrarMov}>
+                    {registrandoMov ? "Registrando..." : movAbierto === "PAGO" ? "Confirmar pago" : "Confirmar cobro"}
+                  </button>
+                  <button type="button" className="btn secondary" onClick={() => setMovAbierto(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div style={{ marginTop: 14 }}>
               <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
