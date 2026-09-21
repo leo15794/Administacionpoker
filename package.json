@@ -22,7 +22,8 @@
     "alta:adelanto-prodigio": "tsx src/scripts/altaAdelantoProdigio.ts",
     "import:wallet": "tsx src/scripts/importWalletHistorial.ts",
     "test:cierre": "tsx src/engine/__test__.ts",
-    "recalcular:stock": "tsx src/scripts/recalcularStockCierres.ts"
+    "recalcular:stock": "tsx src/scripts/recalcularStockCierres.ts",
+    "diagnostico:cajerouy": "tsx src/scripts/diagnosticoCajerouyRevertido.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
