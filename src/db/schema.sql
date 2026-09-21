@@ -393,6 +393,47 @@ CREATE TABLE IF NOT EXISTS carga_cruce_movements (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Rakeback pendiente (22/09/2026, pedido de Leo): el cierre semanal separa el resultado de
+-- mesas (Win/Lose -- lo único que mueve el stock físico/balance del agente automáticamente) de
+-- todo lo demás (rakeback, rebate, Rodeo, ajuste manual), que queda ACÁ como "pendiente de
+-- pago" hasta decidir cómo se salda: en fichas (mueve stock, movimiento CARGA), en USDT/efectivo
+-- (pago financiero real, movimiento PAGO, no toca stock) o dejarlo así. Un cierre normal genera
+-- UNA fila (role=AGENTE); si el club desvía el rebate a un supervisor (rebate_destino =
+-- RAKEBACK_SUPERVISOR), genera una SEGUNDA fila (role=SUPERVISOR) por ese rebate, a nombre del
+-- supervisor -- antes se acreditaba directo a su balance, ahora también queda pendiente.
+CREATE TABLE IF NOT EXISTS rakeback_pendiente (
+  id                TEXT PRIMARY KEY,
+  weekly_closing_id TEXT NOT NULL REFERENCES weekly_closings(id),
+  role              TEXT NOT NULL DEFAULT 'AGENTE' CHECK (role IN ('AGENTE','SUPERVISOR')),
+  agent_id          TEXT NOT NULL REFERENCES agents(id),
+  club_id           TEXT NOT NULL REFERENCES clubs(id),
+  amount            NUMERIC(18,4) NOT NULL,
+  consumed          NUMERIC(18,4) NOT NULL DEFAULT 0,
+  active            BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (weekly_closing_id, role)
+);
+
+-- Historial de esta rakeback pendiente -- mismo patrón que carga_cruce_movements/
+-- rakeback_advance_movements. ALTA se crea sola al aplicar el cierre (ver repo/closings.ts);
+-- PAGO_FICHAS/PAGO_USDT se generan al pagarla (ver repo/rakebackPendiente.ts), cada uno con su
+-- propio movement_id de ledger_movements para poder rastrear el pago real; BAJA cuando se
+-- revierte/borra el cierre que la originó.
+CREATE TABLE IF NOT EXISTS rakeback_pendiente_movements (
+  id                  TEXT PRIMARY KEY,
+  pendiente_id        TEXT NOT NULL REFERENCES rakeback_pendiente(id),
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA')),
+  amount              NUMERIC(18,4) NOT NULL,
+  resulting_amount    NUMERIC(18,4) NOT NULL,
+  resulting_consumed  NUMERIC(18,4) NOT NULL,
+  movement_id         TEXT REFERENCES ledger_movements(id),
+  notes               TEXT,
+  created_by          TEXT,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),

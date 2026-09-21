@@ -201,32 +201,12 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     }
 
     const id = newId("wc");
-    let supervisorMovementId: string | null = null;
-
-    if (supervisorAgentId) {
-      supervisorMovementId = newId("mov");
-      await client.query(
-        `INSERT INTO ledger_movements
-          (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
-         VALUES ($1,$2,'AJUSTE',$3,$4,$5,'APLICADO',$6,$7)`,
-        [
-          supervisorMovementId,
-          `cierre_supervisor:${input.agentId}:${input.clubId}:${input.weekStart}`,
-          input.clubId,
-          supervisorAgentId,
-          montoSupervisor,
-          input.weekEnd,
-          `Rakeback centralizado de supervisor por cierre semanal ${input.weekStart} al ${input.weekEnd} (agente id ${input.agentId}).`,
-        ]
-      );
-      await client.query(
-        `INSERT INTO balances (id, agent_id, club_id, amount, updated_at)
-         VALUES ($1,$2,$3,$4, now())
-         ON CONFLICT (agent_id, club_id)
-         DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
-        [newId("bal"), supervisorAgentId, input.clubId, montoSupervisor]
-      );
-    }
+    // Rakeback pendiente (22/09/2026, pedido de Leo): el rebate desviado a un supervisor ya NO
+    // se acredita directo a su balance -- queda pendiente de pago (fichas/USDT), igual que el
+    // resto del rakeback/rebate/rodeo/ajuste del agente (ver más abajo, después de insertar
+    // weekly_closings). supervisorMovementId queda siempre null en cierres nuevos: se conserva
+    // la columna solo por compatibilidad con cierres viejos ya cargados.
+    const supervisorMovementId: string | null = null;
 
     await client.query(
       `INSERT INTO weekly_closings
@@ -275,7 +255,12 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       ]
     );
 
-    // El cierre final se refleja como movimiento en el ledger (no se edita balances a mano).
+    // Rakeback pendiente (22/09/2026): el stock físico/balance del agente SOLO se mueve
+    // automáticamente por el resultado de mesas (Win/Lose) -- rakeback, rebate, Rodeo y ajuste
+    // manual quedan pendientes de pago (ver bloque nuevo debajo), nunca entran acá. Antes esto
+    // usaba montoAgente (el cierre económico completo), mezclando fichas físicas con comisiones
+    // -- pedido explícito de Leo (22/09/2026) para separarlos.
+    const montoStock = calc.result;
     await client.query(
       `INSERT INTO ledger_movements
         (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
@@ -285,12 +270,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         `cierre:${input.agentId}:${input.clubId}:${input.weekStart}`,
         input.clubId,
         input.agentId,
-        montoAgente,
+        montoStock,
         input.weekEnd,
-        `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
+        `Cierre semanal ${input.weekStart} al ${input.weekEnd} (Win/Lose de mesas — el rakeback/rebate/Rodeo queda pendiente de pago aparte)` +
           (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
-          (calc.rodeo ? ` — incluye Rodeo: ${calc.rodeo}.` : "") +
-          (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback de supervisor.` : ""),
+          (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback pendiente de supervisor.` : ""),
       ]
     );
 
@@ -299,8 +283,43 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
        VALUES ($1,$2,$3,$4, now())
        ON CONFLICT (agent_id, club_id)
        DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
-      [newId("bal"), input.agentId, input.clubId, montoAgente]
+      [newId("bal"), input.agentId, input.clubId, montoStock]
     );
+
+    // Alta del rakeback pendiente del agente: todo lo que NO es Win/Lose (rakeback + rebate +
+    // Rodeo + ajuste manual, salvo el rebate desviado a supervisor, que va aparte abajo) --
+    // queda a la espera de decidir cómo se paga (fichas, USDT, o se deja así). montoAgente ya
+    // excluye el rebate cuando hay supervisor (ver arriba), así que esta resta da exactamente
+    // lo que falta para completar el cierre económico del agente.
+    const montoPendienteAgente = montoAgente - montoStock;
+    if (Math.abs(montoPendienteAgente) > 0.004) {
+      const pendienteAgenteId = newId("rp");
+      await client.query(
+        `INSERT INTO rakeback_pendiente (id, weekly_closing_id, role, agent_id, club_id, amount, consumed, active)
+         VALUES ($1,$2,'AGENTE',$3,$4,$5,0,true)`,
+        [pendienteAgenteId, id, input.agentId, input.clubId, montoPendienteAgente]
+      );
+      await client.query(
+        `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
+         VALUES ($1,$2,$3,'ALTA',$4,$4,0,$5,$6)`,
+        [newId("rpm"), pendienteAgenteId, input.agentId, montoPendienteAgente, `Cierre semanal ${input.weekStart} al ${input.weekEnd}.`, null]
+      );
+    }
+    // Alta del rakeback pendiente del supervisor (si el rebate de este cierre se desvía) --
+    // antes se acreditaba directo a su balance, ahora también queda pendiente de pago.
+    if (supervisorAgentId && Math.abs(montoSupervisor) > 0.004) {
+      const pendienteSupervisorId = newId("rp");
+      await client.query(
+        `INSERT INTO rakeback_pendiente (id, weekly_closing_id, role, agent_id, club_id, amount, consumed, active)
+         VALUES ($1,$2,'SUPERVISOR',$3,$4,$5,0,true)`,
+        [pendienteSupervisorId, id, supervisorAgentId, input.clubId, montoSupervisor]
+      );
+      await client.query(
+        `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
+         VALUES ($1,$2,$3,'ALTA',$4,$4,0,$5,$6)`,
+        [newId("rpm"), pendienteSupervisorId, supervisorAgentId, montoSupervisor, `Rakeback centralizado por cierre de ${input.weekStart} al ${input.weekEnd} (agente id ${input.agentId}).`, null]
+      );
+    }
 
     // Comisión por referido de supervisor (16/09/2026): si ESTE agente (el que se está
     // cerrando) tiene un referidor activo cargado, se acredita automáticamente su % sobre el
@@ -597,6 +616,28 @@ export async function revertirCierreSemanal(closingId: string, motivo?: string, 
     return { found: true, id: closingId };
   }
 
+  // Rakeback pendiente (22/09/2026): este cierre pudo haber generado 1 o 2 filas de rakeback
+  // pendiente (agente y, si corresponde, supervisor) -- si todavía no se pagó nada, se dan de
+  // baja acá (BAJA); si ya se pagó algo, se bloquea la reversión (misma regla que las cargas de
+  // tesorería) para no dejar un pago real hecho sobre un cierre que ya no existe.
+  const pendientesRes = await pool.query(
+    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = $1 AND active = true`,
+    [closingId]
+  );
+  for (const p of pendientesRes.rows) {
+    if (Number(p.consumed) > 0) {
+      throw new Error(
+        `Este cierre tiene rakeback pendiente ya pagado (${p.role === "SUPERVISOR" ? "del supervisor" : "del agente"}) -- no se puede revertir sin corregir primero ese pago.`
+      );
+    }
+    await pool.query(`UPDATE rakeback_pendiente SET active = false, updated_at = now() WHERE id = $1`, [p.id]);
+    await pool.query(
+      `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes)
+       VALUES ($1,$2,$3,'BAJA',0,$4,0,$5)`,
+      [newId("rpm"), p.id, p.agent_id, p.amount, motivo ? `Reversión de cierre: ${motivo}` : "Reversión de cierre."]
+    );
+  }
+
   const movRes = await pool.query(
     `SELECT id FROM ledger_movements
      WHERE agent_id = $1 AND club_id = $2 AND type = 'CIERRE_SEMANAL' AND occurred_at::date = $3::date AND status <> 'REVERTIDO'`,
@@ -738,12 +779,18 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
     // que sumó aplicarCierreSemanal, con el signo invertido, aplicado directo (sin generar
     // ningún movimiento de reversa: se está por borrar todo, no tiene sentido dejar un rastro).
     if (!yaRevertido) {
+      const movAmountRes = movId ? await client.query(`SELECT amount FROM ledger_movements WHERE id = $1`, [movId]) : null;
+      const montoStockOriginal = movAmountRes?.rows[0] ? Number(movAmountRes.rows[0].amount) : Number(wc.final_closing);
       await client.query(
         `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
          ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
-        [newId("bal"), wc.agent_id, wc.club_id, -Number(wc.final_closing)]
+        [newId("bal"), wc.agent_id, wc.club_id, -montoStockOriginal]
       );
-      if (wc.supervisor_agent_id) {
+      // Legacy: cierres de antes del rakeback pendiente (22/09/2026) acreditaban el rebate
+      // desviado directo al balance del supervisor -- si este cierre es de esa época, deshacerlo
+      // también. En formato nuevo (supervisor_movement_id null) el rebate quedó como rakeback
+      // pendiente, y se borra más abajo junto con el resto.
+      if (wc.supervisor_agent_id && wc.supervisor_movement_id) {
         await client.query(
           `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
            ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
@@ -769,6 +816,24 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
       for (const rm of refMovActivo.rows) {
         await client.query(`UPDATE supervisor_referidos SET saldo = saldo - $1, updated_at = now() WHERE id = $2`, [rm.amount, rm.referido_id]);
       }
+    }
+
+    // Rakeback pendiente (22/09/2026): borrado real de cualquier fila que este cierre haya
+    // generado (agente y/o supervisor) -- bloqueado si ya se pagó algo (mismo criterio que
+    // eliminarCarga en repo/cargaCruces.ts).
+    const pendientesRes = await client.query(`SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = $1`, [closingId]);
+    for (const p of pendientesRes.rows) {
+      if (Number(p.consumed) > 0) {
+        await client.query("ROLLBACK");
+        throw new Error(
+          `Este cierre tiene rakeback pendiente ya pagado (${p.role === "SUPERVISOR" ? "del supervisor" : "del agente"}) -- no se puede borrar sin corregir primero ese pago.`
+        );
+      }
+    }
+    if (pendientesRes.rows.length > 0) {
+      const pendienteIds = pendientesRes.rows.map((p: any) => p.id);
+      await client.query(`DELETE FROM rakeback_pendiente_movements WHERE pendiente_id = ANY($1::text[])`, [pendienteIds]);
+      await client.query(`DELETE FROM rakeback_pendiente WHERE id = ANY($1::text[])`, [pendienteIds]);
     }
 
     // Borra del todo el rastro de comisión de referido de este cierre (tanto la acreditación

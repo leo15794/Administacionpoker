@@ -216,6 +216,15 @@ export const api = {
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
+
+  // Rakeback pendiente (22/09/2026): lo que un cierre semanal genera además del Win/Lose
+  // (rakeback, rebate, Rodeo, ajuste manual) -- ver repo/rakebackPendiente.ts.
+  rakebackPendiente: () => request("/rakeback-pendiente"),
+  pagarRakebackPendiente: (data: { pendienteId: string; amount: number; medio: "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE"; custodian?: string; notes?: string }) =>
+    request("/rakeback-pendiente/pagar", { method: "POST", body: JSON.stringify(data) }),
+  darDeBajaRakebackPendiente: (id: string, notes?: string) =>
+    request(`/rakeback-pendiente/${id}/baja`, { method: "POST", body: JSON.stringify({ notes }) }),
+  eliminarRakebackPendiente: (id: string) => request(`/rakeback-pendiente/${id}`, { method: "DELETE" }),
   // Borra UN movimiento puntual (solo el más reciente de su adelanto) — para corregir pruebas
   // sin tener que eliminar el adelanto entero. Ver nota en repo/advances.ts.
   eliminarMovimientoAdelanto: (movementId: string) => request(`/advances/movimientos/${movementId}`, { method: "DELETE" }),

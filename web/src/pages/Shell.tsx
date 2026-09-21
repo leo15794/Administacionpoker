@@ -60,6 +60,11 @@ const icon = {
       <path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
     </svg>
   ),
+  rakebackPendiente: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+    </svg>
+  ),
   cuenta: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -164,6 +169,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "plata" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "plata" },
   { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "plata" },
+  { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "plata" },
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "plata" },
   { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período", group: "plata" },
   { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "plata" },

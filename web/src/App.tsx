@@ -11,6 +11,7 @@ import ResumenFinanciero from "./pages/ResumenFinanciero";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Adelantos from "./pages/Adelantos";
+import RakebackPendiente from "./pages/RakebackPendiente";
 import CuentasSocios from "./pages/CuentasSocios";
 import GananciasPorPeriodo from "./pages/GananciasPorPeriodo";
 import Liquidaciones from "./pages/Liquidaciones";
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="wallet" element={<Wallet />} />
           <Route path="garantias" element={<Garantias />} />
           <Route path="adelantos" element={<Adelantos />} />
+          <Route path="rakeback-pendiente" element={<RakebackPendiente />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />
           <Route path="ganancias-por-periodo" element={<GananciasPorPeriodo />} />
           <Route path="liquidaciones" element={<Liquidaciones />} />
