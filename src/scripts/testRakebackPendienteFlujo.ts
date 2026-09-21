@@ -156,7 +156,7 @@ async function main() {
     ok(`Balance sigue en 0 tras pagar 300 en USDT (obtuvo ${saldo3})`, Math.abs(saldo3 - 0) < 0.01);
 
     const treasuryRes = await pool.query(
-      `SELECT te.* FROM treasury_entries te JOIN ledger_movements m ON m.id = te.movement_id WHERE m.agent_id = $1 AND m.type = 'PAGO'`,
+      `SELECT te.* FROM treasury_entries te JOIN ledger_movements m ON m.id = te.movement_id WHERE m.agent_id = $1 AND m.type = 'PAGO_RAKEBACK'`,
       [agentId]
     );
     ok("El pago en USDT generó su entrada de tesorería (EGRESO)", treasuryRes.rows.length === 1 && treasuryRes.rows[0].direction === "EGRESO");
