@@ -264,17 +264,36 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     paresAgenteClub.has(`${cp.agent_id}|${cp.club_id}`)
   );
 
-  const filas = closings.rows.map((c) => ({
-    clubId: c.club_id,
-    clubName: c.club_name,
-    agentId: c.agent_id,
-    agentName: c.agent_name,
-    resultado: Number(c.result),
-    rakeTotal: Number(c.rake_total),
-    rakebackBruto: Number(c.rakeback),
-    rebate: Number(c.rebate),
-    rakebackNeto: Number(c.rakeback) + Number(c.rebate),
-  }));
+  // Rakeback pendiente (22/09/2026, pedido de Leo: "no podemos generar el rakeback desde
+  // liquidaciones?"): cada cierre nuevo (post-separación stock/pendiente) tiene su propia fila
+  // en rakeback_pendiente -- se trae acá para que "Enviar" pueda pagarla de verdad (con medio
+  // Fichas/USDT/Efectivo/Zelle) en vez de un PAGO genérico que no sabía nada de esto. Un cierre
+  // viejo (de antes de esa separación) no tiene fila acá -- rakebackPendienteId queda null y el
+  // frontend cae al comportamiento viejo (PAGO/COBRO genérico) para esos casos.
+  const closingIds = closings.rows.map((c) => c.id);
+  const pendientesRes = await pool.query(
+    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = ANY($1::text[]) AND role = 'AGENTE' AND active = true`,
+    [closingIds]
+  );
+  const pendientePorCierre = new Map(pendientesRes.rows.map((p) => [p.weekly_closing_id, p]));
+
+  const filas = closings.rows.map((c) => {
+    const pendiente = pendientePorCierre.get(c.id);
+    return {
+      weeklyClosingId: c.id,
+      clubId: c.club_id,
+      clubName: c.club_name,
+      agentId: c.agent_id,
+      agentName: c.agent_name,
+      resultado: Number(c.result),
+      rakeTotal: Number(c.rake_total),
+      rakebackBruto: Number(c.rakeback),
+      rebate: Number(c.rebate),
+      rakebackNeto: Number(c.rakeback) + Number(c.rebate),
+      rakebackPendienteId: pendiente ? pendiente.id : null,
+      rakebackPendienteDisponible: pendiente ? Number(pendiente.amount) - Number(pendiente.consumed) : null,
+    };
+  });
   const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);
 
   res.json({

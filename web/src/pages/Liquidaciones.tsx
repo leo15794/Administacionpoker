@@ -254,13 +254,35 @@ export default function Liquidaciones() {
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
   const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado - aplicadoCarga - totalCruzadoCarga : 0);
 
+  function montoSugeridoParaFila(f: any) {
+    // Si la fila tiene rakeback pendiente propio, ese es el monto correcto a sugerir (es lo que
+    // ESE cierre generó de rakeback/rebate, no el total de toda la liquidación, que puede
+    // combinar varios agentes/clubes). Si no tiene (cierre viejo, sin migrar), se cae al total
+    // de la liquidación como hacía antes.
+    if (f && f.rakebackPendienteId && f.rakebackPendienteDisponible !== null) {
+      return Math.max(0, Number(f.rakebackPendienteDisponible)).toFixed(2);
+    }
+    return Math.abs(totalAPagar).toFixed(2);
+  }
+
   function abrirMov(tipo: "PAGO" | "COBRO") {
     setMovAbierto(tipo);
     setMovMsg(null);
-    setMovMonto(Math.abs(totalAPagar).toFixed(2));
-    if (data && data.filas.length > 0) {
-      setMovAgenteClub(`${data.filas[0].agentId}|${data.filas[0].clubId}`);
+    const primeraFila = data && data.filas.length > 0 ? data.filas[0] : null;
+    setMovMonto(tipo === "PAGO" ? montoSugeridoParaFila(primeraFila) : Math.abs(totalAPagar).toFixed(2));
+    setMovMetodo(tipo === "PAGO" && primeraFila?.rakebackPendienteId ? "FICHAS" : "SIN_TESORERIA");
+    if (primeraFila) {
+      setMovAgenteClub(`${primeraFila.agentId}|${primeraFila.clubId}`);
     }
+  }
+
+  function cambiarFilaMov(valor: string) {
+    setMovAgenteClub(valor);
+    if (movAbierto !== "PAGO") return;
+    const [agentId, clubId] = valor.split("|");
+    const fila = data?.filas.find((f: any) => f.agentId === agentId && f.clubId === clubId);
+    setMovMonto(montoSugeridoParaFila(fila));
+    setMovMetodo(fila?.rakebackPendienteId ? "FICHAS" : "SIN_TESORERIA");
   }
 
   async function registrarMov() {
@@ -271,21 +293,47 @@ export default function Liquidaciones() {
     if (movMetodo === "EFECTIVO" && !movCustodio.trim()) {
       return setMovMsg({ ok: false, text: "Un movimiento en efectivo requiere custodio (BIT-051/052)." });
     }
+    const filaSeleccionada = data?.filas.find((f: any) => f.agentId === agentId && f.clubId === clubId);
+
     setRegistrandoMov(true);
     setMovMsg(null);
     try {
-      await api.crearMovimiento({
-        type: movAbierto,
-        agentId,
-        clubId,
-        amount: monto,
-        paymentMethod: movMetodo,
-        custodian: movMetodo === "EFECTIVO" ? movCustodio.trim() : undefined,
-        occurredAt: new Date().toISOString(),
-        observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
-      });
-      setMovMsg({ ok: true, text: `${movAbierto === "PAGO" ? "Pago" : "Cobro"} registrado y aplicado al ledger.` });
+      // Rakeback pendiente (22/09/2026): si esta fila tiene su propia fila de rakeback
+      // pendiente (cierre nuevo, post-separación stock/pendiente), "Enviar" paga DIRECTO contra
+      // esa fila -- Fichas mueve el stock (CARGA), USDT/Efectivo/Zelle no (PAGO_RAKEBACK) -- en
+      // vez de un PAGO genérico que restaba del stock sin saber que existía este pendiente
+      // (bug real que encontró Leo el 22/09/2026 con triunfoepico). "Recibir" (el agente nos
+      // debe) y los cierres viejos sin migrar siguen con el movimiento genérico de antes.
+      if (movAbierto === "PAGO" && filaSeleccionada?.rakebackPendienteId) {
+        await api.pagarRakebackPendiente({
+          pendienteId: filaSeleccionada.rakebackPendienteId,
+          amount: monto,
+          medio: movMetodo as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
+          custodian: movMetodo === "EFECTIVO" ? movCustodio.trim() : undefined,
+          notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+        });
+        setMovMsg({ ok: true, text: "Rakeback pendiente pagado." });
+      } else {
+        await api.crearMovimiento({
+          type: movAbierto,
+          agentId,
+          clubId,
+          amount: monto,
+          paymentMethod: movMetodo,
+          custodian: movMetodo === "EFECTIVO" ? movCustodio.trim() : undefined,
+          occurredAt: new Date().toISOString(),
+          observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+        });
+        setMovMsg({ ok: true, text: `${movAbierto === "PAGO" ? "Pago" : "Cobro"} registrado y aplicado al ledger.` });
+      }
       setMovObservacion("");
+      // Refresca los datos (rakebackPendienteDisponible actualizado) sin resetear el resto del
+      // estado de la liquidación en curso -- a propósito no usa refrescarLiquidacion(), que
+      // limpia el mensaje que se acaba de mostrar arriba.
+      if (seleccionados.length > 0 && weekStart) {
+        const dataActualizada = await api.liquidacion(seleccionados, weekStart);
+        setData(dataActualizada);
+      }
     } catch (err: any) {
       setMovMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
     } finally {
@@ -494,6 +542,7 @@ export default function Liquidaciones() {
                 <th>Rakeback bruto</th>
                 <th>Rebate</th>
                 <th>Rakeback neto</th>
+                <th>Rakeback pendiente</th>
                 <th>Ventas</th>
                 <th>Tickets</th>
               </tr>
@@ -510,6 +559,9 @@ export default function Liquidaciones() {
                     <td>{usd(f.rakebackBruto)}</td>
                     <td>{usd(f.rebate)}</td>
                     <td><strong>{usd(f.rakebackNeto)}</strong></td>
+                    <td className="muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
+                      {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
+                    </td>
                     <td>
                       <input
                         type="number"
@@ -553,6 +605,7 @@ export default function Liquidaciones() {
                 <td></td>
                 <td></td>
                 <td>{usd(data.total)}</td>
+                <td>{usd(data.filas.reduce((s: number, f: any) => s + (f.rakebackPendienteId ? Number(f.rakebackPendienteDisponible) : 0), 0))}</td>
                 <td>{usd(totalVentasFilas)}</td>
                 <td>{usd(totalTicketsFilas)}</td>
               </tr>
@@ -755,7 +808,7 @@ export default function Liquidaciones() {
                 </div>
                 <div className="field">
                   <label>Agente + club</label>
-                  <select value={movAgenteClub} onChange={(e) => setMovAgenteClub(e.target.value)}>
+                  <select value={movAgenteClub} onChange={(e) => cambiarFilaMov(e.target.value)}>
                     {data.filas.map((f: any) => (
                       <option key={`${f.agentId}|${f.clubId}`} value={`${f.agentId}|${f.clubId}`}>
                         {f.agentName} — {f.clubName}
@@ -763,6 +816,18 @@ export default function Liquidaciones() {
                     ))}
                   </select>
                 </div>
+                {(() => {
+                  const [agentIdSel, clubIdSel] = movAgenteClub.split("|");
+                  const filaSel = data.filas.find((f: any) => f.agentId === agentIdSel && f.clubId === clubIdSel);
+                  if (movAbierto !== "PAGO" || !filaSel?.rakebackPendienteId) return null;
+                  return (
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                      Esta fila tiene <strong>{usd(filaSel.rakebackPendienteDisponible)}</strong> de rakeback
+                      pendiente sin pagar. Esto va a pagar directo contra esa fila: "Fichas" mueve el stock
+                      físico del agente, USDT/Efectivo/Zelle es un pago financiero que no lo toca.
+                    </div>
+                  );
+                })()}
                 <div className="field">
                   <label>Importe (USD)</label>
                   <input
@@ -776,11 +841,27 @@ export default function Liquidaciones() {
                 <div className="field">
                   <label>Medio de pago</label>
                   <select value={movMetodo} onChange={(e) => setMovMetodo(e.target.value)}>
-                    <option value="SIN_TESORERIA">Sin tesorería (interno)</option>
-                    <option value="USDT">USDT</option>
-                    <option value="EFECTIVO">Efectivo</option>
-                    <option value="ZELLE">Zelle</option>
-                    <option value="OTRO">Otro</option>
+                    {(() => {
+                      const [agentIdSel, clubIdSel] = movAgenteClub.split("|");
+                      const filaSel = data.filas.find((f: any) => f.agentId === agentIdSel && f.clubId === clubIdSel);
+                      const esPagoDeRakebackPendiente = movAbierto === "PAGO" && !!filaSel?.rakebackPendienteId;
+                      return esPagoDeRakebackPendiente ? (
+                        <>
+                          <option value="FICHAS">Fichas (mueve el stock físico)</option>
+                          <option value="USDT">USDT</option>
+                          <option value="EFECTIVO">Efectivo</option>
+                          <option value="ZELLE">Zelle</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="SIN_TESORERIA">Sin tesorería (interno)</option>
+                          <option value="USDT">USDT</option>
+                          <option value="EFECTIVO">Efectivo</option>
+                          <option value="ZELLE">Zelle</option>
+                          <option value="OTRO">Otro</option>
+                        </>
+                      );
+                    })()}
                   </select>
                 </div>
                 {movMetodo === "EFECTIVO" && (
