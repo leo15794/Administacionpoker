@@ -75,19 +75,23 @@ async function main() {
       continue; // ya tiene su fila de rakeback_pendiente -- cierre nuevo, formato correcto.
     }
 
+    // OJO: la idempotency_key "cierre:agente:club:semana" se puede repetir en más de una fila
+    // si esa semana se revirtió y se volvió a cerrar (el revertido nunca se borra, ver ledger
+    // inmutable) -- por eso acá SIEMPRE hay que filtrar por status='APLICADO' para quedarse con
+    // el movimiento vigente, nunca con `rows[0]` a secas (bug encontrado el 22/09/2026 con el
+    // caso cajerouy/Fénix Suprema: sin el filtro, el REVERTIDO podía venir primero).
     const movRes = await pool.query(
-      `SELECT * FROM ledger_movements WHERE idempotency_key = $1`,
+      `SELECT * FROM ledger_movements WHERE idempotency_key = $1 AND status = 'APLICADO'`,
       [`cierre:${wc.agent_id}:${wc.club_id}:${wc.week_start}`]
     );
     const mov = movRes.rows[0];
 
     let inconsistencia: string | null = null;
     let montoLedgerActual: number | null = null;
-    if (!mov) {
-      inconsistencia = "No se encontró el movimiento CIERRE_SEMANAL en el ledger (dato viejo/inconsistente) -- revisar a mano.";
-    } else if (mov.status !== "APLICADO") {
-      inconsistencia = `El movimiento del ledger tiene status ${mov.status} (no APLICADO) -- probablemente ya se revirtió por otro lado.`;
-      montoLedgerActual = Number(mov.amount);
+    if (movRes.rows.length > 1) {
+      inconsistencia = `Hay ${movRes.rows.length} movimientos CIERRE_SEMANAL activos (APLICADO) con la misma idempotency_key -- no debería pasar, revisar a mano.`;
+    } else if (!mov) {
+      inconsistencia = "No se encontró un movimiento CIERRE_SEMANAL activo (APLICADO) en el ledger para este cierre -- revisar a mano.";
     } else {
       montoLedgerActual = Number(mov.amount);
     }
