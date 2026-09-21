@@ -289,6 +289,87 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
   }
 }
 
+/**
+ * Borrado real de un movimiento cargado por error (ej. de prueba) -- a diferencia de
+ * revertirMovimiento (LEDGER INMUTABLE: nunca borra, genera una reversa y marca el original
+ * como REVERTIDO), esto lo saca del todo: deshace su efecto en los balances, borra su
+ * treasury_entry si tenía, y borra la fila. Pensado SOLO para limpiar cargas de prueba o mal
+ * tipeadas -- para corregir un movimiento de negocio real ya asentado usar "Revertir".
+ *
+ * Limitado al ÚLTIMO movimiento (no revertido) de ese agente+club, mismo criterio que
+ * eliminarMovimientoAdelanto en repo/advances.ts: borrar uno del medio dejaría el balance
+ * corriente calculado sobre un orden de movimientos que ya no es el real.
+ */
+export async function eliminarMovimiento(movementId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const r = await client.query(`SELECT * FROM ledger_movements WHERE id = $1 FOR UPDATE`, [movementId]);
+    const mov = r.rows[0];
+    if (!mov) throw new Error("No se encontró ese movimiento.");
+    if (mov.status === "REVERTIDO") {
+      throw new Error("Este movimiento ya está revertido -- no hace falta (ni se puede) borrarlo también.");
+    }
+    if (mov.type === "CIERRE_SEMANAL") {
+      throw new Error("Un cierre semanal no se borra desde acá -- usá la opción de revertir cierre en Cierres.");
+    }
+    if (mov.refs && mov.refs.length > 0) {
+      throw new Error("Este movimiento es la reversa de otro (generado por \"Revertir\") -- borrarlo dejaría el original mal marcado. No se puede eliminar.");
+    }
+
+    const ultimoOrigen = await client.query(
+      `SELECT id FROM ledger_movements WHERE agent_id = $1 AND club_id = $2 AND status <> 'REVERTIDO'
+       ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.agent_id, mov.club_id]
+    );
+    if (ultimoOrigen.rows[0]?.id !== movementId) {
+      throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE de este agente+club -- borralos en orden, del más nuevo hacia atrás.");
+    }
+    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
+      const ultimoDestino = await client.query(
+        `SELECT id FROM ledger_movements WHERE agent_id = $1 AND club_id = $2 AND status <> 'REVERTIDO'
+         ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+        [mov.agent_id, mov.club_destino_id]
+      );
+      if (ultimoDestino.rows[0]?.id !== movementId) {
+        throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE también en el club destino de la transferencia.");
+      }
+    }
+
+    // Si es una CARGA que ya se cruzó (parcial o totalmente) en una liquidación, bloquear --
+    // borrarla dejaría esa liquidación con plata "fantasma" ya descontada de un pago real.
+    if (mov.type === "CARGA") {
+      const cargaRes = await client.query(`SELECT * FROM carga_pendientes_cruce WHERE movement_id = $1`, [movementId]);
+      const carga = cargaRes.rows[0];
+      if (carga && Number(carga.consumed) > 0) {
+        throw new Error("Esta carga ya se cruzó (parcial o totalmente) en una liquidación guardada -- corregí esa liquidación antes de borrar el movimiento.");
+      }
+      if (carga) {
+        await client.query(`DELETE FROM carga_cruce_movements WHERE carga_id = $1`, [carga.id]);
+        await client.query(`DELETE FROM carga_pendientes_cruce WHERE id = $1`, [carga.id]);
+      }
+    }
+
+    const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
+    await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaOrigen);
+    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
+      const deltaDestino = deltaParaBalance(mov.type, Number(mov.amount), true);
+      await upsertBalanceDelta(client, mov.agent_id, mov.club_destino_id, -deltaDestino);
+    }
+
+    await client.query(`DELETE FROM treasury_entries WHERE movement_id = $1`, [movementId]);
+    await client.query(`DELETE FROM ledger_movements WHERE id = $1`, [movementId]);
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listMovementsByAgent(agentId: string, limit = 200) {
   const r = await pool.query(
     `SELECT m.*, c.name as club_name FROM ledger_movements m JOIN clubs c ON c.id = m.club_id

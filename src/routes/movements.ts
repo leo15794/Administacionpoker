@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { registrarMovimiento, revertirMovimiento } from "../repo/ledger.js";
+import { registrarMovimiento, revertirMovimiento, eliminarMovimiento } from "../repo/ledger.js";
 import { aplicarCierreSemanal, revertirCierreSemanal, eliminarCierreSemanalDefinitivo, eliminarCierresSemanaDefinitivo } from "../repo/closings.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 
@@ -159,6 +159,18 @@ movementsRouter.delete("/:id", requireAuth, requireAdmin, async (req: AuthedRequ
     const result = await revertirMovimiento(req.params.id, motivo, req.user?.email ?? null);
     if (!result.found) return res.status(404).json({ error: "Movimiento no encontrado" });
     res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real de un movimiento (ej. cargado de prueba) -- a diferencia de la ruta de arriba
+// (que revierte y preserva el ledger inmutable), esto lo saca del todo. Solo el último
+// movimiento del agente+club, y bloqueado si es una CARGA ya cruzada (ver repo/ledger.ts).
+movementsRouter.delete("/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await eliminarMovimiento(req.params.id);
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

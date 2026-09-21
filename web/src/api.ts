@@ -119,6 +119,9 @@ export const api = {
   // historial marcado como revertido y se genera un movimiento/ajuste opuesto.
   revertirMovimiento: (id: string, motivo?: string) =>
     request(`/movements/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
+  // Borrado real (no reversa) -- solo para el último movimiento de ese agente+club. Ver nota
+  // en repo/ledger.ts (eliminarMovimiento).
+  eliminarMovimiento: (id: string) => request(`/movements/${id}/definitivo`, { method: "DELETE" }),
   revertirAjusteTesoreria: (id: string, motivo?: string) =>
     request(`/dashboard/tesoreria/ajuste/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
   revertirCierre: (id: string, motivo?: string) =>

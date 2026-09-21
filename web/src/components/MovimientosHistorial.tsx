@@ -20,10 +20,11 @@ function truncar(texto: string, max = 140) {
 }
 
 export default function MovimientosHistorial({ agentId, clubId }: { agentId?: string; clubId?: string }) {
-  const { alertDialog, promptDialog } = useConfirmDialog();
+  const { alertDialog, promptDialog, confirmDialog } = useConfirmDialog();
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   const [borrando, setBorrando] = useState<string | null>(null);
+  const [eliminando, setEliminando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
@@ -46,6 +47,22 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
       await alertDialog(err.message || "No se pudo revertir el movimiento.");
     } finally {
       setBorrando(null);
+    }
+  }
+
+  // Borrado real (no reversa) -- solo el último movimiento de ese agente+club, y bloqueado si
+  // es una CARGA ya cruzada en una liquidación (el backend valida todo esto, ver
+  // repo/ledger.ts). Pensado para sacar un movimiento de prueba, no para corregir uno real.
+  async function onEliminar(r: any) {
+    if (!(await confirmDialog(`¿Eliminar este movimiento de ${TIPO_LABEL[r.type] ?? r.type} por ${usd(r.amount)}? A diferencia de "Revertir", esto lo borra del todo -- no queda en el historial. Solo funciona si es el último movimiento cargado para ese agente+club. No se puede deshacer.`))) return;
+    setEliminando(r.id);
+    try {
+      await api.eliminarMovimiento(r.id);
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar el movimiento.");
+    } finally {
+      setEliminando(null);
     }
   }
 
@@ -95,7 +112,7 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
               <td>{r.club_name}{r.club_destino_name ? ` → ${r.club_destino_name}` : ""}</td>
               <td><span className={`badge ${Number(r.amount) > 0 ? "pos" : Number(r.amount) < 0 ? "neg" : "neutral"}`}>{usd(r.amount)}</span></td>
               <td className="muted" style={{ fontSize: 12 }} title={r.observation || undefined}>{r.observation ? truncar(r.observation) : "—"}</td>
-              <td>
+              <td style={{ display: "flex", gap: 6 }}>
                 {r.status !== "REVERTIDO" && (
                   <button
                     className="btn secondary small"
@@ -104,6 +121,17 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
                     title="Revertir movimiento (genera un ajuste opuesto, no borra nada)"
                   >
                     {borrando === r.id ? "..." : "Revertir"}
+                  </button>
+                )}
+                {r.status !== "REVERTIDO" && (!r.refs || r.refs.length === 0) && (
+                  <button
+                    className="btn secondary small"
+                    disabled={eliminando === r.id}
+                    onClick={() => onEliminar(r)}
+                    title="Borrado real -- no queda en el historial. Solo funciona si es el último movimiento de ese agente+club (ej. para sacar una carga de prueba)."
+                    style={{ color: "var(--danger, #e5484d)" }}
+                  >
+                    {eliminando === r.id ? "..." : "Eliminar"}
                   </button>
                 )}
               </td>
