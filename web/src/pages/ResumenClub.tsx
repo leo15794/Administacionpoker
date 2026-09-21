@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import { ClubPicker } from "../components/ClubPicker";
 
 /**
  * "Resumen por club" — reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion
@@ -296,14 +297,13 @@ export default function ResumenClub() {
 
   return (
     <div>
-      <div className="topbar" style={{ marginBottom: 14 }}>
+      <div className="topbar" style={{ marginBottom: 14, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0 }}>Resumen por club</h2>
-        <div style={{ display: "flex", gap: 10 }}>
-          <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
-            {clubes.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+      </div>
+      <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+        <ClubPicker clubes={clubes} value={clubId} onChange={setClubId} />
+        <div className="field" style={{ margin: 0, minWidth: 240 }}>
+          <label>Semana</label>
           <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)}>
             {semanas.length === 0 && <option value="">Sin cierres cargados</option>}
             {semanas.map((s) => (
