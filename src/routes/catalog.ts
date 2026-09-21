@@ -27,6 +27,7 @@ import {
   setJugadorBancado,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
+import { listCargasPendientesPorAgentes, consumirCarga } from "../repo/cargaCruces.js";
 import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -254,6 +255,15 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     [agentIds]
   );
 
+  // Cargas de tesorería pendientes (21/09/2026): a diferencia de los adelantos (por agente
+  // nomás), estas son por agente+club — solo tiene sentido cruzar acá la carga de un club que
+  // efectivamente forma parte de ESTA liquidación (si un agente tiene una carga pendiente en un
+  // club que no está en esta tanda, no se muestra: se cruzará cuando se liquide ESE club).
+  const paresAgenteClub = new Set(closings.rows.map((c) => `${c.agent_id}|${c.club_id}`));
+  const cargasPendientes = (await listCargasPendientesPorAgentes(agentIds)).filter((cp) =>
+    paresAgenteClub.has(`${cp.agent_id}|${cp.club_id}`)
+  );
+
   const filas = closings.rows.map((c) => ({
     clubId: c.club_id,
     clubName: c.club_name,
@@ -281,7 +291,39 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       consumed: Number(a.consumed),
       pendiente: Number(a.amount) - Number(a.consumed),
     })),
+    cargas: cargasPendientes.map((cp) => ({
+      id: cp.id,
+      agentName: cp.agent_name,
+      clubName: cp.club_name,
+      amount: Number(cp.amount),
+      consumed: Number(cp.consumed),
+      pendiente: Number(cp.amount) - Number(cp.consumed),
+    })),
   });
+});
+
+// Cruza (consume) una carga de tesorería pendiente contra el rakeback de una liquidación —
+// mismo efecto que POST /advances/ajuste con type CONSUMO, pero sobre carga_pendientes_cruce en
+// vez de rakeback_advances (ver repo/cargaCruces.ts).
+const ajusteCargaSchema = z.object({
+  cargaId: z.string(),
+  amount: z.number().positive(),
+  notes: z.string().optional(),
+});
+catalogRouter.post("/liquidacion/carga/consumir", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = ajusteCargaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const carga = await consumirCarga({
+      cargaId: parsed.data.cargaId,
+      amount: parsed.data.amount,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(carga);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Guarda una FOTO congelada de una liquidación ya armada (filas, totales, nota) para que quede
@@ -296,6 +338,7 @@ const guardarLiquidacionSchema = z.object({
   total: z.number(),
   adelantosAplicados: z.number().default(0),
   adelantosManual: z.number().default(0),
+  cargasAplicadas: z.number().default(0),
   totalAPagar: z.number(),
   nota: z.string().nullable().optional(),
 });
@@ -306,8 +349,8 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
   const d = parsed.data;
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, total_a_pagar, nota, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [
       newId("liq"),
       d.nombreGrupo,
@@ -318,6 +361,7 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
       d.total,
       d.adelantosAplicados,
       d.adelantosManual,
+      d.cargasAplicadas,
       d.totalAPagar,
       d.nota ?? null,
       req.user?.email ?? null,

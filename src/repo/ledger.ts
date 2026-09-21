@@ -99,6 +99,26 @@ export async function registrarMovimiento(input: NewMovement) {
       await upsertBalanceDelta(client, input.agentId, input.clubDestinoId, deltaParaBalance(input.type, input.amount, true));
     }
 
+    // Carga de tesorería (21/09/2026, pedido de Leo): un movimiento CARGA además de sumar al
+    // balance del agente (arriba) abre una "nota de crédito" pendiente de cruzar contra ese
+    // agente+club — mismo mecanismo que un adelanto de rakeback (amount/consumed), para poder
+    // descontarla después en Liquidaciones (ver repo/cargaCruces.ts). Independiente del método
+    // de pago (a diferencia de treasury_entries, que solo se genera con USDT/EFECTIVO/ZELLE).
+    if (input.type === "CARGA") {
+      const cargaId = newId("cpc");
+      const montoCarga = Math.abs(input.amount);
+      await client.query(
+        `INSERT INTO carga_pendientes_cruce (id, movement_id, agent_id, club_id, amount, consumed, active)
+         VALUES ($1,$2,$3,$4,$5,0,true)`,
+        [cargaId, movementId, input.agentId, input.clubId, montoCarga]
+      );
+      await client.query(
+        `INSERT INTO carga_cruce_movements (id, carga_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
+         VALUES ($1,$2,$3,'ALTA',$4,$4,0,$5,$6)`,
+        [newId("ccm"), cargaId, input.agentId, montoCarga, input.observation ?? null, input.createdBy ?? null]
+      );
+    }
+
     await client.query("COMMIT");
     return { id: movementId, alreadyApplied: false };
   } catch (err) {

@@ -521,6 +521,12 @@ export default function ResumenClub() {
                     {usd(resumen.ingresoPorVentas)}
                   </td>
                 </tr>
+                {Number(resumen.cargasTesoreriaTotal) !== 0 && (
+                  <tr>
+                    <td className="muted">Cargado en tesorería esta semana (informativo — se cruza en Liquidaciones)</td>
+                    <td className="muted">{usd(resumen.cargasTesoreriaTotal)}</td>
+                  </tr>
+                )}
                 <tr>
                   <td className="muted">Tasa semanal fija (Tasas)</td>
                   <td className={Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}>

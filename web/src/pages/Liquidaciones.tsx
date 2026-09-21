@@ -22,6 +22,7 @@ interface PdfInput {
   total: number;
   adelantosAplicados: number;
   adelantosManual: number;
+  cargasAplicadas: number;
   nota: string;
 }
 
@@ -37,7 +38,7 @@ async function generarPdf(input: PdfInput) {
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;
-  const totalDescontar = input.adelantosAplicados + input.adelantosManual;
+  const totalDescontar = input.adelantosAplicados + input.adelantosManual + input.cargasAplicadas;
   const totalAPagar = input.total - totalDescontar;
 
   doc.setFontSize(16);
@@ -112,6 +113,10 @@ export default function Liquidaciones() {
   const [data, setData] = useState<any>(null);
   const [cruces, setCruces] = useState<Record<string, number>>({}); // advanceId -> monto a cruzar (tildado, todavía sin aplicar)
   const [aplicado, setAplicado] = useState<number>(0); // suma de lo YA aplicado (consumido de verdad) en esta liquidación
+  // Cargas de tesorería pendientes (21/09/2026) -- mismo patrón que "cruces"/"aplicado" de
+  // arriba, pero contra carga_pendientes_cruce en vez de rakeback_advances (ver repo/cargaCruces.ts).
+  const [crucesCarga, setCrucesCarga] = useState<Record<string, number>>({}); // cargaId -> monto a cruzar
+  const [aplicadoCarga, setAplicadoCarga] = useState<number>(0);
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
   const [nota, setNota] = useState("");
   const [error, setError] = useState("");
@@ -172,9 +177,11 @@ export default function Liquidaciones() {
       .then((d) => {
         setData(d);
         setCruces({});
+        setCrucesCarga({});
         setGuardado(false);
         if (!preservarAplicado) {
           setAplicado(0);
+          setAplicadoCarga(0);
           setAdelantosManual(0);
           if (seleccionados.length === 1) setNota("");
         }
@@ -189,14 +196,15 @@ export default function Liquidaciones() {
   }, [seleccionados.join(","), weekStart]);
 
   const totalCruzado = Object.values(cruces).reduce((s, v) => s + (Number(v) || 0), 0);
+  const totalCruzadoCarga = Object.values(crucesCarga).reduce((s, v) => s + (Number(v) || 0), 0);
   // Lo que ya se descuenta de verdad: lo aplicado en rondas anteriores de esta misma
-  // liquidación + lo que está tildado ahora mismo (todavía sin aplicar) + el manual.
-  const totalDescontar = aplicado + totalCruzado + adelantosManual;
+  // liquidación + lo que está tildado ahora mismo (todavía sin aplicar, adelantos y cargas) + el manual.
+  const totalDescontar = aplicado + totalCruzado + aplicadoCarga + totalCruzadoCarga + adelantosManual;
   const totalAPagar = data ? data.total - totalDescontar : 0;
-  // Cuánto rakeback de esta semana queda todavía "libre" para cruzar contra un adelanto, sin
-  // contar más de lo que esta liquidación generó — no tiene sentido consumirle a un agente más
-  // adelanto del que este cierre efectivamente cubre; el resto queda pendiente para la próxima.
-  const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado : 0);
+  // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
+  // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
+  // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
+  const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado - aplicadoCarga - totalCruzadoCarga : 0);
 
   async function aplicarCruces() {
     const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
@@ -213,6 +221,30 @@ export default function Liquidaciones() {
         });
       }
       setAplicado((prev) => prev + totalCruzado);
+      refrescarLiquidacion(true);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo aplicar el cruce.");
+    } finally {
+      setAplicando(false);
+    }
+  }
+
+  // Mismo mecanismo que aplicarCruces() de arriba, pero para cargas de tesorería pendientes
+  // (ver repo/cargaCruces.ts) -- consumirCarga en vez de ajustarAdelanto CONSUMO.
+  async function aplicarCrucesCarga() {
+    const ids = Object.keys(crucesCarga).filter((id) => crucesCarga[id] > 0);
+    if (ids.length === 0) return;
+    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzadoCarga)} de ${ids.length} carga(s) de tesorería — esto las consume de verdad, no se puede deshacer desde acá. ¿Confirmás?`))) return;
+    setAplicando(true);
+    try {
+      for (const id of ids) {
+        await api.consumirCarga({
+          cargaId: id,
+          amount: crucesCarga[id],
+          notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+        });
+      }
+      setAplicadoCarga((prev) => prev + totalCruzadoCarga);
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
@@ -298,6 +330,7 @@ export default function Liquidaciones() {
                       total: data.total,
                       adelantosAplicados: aplicado + totalCruzado,
                       adelantosManual,
+                      cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
                       totalAPagar,
                       nota,
                     });
@@ -328,6 +361,7 @@ export default function Liquidaciones() {
                       total: data.total,
                       adelantosAplicados: aplicado + totalCruzado,
                       adelantosManual,
+                      cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
                       nota,
                     });
                   } catch (err: any) {
@@ -442,6 +476,65 @@ export default function Liquidaciones() {
               </div>
             )}
 
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              <h3 style={{ marginTop: 0 }}>Cruzar cargas de tesorería pendientes</h3>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Fichas/USD que ya se le cargaron a este agente en este club (ver "Cargar Movimiento", tipo CARGA) y todavía
+                no se descontaron de ninguna liquidación.
+              </div>
+              {data.cargas.length === 0 ? (
+                <div className="muted">Sin cargas de tesorería pendientes para estos agentes/clubes.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {data.cargas.map((cg: any) => (
+                    <label key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={cg.id in crucesCarga}
+                        onChange={(e) => {
+                          setGuardado(false);
+                          setCrucesCarga((prev) => {
+                            const next = { ...prev };
+                            if (e.target.checked) {
+                              next[cg.id] = Math.min(cg.pendiente, disponibleParaCruzar);
+                            } else {
+                              delete next[cg.id];
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                      <span style={{ minWidth: 260 }}>
+                        {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
+                      </span>
+                      {cg.id in crucesCarga && (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          max={cg.pendiente}
+                          value={crucesCarga[cg.id]}
+                          onChange={(e) => {
+                            setGuardado(false);
+                            setCrucesCarga((prev) => ({ ...prev, [cg.id]: Math.min(Number(e.target.value) || 0, cg.pendiente) }));
+                          }}
+                          style={{ width: 110, textAlign: "right" }}
+                        />
+                      )}
+                    </label>
+                  ))}
+                  <div>
+                    <button className="btn secondary small" disabled={totalCruzadoCarga <= 0 || aplicando} onClick={aplicarCrucesCarga} style={{ marginTop: 8 }}>
+                      {aplicando ? "Aplicando..." : `Aplicar cruce (${usd(totalCruzadoCarga)})`}
+                    </button>
+                    <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
+                      Esto consume de verdad la carga (no se puede deshacer desde acá).
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ marginTop: 16 }}>
               <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
                 Adicional manual a descontar (ej. adelanto todavía no registrado en el sistema)
@@ -464,7 +557,7 @@ export default function Liquidaciones() {
                 <span>{usd(data.total)}</span>
               </div>
               <div className="topbar" style={{ margin: 0 }}>
-                <span className="muted">Adelantos a descontar</span>
+                <span className="muted">Adelantos + cargas a descontar</span>
                 <span>-{usd(totalDescontar)}</span>
               </div>
               <div className="topbar" style={{ margin: 0, fontWeight: 700, fontSize: 16, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
@@ -513,7 +606,7 @@ export default function Liquidaciones() {
                   <td>{h.nombre_grupo}</td>
                   <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
                   <td>{usd(h.total)}</td>
-                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual))}</td>
+                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0))}</td>
                   <td><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <button
@@ -528,6 +621,7 @@ export default function Liquidaciones() {
                           total: Number(h.total),
                           adelantosAplicados: Number(h.adelantos_aplicados),
                           adelantosManual: Number(h.adelantos_manual),
+                          cargasAplicadas: Number(h.cargas_aplicadas ?? 0),
                           nota: h.nota || "",
                         }).catch((err: any) => alertDialog(err.message || "No se pudo generar el PDF."))
                       }

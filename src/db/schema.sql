@@ -358,6 +358,41 @@ ALTER TABLE rakeback_advances ALTER COLUMN created_at SET NOT NULL;
 -- que guarantee_movements. CORRECCION (12/09/2026): para arreglar un error de carga (monto mal
 -- tipeado, etc.) dejando explícito en el historial que no fue un evento real de negocio, a
 -- diferencia de AUMENTO/REDUCCION.
+-- Cargas de tesoreria "pendientes de cruzar" (21/09/2026, pedido de Leo): un movimiento tipo
+-- CARGA (Cargar Movimiento) ademas de sumar al balance del agente y proyectar en tesoreria como
+-- siempre, abre aca una "nota de credito" contra ese agente+club -- mismo mecanismo que
+-- rakeback_advances (amount/consumed/active), pero por agente+club (no solo por agente, a
+-- diferencia de los adelantos) y con origen fijo en UN movimiento puntual (1 a 1), para poder
+-- cruzarla despues en Liquidaciones contra el rakeback que se le paga -- exactamente igual que
+-- ya se hace con los adelantos de rakeback.
+CREATE TABLE IF NOT EXISTS carga_pendientes_cruce (
+  id          TEXT PRIMARY KEY,
+  movement_id TEXT UNIQUE NOT NULL REFERENCES ledger_movements(id),
+  agent_id    TEXT NOT NULL REFERENCES agents(id),
+  club_id     TEXT NOT NULL REFERENCES clubs(id),
+  amount      NUMERIC(18,4) NOT NULL,
+  consumed    NUMERIC(18,4) NOT NULL DEFAULT 0,
+  active      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Historial de consumos de cada carga pendiente -- mismo criterio que rakeback_advance_movements.
+-- La ALTA se crea sola al registrar el movimiento CARGA (ver repo/ledger.ts); CONSUMO se agrega
+-- al cruzarla en Liquidaciones (ver repo/cargaCruces.ts).
+CREATE TABLE IF NOT EXISTS carga_cruce_movements (
+  id                  TEXT PRIMARY KEY,
+  carga_id            TEXT NOT NULL REFERENCES carga_pendientes_cruce(id),
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','CONSUMO')),
+  amount              NUMERIC(18,4) NOT NULL,
+  resulting_amount    NUMERIC(18,4) NOT NULL,
+  resulting_consumed  NUMERIC(18,4) NOT NULL,
+  notes               TEXT,
+  created_by          TEXT,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),
@@ -784,12 +819,16 @@ CREATE TABLE IF NOT EXISTS liquidaciones_guardadas (
   total                 NUMERIC(18,4) NOT NULL,
   adelantos_aplicados   NUMERIC(18,4) NOT NULL DEFAULT 0,
   adelantos_manual      NUMERIC(18,4) NOT NULL DEFAULT 0,
+  cargas_aplicadas      NUMERIC(18,4) NOT NULL DEFAULT 0,
   total_a_pagar         NUMERIC(18,4) NOT NULL,
   nota                  TEXT,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_by            TEXT
 );
 CREATE INDEX IF NOT EXISTS liquidaciones_guardadas_week_idx ON liquidaciones_guardadas(week_start DESC);
+-- cargas_aplicadas (21/09/2026): agregado despues de que la tabla ya existia en produccion --
+-- CREATE TABLE IF NOT EXISTS de arriba no la agrega sola en una base que ya la tenia creada.
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS cargas_aplicadas NUMERIC(18,4) NOT NULL DEFAULT 0;
 
 -- Un mismo login de portal ahora puede ver más de un agente/club (15/09/2026) — ej. una persona
 -- que tiene identidades separadas en varios clubes (mismo caso de fondo que Cuenta de socio de

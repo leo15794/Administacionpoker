@@ -54,6 +54,11 @@ export interface FilaAgenteResumenClub {
   // (lo suma/resta el motor, ver engine/cierre.ts) -- se expone aparte solo para mostrarlo como
   // renglón informativo en el resumen del club, igual que rodeoAgente.
   ajusteManual: number;
+  // Cargas de tesorería (21/09/2026, pedido de Leo): suma de los movimientos tipo CARGA de este
+  // agente en este club, cargados durante ESTA semana (ver Cargar Movimiento) -- puramente
+  // informativo, NUNCA entra en ningún cálculo de ganancia neta ni de cierre; se cruzan de
+  // verdad en Liquidaciones (ver repo/cargaCruces.ts), esto es solo para verlo acá también.
+  cargasTesoreria: number;
 }
 
 export interface ResumenClubSemanal {
@@ -80,6 +85,7 @@ export interface ResumenClubSemanal {
   jugadoresTotal: number | null;
   resultadoTotal: number;
   ajusteManualTotal: number;
+  cargasTesoreriaTotal: number;
 }
 
 export async function getResumenClubSemanal(clubId: string, weekStart: string): Promise<ResumenClubSemanal | null> {
@@ -103,6 +109,24 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     [clubId, weekStart]
   );
 
+  // Cargas de tesorería (21/09/2026): un mapa agentId -> total cargado ESTA semana en este
+  // club (movimientos tipo CARGA con occurred_at dentro de [weekStart, weekEnd] del primer
+  // cierre encontrado -- si todavía no hay ningún cierre cargado no hay weekEnd conocido, así
+  // que se salta esta consulta y queda todo en 0, igual que ya pasa con el resto del resumen).
+  const weekEndParaCargas: string | null = cierresRes.rows[0]?.week_end ?? null;
+  const cargasPorAgente = new Map<string, number>();
+  if (weekEndParaCargas) {
+    const cargasRes = await pool.query(
+      `SELECT agent_id, COALESCE(SUM(amount), 0) as total
+       FROM ledger_movements
+       WHERE club_id = $1 AND type = 'CARGA' AND status <> 'REVERTIDO'
+         AND occurred_at::date >= $2::date AND occurred_at::date <= $3::date
+       GROUP BY agent_id`,
+      [clubId, weekStart, weekEndParaCargas]
+    );
+    for (const row of cargasRes.rows) cargasPorAgente.set(row.agent_id, Number(row.total));
+  }
+
   const filas: FilaAgenteResumenClub[] = [];
   let rakeTotal = 0;
   let comisionesAgentes = 0;
@@ -115,6 +139,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   let jugadoresTotal: number | null = null;
   let resultadoTotal = 0;
   let ajusteManualTotal = 0;
+  let cargasTesoreriaTotal = 0;
   let weekEnd: string | null = null;
   for (const r of cierresRes.rows) {
     const rake = Number(r.rake_total);
@@ -140,6 +165,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
       gananciaPorRake: gananciaFila,
       cierreFinalAgente: Number(r.final_closing),
       ajusteManual: Number(r.ajuste_manual ?? 0),
+      cargasTesoreria: cargasPorAgente.get(r.agent_id) ?? 0,
     });
     rakeTotal += rake;
     comisionesAgentes += rakeback;
@@ -152,6 +178,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     if (r.jugadores !== null) jugadoresTotal = (jugadoresTotal ?? 0) + Number(r.jugadores);
     resultadoTotal += Number(r.result);
     ajusteManualTotal += Number(r.ajuste_manual ?? 0);
+    cargasTesoreriaTotal += cargasPorAgente.get(r.agent_id) ?? 0;
     if (!weekEnd) weekEnd = r.week_end;
   }
 
@@ -198,6 +225,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     jugadoresTotal,
     resultadoTotal,
     ajusteManualTotal,
+    cargasTesoreriaTotal,
   };
 }
 

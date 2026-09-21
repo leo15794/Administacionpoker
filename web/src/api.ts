@@ -94,6 +94,7 @@ export const api = {
     total: number;
     adelantosAplicados: number;
     adelantosManual: number;
+    cargasAplicadas: number;
     totalAPagar: number;
     nota?: string | null;
   }) => request("/catalog/liquidacion/guardar", { method: "POST", body: JSON.stringify(data) }),
@@ -203,6 +204,10 @@ export const api = {
     request("/advances/alta", { method: "POST", body: JSON.stringify(data) }),
   ajustarAdelanto: (data: { advanceId: string; type: "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),
+  // Cruce de cargas de tesorería pendientes contra una liquidación (21/09/2026) — mismo efecto
+  // que ajustarAdelanto CONSUMO, pero sobre carga_pendientes_cruce (ver repo/cargaCruces.ts).
+  consumirCarga: (data: { cargaId: string; amount: number; notes?: string }) =>
+    request("/catalog/liquidacion/carga/consumir", { method: "POST", body: JSON.stringify(data) }),
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),
