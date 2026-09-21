@@ -13,6 +13,14 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 // Todo en USD: weekly_closings ya guarda los montos convertidos con la tasa de esa semana, no
 // el monto en moneda local original, así que cualquier aclaración de conversión se agrega a
 // mano en la nota de abajo.
+// Ventas y tickets promocionales (21/09/2026): se cargan por FILA (agente+club), no para toda
+// la liquidación como el "Adicional manual" -- Leo necesita poder cargárselo a un solo agente
+// de la tanda, no a todos. Viajan pegados a cada objeto de `filas` (que ya se guarda como JSON
+// tal cual, sin columnas propias) para no tocar el schema.
+function filaKey(f: any): string {
+  return `${f.agentId}_${f.clubId}`;
+}
+
 interface PdfInput {
   nombreGrupo: string;
   weekStart: string;
@@ -23,6 +31,7 @@ interface PdfInput {
   adelantosAplicados: number;
   adelantosManual: number;
   cargasAplicadas: number;
+  ventasTickets: number;
   nota: string;
 }
 
@@ -38,7 +47,7 @@ async function generarPdf(input: PdfInput) {
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;
-  const totalDescontar = input.adelantosAplicados + input.adelantosManual + input.cargasAplicadas;
+  const totalDescontar = input.adelantosAplicados + input.adelantosManual + input.cargasAplicadas + input.ventasTickets;
   const totalAPagar = input.total - totalDescontar;
 
   doc.setFontSize(16);
@@ -49,7 +58,7 @@ async function generarPdf(input: PdfInput) {
   autoTable(doc, {
     startY: y,
     margin: { left: margen, right: margen },
-    head: [["Club", "Ganancias/Pérdidas", "Rake", "Rakeback bruto", "Rebate", "Rakeback neto"]],
+    head: [["Club", "Ganancias/Pérdidas", "Rake", "Rakeback bruto", "Rebate", "Rakeback neto", "Ventas", "Tickets"]],
     body: input.filas.map((f: any) => [
       input.multiAgente ? `${f.clubName} (${f.agentName})` : f.clubName,
       usd(f.resultado),
@@ -57,8 +66,13 @@ async function generarPdf(input: PdfInput) {
       usd(f.rakebackBruto),
       usd(f.rebate),
       usd(f.rakebackNeto),
+      usd(f.ventas || 0),
+      usd(f.tickets || 0),
     ]),
-    foot: [["TOTAL", "", "", "", "", usd(input.total)]],
+    foot: [["TOTAL", "", "", "", "", usd(input.total),
+      usd(input.filas.reduce((s: number, f: any) => s + (Number(f.ventas) || 0), 0)),
+      usd(input.filas.reduce((s: number, f: any) => s + (Number(f.tickets) || 0), 0)),
+    ]],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [40, 50, 90] },
     footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
@@ -73,8 +87,12 @@ async function generarPdf(input: PdfInput) {
   doc.setFont("helvetica", "normal");
   doc.text(`Rakeback / comisiones finales: ${usd(input.total)}`, margen, y);
   y += 6;
-  doc.text(`Adelantos a descontar: -${usd(totalDescontar)}`, margen, y);
+  doc.text(`Adelantos + cargas a descontar: -${usd(input.adelantosAplicados + input.adelantosManual + input.cargasAplicadas)}`, margen, y);
   y += 6;
+  if (input.ventasTickets !== 0) {
+    doc.text(`Ventas + tickets (por agente) a descontar: -${usd(input.ventasTickets)}`, margen, y);
+    y += 6;
+  }
   if (input.adelantosManual !== 0) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
@@ -118,6 +136,9 @@ export default function Liquidaciones() {
   const [crucesCarga, setCrucesCarga] = useState<Record<string, number>>({}); // cargaId -> monto a cruzar
   const [aplicadoCarga, setAplicadoCarga] = useState<number>(0);
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
+  // Ventas / tickets promocionales por fila (agente+club) -- keyed por filaKey(f).
+  const [ventasPorFila, setVentasPorFila] = useState<Record<string, number>>({});
+  const [ticketsPorFila, setTicketsPorFila] = useState<Record<string, number>>({});
   // Enviar/Recibir (21/09/2026): registra el pago/cobro real contra la wallet, reusando el
   // movimiento CARGA... no, PAGO/COBRO que ya existe en Movimientos -- acá elegimos con qué
   // agente+club de la liquidación se cruza (puede ser multi-agente) y el medio de pago, igual
@@ -198,6 +219,8 @@ export default function Liquidaciones() {
           setAplicado(0);
           setAplicadoCarga(0);
           setAdelantosManual(0);
+          setVentasPorFila({});
+          setTicketsPorFila({});
           if (seleccionados.length === 1) setNota("");
         }
       })
@@ -214,8 +237,17 @@ export default function Liquidaciones() {
   const totalCruzadoCarga = Object.values(crucesCarga).reduce((s, v) => s + (Number(v) || 0), 0);
   // Lo que ya se descuenta de verdad: lo aplicado en rondas anteriores de esta misma
   // liquidación + lo que está tildado ahora mismo (todavía sin aplicar, adelantos y cargas) + el manual.
-  const totalDescontar = aplicado + totalCruzado + aplicadoCarga + totalCruzadoCarga + adelantosManual;
+  const totalDescontarAdelantos = aplicado + totalCruzado + aplicadoCarga + totalCruzadoCarga + adelantosManual;
+  const totalVentasFilas = data ? data.filas.reduce((s: number, f: any) => s + (Number(ventasPorFila[filaKey(f)]) || 0), 0) : 0;
+  const totalTicketsFilas = data ? data.filas.reduce((s: number, f: any) => s + (Number(ticketsPorFila[filaKey(f)]) || 0), 0) : 0;
+  const totalVentasTickets = totalVentasFilas + totalTicketsFilas;
+  const totalDescontar = totalDescontarAdelantos + totalVentasTickets;
   const totalAPagar = data ? data.total - totalDescontar : 0;
+  // Filas con ventas/tickets ya pegados encima -- lo que de verdad se guarda/imprime, para que
+  // el PDF y el historial conserven cuánto se le cargó a cada agente puntual.
+  const filasConAjustes = data
+    ? data.filas.map((f: any) => ({ ...f, ventas: Number(ventasPorFila[filaKey(f)]) || 0, tickets: Number(ticketsPorFila[filaKey(f)]) || 0 }))
+    : [];
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
@@ -380,7 +412,7 @@ export default function Liquidaciones() {
                       agentIds: seleccionados,
                       weekStart: data.weekStart,
                       weekEnd: data.weekEnd,
-                      filas: data.filas,
+                      filas: filasConAjustes,
                       total: data.total,
                       adelantosAplicados: aplicado + totalCruzado,
                       adelantosManual,
@@ -410,12 +442,13 @@ export default function Liquidaciones() {
                       nombreGrupo: nombreGrupo || "Liquidación",
                       weekStart: data.weekStart,
                       weekEnd: data.weekEnd,
-                      filas: data.filas,
+                      filas: filasConAjustes,
                       multiAgente: data.agentes.length > 1,
                       total: data.total,
                       adelantosAplicados: aplicado + totalCruzado,
                       adelantosManual,
                       cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
+                      ventasTickets: totalVentasTickets,
                       nota,
                     });
                   } catch (err: any) {
@@ -440,20 +473,57 @@ export default function Liquidaciones() {
                 <th>Rakeback bruto</th>
                 <th>Rebate</th>
                 <th>Rakeback neto</th>
+                <th>Ventas</th>
+                <th>Tickets</th>
               </tr>
             </thead>
             <tbody>
-              {data.filas.map((f: any) => (
-                <tr key={`${f.agentId}_${f.clubId}`}>
-                  <td>{f.clubName}</td>
-                  {data.agentes.length > 1 && <td className="muted">{f.agentName}</td>}
-                  <td className={Number(f.resultado) >= 0 ? "pos" : "neg"}>{usd(f.resultado)}</td>
-                  <td>{usd(f.rakeTotal)}</td>
-                  <td>{usd(f.rakebackBruto)}</td>
-                  <td>{usd(f.rebate)}</td>
-                  <td><strong>{usd(f.rakebackNeto)}</strong></td>
-                </tr>
-              ))}
+              {data.filas.map((f: any) => {
+                const key = filaKey(f);
+                return (
+                  <tr key={key}>
+                    <td>{f.clubName}</td>
+                    {data.agentes.length > 1 && <td className="muted">{f.agentName}</td>}
+                    <td className={Number(f.resultado) >= 0 ? "pos" : "neg"}>{usd(f.resultado)}</td>
+                    <td>{usd(f.rakeTotal)}</td>
+                    <td>{usd(f.rakebackBruto)}</td>
+                    <td>{usd(f.rebate)}</td>
+                    <td><strong>{usd(f.rakebackNeto)}</strong></td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={ventasPorFila[key] ?? ""}
+                        placeholder="0"
+                        onChange={(e) => {
+                          setGuardado(false);
+                          const v = Number(e.target.value) || 0;
+                          setVentasPorFila((prev) => ({ ...prev, [key]: v }));
+                        }}
+                        style={{ width: 90, textAlign: "right" }}
+                        title={`Ventas cargadas solo a ${f.agentName} (${f.clubName}) -- se descuenta de su parte, no de toda la liquidación.`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={ticketsPorFila[key] ?? ""}
+                        placeholder="0"
+                        onChange={(e) => {
+                          setGuardado(false);
+                          const v = Number(e.target.value) || 0;
+                          setTicketsPorFila((prev) => ({ ...prev, [key]: v }));
+                        }}
+                        style={{ width: 90, textAlign: "right" }}
+                        title={`Tickets promocionales cargados solo a ${f.agentName} (${f.clubName}) -- se descuenta de su parte, no de toda la liquidación.`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
               <tr style={{ fontWeight: 700 }}>
                 <td>TOTAL</td>
                 {data.agentes.length > 1 && <td></td>}
@@ -462,6 +532,8 @@ export default function Liquidaciones() {
                 <td></td>
                 <td></td>
                 <td>{usd(data.total)}</td>
+                <td>{usd(totalVentasFilas)}</td>
+                <td>{usd(totalTicketsFilas)}</td>
               </tr>
             </tbody>
           </table>
@@ -612,8 +684,14 @@ export default function Liquidaciones() {
               </div>
               <div className="topbar" style={{ margin: 0 }}>
                 <span className="muted">Adelantos + cargas a descontar</span>
-                <span>-{usd(totalDescontar)}</span>
+                <span>-{usd(totalDescontarAdelantos)}</span>
               </div>
+              {totalVentasTickets !== 0 && (
+                <div className="topbar" style={{ margin: 0 }}>
+                  <span className="muted">Ventas + tickets (por agente) a descontar</span>
+                  <span>-{usd(totalVentasTickets)}</span>
+                </div>
+              )}
               <div className="topbar" style={{ margin: 0, fontWeight: 700, fontSize: 16, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
                 <span>Total a pagar</span>
                 <span className={totalAPagar >= 0 ? "pos" : "neg"}>{usd(totalAPagar)}</span>
@@ -725,7 +803,7 @@ export default function Liquidaciones() {
             <thead>
               <tr>
                 <th>Fecha</th><th>Nombre</th><th>Semana</th><th>Rakeback total</th>
-                <th>Adelantos descontados</th><th>Total pagado</th><th></th>
+                <th>Descontado</th><th>Total pagado</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -735,7 +813,7 @@ export default function Liquidaciones() {
                   <td>{h.nombre_grupo}</td>
                   <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
                   <td>{usd(h.total)}</td>
-                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0))}</td>
+                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
                   <td><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <button
@@ -751,6 +829,7 @@ export default function Liquidaciones() {
                           adelantosAplicados: Number(h.adelantos_aplicados),
                           adelantosManual: Number(h.adelantos_manual),
                           cargasAplicadas: Number(h.cargas_aplicadas ?? 0),
+                          ventasTickets: (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0),
                           nota: h.nota || "",
                         }).catch((err: any) => alertDialog(err.message || "No se pudo generar el PDF."))
                       }
