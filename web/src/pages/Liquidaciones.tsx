@@ -668,7 +668,10 @@ export default function Liquidaciones() {
               <input
                 type="number"
                 step="0.01"
-                value={adelantosManual}
+                // value={adelantosManual} directo mostraba "0" fijo en el campo -- para escribir
+                // un monto había que borrar ese 0 a mano primero (el "bug del 0"). Mostrando ""
+                // cuando el valor es 0 (el default) se puede tipear directo.
+                value={adelantosManual === 0 ? "" : adelantosManual}
                 onChange={(e) => {
                   setAdelantosManual(Number(e.target.value) || 0);
                   setGuardado(false);
