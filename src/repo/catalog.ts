@@ -467,20 +467,28 @@ export async function upsertDeal(
   system: "PREPAGO" | "WIN_LOSE",
   rakebackPct: number,
   rebatePct: number,
-  notes?: string
+  notes?: string,
+  // Vigente desde (18/09/2026, pedido de Leo: precargar saldos históricos necesita poder cargar
+  // HOY un deal que ya regía en semanas pasadas, no solo "a partir de ahora"). Sin este parámetro
+  // (uso normal desde la pantalla de Agentes) se comporta igual que siempre: vigente desde este
+  // mismo instante. Con una fecha pasada, el deal anterior (si había) se cierra justo en ESE
+  // punto (no en "ahora"), para que no quede un período donde ambos "compiten" y gana el de
+  // valid_from más nuevo por casualidad en vez de por intención real.
+  validFrom?: string
 ) {
+  const desde = validFrom ? new Date(validFrom + "T00:00:00Z") : new Date();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(
-      `UPDATE agent_club_deals SET valid_to = now() WHERE agent_id=$1 AND club_id=$2 AND valid_to IS NULL`,
-      [agentId, clubId]
+      `UPDATE agent_club_deals SET valid_to = $3 WHERE agent_id=$1 AND club_id=$2 AND valid_to IS NULL`,
+      [agentId, clubId, desde]
     );
     const id = newId("deal");
     await client.query(
-      `INSERT INTO agent_club_deals (id, agent_id, club_id, system, rakeback_pct, rebate_pct, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, agentId, clubId, system, rakebackPct, rebatePct, notes ?? null]
+      `INSERT INTO agent_club_deals (id, agent_id, club_id, system, rakeback_pct, rebate_pct, notes, valid_from)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [id, agentId, clubId, system, rakebackPct, rebatePct, notes ?? null, desde]
     );
     await client.query("COMMIT");
     return id;

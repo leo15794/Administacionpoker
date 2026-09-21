@@ -1308,6 +1308,10 @@ function NuevoDeal({
   const [rakebackPct, setRakebackPct] = useState(initial ? String(Number(initial.rakeback_pct) * 100) : "70");
   const [rebatePct, setRebatePct] = useState(initial ? String(Number(initial.rebate_pct) * 100) : "0");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  // Por defecto hoy — pero se puede atrasar (backdatear) para que el deal aplique a un cierre de
+  // una semana pasada. Sin esto, un deal cargado hoy para una semana anterior no se toma al
+  // hacer el cierre (resolverConfigVigente filtra por valid_from <= fin de semana del cierre).
+  const [validFrom, setValidFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   // "deal" = este agente YA tiene un % propio cargado para este club (se está mostrando su
@@ -1353,6 +1357,7 @@ function NuevoDeal({
         rakebackPct: Number(rakebackPct) / 100,
         rebatePct: Number(rebatePct) / 100,
         notes: notes.trim() || undefined,
+        validFrom: validFrom || undefined,
       });
       setMsg({ ok: true, text: initial ? "Deal actualizado desde ahora (el anterior queda en el historial)." : "Deal guardado. Reemplaza cualquier % anterior para ese agente+club a partir de ahora." });
       onCreated();
@@ -1421,6 +1426,15 @@ function NuevoDeal({
         <div className="field">
           <label>Notas (opcional)</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Vigente desde</label>
+          <input value={validFrom} onChange={(e) => setValidFrom(e.target.value)} type="date" />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Por defecto es hoy. Atrasala si este % ya se venía usando antes (por ejemplo, para que
+            aplique a un cierre de una semana anterior a hoy) — si no, el cierre de esa semana no
+            va a tomar este deal aunque ya esté cargado.
+          </div>
         </div>
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
         <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Guardar deal"}</button>

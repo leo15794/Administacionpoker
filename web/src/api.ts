@@ -317,6 +317,7 @@ export const api = {
     rakebackPct: number;
     rebatePct?: number;
     notes?: string;
+    validFrom?: string;
   }) => request("/catalog/deals", { method: "POST", body: JSON.stringify(data) }),
   // Todos los deals vigentes de todos los agentes de una — para pintar el % en la lista
   // principal sin pedir agente por agente.

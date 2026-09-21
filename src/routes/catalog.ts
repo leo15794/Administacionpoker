@@ -128,6 +128,8 @@ const dealSchema = z.object({
   // TeamBack GG) es un caso real y válido, no un error de carga.
   rebatePct: z.number().min(-1).max(1).default(0),
   notes: z.string().optional(),
+  // Vigente desde (YYYY-MM-DD), opcional -- sin esto el deal rige desde ahora, igual que siempre.
+  validFrom: z.string().optional(),
 });
 // Todos los deals vigentes de todos los agentes, para pintar el % en la lista principal de
 // agentes de un vistazo (ver quién tiene deal propio y quién todavía no) sin pedir uno por uno.
@@ -145,7 +147,8 @@ catalogRouter.post("/deals", requireAuth, requireAdmin, async (req, res) => {
       parsed.data.system,
       parsed.data.rakebackPct,
       parsed.data.rebatePct,
-      parsed.data.notes
+      parsed.data.notes,
+      parsed.data.validFrom
     );
     res.status(201).json({ id });
   } catch (err: any) {
