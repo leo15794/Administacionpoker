@@ -4,6 +4,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import ActionsMenu from "../components/ActionsMenu";
 
 // Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
 // entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
@@ -263,8 +264,8 @@ export default function Cierres() {
         <table>
           <thead>
             <tr>
-              <th>Semana</th><th>Agente</th><th>Club</th><th>Sistema</th>
-              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Rodeo</th><th>Cierre final</th><th>Regla</th><th></th>
+              <th></th><th>Agente</th><th>Club</th><th>Sistema</th>
+              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Cierre final</th><th>Extra</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -279,7 +280,7 @@ export default function Cierres() {
                     onClick={() => toggleSemanaColapsada(g.weekStart)}
                     style={{ background: "rgba(255,255,255,0.04)" }}
                   >
-                    <td colSpan={11}>
+                    <td colSpan={10}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span>{semanaColapsada ? "▸" : "▾"}</span>
                         <strong>{dateShort(g.weekStart)} - {dateShort(g.weekEnd)}</strong>
@@ -306,35 +307,35 @@ export default function Cierres() {
                             style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
                           >
                             <td>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                {tieneDesglose && (
-                                  <button
-                                    className="btn secondary small"
-                                    onClick={() => toggleExpandido(c.id)}
-                                    title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
-                                    style={{ padding: "2px 8px" }}
-                                  >
-                                    {abierto ? "▾" : "▸"}
-                                  </button>
-                                )}
-                                <span>{dateShort(c.week_start)} - {dateShort(c.week_end)}</span>
-                              </div>
+                              {tieneDesglose && (
+                                <button
+                                  className="btn secondary small"
+                                  onClick={() => toggleExpandido(c.id)}
+                                  title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
+                                  style={{ padding: "2px 8px" }}
+                                >
+                                  {abierto ? "▾" : "▸"}
+                                </button>
+                              )}
                             </td>
                             <td>{c.agent_name}</td>
                             <td>{c.club_name}</td>
-                            <td>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                            <td className="muted">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                             <td>{usd(c.result)}</td>
                             <td>{usd(c.rake_total)}</td>
                             <td>{usd(c.rakeback)}</td>
-                            <td>
-                              {/* Rodeo: solo existe en cierres importados de SupremaPoker (ver engine/rodeo.ts) —
-                                  para cualquier otro cierre queda en 0/null, se muestra "—" para no ensuciar la tabla. */}
-                              {c.rodeo != null && Number(c.rodeo) !== 0 ? usd(c.rodeo) : <span className="muted">—</span>}
-                            </td>
                             <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
                             <td>
+                              {/* "Extra" junta Rodeo + Regla + Revertido en una sola columna, en blanco
+                                  cuando no hay nada que mostrar (antes eran dos columnas separadas que
+                                  mostraban "—" en casi todas las filas, puro ruido visual). */}
                               {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
-                              {c.rule_applied ? <span className="badge neutral">{c.rule_applied}</span> : (c.status !== "REVERTIDO" ? "—" : "")}
+                              {c.rule_applied && <span className="badge neutral">{c.rule_applied}</span>}
+                              {c.rodeo != null && Number(c.rodeo) !== 0 && (
+                                <span className="muted" style={{ marginLeft: c.rule_applied ? 6 : 0 }}>
+                                  Rodeo {usd(c.rodeo)}
+                                </span>
+                              )}
                               {c.rule_applied === "BANCADO" && (
                                 <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                                   Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
@@ -353,20 +354,21 @@ export default function Cierres() {
                                   {borrando === c.id ? "..." : "Revertir"}
                                 </button>
                               )}
-                              <button
-                                className="btn secondary small"
-                                disabled={borrando === c.id}
-                                onClick={() => borrarDefinitivo(c)}
-                                title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                                style={{ color: "var(--danger, #e5484d)" }}
-                              >
-                                {borrando === c.id ? "..." : "Borrar"}
-                              </button>
+                              <ActionsMenu
+                                items={[
+                                  {
+                                    label: borrando === c.id ? "Borrando..." : "Borrar (borrado real, sin rastro)",
+                                    onClick: () => borrarDefinitivo(c),
+                                    danger: true,
+                                    disabled: borrando === c.id,
+                                  },
+                                ]}
+                              />
                             </td>
                           </tr>
                           {abierto && tieneDesglose && (
                             <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
-                              <td colSpan={11}>
+                              <td colSpan={10}>
                                 <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
                                   <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
                                   <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
