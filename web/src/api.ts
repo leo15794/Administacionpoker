@@ -214,9 +214,6 @@ export const api = {
     proveedorId: string;
     clubId: string;
     weekStart: string;
-    weekEnd: string;
-    resultadoTotal: number;
-    rakeTotal: number;
     rakebackPct: number;
     notes?: string;
   }) => request("/proveedores/cierres", { method: "POST", body: JSON.stringify(data) }),

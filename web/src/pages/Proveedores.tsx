@@ -372,37 +372,66 @@ function NuevoProveedorForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+// El resultado y el rake total NUNCA se tipean acá -- se traen del resumen semanal del club
+// (mismo que ya usa la pestaña "Resumen por club"), que suma los cierres de todos los agentes
+// de ese club+semana ya cargados por la vía normal ("Cierres semanales"). Pedido de Leo,
+// 22/09/2026: "no podemos hacer el cierre semanal de los clubes y que se gestione lo mismo
+// para esta pestaña? si no tenemos que hacer dos cierres con lo mismo". Este formulario es
+// entonces un paso DESPUÉS de cerrar el club como siempre, nunca una carga en paralelo.
 function CierreForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
   const [proveedorId, setProveedorId] = useState("");
   const [clubId, setClubId] = useState("");
+  const [semanas, setSemanas] = useState<any[] | null>(null);
   const [weekStart, setWeekStart] = useState("");
-  const [weekEnd, setWeekEnd] = useState("");
-  const [resultadoTotal, setResultadoTotal] = useState("");
-  const [rakeTotal, setRakeTotal] = useState("");
+  const [resumen, setResumen] = useState<any | null>(null);
+  const [cargandoResumen, setCargandoResumen] = useState(false);
   const [rakebackPct, setRakebackPct] = useState("75");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setWeekStart("");
+    setResumen(null);
+    if (!clubId) {
+      setSemanas(null);
+      return;
+    }
+    api.semanasResumenClub(clubId).then(setSemanas).catch(() => setSemanas([]));
+  }, [clubId]);
+
+  useEffect(() => {
+    setResumen(null);
+    if (!clubId || !weekStart) return;
+    setCargandoResumen(true);
+    api
+      .resumenClub(clubId, weekStart)
+      .then(setResumen)
+      .catch(() => setResumen(null))
+      .finally(() => setCargandoResumen(false));
+  }, [clubId, weekStart]);
+
   const pctNum = (Number(rakebackPct) || 0) / 100;
-  const rakebackMonto = (Number(rakeTotal) || 0) * pctNum;
-  const cierre = (Number(resultadoTotal) || 0) + rakebackMonto;
+  const resultadoTotal = resumen ? Number(resumen.resultadoTotal) : null;
+  const rakeTotal = resumen ? Number(resumen.rakeTotal) : null;
+  const rakebackMonto = rakeTotal !== null ? rakeTotal * pctNum : null;
+  const cierre = resultadoTotal !== null && rakebackMonto !== null ? resultadoTotal + rakebackMonto : null;
+  const sinCierresDelClub = resumen && Number(resumen.agentesConCierre) === 0;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
-    if (!weekStart || !weekEnd) return setMsg({ ok: false, text: "Elegí inicio y fin de semana." });
-    if (resultadoTotal === "" || rakeTotal === "") return setMsg({ ok: false, text: "Cargá resultado y rake totales." });
+    if (!weekStart) return setMsg({ ok: false, text: "Elegí la semana (tiene que tener cierres del club ya cargados)." });
+    if (sinCierresDelClub) {
+      return setMsg({ ok: false, text: 'Esta semana todavía no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".' });
+    }
     setLoading(true);
     try {
       await api.aplicarCierreProveedor({
         proveedorId,
         clubId,
         weekStart,
-        weekEnd,
-        resultadoTotal: Number(resultadoTotal),
-        rakeTotal: Number(rakeTotal),
         rakebackPct: pctNum,
         notes: notes.trim() || undefined,
       });
@@ -432,20 +461,20 @@ function CierreForm({ proveedores, clubes, onDone }: { proveedores: any[]; clube
           </select>
         </div>
         <div className="field">
-          <label>Semana desde</label>
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Semana hasta</label>
-          <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Resultado total del club (USD)</label>
-          <input value={resultadoTotal} onChange={(e) => setResultadoTotal(e.target.value)} type="number" step="0.01" />
-        </div>
-        <div className="field">
-          <label>Rake total del club (USD)</label>
-          <input value={rakeTotal} onChange={(e) => setRakeTotal(e.target.value)} type="number" step="0.01" />
+          <label>Semana (ya cerrada en el club)</label>
+          <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} disabled={!clubId}>
+            <option value="">{clubId ? "Elegir..." : "Elegí un club primero"}</option>
+            {(semanas ?? []).map((s) => (
+              <option key={s.week_start} value={s.week_start}>
+                {dateShort(s.week_start)} - {dateShort(s.week_end)}
+              </option>
+            ))}
+          </select>
+          {clubId && semanas && semanas.length === 0 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Este club todavía no tiene ningún cierre semanal cargado.
+            </div>
+          )}
         </div>
         <div className="field">
           <label>% rakeback</label>
@@ -454,13 +483,24 @@ function CierreForm({ proveedores, clubes, onDone }: { proveedores: any[]; clube
       </div>
       <div className="field">
         <label>Notas (opcional)</label>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, archivo de origen, etc." />
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, etc." />
       </div>
-      <div className="muted" style={{ fontSize: 13, margin: "10px 0" }}>
-        Rakeback: {usd(rakebackMonto)} · Cierre = Resultado + Rakeback = <b>{usd(cierre)}</b>
-      </div>
+
+      {cargandoResumen && <div className="muted" style={{ fontSize: 13 }}>Trayendo el resumen del club...</div>}
+      {sinCierresDelClub && (
+        <div className="error" style={{ fontSize: 13 }}>
+          Esta semana no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".
+        </div>
+      )}
+      {resumen && !sinCierresDelClub && (
+        <div className="muted" style={{ fontSize: 13, margin: "10px 0" }}>
+          Resultado total del club: {usd(resultadoTotal ?? 0)} (de {resumen.agentesConCierre} agente{Number(resumen.agentesConCierre) === 1 ? "" : "s"}) ·
+          Rake total: {usd(rakeTotal ?? 0)} · Rakeback: {usd(rakebackMonto ?? 0)} · Cierre = <b>{usd(cierre ?? 0)}</b>
+        </div>
+      )}
+
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
+      <button className="btn" disabled={loading || !resumen || sinCierresDelClub}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
     </form>
   );
 }

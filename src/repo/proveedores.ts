@@ -1,5 +1,6 @@
 import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
+import { getResumenClubSemanal } from "./clubResumen.js";
 
 // Repositorio de Proveedores (22/09/2026, pedido de Leo) -- entidad separada de agents.
 // Ver comentario largo en schema.sql. Mismo criterio de signo que balances: positivo = a
@@ -61,9 +62,6 @@ export interface CierreProveedorInput {
   proveedorId: string;
   clubId: string;
   weekStart: string; // YYYY-MM-DD
-  weekEnd: string;
-  resultadoTotal: number;
-  rakeTotal: number;
   rakebackPct: number; // ej. 0.75
   notes?: string;
   createdBy?: string;
@@ -71,20 +69,39 @@ export interface CierreProveedorInput {
 
 /**
  * Aplica el cierre semanal de un proveedor: cierre = resultado_total + (rake_total ×
- * rakeback_pct). Actualiza el saldo acumulado del proveedor+club de forma atómica y deja el
+ * rakeback_pct). A pedido de Leo (22/09/2026: "no podemos hacer el cierre semanal de los
+ * clubes y que se gestione lo mismo para esta pestaña? si no tenemos que hacer dos cierres
+ * con lo mismo"), resultado_total y rake_total NO se cargan a mano acá -- se toman del
+ * resumen semanal del club (repo/clubResumen.ts, getResumenClubSemanal), que ya suma los
+ * cierres de TODOS los agentes de ese club+semana cargados por la vía normal (Cierres
+ * semanales). Este cierre de proveedor es entonces un paso más DESPUÉS de cerrar el club
+ * como siempre, nunca una carga independiente de los mismos números.
+ * Actualiza el saldo acumulado del proveedor+club de forma atómica y deja el
  * saldo_anterior/saldo_nuevo registrado en la fila para poder revertir sin ambigüedad.
  */
 export async function aplicarCierreProveedor(input: CierreProveedorInput) {
   if (input.rakebackPct < 0 || input.rakebackPct > 1) {
     throw new Error("El % de rakeback tiene que estar entre 0 y 1 (ej. 0.75 = 75%).");
   }
+  const resumen = await getResumenClubSemanal(input.clubId, input.weekStart);
+  if (!resumen) throw new Error("Club no encontrado.");
+  if (resumen.agentesConCierre === 0) {
+    throw new Error(
+      "Todavía no hay ningún cierre semanal cargado para este club en esa semana -- cargá primero el cierre normal en \"Cierres semanales\" (con todos los agentes que correspondan) y después aplicá el cierre de proveedor."
+    );
+  }
+  if (!resumen.weekEnd) throw new Error("El resumen del club no tiene fecha de fin de semana todavía.");
+  const resultadoTotal = resumen.resultadoTotal;
+  const rakeTotal = resumen.rakeTotal;
+  const weekEnd = resumen.weekEnd;
+
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
 
     const saldo = await getSaldoParaUpdate(client, input.proveedorId, input.clubId);
-    const rakebackMonto = input.rakeTotal * input.rakebackPct;
-    const cierre = input.resultadoTotal + rakebackMonto;
+    const rakebackMonto = rakeTotal * input.rakebackPct;
+    const cierre = resultadoTotal + rakebackMonto;
     const saldoAnterior = Number(saldo.amount);
     const saldoNuevo = saldoAnterior + cierre;
 
@@ -101,9 +118,9 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           input.proveedorId,
           input.clubId,
           input.weekStart,
-          input.weekEnd,
-          input.resultadoTotal,
-          input.rakeTotal,
+          weekEnd,
+          resultadoTotal,
+          rakeTotal,
           input.rakebackPct,
           rakebackMonto,
           cierre,

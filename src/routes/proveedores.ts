@@ -55,9 +55,6 @@ const cierreSchema = z.object({
   proveedorId: z.string(),
   clubId: z.string(),
   weekStart: z.string(),
-  weekEnd: z.string(),
-  resultadoTotal: z.number(),
-  rakeTotal: z.number(),
   rakebackPct: z.number(),
   notes: z.string().optional(),
 });
