@@ -1033,6 +1033,35 @@ CREATE TABLE IF NOT EXISTS proveedores (
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS auto_cierre_club_id TEXT REFERENCES clubs(id);
 ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS auto_cierre_rakeback_pct NUMERIC(6,4);
 
+-- Multi-club de auto-cierre (22/09/2026, pedido de Leo -- caso Manzur: M CHOCO/Suprema Y
+-- Fénix GG a la vez, no uno solo). Reemplaza en los hechos a auto_cierre_club_id/
+-- auto_cierre_rakeback_pct (que quedan para no romper filas viejas, pero ya no se usan para
+-- decidir el auto-cierre): un proveedor puede tener CUALQUIER cantidad de clubes configurados,
+-- cada uno con su propio % de rakeback. Al guardar el resumen semanal de un club, se aplica
+-- (o se agrega como línea nueva a un cierre ya existente de esa semana) el cierre automático
+-- de todos los proveedores que tengan ese club configurado acá.
+CREATE TABLE IF NOT EXISTS proveedor_auto_cierre_clubes (
+  id           TEXT PRIMARY KEY,
+  proveedor_id TEXT NOT NULL REFERENCES proveedores(id),
+  club_id      TEXT NOT NULL REFERENCES clubs(id),
+  rakeback_pct NUMERIC(6,4) NOT NULL,
+  active       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (proveedor_id, club_id)
+);
+CREATE INDEX IF NOT EXISTS proveedor_auto_cierre_clubes_club_idx ON proveedor_auto_cierre_clubes(club_id);
+
+-- Migra la config vieja (single-club) a la tabla nueva (multi-club) para no perder lo que
+-- Leo ya tenía cargado (ej. Manzur -> Fénix GG 75%).
+INSERT INTO proveedor_auto_cierre_clubes (id, proveedor_id, club_id, rakeback_pct)
+SELECT 'pacc_' || substr(md5(id || club_id_aux), 1, 20), id, club_id_aux, rakeback_aux
+FROM (
+  SELECT id, auto_cierre_club_id AS club_id_aux, auto_cierre_rakeback_pct AS rakeback_aux
+  FROM proveedores
+  WHERE auto_cierre_club_id IS NOT NULL AND auto_cierre_rakeback_pct IS NOT NULL
+) sub
+ON CONFLICT (proveedor_id, club_id) DO NOTHING;
+
 -- Saldo operativo acumulado por proveedor+club (mismo criterio de signo que balances:
 -- positivo = a favor del proveedor/le debemos, negativo = a favor nuestro/nos debe). Se
 -- actualiza con cada cierre semanal y cada pago -- nunca se toca a mano.

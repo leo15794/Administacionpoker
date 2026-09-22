@@ -258,6 +258,14 @@ export const api = {
     request(`/proveedores/garantias/historial${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
   eliminarGarantiaProveedorDefinitivo: (id: string) => request(`/proveedores/garantias/${id}/definitivo`, { method: "DELETE" }),
   eliminarProveedorDefinitivo: (id: string) => request(`/proveedores/${id}`, { method: "DELETE" }),
+
+  // Auto-cierre multi-club (22/09/2026): un proveedor puede tener cualquier cantidad de
+  // clubes configurados (ej. Manzur: M CHOCO Y Fénix GG a la vez).
+  autoCierreClubesProveedor: (proveedorId: string) => request(`/proveedores/${proveedorId}/auto-cierre-clubes`),
+  autoCierreClubesTodos: () => request("/proveedores/auto-cierre-clubes"),
+  agregarAutoCierreClub: (proveedorId: string, data: { clubId: string; rakebackPct: number }) =>
+    request(`/proveedores/${proveedorId}/auto-cierre-clubes`, { method: "POST", body: JSON.stringify(data) }),
+  eliminarAutoCierreClub: (configId: string) => request(`/proveedores/auto-cierre-clubes/${configId}`, { method: "DELETE" }),
   ajustarGarantiaProveedor: (data: {
     proveedorId: string;
     type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA";

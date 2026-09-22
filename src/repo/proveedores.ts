@@ -474,14 +474,84 @@ export async function revertirCierreProveedor(id: string) {
   }
 }
 
+// ============ Config de auto-cierre multi-club (22/09/2026, pedido de Leo) ============
+// Un proveedor puede tener cualquier cantidad de clubes configurados para auto-cierre (ej.
+// Manzur: M CHOCO/Suprema Y Fénix GG a la vez -- antes solo soportaba uno, por eso Fénix GG
+// no le llegaba solo). Reemplaza a auto_cierre_club_id/auto_cierre_rakeback_pct en proveedores
+// (esas columnas quedan en la tabla para no romper filas viejas, pero ya no se usan).
+
+export interface AutoCierreClubConfig {
+  id: string;
+  proveedorId: string;
+  clubId: string;
+  clubName?: string;
+  rakebackPct: number;
+  active: boolean;
+}
+
+export async function listAutoCierreClubesProveedor(proveedorId: string): Promise<AutoCierreClubConfig[]> {
+  const r = await pool.query(
+    `SELECT pac.*, c.name as club_name FROM proveedor_auto_cierre_clubes pac
+     JOIN clubs c ON c.id = pac.club_id
+     WHERE pac.proveedor_id = $1 ORDER BY c.name`,
+    [proveedorId]
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    proveedorId: row.proveedor_id,
+    clubId: row.club_id,
+    clubName: row.club_name,
+    rakebackPct: Number(row.rakeback_pct),
+    active: row.active,
+  }));
+}
+
+// Todas las configs de todos los proveedores juntas (para pintar la columna "Auto-cierre" en
+// la tabla de Proveedores sin hacer un fetch por fila).
+export async function listAutoCierreClubesTodos(): Promise<AutoCierreClubConfig[]> {
+  const r = await pool.query(
+    `SELECT pac.*, c.name as club_name FROM proveedor_auto_cierre_clubes pac
+     JOIN clubs c ON c.id = pac.club_id
+     WHERE pac.active = true
+     ORDER BY c.name`
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    proveedorId: row.proveedor_id,
+    clubId: row.club_id,
+    clubName: row.club_name,
+    rakebackPct: Number(row.rakeback_pct),
+    active: row.active,
+  }));
+}
+
+export async function agregarAutoCierreClub(proveedorId: string, clubId: string, rakebackPct: number) {
+  if (rakebackPct < 0 || rakebackPct > 1) {
+    throw new Error("El % de rakeback tiene que estar entre 0 y 1 (ej. 0.75 = 75%).");
+  }
+  const r = await pool.query(
+    `INSERT INTO proveedor_auto_cierre_clubes (id, proveedor_id, club_id, rakeback_pct, active)
+     VALUES ($1,$2,$3,$4,true)
+     ON CONFLICT (proveedor_id, club_id) DO UPDATE SET rakeback_pct = $4, active = true
+     RETURNING *`,
+    [newId("pacc"), proveedorId, clubId, rakebackPct]
+  );
+  return r.rows[0];
+}
+
+export async function eliminarAutoCierreClub(id: string) {
+  await pool.query(`DELETE FROM proveedor_auto_cierre_clubes WHERE id = $1`, [id]);
+  return { ok: true };
+}
+
 // Auto-cierre (22/09/2026, pedido de Leo): se llama desde el guardado de "Resumen por club"
 // (routes/dashboard.ts, POST /resumen-club/extras) -- busca todos los proveedores que tengan
-// este club como auto_cierre_club_id y les aplica el cierre semanal solo, sin que Leo tenga
-// que ir a la pestaña Proveedores y tocar nada. Por ahora el auto-cierre siempre genera una
-// única línea de tipo CLUB (el caso simple); líneas de agente se siguen cargando a mano desde
-// "Cierres semanales" en Proveedores. Si un proveedor ya tiene el cierre de esa
-// semana aplicado (por ejemplo porque el resumen se guardó dos veces), se lo salta sin error
-// -- nunca duplica ni revienta el guardado del resumen del club por esto.
+// este club configurado en proveedor_auto_cierre_clubes y les aplica (o agrega, si ya tienen
+// un cierre activo esa semana por otro club) la línea CLUB correspondiente, sin que Leo tenga
+// que ir a la pestaña Proveedores y tocar nada. Líneas de agente se siguen cargando a mano
+// desde "Cierres semanales" en Proveedores. Si un proveedor ya tiene ESE club aplicado en esa
+// semana (por ejemplo porque el resumen se guardó dos veces), se lo salta sin error -- nunca
+// duplica ni revienta el guardado del resumen del club por esto.
 export interface ResultadoAutoCierreProveedor {
   proveedorId: string;
   proveedorName: string;
@@ -496,28 +566,120 @@ export async function aplicarCierresAutomaticosParaClub(
   createdBy?: string
 ): Promise<ResultadoAutoCierreProveedor[]> {
   const r = await pool.query(
-    `SELECT id, name, auto_cierre_rakeback_pct FROM proveedores
-     WHERE active = true AND auto_cierre_club_id = $1 AND auto_cierre_rakeback_pct IS NOT NULL`,
+    `SELECT pac.proveedor_id, pac.rakeback_pct, p.name as proveedor_name
+     FROM proveedor_auto_cierre_clubes pac
+     JOIN proveedores p ON p.id = pac.proveedor_id
+     WHERE pac.active = true AND p.active = true AND pac.club_id = $1`,
     [clubId]
   );
   const resultados: ResultadoAutoCierreProveedor[] = [];
-  for (const p of r.rows) {
+  for (const row of r.rows) {
     try {
-      const cierre = await aplicarCierreProveedor({
-        proveedorId: p.id,
+      const monto = await aplicarOAgregarLineaClubAutomatica(
+        row.proveedor_id,
+        clubId,
         weekStart,
-        lineas: [{ tipo: "CLUB", clubId, rakebackPct: Number(p.auto_cierre_rakeback_pct) }],
-        notes: "Cierre automático al guardar el resumen semanal del club.",
-        createdBy,
-      });
-      resultados.push({ proveedorId: p.id, proveedorName: p.name, applied: true, cierre: Number(cierre.cierre) });
+        Number(row.rakeback_pct),
+        createdBy
+      );
+      resultados.push({ proveedorId: row.proveedor_id, proveedorName: row.proveedor_name, applied: true, cierre: monto });
     } catch (err: any) {
-      // "Ya existe un cierre..." es el caso normal de re-guardar el resumen -- no es un error
-      // real, solo significa que este proveedor ya estaba cerrado para esta semana.
-      resultados.push({ proveedorId: p.id, proveedorName: p.name, applied: false, reason: err.message });
+      // "Ya existe una línea de este club..." es el caso normal de re-guardar el resumen --
+      // no es un error real, solo significa que este club ya estaba cerrado para esta semana.
+      resultados.push({ proveedorId: row.proveedor_id, proveedorName: row.proveedor_name, applied: false, reason: err.message });
     }
   }
   return resultados;
+}
+
+// Si el proveedor todavía no tiene un cierre activo para esa semana, crea uno nuevo con una
+// sola línea CLUB (caso simple, como antes). Si YA tiene un cierre activo esa semana (por
+// ejemplo porque otro club de este mismo proveedor -- M CHOCO -- ya disparó el auto-cierre),
+// le AGREGA esta línea de club al cierre existente en vez de fallar por "ya existe un cierre"
+// -- así Manzur puede recibir Fénix GG y M CHOCO en el mismo cierre semanal sin pisarse.
+async function aplicarOAgregarLineaClubAutomatica(
+  proveedorId: string,
+  clubId: string,
+  weekStart: string,
+  rakebackPct: number,
+  createdBy?: string
+): Promise<number> {
+  const existing = await pool.query(
+    `SELECT id FROM proveedor_cierres WHERE proveedor_id = $1 AND week_start = $2 AND status <> 'REVERTIDO'`,
+    [proveedorId, weekStart]
+  );
+
+  if (!existing.rows[0]) {
+    const cierre = await aplicarCierreProveedor({
+      proveedorId,
+      weekStart,
+      lineas: [{ tipo: "CLUB", clubId, rakebackPct }],
+      notes: "Cierre automático al guardar el resumen semanal del club.",
+      createdBy,
+    });
+    const linea = cierre.lineas.find((l: any) => l.clubId === clubId);
+    return linea ? linea.montoAplicado : Number(cierre.cierre);
+  }
+
+  const cierreId = existing.rows[0].id;
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const yaExiste = await client.query(
+      `SELECT id FROM proveedor_cierre_lineas WHERE cierre_id = $1 AND club_id = $2 AND tipo = 'CLUB' FOR UPDATE`,
+      [cierreId, clubId]
+    );
+    if (yaExiste.rows[0]) {
+      throw new Error("Ya existe una línea de este club en el cierre de esta semana.");
+    }
+
+    const preview = await calcularLineaClubPreview(clubId, weekStart, rakebackPct);
+    const saldo = await getSaldoParaUpdate(client, proveedorId, clubId);
+    const saldoAnterior = Number(saldo.amount);
+    const saldoNuevo = round2(saldoAnterior + preview.montoAplicado);
+
+    await client.query(
+      `INSERT INTO proveedor_cierre_lineas
+        (id, cierre_id, tipo, club_id, agent_id, weekly_closing_id, resultado_total, rake_total,
+         rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
+       VALUES ($1,$2,'CLUB',$3,NULL,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        newId("pclin"),
+        cierreId,
+        clubId,
+        preview.resumen.resultadoTotal,
+        preview.resumen.rakeTotal,
+        rakebackPct,
+        preview.clubRebate,
+        preview.impactoRodeo,
+        preview.montoCrudo,
+        preview.montoAplicado,
+        saldoAnterior,
+        saldoNuevo,
+        "Línea agregada automáticamente al guardar el resumen semanal del club.",
+      ]
+    );
+
+    await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [saldoNuevo, saldo.id]);
+
+    await client.query(
+      `UPDATE proveedor_cierres SET
+         cierre = cierre + $2,
+         saldo_anterior = saldo_anterior + $3,
+         saldo_nuevo = saldo_nuevo + $4
+       WHERE id = $1`,
+      [cierreId, preview.montoAplicado, saldoAnterior, saldoNuevo]
+    );
+
+    await client.query("COMMIT");
+    return preview.montoAplicado;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listCierresProveedor(proveedorId?: string) {

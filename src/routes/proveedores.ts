@@ -23,6 +23,10 @@ import {
   eliminarGarantiaProveedorDefinitivo,
   eliminarProveedorDefinitivo,
   calcularLineaClubPreview,
+  listAutoCierreClubesProveedor,
+  listAutoCierreClubesTodos,
+  agregarAutoCierreClub,
+  eliminarAutoCierreClub,
 } from "../repo/proveedores.js";
 
 export const proveedoresRouter = Router();
@@ -76,6 +80,39 @@ proveedoresRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => 
     const r = await eliminarProveedorDefinitivo(req.params.id);
     if (!r.found) return res.status(404).json({ error: "Proveedor no encontrado." });
     res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ============ Config de auto-cierre multi-club (22/09/2026) ============
+// Un proveedor puede tener cualquier cantidad de clubes configurados -- ej. Manzur necesita
+// M CHOCO/Suprema Y Fénix GG a la vez, no uno solo (ver repo/proveedores.ts para el porqué).
+proveedoresRouter.get("/auto-cierre-clubes", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listAutoCierreClubesTodos());
+});
+
+proveedoresRouter.get("/:id/auto-cierre-clubes", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listAutoCierreClubesProveedor(req.params.id));
+});
+
+const autoCierreClubSchema = z.object({
+  clubId: z.string().min(1),
+  rakebackPct: z.number(),
+});
+proveedoresRouter.post("/:id/auto-cierre-clubes", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = autoCierreClubSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.status(201).json(await agregarAutoCierreClub(req.params.id, parsed.data.clubId, parsed.data.rakebackPct));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+proveedoresRouter.delete("/auto-cierre-clubes/:configId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await eliminarAutoCierreClub(req.params.configId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
