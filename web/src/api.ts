@@ -226,6 +226,8 @@ export const api = {
   lineasCierreProveedor: (cierreId: string) => request(`/proveedores/cierres/${cierreId}/lineas`),
   cierreAgentePreview: (agentId: string, clubId: string, weekStart: string) =>
     request(`/proveedores/cierre-agente-preview?agentId=${agentId}&clubId=${clubId}&weekStart=${weekStart}`),
+  cierreClubPreview: (clubId: string, weekStart: string, rakebackPct: number) =>
+    request(`/proveedores/cierre-club-preview?clubId=${clubId}&weekStart=${weekStart}&rakebackPct=${rakebackPct}`),
   aplicarCierreProveedor: (data: {
     proveedorId: string;
     weekStart: string;

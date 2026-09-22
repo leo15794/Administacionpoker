@@ -1108,6 +1108,16 @@ CREATE TABLE IF NOT EXISTS proveedor_cierre_lineas (
   resultado_total   NUMERIC(18,4),  -- solo tipo CLUB
   rake_total        NUMERIC(18,4),  -- solo tipo CLUB
   rakeback_pct      NUMERIC(6,4),   -- solo tipo CLUB
+  -- Rebate que el CLUB nos reconoce a nosotros (22/09/2026, pedido de Leo) -- CONCEPTO
+  -- DISTINTO del rebate de agentes que ya existe en weekly_closings.rebate (ese ya está
+  -- adentro de cada final_closing de agente, nunca se reutiliza acá para no contarlo dos
+  -- veces). Depende de la familia del club: TeamBack GG = (resultado_total + rake_total) ×
+  -- -10% siempre; Tiny = reutiliza el rebate ya calculado y probado de tiny_rebate_union
+  -- (getResumenTinyExtra().rebateGlobal); Fénix GG y Suprema = 0. Solo aplica a tipo CLUB.
+  club_rebate       NUMERIC(18,4),
+  -- Rodeo (solo SupremaPoker: Fénix/TeamBack Suprema, 0 en cualquier otro club de fábrica,
+  -- ver engine/rodeo.ts) = -rodeo_pagado_agentes del resumen del club. Solo aplica a tipo CLUB.
+  impacto_rodeo     NUMERIC(18,4),
   monto_crudo       NUMERIC(18,4) NOT NULL, -- el cierre "en bruto" de la línea, SIN invertir
   monto_aplicado    NUMERIC(18,4) NOT NULL, -- lo que realmente se sumó al saldo proveedor+club de esta línea
   saldo_anterior    NUMERIC(18,4) NOT NULL, -- saldo de ese proveedor+club antes de esta línea (dentro del mismo cierre)

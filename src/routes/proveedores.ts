@@ -22,6 +22,7 @@ import {
   eliminarPagoProveedorDefinitivo,
   eliminarGarantiaProveedorDefinitivo,
   eliminarProveedorDefinitivo,
+  calcularLineaClubPreview,
 } from "../repo/proveedores.js";
 
 export const proveedoresRouter = Router();
@@ -115,6 +116,25 @@ proveedoresRouter.get("/cierres", requireAuth, requireAdmin, async (req, res) =>
 
 proveedoresRouter.get("/cierres/:id/lineas", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listLineasCierreProveedor(req.params.id));
+});
+
+// Preview de una línea tipo CLUB (resultado + rake×% + clubRebate + impactoRodeo) antes de
+// confirmar -- misma función que usa aplicarCierreProveedor, así el número que se ve acá es
+// exactamente el que se va a guardar.
+proveedoresRouter.get("/cierre-club-preview", requireAuth, requireAdmin, async (req, res) => {
+  const { clubId, weekStart, rakebackPct } = req.query;
+  if (typeof clubId !== "string" || typeof weekStart !== "string" || typeof rakebackPct !== "string") {
+    return res.status(400).json({ error: "Faltan parámetros (clubId, weekStart, rakebackPct)." });
+  }
+  const pct = Number(rakebackPct);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 1) {
+    return res.status(400).json({ error: "rakebackPct inválido." });
+  }
+  try {
+    res.json(await calcularLineaClubPreview(clubId, weekStart, pct));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Preview del cierre ya aplicado de un agente (para armar una línea tipo AGENTE antes de

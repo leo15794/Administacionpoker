@@ -1,6 +1,68 @@
 import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
-import { getResumenClubSemanal } from "./clubResumen.js";
+import { getResumenClubSemanal, type ResumenClubSemanal } from "./clubResumen.js";
+import { getResumenTinyExtra } from "./tinyResumen.js";
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+// Rebate que el CLUB nos reconoce a nosotros -- CONCEPTO DISTINTO del rebate de agentes que ya
+// existe en weekly_closings.rebate (ese ya está adentro del final_closing de cada agente, NUNCA
+// se reutiliza acá, sería contarlo dos veces). Depende de la familia del club (22/09/2026,
+// casos reales confirmados por Leo -- Prodigio y Uriel en TeamBack GG, fixture de Tiny):
+//  - "GG" (TeamBack GG): SIEMPRE (rebateInfo?.base != null && rebateInfo.base < 0 ? ... : ...)
+//    (resultado_total + rake_total) × -10%, sin condición de signo -- puede dar positivo o
+//    negativo según el caso, y así es como tiene que ser (confirmado con 2 casos reales).
+//  - "TINY": reutiliza el rebate YA CALCULADO Y PROBADO de tiny_rebate_union (ver
+//    repo/tinyResumen.ts, getResumenTinyExtra) -- nunca se recalcula acá, evita que la fórmula
+//    se desincronice de la que ya usa la pantalla de conciliación de Cierres.
+//  - "FENIX_GG" / "SUPREMA" / cualquier otra: 0 (sin rebate de club).
+async function calcularClubRebate(resumen: ResumenClubSemanal): Promise<number> {
+  if (resumen.clubFamily === "GG") {
+    return round2((resumen.resultadoTotal + resumen.rakeTotal) * -0.1);
+  }
+  if (resumen.clubFamily === "TINY") {
+    const tinyExtra = await getResumenTinyExtra(resumen.clubId, resumen.weekStart);
+    return tinyExtra ? tinyExtra.rebateGlobal : 0;
+  }
+  return 0;
+}
+
+export interface LineaClubPreview {
+  resumen: ResumenClubSemanal;
+  participacionRake: number;
+  clubRebate: number;
+  impactoRodeo: number;
+  montoCrudo: number;
+  montoAplicado: number;
+}
+
+// Preview de una línea tipo CLUB (usado por el formulario de Proveedores antes de confirmar, y
+// por aplicarCierreProveedor -- misma función en los dos lados, así el número que Leo ve antes
+// de aplicar es EXACTAMENTE el que se va a guardar, nunca dos fórmulas que se puedan desincronizar.
+export async function calcularLineaClubPreview(
+  clubId: string,
+  weekStart: string,
+  rakebackPct: number
+): Promise<LineaClubPreview> {
+  const resumen = await getResumenClubSemanal(clubId, weekStart);
+  if (!resumen) throw new Error("Club no encontrado.");
+  if (resumen.agentesConCierre === 0) {
+    throw new Error(
+      `Todavía no hay ningún cierre semanal cargado para "${resumen.clubName ?? "este club"}" en esa semana -- cargá primero el cierre normal en "Cierres semanales" y después aplicá el cierre de proveedor.`
+    );
+  }
+  if (!resumen.weekEnd) throw new Error("El resumen del club no tiene fecha de fin de semana todavía.");
+
+  const participacionRake = resumen.rakeTotal * rakebackPct;
+  const clubRebate = await calcularClubRebate(resumen);
+  const impactoRodeo = -resumen.rodeoPagadoAgentes;
+  const montoCrudo = resumen.resultadoTotal + participacionRake + clubRebate + impactoRodeo;
+  const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
+
+  return { resumen, participacionRake, clubRebate, impactoRodeo, montoCrudo, montoAplicado };
+}
 
 // Repositorio de Proveedores (22/09/2026, pedido de Leo) -- entidad separada de agents.
 // Ver comentario largo en schema.sql. Mismo criterio de signo que balances: positivo = a
@@ -174,6 +236,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       resultadoTotal: number | null;
       rakeTotal: number | null;
       rakebackPct: number | null;
+      clubRebate: number | null;
+      impactoRodeo: number | null;
       montoCrudo: number;
       montoAplicado: number;
       saldoAnterior: number;
@@ -183,34 +247,25 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
 
     for (const linea of input.lineas) {
       if (linea.tipo === "CLUB") {
-        const resumen = await getResumenClubSemanal(linea.clubId, input.weekStart);
-        if (!resumen) throw new Error("Club no encontrado.");
-        if (resumen.agentesConCierre === 0) {
-          throw new Error(
-            `Todavía no hay ningún cierre semanal cargado para "${resumen.clubName ?? "este club"}" en esa semana -- cargá primero el cierre normal en "Cierres semanales" y después aplicá el cierre de proveedor.`
-          );
-        }
-        if (!resumen.weekEnd) throw new Error("El resumen del club no tiene fecha de fin de semana todavía.");
-        weekEnd = weekEnd ?? resumen.weekEnd;
-
-        const rakebackMonto = resumen.rakeTotal * (linea.rakebackPct as number);
-        const montoCrudo = resumen.resultadoTotal + rakebackMonto;
-        const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
+        const preview = await calcularLineaClubPreview(linea.clubId, input.weekStart, linea.rakebackPct as number);
+        weekEnd = weekEnd ?? preview.resumen.weekEnd;
 
         const entry = await getOrInitSaldo(linea.clubId);
         const saldoAnterior = entry.actual;
-        entry.actual += montoAplicado;
+        entry.actual += preview.montoAplicado;
 
         lineasPreparadas.push({
           tipo: "CLUB",
           clubId: linea.clubId,
           agentId: null,
           weeklyClosingId: null,
-          resultadoTotal: resumen.resultadoTotal,
-          rakeTotal: resumen.rakeTotal,
+          resultadoTotal: preview.resumen.resultadoTotal,
+          rakeTotal: preview.resumen.rakeTotal,
           rakebackPct: linea.rakebackPct as number,
-          montoCrudo,
-          montoAplicado,
+          clubRebate: preview.clubRebate,
+          impactoRodeo: preview.impactoRodeo,
+          montoCrudo: preview.montoCrudo,
+          montoAplicado: preview.montoAplicado,
           saldoAnterior,
           saldoNuevo: entry.actual,
           notes: linea.notes ?? null,
@@ -246,6 +301,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           resultadoTotal: null,
           rakeTotal: null,
           rakebackPct: null,
+          clubRebate: null,
+          impactoRodeo: null,
           montoCrudo,
           montoAplicado,
           saldoAnterior,
@@ -292,8 +349,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       await client.query(
         `INSERT INTO proveedor_cierre_lineas
           (id, cierre_id, tipo, club_id, agent_id, weekly_closing_id, resultado_total, rake_total,
-           rakeback_pct, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+           rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [
           newId("pclin"),
           id,
@@ -304,6 +361,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           linea.resultadoTotal,
           linea.rakeTotal,
           linea.rakebackPct,
+          linea.clubRebate,
+          linea.impactoRodeo,
           linea.montoCrudo,
           linea.montoAplicado,
           linea.saldoAnterior,

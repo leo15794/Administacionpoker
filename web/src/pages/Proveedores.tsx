@@ -450,7 +450,7 @@ function CierreRow({
                 <thead>
                   <tr>
                     <th>Tipo</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>%</th>
-                    <th>Monto bruto</th><th>Aplicado al saldo</th>
+                    <th>Rebate club</th><th>Rodeo</th><th>Monto bruto</th><th>Aplicado al saldo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -462,6 +462,8 @@ function CierreRow({
                       <td>{l.resultado_total !== null ? usd(l.resultado_total) : "—"}</td>
                       <td>{l.rake_total !== null ? usd(l.rake_total) : "—"}</td>
                       <td>{l.rakeback_pct !== null ? pct(l.rakeback_pct) : "—"}</td>
+                      <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
+                      <td>{l.impacto_rodeo !== null ? usd(l.impacto_rodeo) : "—"}</td>
                       <td>{usd(l.monto_crudo)}</td>
                       <td><b>{usd(l.monto_aplicado)}</b></td>
                     </tr>
@@ -599,25 +601,24 @@ function LineaClubEditor({
   onRemove: () => void;
   soloUna: boolean;
 }) {
-  const [resumen, setResumen] = useState<any | null>(null);
+  const [preview, setPreview] = useState<any | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setResumen(null);
+    setPreview(null);
+    setError(null);
     if (linea.tipo !== "CLUB" || !linea.clubId || !weekStart) return;
+    const pctNum = (Number(linea.rakebackPct) || 0) / 100;
     setCargando(true);
     api
-      .resumenClub(linea.clubId, weekStart)
-      .then(setResumen)
-      .catch(() => setResumen(null))
+      .cierreClubPreview(linea.clubId, weekStart, pctNum)
+      .then(setPreview)
+      .catch((err) => setError(err.message || "No se pudo calcular el preview."))
       .finally(() => setCargando(false));
-  }, [linea.tipo, linea.clubId, weekStart]);
+  }, [linea.tipo, linea.clubId, linea.rakebackPct, weekStart]);
 
-  const pctNum = (Number(linea.rakebackPct) || 0) / 100;
-  const resultadoTotal = resumen ? Number(resumen.resultadoTotal) : null;
-  const rakeTotal = resumen ? Number(resumen.rakeTotal) : null;
-  const montoCrudo = resultadoTotal !== null && rakeTotal !== null ? resultadoTotal + rakeTotal * pctNum : null;
-  const sinCierresDelClub = resumen && Number(resumen.agentesConCierre) === 0;
+  const resumen = preview?.resumen ?? null;
 
   return (
     <div className="panel" style={{ background: "rgba(255,255,255,0.02)", marginBottom: 10 }}>
@@ -634,17 +635,15 @@ function LineaClubEditor({
           <input value={linea.rakebackPct} onChange={(e) => onChange({ ...linea, rakebackPct: e.target.value })} type="number" step="0.01" />
         </div>
       </div>
-      {cargando && <div className="muted" style={{ fontSize: 12 }}>Trayendo el resumen del club...</div>}
-      {sinCierresDelClub && (
-        <div className="error" style={{ fontSize: 12 }}>
-          Esta semana no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".
-        </div>
-      )}
-      {resumen && !sinCierresDelClub && (
+      {cargando && <div className="muted" style={{ fontSize: 12 }}>Calculando...</div>}
+      {error && <div className="error" style={{ fontSize: 12 }}>{error}</div>}
+      {preview && resumen && !error && (
         <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-          Resultado: {usd(resultadoTotal ?? 0)} (de {resumen.agentesConCierre} agente{Number(resumen.agentesConCierre) === 1 ? "" : "s"}) · Rake:{" "}
-          {usd(rakeTotal ?? 0)} · Cierre bruto = {usd(montoCrudo ?? 0)} · Se guarda invertido:{" "}
-          <b>{usd(montoCrudo !== null ? -montoCrudo : 0)}</b>
+          Resultado: {usd(resumen.resultadoTotal)} (de {resumen.agentesConCierre} agente{Number(resumen.agentesConCierre) === 1 ? "" : "s"}) · Rake:{" "}
+          {usd(resumen.rakeTotal)} · Participación rake: {usd(preview.participacionRake)}
+          {Number(preview.clubRebate) !== 0 && <> · Rebate del club: {usd(preview.clubRebate)}</>}
+          {Number(preview.impactoRodeo) !== 0 && <> · Rodeo: {usd(preview.impactoRodeo)}</>}
+          {" "}· Cierre bruto = {usd(preview.montoCrudo)} · Se guarda invertido: <b>{usd(preview.montoAplicado)}</b>
         </div>
       )}
       {!soloUna && (
