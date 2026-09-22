@@ -89,6 +89,46 @@ export default function Proveedores() {
     }
   }
 
+  async function onEliminarCierre(id: string) {
+    if (!confirm("¿Eliminar este cierre DEL TODO? No se puede deshacer (a diferencia de \"Revertir\", esto lo saca del historial).")) return;
+    try {
+      await api.eliminarCierreProveedorDefinitivo(id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar.");
+    }
+  }
+
+  async function onEliminarPago(id: string) {
+    if (!confirm("¿Eliminar este pago DEL TODO? No se puede deshacer.")) return;
+    try {
+      await api.eliminarPagoProveedorDefinitivo(id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar.");
+    }
+  }
+
+  async function onEliminarGarantia(id: string) {
+    if (!confirm("¿Eliminar esta garantía DEL TODO, junto con su historial? No se puede deshacer.")) return;
+    try {
+      await api.eliminarGarantiaProveedorDefinitivo(id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar.");
+    }
+  }
+
+  async function onEliminarProveedor(id: string, nombre: string) {
+    if (!confirm(`¿Eliminar a "${nombre}" DEL TODO -- saldos, cierres, pagos y garantías? No se puede deshacer.`)) return;
+    try {
+      await api.eliminarProveedorDefinitivo(id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar.");
+    }
+  }
+
   return (
     <div>
       <div className="topbar">
@@ -139,7 +179,10 @@ export default function Proveedores() {
                     : "Sin auto-cierre"}
                 </td>
                 <td className="muted" style={{ fontSize: 12 }} title={p.notes || undefined}>{p.notes || "—"}</td>
-                <td><button className="btn secondary small" onClick={() => setEditandoProveedor(p)}>Editar</button></td>
+                <td>
+                  <button className="btn secondary small" onClick={() => setEditandoProveedor(p)}>Editar</button>{" "}
+                  <button className="btn danger small" onClick={() => onEliminarProveedor(p.id, p.name)}>Eliminar</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -205,7 +248,7 @@ export default function Proveedores() {
               </thead>
               <tbody>
                 {cierres.map((c) => (
-                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} />
+                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onEliminar={onEliminarCierre} />
                 ))}
               </tbody>
             </table>
@@ -239,7 +282,8 @@ export default function Proveedores() {
                       {p.status !== "REVERTIDO" && (
                         <button className="btn secondary small" onClick={() => onRevertirPago(p.id)}>Revertir</button>
                       )}
-                      {p.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}
+                      {p.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}{" "}
+                      <button className="btn danger small" onClick={() => onEliminarPago(p.id)}>Eliminar</button>
                     </td>
                   </tr>
                 ))}
@@ -272,7 +316,8 @@ export default function Proveedores() {
                       <td><span className="badge neutral">{usd(Number(g.amount) - Number(g.consumed))}</span></td>
                       <td className="muted" style={{ fontSize: 12 }} title={g.notes || undefined}>{g.notes || "—"}</td>
                       <td>
-                        <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({ proveedorId: g.proveedor_id })}>Ajustar</button>
+                        <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({ proveedorId: g.proveedor_id })}>Ajustar</button>{" "}
+                        <button className="btn danger small" onClick={() => onEliminarGarantia(g.id)}>Eliminar</button>
                       </td>
                     </tr>
                   ))}
@@ -355,7 +400,15 @@ export default function Proveedores() {
   );
 }
 
-function CierreRow({ cierre, onRevertir }: { cierre: any; onRevertir: (id: string) => void }) {
+function CierreRow({
+  cierre,
+  onRevertir,
+  onEliminar,
+}: {
+  cierre: any;
+  onRevertir: (id: string) => void;
+  onEliminar: (id: string) => void;
+}) {
   const [abierto, setAbierto] = useState(false);
   const [lineas, setLineas] = useState<any[] | null>(null);
 
@@ -381,7 +434,8 @@ function CierreRow({ cierre, onRevertir }: { cierre: any; onRevertir: (id: strin
           {cierre.status !== "REVERTIDO" && (
             <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRevertir(cierre.id); }}>Revertir</button>
           )}
-          {cierre.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}
+          {cierre.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}{" "}
+          <button className="btn danger small" onClick={(e) => { e.stopPropagation(); onEliminar(cierre.id); }}>Eliminar</button>
         </td>
       </tr>
       {abierto && (

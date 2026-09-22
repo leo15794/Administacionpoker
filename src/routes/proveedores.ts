@@ -18,6 +18,10 @@ import {
   listGarantiasProveedores,
   listGarantiaProveedorMovements,
   ajustarGarantiaProveedor,
+  eliminarCierreProveedorDefinitivo,
+  eliminarPagoProveedorDefinitivo,
+  eliminarGarantiaProveedorDefinitivo,
+  eliminarProveedorDefinitivo,
 } from "../repo/proveedores.js";
 
 export const proveedoresRouter = Router();
@@ -59,6 +63,18 @@ proveedoresRouter.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await actualizarProveedor(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real y en cascada (22/09/2026, pedido de Leo: "seguimos haciendo pruebas") -- saca
+// el proveedor y todo su rastro (saldos, cierres, pagos, garantías). No se puede deshacer.
+proveedoresRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const r = await eliminarProveedorDefinitivo(req.params.id);
+    if (!r.found) return res.status(404).json({ error: "Proveedor no encontrado." });
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -124,6 +140,18 @@ proveedoresRouter.delete("/cierres/:id", requireAuth, requireAdmin, async (req, 
   }
 });
 
+// Borrado real (22/09/2026, pedido de Leo: "seguimos haciendo pruebas") -- a diferencia de
+// Revertir (que deja la fila marcada REVERTIDO), esto la saca del todo del historial.
+proveedoresRouter.delete("/cierres/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const r = await eliminarCierreProveedorDefinitivo(req.params.id);
+    if (!r.found) return res.status(404).json({ error: "Cierre no encontrado." });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 const pagoSchema = z.object({
   proveedorId: z.string(),
   clubId: z.string(),
@@ -156,6 +184,16 @@ proveedoresRouter.delete("/pagos/:id", requireAuth, requireAdmin, async (req, re
   }
 });
 
+proveedoresRouter.delete("/pagos/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const r = await eliminarPagoProveedorDefinitivo(req.params.id);
+    if (!r.found) return res.status(404).json({ error: "Pago no encontrado." });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 proveedoresRouter.get("/garantias", requireAuth, requireAdmin, async (_req, res) => {
   res.json(await listGarantiasProveedores());
 });
@@ -163,6 +201,18 @@ proveedoresRouter.get("/garantias", requireAuth, requireAdmin, async (_req, res)
 proveedoresRouter.get("/garantias/historial", requireAuth, requireAdmin, async (req, res) => {
   const proveedorId = typeof req.query.proveedorId === "string" && req.query.proveedorId ? req.query.proveedorId : undefined;
   res.json(await listGarantiaProveedorMovements(proveedorId));
+});
+
+// Borrado real de una garantía entera (22/09/2026, pedido de Leo) -- a diferencia de "Baja"
+// (que la deja inactiva pero registrada), esto la saca del todo junto con su historial.
+proveedoresRouter.delete("/garantias/:id/definitivo", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const r = await eliminarGarantiaProveedorDefinitivo(req.params.id);
+    if (!r.found) return res.status(404).json({ error: "Garantía no encontrada." });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const ajusteGarantiaSchema = z.object({

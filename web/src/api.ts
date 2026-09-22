@@ -239,6 +239,7 @@ export const api = {
     notes?: string;
   }) => request("/proveedores/cierres", { method: "POST", body: JSON.stringify(data) }),
   revertirCierreProveedor: (id: string) => request(`/proveedores/cierres/${id}`, { method: "DELETE" }),
+  eliminarCierreProveedorDefinitivo: (id: string) => request(`/proveedores/cierres/${id}/definitivo`, { method: "DELETE" }),
   pagosProveedor: (proveedorId?: string) => request(`/proveedores/pagos${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
   registrarPagoProveedor: (data: {
     proveedorId: string;
@@ -249,9 +250,12 @@ export const api = {
     notes?: string;
   }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
   revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
+  eliminarPagoProveedorDefinitivo: (id: string) => request(`/proveedores/pagos/${id}/definitivo`, { method: "DELETE" }),
   garantiasProveedores: () => request("/proveedores/garantias"),
   garantiasProveedoresHistorial: (proveedorId?: string) =>
     request(`/proveedores/garantias/historial${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
+  eliminarGarantiaProveedorDefinitivo: (id: string) => request(`/proveedores/garantias/${id}/definitivo`, { method: "DELETE" }),
+  eliminarProveedorDefinitivo: (id: string) => request(`/proveedores/${id}`, { method: "DELETE" }),
   ajustarGarantiaProveedor: (data: {
     proveedorId: string;
     type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA";

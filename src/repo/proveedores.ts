@@ -679,6 +679,146 @@ export async function ajustarGarantiaProveedor(input: AjusteGarantiaProveedorInp
   }
 }
 
+// ---- Borrado real (22/09/2026, pedido de Leo: "seguimos haciendo pruebas") ----
+// Mismo criterio que eliminarCierreSemanalDefinitivo (repo/closings.ts): pensado para limpiar
+// datos de PRUEBA rápido, nunca plata real operada. Si el registro todavía está activo,
+// deshace su efecto en el saldo ANTES de borrar (sin dejar rastro de reversa, total se borra
+// todo) -- si ya estaba revertido, el saldo ya está deshecho, solo hay que borrar filas.
+
+export async function eliminarCierreProveedorDefinitivo(id: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query(`SELECT * FROM proveedor_cierres WHERE id = $1 FOR UPDATE`, [id]);
+    const cierre = r.rows[0];
+    if (!cierre) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+
+    if (cierre.status !== "REVERTIDO") {
+      const lineasR = await client.query(
+        `SELECT * FROM proveedor_cierre_lineas WHERE cierre_id = $1 ORDER BY created_at`,
+        [id]
+      );
+      const porClub = new Map<string, number>(); // club_id -> delta total a deshacer
+      for (const l of lineasR.rows) {
+        const clubId = l.club_id as string;
+        porClub.set(clubId, (porClub.get(clubId) ?? 0) + Number(l.monto_aplicado));
+      }
+      for (const [clubId, delta] of porClub) {
+        const saldo = await getSaldoParaUpdate(client, cierre.proveedor_id, clubId);
+        await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
+          Number(saldo.amount) - delta,
+          saldo.id,
+        ]);
+      }
+    }
+
+    await client.query(`DELETE FROM proveedor_cierre_lineas WHERE cierre_id = $1`, [id]);
+    await client.query(`DELETE FROM proveedor_cierres WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+    return { found: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function eliminarPagoProveedorDefinitivo(id: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query(`SELECT * FROM proveedor_pagos WHERE id = $1 FOR UPDATE`, [id]);
+    const pago = r.rows[0];
+    if (!pago) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+
+    if (pago.status !== "REVERTIDO") {
+      const delta = pago.direction === "PAGO" ? -Math.abs(Number(pago.amount)) : Math.abs(Number(pago.amount));
+      const saldo = await getSaldoParaUpdate(client, pago.proveedor_id, pago.club_id);
+      await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
+        Number(saldo.amount) - delta,
+        saldo.id,
+      ]);
+    }
+
+    await client.query(`DELETE FROM proveedor_pagos WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+    return { found: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Borra una garantía entera (y todo su historial de movimientos) -- a diferencia de "Baja"
+// (que la deja registrada como inactiva), esto la saca del todo, para limpiar pruebas.
+export async function eliminarGarantiaProveedorDefinitivo(id: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query(`SELECT * FROM proveedor_garantias WHERE id = $1 FOR UPDATE`, [id]);
+    if (!r.rows[0]) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+    await client.query(`DELETE FROM proveedor_garantia_movements WHERE garantia_id = $1`, [id]);
+    await client.query(`DELETE FROM proveedor_garantias WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+    return { found: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Borra un proveedor ENTERO junto con todo su rastro (saldos, cierres+líneas, pagos,
+// garantías+movimientos) -- el módulo de Proveedores es autocontenido (no toca balances ni
+// ledger_movements de Agentes), así que no hay nada que deshacer afuera, solo borrar sus
+// propias tablas en orden (líneas/movimientos primero, por las foreign keys).
+export async function eliminarProveedorDefinitivo(id: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query(`SELECT * FROM proveedores WHERE id = $1 FOR UPDATE`, [id]);
+    if (!r.rows[0]) {
+      await client.query("ROLLBACK");
+      return { found: false };
+    }
+
+    await client.query(
+      `DELETE FROM proveedor_cierre_lineas WHERE cierre_id IN (SELECT id FROM proveedor_cierres WHERE proveedor_id = $1)`,
+      [id]
+    );
+    await client.query(`DELETE FROM proveedor_cierres WHERE proveedor_id = $1`, [id]);
+    await client.query(`DELETE FROM proveedor_pagos WHERE proveedor_id = $1`, [id]);
+    await client.query(
+      `DELETE FROM proveedor_garantia_movements WHERE proveedor_id = $1`,
+      [id]
+    );
+    await client.query(`DELETE FROM proveedor_garantias WHERE proveedor_id = $1`, [id]);
+    await client.query(`DELETE FROM proveedor_saldos WHERE proveedor_id = $1`, [id]);
+    await client.query(`DELETE FROM proveedores WHERE id = $1`, [id]);
+
+    await client.query("COMMIT");
+    return { found: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function registrarMovimientoGarantia(
   client: PoolClient,
   garantia: any,
