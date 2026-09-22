@@ -37,6 +37,7 @@ export default function Proveedores() {
   const [showCierre, setShowCierre] = useState(false);
   const [showPago, setShowPago] = useState(false);
   const [showGarantiaAjuste, setShowGarantiaAjuste] = useState<{ proveedorId?: string } | null>(null);
+  const [showLiquidacion, setShowLiquidacion] = useState(false);
 
   function refresh() {
     setError("");
@@ -161,6 +162,7 @@ export default function Proveedores() {
           <button className="btn secondary" onClick={() => setShowNuevoProveedor(true)}>+ Nuevo proveedor</button>
           <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
           <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>
+          <button className="btn secondary" onClick={() => setShowLiquidacion(true)} disabled={proveedores.length === 0}>+ Liquidación PDF</button>
         </div>
       </div>
 
@@ -408,6 +410,16 @@ export default function Proveedores() {
             garantias={garantias ?? []}
             preselectProveedorId={showGarantiaAjuste.proveedorId}
             onDone={() => { setShowGarantiaAjuste(null); refresh(); }}
+          />
+        </Modal>
+      )}
+      {showLiquidacion && (
+        <Modal title="Liquidación PDF de proveedor" onClose={() => setShowLiquidacion(false)}>
+          <LiquidacionProveedorForm
+            proveedores={proveedores}
+            saldos={saldos ?? []}
+            garantias={garantias ?? []}
+            onDone={() => setShowLiquidacion(false)}
           />
         </Modal>
       )}
@@ -1080,6 +1092,303 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
     </form>
+  );
+}
+
+// Genera el PDF "REPORTE ACTUAL DE <proveedor>" (22/09/2026, formato exacto del ejemplo que
+// mandó Leo). Convención de ESTE reporte es la OPUESTA a la interna del sistema (acá positivo
+// = <proveedor> nos debe, para que se lea como estado de cuenta) -- se invierte al armar el
+// reporte, nunca se toca la convención interna (positivo = a favor del proveedor) en ningún
+// otro lado. "Cierre línea" = monto_crudo tal cual quedó guardado en cada línea (para CLUB ya
+// es el crudo sin invertir; para AGENTE es el final_closing del agente, nunca se invierte).
+// "Impacto <proveedor>" = -monto_aplicado (la vuelta de tuerca de este reporte en particular).
+async function generarLiquidacionPdf(input: {
+  proveedorName: string;
+  weekStart: string;
+  weekEnd: string;
+  lineasSeleccionadas: any[];
+  saldoActualTotal: number; // convención interna: positivo = a favor del proveedor
+  garantiaVigente: number;
+  nota: string;
+}) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const doc = new jsPDF();
+  const margen = 14;
+  let y = 18;
+
+  doc.setFillColor(40, 50, 90);
+  doc.rect(0, 0, 210, 14, "F");
+  doc.setTextColor(255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(`REPORTE ACTUAL DE ${input.proveedorName.toUpperCase()}`, 105, 9.5, { align: "center" });
+  doc.setTextColor(0);
+  y = 22;
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("Semana", margen, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${dateShort(input.weekStart)} al ${dateShort(input.weekEnd)}`, margen + 22, y);
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.text("Proveedor / Unión", margen, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(input.proveedorName, margen + 32, y);
+  y += 8;
+
+  const mostrarRebate = input.lineasSeleccionadas.some((l) => Number(l.club_rebate || 0) !== 0);
+
+  function datosLinea(l: any) {
+    const esAgente = l.tipo === "AGENTE";
+    const resultado = esAgente ? Number(l.wc_result || 0) : Number(l.resultado_total || 0);
+    const rakeTotal = esAgente ? Number(l.wc_rake_total || 0) : Number(l.rake_total || 0);
+    const rakeback = esAgente ? Number(l.wc_rakeback || 0) : rakeTotal * Number(l.rakeback_pct || 0);
+    const rebateClub = Number(l.club_rebate || 0);
+    const rodeo = esAgente ? Number(l.wc_rodeo || 0) : Number(l.impacto_rodeo || 0);
+    const cierreLinea = Number(l.monto_crudo);
+    const impacto = -Number(l.monto_aplicado);
+    return { esAgente, resultado, rakeTotal, rakeback, rebateClub, rodeo, cierreLinea, impacto };
+  }
+
+  const head = [
+    "Agente / Línea", "Club", "Resultado", "Rake", "Rakeback",
+    ...(mostrarRebate ? ["Rebate club"] : []),
+    "Rodeo", "Cierre línea", `Impacto ${input.proveedorName}`,
+  ];
+  const body = input.lineasSeleccionadas.map((l) => {
+    const d = datosLinea(l);
+    const label = d.esAgente ? (l.agent_name ?? "?") : `TOTAL ${(l.club_name ?? "?").toUpperCase()}`;
+    return [
+      label, l.club_name, usd(d.resultado), usd(d.rakeTotal), usd(d.rakeback),
+      ...(mostrarRebate ? [usd(d.rebateClub)] : []),
+      usd(d.rodeo), usd(d.cierreLinea), usd(d.impacto),
+    ];
+  });
+  const sum = (fn: (d: ReturnType<typeof datosLinea>) => number) =>
+    input.lineasSeleccionadas.reduce((s, l) => s + fn(datosLinea(l)), 0);
+  const totalImpacto = sum((d) => d.impacto);
+  const foot = [
+    "TOTAL CIERRE", "", usd(sum((d) => d.resultado)), usd(sum((d) => d.rakeTotal)), usd(sum((d) => d.rakeback)),
+    ...(mostrarRebate ? [usd(sum((d) => d.rebateClub))] : []),
+    usd(sum((d) => d.rodeo)), "", usd(totalImpacto),
+  ];
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen, right: margen },
+    head: [head],
+    body,
+    foot: [foot],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [40, 50, 90] },
+    footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
+  });
+  y = (doc as any).lastAutoTable.finalY + 10;
+
+  // Estado de cuenta -- ver comentario de convención arriba: acá SIEMPRE se combinan TODOS los
+  // clubes del proveedor (el estado de cuenta completo), no solo las líneas tildadas para el
+  // reporte. Refleja el saldo/garantía de HOY, no una reconstrucción histórica de esa semana.
+  const deudaActualReporte = -input.saldoActualTotal;
+  const saldoAnteriorReporte = deudaActualReporte - totalImpacto;
+  const totalControlado = deudaActualReporte + input.garantiaVigente;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen, right: margen },
+    head: [["Estado de cuenta", "Importe", "Detalle"]],
+    body: [
+      ["Saldo operativo anterior", usd(saldoAnteriorReporte), ""],
+      ["Cierre semanal actual", usd(totalImpacto), "Impacto neto de las líneas incluidas en este reporte"],
+      ["Deuda operativa actual", usd(deudaActualReporte), deudaActualReporte >= 0 ? `${input.proveedorName} nos debe` : `Le debemos a ${input.proveedorName}`],
+      ["Garantía vigente", usd(input.garantiaVigente), "Separada de la deuda operativa"],
+      ["TOTAL CONTROLADO", usd(totalControlado), "Deuda operativa actual + garantía vigente"],
+    ],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [40, 50, 90] },
+    didParseCell: (data: any) => {
+      if (data.row.section === "body" && (data.row.index === 2 || data.row.index === 4)) {
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+  y = (doc as any).lastAutoTable.finalY + 10;
+
+  doc.setFillColor(40, 50, 90);
+  doc.rect(margen, y, 182, 10, "F");
+  doc.setTextColor(255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text(`TOTAL FINAL ${input.proveedorName.toUpperCase()}: ${usd(totalControlado)}`, margen + 3, y + 7);
+  doc.setTextColor(0);
+  y += 16;
+
+  const notaSignos = input.lineasSeleccionadas
+    .map((l) => {
+      const d = datosLinea(l);
+      return d.esAgente
+        ? `En ${l.club_name} el cierre de ${l.agent_name ?? "el agente"} se invierte para obtener el impacto en ${input.proveedorName}.`
+        : `En ${l.club_name} el signo se mantiene.`;
+    })
+    .join(" ");
+  const notaCompleta = [notaSignos, "La garantía se conserva separada del saldo operativo.", input.nota.trim()]
+    .filter(Boolean)
+    .join(" ");
+  if (notaCompleta) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(90);
+    const lineas = doc.splitTextToSize(`Nota: ${notaCompleta}`, 182);
+    doc.text(lineas, margen, y);
+    doc.setTextColor(0);
+  }
+
+  const nombreArchivo = `Cierre_${input.proveedorName.replace(/[^a-z0-9]+/gi, "-")}_${input.weekStart}.pdf`;
+  doc.save(nombreArchivo);
+}
+
+// Formulario del modal "+ Liquidación PDF" (22/09/2026, pedido de Leo: "tenemos que poder
+// elegir en este caso al proveedor y a los clubes que tiene, no que salga de a uno") -- elige
+// proveedor, después semana (de sus cierres ya aplicados), y tilda qué líneas (club y/o
+// agente) van en el reporte -- por defecto todas tildadas. El saldo/garantía del estado de
+// cuenta salen de los mismos `saldos`/`garantias` ya cargados en la página principal (filtrados
+// por proveedor acá), nunca se recalculan.
+function LiquidacionProveedorForm({
+  proveedores,
+  saldos,
+  garantias,
+  onDone,
+}: {
+  proveedores: any[];
+  saldos: any[];
+  garantias: any[];
+  onDone: () => void;
+}) {
+  const [proveedorId, setProveedorId] = useState("");
+  const [cierresProveedor, setCierresProveedor] = useState<any[] | null>(null);
+  const [cierreId, setCierreId] = useState("");
+  const [lineas, setLineas] = useState<any[] | null>(null);
+  const [seleccion, setSeleccion] = useState<Record<string, boolean>>({});
+  const [nota, setNota] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [cargandoCierres, setCargandoCierres] = useState(false);
+  const [generando, setGenerando] = useState(false);
+
+  useEffect(() => {
+    setCierreId("");
+    setLineas(null);
+    if (!proveedorId) { setCierresProveedor(null); return; }
+    setCargandoCierres(true);
+    api
+      .cierresProveedor(proveedorId)
+      .then((rows: any[]) => setCierresProveedor(rows.filter((c) => c.status !== "REVERTIDO")))
+      .catch(() => setCierresProveedor([]))
+      .finally(() => setCargandoCierres(false));
+  }, [proveedorId]);
+
+  useEffect(() => {
+    if (!cierreId) { setLineas(null); return; }
+    api
+      .lineasCierreProveedor(cierreId)
+      .then((rows: any[]) => {
+        setLineas(rows);
+        const sel: Record<string, boolean> = {};
+        rows.forEach((l) => { sel[l.id] = true; });
+        setSeleccion(sel);
+      })
+      .catch(() => setLineas([]));
+  }, [cierreId]);
+
+  const proveedor = proveedores.find((p) => p.id === proveedorId);
+  const cierre = (cierresProveedor ?? []).find((c) => c.id === cierreId);
+
+  async function onGenerar() {
+    setMsg(null);
+    if (!proveedor || !cierre || !lineas) return;
+    const lineasSeleccionadas = lineas.filter((l) => seleccion[l.id]);
+    if (lineasSeleccionadas.length === 0) return setMsg({ ok: false, text: "Elegí al menos una línea." });
+    setGenerando(true);
+    try {
+      const saldoActualTotal = saldos
+        .filter((s) => s.proveedor_id === proveedorId)
+        .reduce((s, x) => s + Number(x.amount), 0);
+      const garantiaVigente = garantias
+        .filter((g) => g.proveedor_id === proveedorId)
+        .reduce((s, g) => s + (Number(g.amount) - Number(g.consumed)), 0);
+      await generarLiquidacionPdf({
+        proveedorName: proveedor.name,
+        weekStart: cierre.week_start,
+        weekEnd: cierre.week_end,
+        lineasSeleccionadas,
+        saldoActualTotal,
+        garantiaVigente,
+        nota,
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo generar el PDF." });
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Proveedor</label>
+          <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+            <option value="">Elegir...</option>
+            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Semana</label>
+          <select value={cierreId} onChange={(e) => setCierreId(e.target.value)} disabled={!proveedorId || cargandoCierres}>
+            <option value="">{cargandoCierres ? "Cargando..." : "Elegir..."}</option>
+            {(cierresProveedor ?? []).map((c) => (
+              <option key={c.id} value={c.id}>{dateShort(c.week_start)} - {dateShort(c.week_end)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {proveedorId && cierresProveedor && cierresProveedor.length === 0 && (
+        <div className="muted" style={{ fontSize: 12 }}>Este proveedor todavía no tiene cierres semanales aplicados.</div>
+      )}
+
+      {cierreId && !lineas && <div className="muted">Cargando líneas...</div>}
+
+      {lineas && lineas.length > 0 && (
+        <div className="field">
+          <label>Líneas a incluir en el reporte</label>
+          {lineas.map((l) => (
+            <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={!!seleccion[l.id]}
+                onChange={(e) => setSeleccion((prev) => ({ ...prev, [l.id]: e.target.checked }))}
+              />
+              {l.tipo === "AGENTE" ? `${l.agent_name ?? "?"} (agente) -- ${l.club_name}` : `Club total -- ${l.club_name}`}
+              <span className="muted">({usd(l.monto_aplicado)})</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div className="field">
+        <label>Nota (opcional)</label>
+        <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Aclaración extra para el pie del PDF" />
+      </div>
+
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={!lineas || lineas.length === 0 || generando} onClick={onGenerar}>
+        {generando ? "Generando..." : "Generar PDF"}
+      </button>
+    </div>
   );
 }
 

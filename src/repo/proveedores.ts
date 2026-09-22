@@ -518,11 +518,18 @@ export async function recalcularCierreProveedor(id: string, createdBy?: string) 
 }
 
 export async function listLineasCierreProveedor(cierreId: string) {
+  // LEFT JOIN weekly_closings (22/09/2026, para el PDF de liquidación) -- las líneas tipo
+  // AGENTE no guardan su propio resultado_total/rake_total/rakeback/rodeo (solo el
+  // weekly_closing_id de referencia), así que para poder mostrar ese desglose en el reporte se
+  // trae tal cual del cierre de agente ya aplicado -- nunca se recalcula acá.
   const r = await pool.query(
-    `SELECT pcl.*, c.name as club_name, a.name as agent_name
+    `SELECT pcl.*, c.name as club_name, a.name as agent_name,
+            wc.result as wc_result, wc.rake_total as wc_rake_total,
+            wc.rakeback as wc_rakeback, wc.rodeo as wc_rodeo
      FROM proveedor_cierre_lineas pcl
      JOIN clubs c ON c.id = pcl.club_id
      LEFT JOIN agents a ON a.id = pcl.agent_id
+     LEFT JOIN weekly_closings wc ON wc.id = pcl.weekly_closing_id
      WHERE pcl.cierre_id = $1
      ORDER BY pcl.created_at`,
     [cierreId]
