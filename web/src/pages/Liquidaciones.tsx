@@ -273,15 +273,40 @@ export default function Liquidaciones() {
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
   const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado - aplicadoCarga - totalCruzadoCarga : 0);
 
+  // Sugerencia de importe por fila para el pago en lote (22/09/2026: bug que encontró Leo --
+  // antes esto sumaba el pendiente BRUTO de cada fila, sin restar lo que ya se descontó a nivel
+  // liquidación por adelantos/cargas cruzados -- el total tildado daba más que "Total a pagar".
+  // Acá primero se resta lo que SÍ se puede atribuir a una fila puntual (ventas/tickets de esa
+  // fila), y lo que queda se escala PROPORCIONALMENTE entre todas las filas para que la suma
+  // coincida con totalAPagar -- los adelantos son por agente (no por agente+club) y las cargas
+  // no están necesariamente ligadas a este cierre, así que no hay forma de saber con certeza a
+  // qué fila puntual "le tocó" ese descuento; repartirlo a prorrata es la mejor aproximación, y
+  // de cualquier forma Leo puede ajustar cada importe a mano antes de confirmar.
+  const sugerenciasPagoPorFila = useMemo(() => {
+    const brutos: Record<string, number> = {};
+    let totalBruto = 0;
+    (data?.filas ?? []).forEach((f: any) => {
+      const key = filaKey(f);
+      const ventasTickets = (Number(ventasPorFila[key]) || 0) + (Number(ticketsPorFila[key]) || 0);
+      const bruto =
+        f && f.rakebackPendienteId && f.rakebackPendienteDisponible !== null
+          ? Math.max(0, Number(f.rakebackPendienteDisponible) - ventasTickets)
+          : Math.max(0, Math.abs(totalAPagar));
+      brutos[key] = bruto;
+      totalBruto += bruto;
+    });
+    const objetivo = Math.max(0, totalAPagar);
+    const factor = totalBruto > 0 ? Math.min(1, objetivo / totalBruto) : 1;
+    const sugerencias: Record<string, number> = {};
+    Object.keys(brutos).forEach((key) => {
+      sugerencias[key] = brutos[key] * factor;
+    });
+    return sugerencias;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, ventasPorFila, ticketsPorFila, totalAPagar]);
+
   function montoSugeridoParaFila(f: any) {
-    // Si la fila tiene rakeback pendiente propio, ese es el monto correcto a sugerir (es lo que
-    // ESE cierre generó de rakeback/rebate, no el total de toda la liquidación, que puede
-    // combinar varios agentes/clubes). Si no tiene (cierre viejo, sin migrar), se cae al total
-    // de la liquidación como hacía antes.
-    if (f && f.rakebackPendienteId && f.rakebackPendienteDisponible !== null) {
-      return Math.max(0, Number(f.rakebackPendienteDisponible)).toFixed(2);
-    }
-    return Math.abs(totalAPagar).toFixed(2);
+    return (sugerenciasPagoPorFila[filaKey(f)] ?? 0).toFixed(2);
   }
 
   function abrirMov(tipo: "PAGO" | "COBRO") {
