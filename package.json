@@ -14,6 +14,8 @@
     "sync:saldos": "tsx src/scripts/syncSaldosPlanilla.ts",
     "reset:financiero": "tsx src/scripts/resetDatosFinancieros.ts",
     "reset:financiero:apply": "tsx src/scripts/resetDatosFinancieros.ts --apply --confirmo",
+    "reset:adelantos-liq": "tsx src/scripts/resetAdelantosYLiquidaciones.ts",
+    "reset:adelantos-liq:apply": "tsx src/scripts/resetAdelantosYLiquidaciones.ts --apply --confirmo",
     "sync:saldos:apply": "tsx src/scripts/syncSaldosPlanilla.ts --apply",
     "ajuste:colgados": "tsx src/scripts/ajustePlanillaColgados.ts",
     "ajuste:colgados:apply": "tsx src/scripts/ajustePlanillaColgados.ts --apply",
