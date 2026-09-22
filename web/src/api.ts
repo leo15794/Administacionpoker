@@ -203,7 +203,7 @@ export const api = {
   // tener varios a la vez (distintos momentos, distintos clubes de origen).
   adelantos: () => request("/advances"),
   adelantosHistorial: (agentId?: string) => request(`/advances/historial${agentId ? `?agentId=${agentId}` : ""}`),
-  altaAdelanto: (data: { agentId: string; amount: number; clubOrigenId?: string | null; notes?: string }) =>
+  altaAdelanto: (data: { agentId: string; amount: number; medio?: "FICHAS" | "USDT" | null; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/alta", { method: "POST", body: JSON.stringify(data) }),
   ajustarAdelanto: (data: { advanceId: string; type: "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),

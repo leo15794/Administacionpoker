@@ -162,6 +162,13 @@ function deltaParaBalance(type: string, amount: number, esDestinoDeTransferencia
       // propósito NO es lo mismo que "PAGO", que siempre resta del balance -- ver
       // repo/rakebackPendiente.ts.
       return 0;
+    case "ADELANTO_RAKEBACK":
+      // Adelanto de rakeback dado en USDT (repo/advances.ts): sale de la wallet (entrada de
+      // tesorería EGRESO, ver más abajo) pero NO es plata que el agente ya ganó operativamente
+      // -- eso lo trackea rakeback_advances aparte (amount/consumed), igual que con
+      // PAGO_RAKEBACK. Un adelanto en FICHAS, en cambio, SÍ usa el tipo CARGA normal (mueve el
+      // stock de verdad, porque son fichas físicas que se le dieron).
+      return 0;
     case "TRANSFERENCIA_ENTRE_CLUBES":
       return esDestinoDeTransferencia ? Math.abs(amount) : -Math.abs(amount);
     default:

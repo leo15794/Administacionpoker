@@ -21,8 +21,12 @@ advancesRouter.get("/historial", requireAuth, requireAdmin, async (req, res) => 
 const altaSchema = z.object({
   agentId: z.string(),
   amount: z.number().positive(),
+  medio: z.enum(["FICHAS", "USDT"]).nullable().optional(),
   clubOrigenId: z.string().nullable().optional(),
   notes: z.string().optional(),
+}).refine((v) => !v.medio || !!v.clubOrigenId, {
+  message: "Un adelanto en fichas o USDT necesita club de origen.",
+  path: ["clubOrigenId"],
 });
 
 advancesRouter.post("/alta", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -32,6 +36,7 @@ advancesRouter.post("/alta", requireAuth, requireAdmin, async (req: AuthedReques
     const advance = await altaAdelanto({
       agentId: parsed.data.agentId,
       amount: parsed.data.amount,
+      medio: parsed.data.medio,
       clubOrigenId: parsed.data.clubOrigenId,
       notes: parsed.data.notes,
       createdBy: req.user?.email,

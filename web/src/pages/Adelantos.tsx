@@ -137,12 +137,21 @@ export default function Adelantos() {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th>Medio</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {adelantos.map((a) => (
                 <tr key={a.id}>
                   <td>{a.agent_name}</td>
+                  <td>
+                    {a.medio === "FICHAS" ? (
+                      <span className="badge neutral">Fichas</span>
+                    ) : a.medio === "USDT" ? (
+                      <span className="badge neutral">USDT</span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
                   <td className="muted">{a.club_origen_name || "—"}</td>
                   <td>{usd(a.amount)}</td>
                   <td>{usd(a.consumed)}</td>
@@ -268,6 +277,7 @@ export default function Adelantos() {
 function AltaForm({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; onDone: () => void }) {
   const [agentId, setAgentId] = useState("");
   const [amount, setAmount] = useState("");
+  const [medio, setMedio] = useState<"" | "FICHAS" | "USDT">("");
   const [clubOrigenId, setClubOrigenId] = useState("");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -279,9 +289,16 @@ function AltaForm({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; 
     if (!agentId) return setMsg({ ok: false, text: "Elegí un agente." });
     const monto = Number(amount) || 0;
     if (monto <= 0) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
+    if (medio && !clubOrigenId) return setMsg({ ok: false, text: "Un adelanto en fichas o USDT necesita club de origen." });
     setLoading(true);
     try {
-      await api.altaAdelanto({ agentId, amount: monto, clubOrigenId: clubOrigenId || null, notes: notes.trim() || undefined });
+      await api.altaAdelanto({
+        agentId,
+        amount: monto,
+        medio: medio || null,
+        clubOrigenId: clubOrigenId || null,
+        notes: notes.trim() || undefined,
+      });
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo dar de alta el adelanto." });
@@ -305,13 +322,26 @@ function AltaForm({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; 
           <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
         </div>
         <div className="field">
-          <label>Club de origen (opcional)</label>
+          <label>Medio</label>
+          <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
+            <option value="">Sin especificar (no mueve stock ni wallet)</option>
+            <option value="FICHAS">Fichas (mueve el stock del agente ya mismo)</option>
+            <option value="USDT">USDT (sale de la wallet ya mismo)</option>
+          </select>
+          <span className="muted" style={{ fontSize: 12 }}>
+            Se descuenta después en la liquidación real. "Sin especificar" es el comportamiento viejo — no mueve nada.
+          </span>
+        </div>
+        <div className="field">
+          <label>Club de origen{medio ? "" : " (opcional)"}</label>
           <select value={clubOrigenId} onChange={(e) => setClubOrigenId(e.target.value)}>
             <option value="">Sin especificar</option>
             {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <span className="muted" style={{ fontSize: 12 }}>
-            Solo de referencia (para rastrearlo contra la planilla) — el adelanto se compensa igual contra el rakeback de cualquier club.
+            {medio
+              ? "De qué club salen las fichas/la wallet."
+              : "Solo de referencia (para rastrearlo contra la planilla) — el adelanto se compensa igual contra el rakeback de cualquier club."}
           </span>
         </div>
       </div>
@@ -355,6 +385,9 @@ function AjusteForm({ adelanto, onDone }: { adelanto: any; onDone: () => void })
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
         Adelantado {usd(adelanto.amount)} · consumido {usd(adelanto.consumed)} · pendiente {usd(Number(adelanto.amount) - Number(adelanto.consumed))}.
+        {adelanto.medio && (
+          <> Medio: {adelanto.medio === "FICHAS" ? "fichas" : "USDT"} — un Aumento va a mover {adelanto.medio === "FICHAS" ? "stock" : "la wallet"} de nuevo; Reducción/Consumo/Baja no mueven nada, solo corrigen cuánto se le sigue debiendo.</>
+        )}
       </div>
       <div className="form-grid">
         <div className="field">

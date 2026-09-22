@@ -353,6 +353,16 @@ ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
 UPDATE rakeback_advances SET created_at = updated_at WHERE created_at IS NULL;
 ALTER TABLE rakeback_advances ALTER COLUMN created_at SET DEFAULT now();
 ALTER TABLE rakeback_advances ALTER COLUMN created_at SET NOT NULL;
+-- medio (22/09/2026, pedido de Leo): un adelanto en FICHAS mueve el stock físico del agente
+-- YA en el Alta (movimiento CARGA, ver repo/advances.ts) -- se descuenta después en la
+-- liquidación real (Leo: "es un adelanto de sueldo y después se descuenta"). Un adelanto en
+-- USDT sale de la wallet YA en el Alta (movimiento ADELANTO_RAKEBACK, con su entrada de
+-- tesorería -- Leo: "los adelantos de usdt tienen que afectar a la wallet porque salen de
+-- ahí"). NULL = adelanto viejo (de antes de este cambio), no mueve nada, se comporta como
+-- siempre. club_origen_id pasa a ser obligatorio a nivel aplicación (no acá en la DB, para no
+-- romper filas viejas) cuando medio no es NULL, porque ahí sí hace falta saber de qué club sale
+-- la plata/fichas.
+ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS medio TEXT CHECK (medio IN ('FICHAS','USDT'));
 
 -- Historial de cada alta/aumento/reducción/consumo/baja/corrección de adelanto, mismo criterio
 -- que guarantee_movements. CORRECCION (12/09/2026): para arreglar un error de carga (monto mal
@@ -423,7 +433,7 @@ CREATE TABLE IF NOT EXISTS rakeback_pendiente (
 -- Revertir/Eliminar funcionen solos sin casos especiales (deltaParaBalance le da delta 0).
 ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
 ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
-  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK'));
+  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK'));
 
 -- Historial de esta rakeback pendiente -- mismo patrón que carga_cruce_movements/
 -- rakeback_advance_movements. ALTA se crea sola al aplicar el cierre (ver repo/closings.ts);
@@ -457,6 +467,10 @@ CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE rakeback_advance_movements DROP COLUMN IF EXISTS club_id;
+-- movement_id (22/09/2026): cuando el ALTA/AUMENTO mueve stock o wallet de verdad (medio
+-- FICHAS/USDT), acá queda el id del ledger_movements que generó -- mismo criterio que
+-- rakeback_pendiente_movements -- para poder deshacerlo si se borra/corrige el adelanto.
+ALTER TABLE rakeback_advance_movements ADD COLUMN IF NOT EXISTS movement_id TEXT REFERENCES ledger_movements(id);
 -- Si la tabla ya existía de una corrida anterior de la migración, el CHECK de arriba (creado sin
 -- 'CORRECCION') no se actualiza solo — se recrea acá para permitirlo también en bases viejas.
 ALTER TABLE rakeback_advance_movements DROP CONSTRAINT IF EXISTS rakeback_advance_movements_type_check;

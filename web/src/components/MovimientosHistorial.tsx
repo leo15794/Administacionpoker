@@ -14,6 +14,7 @@ const TIPO_LABEL: Record<string, string> = {
   AJUSTE: "Ajuste",
   CIERRE_SEMANAL: "Cierre semanal",
   PAGO_RAKEBACK: "Pago de rakeback pendiente",
+  ADELANTO_RAKEBACK: "Adelanto de rakeback (USDT)",
 };
 
 function truncar(texto: string, max = 140) {
