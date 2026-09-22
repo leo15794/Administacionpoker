@@ -1027,6 +1027,12 @@ CREATE TABLE IF NOT EXISTS proveedores (
   auto_cierre_rakeback_pct NUMERIC(6,4)
 );
 
+-- La tabla proveedores ya existia (CREATE TABLE IF NOT EXISTS de arriba no la toca si ya
+-- fue creada antes de agregar estas dos columnas) -- estas dos lineas son las que realmente
+-- agregan auto_cierre_club_id / auto_cierre_rakeback_pct en una base que ya tenia la tabla.
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS auto_cierre_club_id TEXT REFERENCES clubs(id);
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS auto_cierre_rakeback_pct NUMERIC(6,4);
+
 -- Saldo operativo acumulado por proveedor+club (mismo criterio de signo que balances:
 -- positivo = a favor del proveedor/le debemos, negativo = a favor nuestro/nos debe). Se
 -- actualiza con cada cierre semanal y cada pago -- nunca se toca a mano.
