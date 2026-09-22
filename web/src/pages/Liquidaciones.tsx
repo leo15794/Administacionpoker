@@ -135,6 +135,14 @@ export default function Liquidaciones() {
   // arriba, pero contra carga_pendientes_cruce en vez de rakeback_advances (ver repo/cargaCruces.ts).
   const [crucesCarga, setCrucesCarga] = useState<Record<string, number>>({}); // cargaId -> monto a cruzar
   const [aplicadoCarga, setAplicadoCarga] = useState<number>(0);
+  // Deshacer último cruce (22/09/2026, pedido de Leo, "estamos probando"): guarda los ids de
+  // movimiento del ÚLTIMO cruce de adelantos/cargas que se aplicó en esta liquidación, para
+  // poder deshacerlo de un click sin ir a Adelantos ni tener que resetear toda la base. Solo
+  // el último -- si se aplica otro cruce encima, el backend (eliminarMovimientoAdelanto /
+  // eliminarMovimientoCarga) igual exige que sea el más reciente de cada adelanto/carga.
+  const [ultimoCruceAdelantos, setUltimoCruceAdelantos] = useState<{ movIds: string[]; monto: number } | null>(null);
+  const [ultimoCruceCargas, setUltimoCruceCargas] = useState<{ movIds: string[]; monto: number } | null>(null);
+  const [deshaciendoCruce, setDeshaciendoCruce] = useState(false);
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
   // Ventas / tickets promocionales por fila (agente+club) -- keyed por filaKey(f).
   const [ventasPorFila, setVentasPorFila] = useState<Record<string, number>>({});
@@ -231,6 +239,8 @@ export default function Liquidaciones() {
           setAdelantosManual(0);
           setVentasPorFila({});
           setTicketsPorFila({});
+          setUltimoCruceAdelantos(null);
+          setUltimoCruceCargas(null);
           if (seleccionados.length === 1) setNota("");
         }
       })
@@ -421,18 +431,21 @@ export default function Liquidaciones() {
   async function aplicarCruces() {
     const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
     if (ids.length === 0) return;
-    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzado)} de ${ids.length} adelanto(s) — esto los consume de verdad, no se puede deshacer desde acá (habría que corregirlo en Adelantos). ¿Confirmás?`))) return;
+    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzado)} de ${ids.length} adelanto(s) — se puede deshacer con el botón "Deshacer último cruce" mientras no se aplique nada más encima de estos mismos adelantos. ¿Confirmás?`))) return;
     setAplicando(true);
     try {
+      const movIds: string[] = [];
       for (const id of ids) {
-        await api.ajustarAdelanto({
+        const r = await api.ajustarAdelanto({
           advanceId: id,
           type: "CONSUMO",
           amount: cruces[id],
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
+        if (r?.movementRowId) movIds.push(r.movementRowId);
       }
       setAplicado((prev) => prev + totalCruzado);
+      setUltimoCruceAdelantos({ movIds, monto: totalCruzado });
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
@@ -446,22 +459,62 @@ export default function Liquidaciones() {
   async function aplicarCrucesCarga() {
     const ids = Object.keys(crucesCarga).filter((id) => crucesCarga[id] > 0);
     if (ids.length === 0) return;
-    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzadoCarga)} de ${ids.length} carga(s) de tesorería — esto las consume de verdad, no se puede deshacer desde acá. ¿Confirmás?`))) return;
+    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzadoCarga)} de ${ids.length} carga(s) de tesorería — se puede deshacer con el botón "Deshacer último cruce" mientras no se aplique nada más encima de estas mismas cargas. ¿Confirmás?`))) return;
     setAplicando(true);
     try {
+      const movIds: string[] = [];
       for (const id of ids) {
-        await api.consumirCarga({
+        const r = await api.consumirCarga({
           cargaId: id,
           amount: crucesCarga[id],
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
+        if (r?.movementRowId) movIds.push(r.movementRowId);
       }
       setAplicadoCarga((prev) => prev + totalCruzadoCarga);
+      setUltimoCruceCargas({ movIds, monto: totalCruzadoCarga });
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
     } finally {
       setAplicando(false);
+    }
+  }
+
+  // Deshace el ÚLTIMO cruce aplicado (adelantos y/o cargas) en esta liquidación -- ver estado
+  // ultimoCruceAdelantos/ultimoCruceCargas arriba. Sigue habiendo un límite real: si el mismo
+  // adelanto/carga tuvo OTRO ajuste después (desde Adelantos, por ejemplo), el backend rechaza
+  // ese movimiento puntual porque ya no es el más reciente -- ahí hay que ir a Adelantos/la
+  // carga y deshacerlo en orden, del más nuevo hacia atrás.
+  async function deshacerUltimoCruce() {
+    if (!ultimoCruceAdelantos && !ultimoCruceCargas) return;
+    const monto = (ultimoCruceAdelantos?.monto ?? 0) + (ultimoCruceCargas?.monto ?? 0);
+    if (!(await confirmDialog(`¿Deshacer el último cruce aplicado (${usd(monto)})? El adelanto/carga vuelve a quedar pendiente como antes.`))) return;
+    setDeshaciendoCruce(true);
+    const errores: string[] = [];
+    try {
+      for (const id of ultimoCruceAdelantos?.movIds ?? []) {
+        try {
+          await api.eliminarMovimientoAdelanto(id);
+        } catch (err: any) {
+          errores.push(err.message || "No se pudo deshacer un cruce de adelanto.");
+        }
+      }
+      for (const id of ultimoCruceCargas?.movIds ?? []) {
+        try {
+          await api.eliminarMovimientoCarga(id);
+        } catch (err: any) {
+          errores.push(err.message || "No se pudo deshacer un cruce de carga.");
+        }
+      }
+      if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.monto));
+      if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.monto));
+      setUltimoCruceAdelantos(null);
+      setUltimoCruceCargas(null);
+      refrescarLiquidacion(true);
+      if (errores.length > 0) await alertDialog(errores.join(" · "));
+    } finally {
+      setDeshaciendoCruce(false);
     }
   }
 
@@ -817,9 +870,21 @@ export default function Liquidaciones() {
                       {aplicando ? "Aplicando..." : `Aplicar cruce (${usd(totalCruzadoCarga)})`}
                     </button>
                     <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
-                      Esto consume de verdad la carga (no se puede deshacer desde acá).
+                      Esto consume de verdad la carga (mismo efecto que "Consumo" en cargas de tesorería).
                     </span>
                   </div>
+                </div>
+              )}
+              {(ultimoCruceAdelantos || ultimoCruceCargas) && (
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn secondary small" disabled={deshaciendoCruce} onClick={deshacerUltimoCruce}>
+                    {deshaciendoCruce
+                      ? "Deshaciendo..."
+                      : `Deshacer último cruce (${usd((ultimoCruceAdelantos?.monto ?? 0) + (ultimoCruceCargas?.monto ?? 0))})`}
+                  </button>
+                  <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
+                    Vuelve el/los adelanto(s) o carga(s) a como estaban antes de aplicar el último cruce.
+                  </span>
                 </div>
               )}
             </div>

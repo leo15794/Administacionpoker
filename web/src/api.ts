@@ -213,6 +213,7 @@ export const api = {
     request("/catalog/liquidacion/carga/consumir", { method: "POST", body: JSON.stringify(data) }),
   // Borrado real de una carga pendiente (ej. cargada de prueba) -- no queda en historial.
   eliminarCarga: (cargaId: string) => request(`/catalog/liquidacion/carga/${cargaId}`, { method: "DELETE" }),
+  eliminarMovimientoCarga: (movementId: string) => request(`/catalog/liquidacion/carga/movimientos/${movementId}`, { method: "DELETE" }),
   corregirAdelanto: (data: { advanceId: string; amount?: number; consumed?: number; clubOrigenId?: string | null; notes?: string }) =>
     request("/advances/correccion", { method: "POST", body: JSON.stringify(data) }),
   eliminarAdelanto: (advanceId: string) => request(`/advances/${advanceId}`, { method: "DELETE" }),

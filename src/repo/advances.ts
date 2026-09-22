@@ -216,9 +216,12 @@ export async function ajustarAdelanto(input: AjusteAdelantoInput) {
       [nuevoAmount, nuevoConsumed, nuevoActive, input.notes ?? null, actual.id]
     );
     const advance = r.rows[0];
-    await registrarMovimiento(client, advance, input.type, input.amount, input.notes, input.createdBy, movementId);
+    const advMovId = await registrarMovimiento(client, advance, input.type, input.amount, input.notes, input.createdBy, movementId);
     await client.query("COMMIT");
-    return advance;
+    // movementRowId (no confundir con el movimiento de ledger, que ya viaja aparte si medio lo
+    // generó): el id de esta fila puntual en rakeback_advance_movements, para poder deshacer
+    // ESTE ajuste puntual con eliminarMovimientoAdelanto -- ver uso en Liquidaciones.tsx.
+    return { ...advance, movementRowId: advMovId };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -377,11 +380,12 @@ async function registrarMovimiento(
   createdBy: string | undefined,
   movementId: string | null
 ) {
+  const advMovId = newId("advmov");
   await client.query(
     `INSERT INTO rakeback_advance_movements (id, agent_id, advance_id, type, amount, resulting_amount, resulting_consumed, movement_id, notes, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [
-      newId("advmov"),
+      advMovId,
       advance.agent_id,
       advance.id,
       type,
@@ -393,4 +397,8 @@ async function registrarMovimiento(
       createdBy ?? null,
     ]
   );
+  // Devuelve el id de ESTE movimiento puntual (no el del ledger, que es movementId) -- lo usa
+  // por ejemplo Liquidaciones para poder deshacer un CONSUMO recién aplicado sin tener que ir a
+  // buscar el movimiento a mano en la pantalla de Adelantos (ver eliminarMovimientoAdelanto).
+  return advMovId;
 }

@@ -59,13 +59,63 @@ export async function consumirCarga(input: ConsumirCargaInput) {
       [nuevoConsumed, actual.id]
     );
     const carga = r.rows[0];
+    const movId = newId("ccm");
     await client.query(
       `INSERT INTO carga_cruce_movements (id, carga_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
        VALUES ($1,$2,$3,'CONSUMO',$4,$5,$6,$7,$8)`,
-      [newId("ccm"), carga.id, carga.agent_id, input.amount, carga.amount, carga.consumed, input.notes ?? null, input.createdBy ?? null]
+      [movId, carga.id, carga.agent_id, input.amount, carga.amount, carga.consumed, input.notes ?? null, input.createdBy ?? null]
     );
     await client.query("COMMIT");
-    return carga;
+    // movementRowId: el id de ESTE cruce puntual en carga_cruce_movements, para poder
+    // deshacerlo con eliminarMovimientoCarga sin ir a buscarlo a mano (ver uso en
+    // Liquidaciones.tsx, botón "Deshacer último cruce").
+    return { ...carga, movementRowId: movId };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Borra UN cruce (CONSUMO) puntual -- mismo criterio que eliminarMovimientoAdelanto en
+ * repo/advances.ts: solo el más reciente de esa carga (si hay otro cruce encima, hay que
+ * deshacer ese primero), y nunca la ALTA (esa nace sola del movimiento CARGA real -- para
+ * deshacerla hay que borrar/revertir ese movimiento en Movimientos, no acá).
+ */
+export async function eliminarMovimientoCarga(movementId: string) {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const movRes = await client.query(`SELECT * FROM carga_cruce_movements WHERE id = $1 FOR UPDATE`, [movementId]);
+    const mov = movRes.rows[0];
+    if (!mov) throw new Error("No se encontró ese cruce.");
+    if (mov.type === "ALTA") {
+      throw new Error("La ALTA de una carga no se borra desde acá -- se deshace revirtiendo o borrando el movimiento CARGA original en Movimientos.");
+    }
+
+    const ultimo = await client.query(
+      `SELECT id FROM carga_cruce_movements WHERE carga_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.carga_id]
+    );
+    if (ultimo.rows[0]?.id !== movementId) {
+      throw new Error("Solo se puede deshacer el cruce MÁS RECIENTE de esta carga -- si aplicaste otro encima, deshacé ese primero.");
+    }
+
+    const anterior = await client.query(
+      `SELECT resulting_consumed FROM carga_cruce_movements
+       WHERE carga_id = $1 AND id <> $2 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+      [mov.carga_id, movementId]
+    );
+    const consumed = anterior.rows[0] ? Number(anterior.rows[0].resulting_consumed) : 0;
+
+    await client.query(
+      `UPDATE carga_pendientes_cruce SET consumed=$1, active=true, updated_at=now() WHERE id=$2`,
+      [consumed, mov.carga_id]
+    );
+    await client.query(`DELETE FROM carga_cruce_movements WHERE id = $1`, [movementId]);
+    await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

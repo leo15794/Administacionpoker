@@ -27,7 +27,7 @@ import {
   setJugadorBancado,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
-import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga } from "../repo/cargaCruces.js";
+import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarMovimientoCarga } from "../repo/cargaCruces.js";
 import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -340,6 +340,17 @@ catalogRouter.post("/liquidacion/carga/consumir", requireAuth, requireAdmin, asy
       createdBy: req.user?.email,
     });
     res.status(200).json(carga);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Deshace UN cruce (CONSUMO) puntual sobre una carga -- misma idea que
+// DELETE /advances/movimientos/:id, ver nota en repo/cargaCruces.ts. Solo el más reciente.
+catalogRouter.delete("/liquidacion/carga/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarMovimientoCarga(req.params.id);
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
