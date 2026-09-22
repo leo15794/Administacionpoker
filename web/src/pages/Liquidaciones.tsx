@@ -149,6 +149,15 @@ export default function Liquidaciones() {
   const [movAgenteClub, setMovAgenteClub] = useState("");
   const [movMonto, setMovMonto] = useState("");
   const [movMetodo, setMovMetodo] = useState("SIN_TESORERIA");
+  // Pago en lote (22/09/2026, pedido de Leo): "Enviar" ahora puede tildar VARIAS filas a la vez
+  // -- cada una con su propio importe (default: lo que le queda pendiente a ESA fila) y su
+  // propio medio (fichas mueve el stock de ese club, USDT/Efectivo/Zelle no) -- y las manda
+  // todas en un solo click. No es técnicamente "un asiento único" en el ledger (cada club es un
+  // movimiento propio, fichas de un club no se pueden mezclar con las de otro), pero para el
+  // usuario es una sola acción: si alguna fila falla, se avisa cuál sin frenar el resto. Keyed
+  // por filaKey(f). "Recibir" (COBRO) sigue con movAgenteClub de abajo -- ahí nunca hubo
+  // concepto de "por fila", el monto siempre fue el total de la liquidación.
+  const [movFilas, setMovFilas] = useState<Record<string, { checked: boolean; monto: string; medio: string }>>({});
   const [movCustodio, setMovCustodio] = useState("");
   const [movObservacion, setMovObservacion] = useState("");
   const [registrandoMov, setRegistrandoMov] = useState(false);
@@ -268,12 +277,32 @@ export default function Liquidaciones() {
   function abrirMov(tipo: "PAGO" | "COBRO") {
     setMovAbierto(tipo);
     setMovMsg(null);
+    if (tipo === "PAGO") {
+      // Arranca con todas las filas que tienen algo pendiente tildadas (importe/medio sugerido
+      // por fila) -- Leo destilda las que no quiere pagar ahora, o ajusta importe/medio de
+      // cualquiera antes de confirmar.
+      const filas: Record<string, { checked: boolean; monto: string; medio: string }> = {};
+      (data?.filas ?? []).forEach((f: any) => {
+        const monto = montoSugeridoParaFila(f);
+        filas[filaKey(f)] = {
+          checked: Number(monto) > 0,
+          monto,
+          medio: f.rakebackPendienteId ? "FICHAS" : "SIN_TESORERIA",
+        };
+      });
+      setMovFilas(filas);
+      return;
+    }
     const primeraFila = data && data.filas.length > 0 ? data.filas[0] : null;
-    setMovMonto(tipo === "PAGO" ? montoSugeridoParaFila(primeraFila) : Math.abs(totalAPagar).toFixed(2));
-    setMovMetodo(tipo === "PAGO" && primeraFila?.rakebackPendienteId ? "FICHAS" : "SIN_TESORERIA");
+    setMovMonto(Math.abs(totalAPagar).toFixed(2));
+    setMovMetodo("SIN_TESORERIA");
     if (primeraFila) {
       setMovAgenteClub(`${primeraFila.agentId}|${primeraFila.clubId}`);
     }
+  }
+
+  function actualizarMovFila(key: string, patch: Partial<{ checked: boolean; monto: string; medio: string }>) {
+    setMovFilas((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
   function cambiarFilaMov(valor: string) {
@@ -286,36 +315,21 @@ export default function Liquidaciones() {
   }
 
   async function registrarMov() {
-    if (!movAbierto || !movAgenteClub) return;
-    const [agentId, clubId] = movAgenteClub.split("|");
-    const monto = Number(movMonto);
-    if (!(monto > 0)) return setMovMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
-    if (movMetodo === "EFECTIVO" && !movCustodio.trim()) {
-      return setMovMsg({ ok: false, text: "Un movimiento en efectivo requiere custodio (BIT-051/052)." });
-    }
-    const filaSeleccionada = data?.filas.find((f: any) => f.agentId === agentId && f.clubId === clubId);
+    if (!movAbierto) return;
 
-    setRegistrandoMov(true);
-    setMovMsg(null);
-    try {
-      // Rakeback pendiente (22/09/2026): si esta fila tiene su propia fila de rakeback
-      // pendiente (cierre nuevo, post-separación stock/pendiente), "Enviar" paga DIRECTO contra
-      // esa fila -- Fichas mueve el stock (CARGA), USDT/Efectivo/Zelle no (PAGO_RAKEBACK) -- en
-      // vez de un PAGO genérico que restaba del stock sin saber que existía este pendiente
-      // (bug real que encontró Leo el 22/09/2026 con triunfoepico). "Recibir" (el agente nos
-      // debe) y los cierres viejos sin migrar siguen con el movimiento genérico de antes.
-      if (movAbierto === "PAGO" && filaSeleccionada?.rakebackPendienteId) {
-        await api.pagarRakebackPendiente({
-          pendienteId: filaSeleccionada.rakebackPendienteId,
-          amount: monto,
-          medio: movMetodo as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
-          custodian: movMetodo === "EFECTIVO" ? movCustodio.trim() : undefined,
-          notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
-        });
-        setMovMsg({ ok: true, text: "Rakeback pendiente pagado." });
-      } else {
+    if (movAbierto === "COBRO") {
+      if (!movAgenteClub) return;
+      const [agentId, clubId] = movAgenteClub.split("|");
+      const monto = Number(movMonto);
+      if (!(monto > 0)) return setMovMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
+      if (movMetodo === "EFECTIVO" && !movCustodio.trim()) {
+        return setMovMsg({ ok: false, text: "Un movimiento en efectivo requiere custodio (BIT-051/052)." });
+      }
+      setRegistrandoMov(true);
+      setMovMsg(null);
+      try {
         await api.crearMovimiento({
-          type: movAbierto,
+          type: "COBRO",
           agentId,
           clubId,
           amount: monto,
@@ -324,21 +338,84 @@ export default function Liquidaciones() {
           occurredAt: new Date().toISOString(),
           observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
-        setMovMsg({ ok: true, text: `${movAbierto === "PAGO" ? "Pago" : "Cobro"} registrado y aplicado al ledger.` });
+        setMovMsg({ ok: true, text: "Cobro registrado y aplicado al ledger." });
+        setMovObservacion("");
+        if (seleccionados.length > 0 && weekStart) {
+          const dataActualizada = await api.liquidacion(seleccionados, weekStart);
+          setData(dataActualizada);
+        }
+      } catch (err: any) {
+        setMovMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
+      } finally {
+        setRegistrandoMov(false);
       }
-      setMovObservacion("");
-      // Refresca los datos (rakebackPendienteDisponible actualizado) sin resetear el resto del
-      // estado de la liquidación en curso -- a propósito no usa refrescarLiquidacion(), que
-      // limpia el mensaje que se acaba de mostrar arriba.
-      if (seleccionados.length > 0 && weekStart) {
-        const dataActualizada = await api.liquidacion(seleccionados, weekStart);
-        setData(dataActualizada);
-      }
-    } catch (err: any) {
-      setMovMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
-    } finally {
-      setRegistrandoMov(false);
+      return;
     }
+
+    // PAGO en lote: todas las filas tildadas, cada una con su importe y medio propio. Si la
+    // fila tiene su propia fila de rakeback pendiente (cierre nuevo, post-separación
+    // stock/pendiente), paga DIRECTO contra esa fila -- Fichas mueve el stock (CARGA),
+    // USDT/Efectivo/Zelle no (PAGO_RAKEBACK) -- en vez de un PAGO genérico que restaba del
+    // stock sin saber que existía este pendiente (bug real que encontró Leo el 22/09/2026 con
+    // triunfoepico). Los cierres viejos sin migrar (sin rakebackPendienteId) siguen con el
+    // movimiento genérico de antes.
+    const entradas = Object.entries(movFilas).filter(([, v]) => v.checked);
+    if (entradas.length === 0) return setMovMsg({ ok: false, text: "Marcá al menos un agente." });
+    for (const [, v] of entradas) {
+      if (!(Number(v.monto) > 0)) return setMovMsg({ ok: false, text: "Todos los importes tildados tienen que ser mayores a 0." });
+    }
+    const necesitaCustodio = entradas.some(([, v]) => v.medio === "EFECTIVO");
+    if (necesitaCustodio && !movCustodio.trim()) {
+      return setMovMsg({ ok: false, text: "Un pago en efectivo requiere custodio (BIT-051/052)." });
+    }
+
+    setRegistrandoMov(true);
+    setMovMsg(null);
+    let exitos = 0;
+    const errores: string[] = [];
+    for (const [key, v] of entradas) {
+      const fila = data?.filas.find((f: any) => filaKey(f) === key);
+      if (!fila) continue;
+      try {
+        if (fila.rakebackPendienteId) {
+          await api.pagarRakebackPendiente({
+            pendienteId: fila.rakebackPendienteId,
+            amount: Number(v.monto),
+            medio: v.medio as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
+            custodian: v.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
+            notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+          });
+        } else {
+          await api.crearMovimiento({
+            type: "PAGO",
+            agentId: fila.agentId,
+            clubId: fila.clubId,
+            amount: Number(v.monto),
+            paymentMethod: v.medio,
+            custodian: v.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
+            occurredAt: new Date().toISOString(),
+            observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+          });
+        }
+        exitos++;
+      } catch (err: any) {
+        errores.push(`${fila.agentName} (${fila.clubName}): ${err.message || "error"}`);
+      }
+    }
+    setMovMsg(
+      errores.length === 0
+        ? { ok: true, text: `${exitos} pago${exitos === 1 ? "" : "s"} registrado${exitos === 1 ? "" : "s"}.` }
+        : {
+            ok: false,
+            text: `${exitos} pago${exitos === 1 ? "" : "s"} registrado${exitos === 1 ? "" : "s"}, ${errores.length} con error — ${errores.join(" · ")}`,
+          }
+    );
+    setMovObservacion("");
+    if (seleccionados.length > 0 && weekStart) {
+      const dataActualizada = await api.liquidacion(seleccionados, weekStart);
+      setData(dataActualizada);
+    }
+    setRegistrandoMov(false);
   }
 
   async function aplicarCruces() {
@@ -796,15 +873,140 @@ export default function Liquidaciones() {
               </button>
             </div>
 
-            {movAbierto && (
-              <div className="panel" style={{ marginTop: 10, maxWidth: 460 }}>
-                <h4 style={{ marginTop: 0 }}>
-                  {movAbierto === "PAGO" ? "Registrar pago al agente" : "Registrar cobro al agente"}
-                </h4>
+            {movAbierto === "PAGO" && (
+              <div className="panel" style={{ marginTop: 10, maxWidth: 620 }}>
+                <h4 style={{ marginTop: 0 }}>Registrar pago al agente</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  Esto registra un movimiento real de {movAbierto === "PAGO" ? "PAGO" : "COBRO"} contra la
-                  wallet (mismo efecto que cargarlo en "Cargar movimiento"). Es independiente de
-                  "Guardar en historial": podés enviar/recibir sin guardar, o guardar sin enviar.
+                  Tildá una o varias filas y mandalas juntas en un click — cada una con su propio importe y
+                  medio (Fichas mueve el stock físico de ese club, USDT/Efectivo/Zelle es un pago financiero
+                  que no lo toca). Es independiente de "Guardar en historial": podés enviar sin guardar, o
+                  guardar sin enviar.
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => setMovFilas((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, { ...v, checked: true }])))}
+                  >
+                    Marcar todos
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => setMovFilas((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, { ...v, checked: false }])))}
+                  >
+                    Ninguno
+                  </button>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Agente / club</th>
+                      <th>Importe (USD)</th>
+                      <th>Medio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.filas.map((f: any) => {
+                      const key = filaKey(f);
+                      const v = movFilas[key] ?? { checked: false, monto: "0", medio: "SIN_TESORERIA" };
+                      return (
+                        <tr key={key}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={v.checked}
+                              onChange={(e) => actualizarMovFila(key, { checked: e.target.checked })}
+                            />
+                          </td>
+                          <td>
+                            {f.agentName} — {f.clubName}
+                            {f.rakebackPendienteId && (
+                              <div className="muted" style={{ fontSize: 11 }}>
+                                Pendiente: {usd(f.rakebackPendienteDisponible)}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={v.monto}
+                              disabled={!v.checked}
+                              onChange={(e) => actualizarMovFila(key, { monto: e.target.value })}
+                              style={{ width: 110 }}
+                            />
+                          </td>
+                          <td>
+                            <select value={v.medio} disabled={!v.checked} onChange={(e) => actualizarMovFila(key, { medio: e.target.value })}>
+                              {f.rakebackPendienteId ? (
+                                <>
+                                  <option value="FICHAS">Fichas (mueve el stock)</option>
+                                  <option value="USDT">USDT</option>
+                                  <option value="EFECTIVO">Efectivo</option>
+                                  <option value="ZELLE">Zelle</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="SIN_TESORERIA">Sin tesorería</option>
+                                  <option value="USDT">USDT</option>
+                                  <option value="EFECTIVO">Efectivo</option>
+                                  <option value="ZELLE">Zelle</option>
+                                  <option value="OTRO">Otro</option>
+                                </>
+                              )}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td></td>
+                      <td><strong>Total tildado</strong></td>
+                      <td colSpan={2}>
+                        <strong>
+                          {usd(Object.values(movFilas).reduce((s, v) => s + (v.checked ? Number(v.monto) || 0 : 0), 0))}
+                        </strong>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+                {Object.values(movFilas).some((v) => v.checked && v.medio === "EFECTIVO") && (
+                  <div className="field" style={{ marginTop: 10 }}>
+                    <label>Custodio del efectivo (aplica a todas las filas en efectivo)</label>
+                    <input value={movCustodio} onChange={(e) => setMovCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+                  </div>
+                )}
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label>Observación (opcional, se usa en todas las filas)</label>
+                  <input
+                    value={movObservacion}
+                    onChange={(e) => setMovObservacion(e.target.value)}
+                    placeholder={`Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim()}
+                  />
+                </div>
+                {movMsg && <div className={movMsg.ok ? "success" : "error"}>{movMsg.text}</div>}
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button type="button" className="btn" disabled={registrandoMov} onClick={registrarMov}>
+                    {registrandoMov ? "Registrando..." : "Confirmar pago(s)"}
+                  </button>
+                  <button type="button" className="btn secondary" onClick={() => setMovAbierto(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {movAbierto === "COBRO" && (
+              <div className="panel" style={{ marginTop: 10, maxWidth: 460 }}>
+                <h4 style={{ marginTop: 0 }}>Registrar cobro al agente</h4>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                  Esto registra un movimiento real de COBRO contra la wallet (mismo efecto que cargarlo en
+                  "Cargar movimiento"). Es independiente de "Guardar en historial": podés recibir sin
+                  guardar, o guardar sin recibir.
                 </div>
                 <div className="field">
                   <label>Agente + club</label>
@@ -816,18 +1018,6 @@ export default function Liquidaciones() {
                     ))}
                   </select>
                 </div>
-                {(() => {
-                  const [agentIdSel, clubIdSel] = movAgenteClub.split("|");
-                  const filaSel = data.filas.find((f: any) => f.agentId === agentIdSel && f.clubId === clubIdSel);
-                  if (movAbierto !== "PAGO" || !filaSel?.rakebackPendienteId) return null;
-                  return (
-                    <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                      Esta fila tiene <strong>{usd(filaSel.rakebackPendienteDisponible)}</strong> de rakeback
-                      pendiente sin pagar. Esto va a pagar directo contra esa fila: "Fichas" mueve el stock
-                      físico del agente, USDT/Efectivo/Zelle es un pago financiero que no lo toca.
-                    </div>
-                  );
-                })()}
                 <div className="field">
                   <label>Importe (USD)</label>
                   <input
@@ -841,27 +1031,11 @@ export default function Liquidaciones() {
                 <div className="field">
                   <label>Medio de pago</label>
                   <select value={movMetodo} onChange={(e) => setMovMetodo(e.target.value)}>
-                    {(() => {
-                      const [agentIdSel, clubIdSel] = movAgenteClub.split("|");
-                      const filaSel = data.filas.find((f: any) => f.agentId === agentIdSel && f.clubId === clubIdSel);
-                      const esPagoDeRakebackPendiente = movAbierto === "PAGO" && !!filaSel?.rakebackPendienteId;
-                      return esPagoDeRakebackPendiente ? (
-                        <>
-                          <option value="FICHAS">Fichas (mueve el stock físico)</option>
-                          <option value="USDT">USDT</option>
-                          <option value="EFECTIVO">Efectivo</option>
-                          <option value="ZELLE">Zelle</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="SIN_TESORERIA">Sin tesorería (interno)</option>
-                          <option value="USDT">USDT</option>
-                          <option value="EFECTIVO">Efectivo</option>
-                          <option value="ZELLE">Zelle</option>
-                          <option value="OTRO">Otro</option>
-                        </>
-                      );
-                    })()}
+                    <option value="SIN_TESORERIA">Sin tesorería (interno)</option>
+                    <option value="USDT">USDT</option>
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="ZELLE">Zelle</option>
+                    <option value="OTRO">Otro</option>
                   </select>
                 </div>
                 {movMetodo === "EFECTIVO" && (
@@ -881,7 +1055,7 @@ export default function Liquidaciones() {
                 {movMsg && <div className={movMsg.ok ? "success" : "error"}>{movMsg.text}</div>}
                 <div style={{ display: "flex", gap: 8 }}>
                   <button type="button" className="btn" disabled={registrandoMov} onClick={registrarMov}>
-                    {registrandoMov ? "Registrando..." : movAbierto === "PAGO" ? "Confirmar pago" : "Confirmar cobro"}
+                    {registrandoMov ? "Registrando..." : "Confirmar cobro"}
                   </button>
                   <button type="button" className="btn secondary" onClick={() => setMovAbierto(null)}>
                     Cancelar
