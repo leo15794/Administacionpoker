@@ -389,6 +389,16 @@ export async function eliminarMovimiento(movementId: string) {
     }
 
     await client.query(`DELETE FROM treasury_entries WHERE movement_id = $1`, [movementId]);
+    // rakeback_advance_movements (Adelantos) y rakeback_pendiente_movements (Rakeback
+    // pendiente) también pueden apuntar a este movimiento con su propio movement_id (22/09/2026,
+    // bug real: "update or delete on table ledger_movements violates foreign key constraint
+    // rakeback_advance_movements_movement_id_fkey" -- faltaba limpiar esta referencia antes del
+    // DELETE, mismo criterio que ya se usa arriba para treasury_entries/carga_pendientes_cruce).
+    // Se pone en NULL en vez de borrar la fila: el historial del adelanto/pendiente lo maneja
+    // su propio repo (advances.ts / rakebackPendiente.ts), acá solo se libera la referencia
+    // para que el ledger_movement se pueda borrar.
+    await client.query(`UPDATE rakeback_advance_movements SET movement_id = NULL WHERE movement_id = $1`, [movementId]);
+    await client.query(`UPDATE rakeback_pendiente_movements SET movement_id = NULL WHERE movement_id = $1`, [movementId]);
     await client.query(`DELETE FROM ledger_movements WHERE id = $1`, [movementId]);
 
     await client.query("COMMIT");
