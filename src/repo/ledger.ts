@@ -58,6 +58,16 @@ export async function registrarMovimiento(input: NewMovement) {
     const movementId = newId("mov");
     const paymentMethod = input.paymentMethod ?? "SIN_TESORERIA";
 
+    // DESCARGA (el agente entrega fichas/crédito) se guarda con signo negativo -- Leo,
+    // 22/09/2026: "la descarga de fichas tienen que ser negativas". Antes se guardaba el
+    // monto tal cual lo tipeaba quien carga el movimiento (siempre positivo), lo que hacía
+    // que el historial y el CSV mostraran una descarga en verde/positivo aunque reduce el
+    // saldo del agente (ver deltaParaBalance más abajo, que ya la resta -- esto solo alinea
+    // el monto GUARDADO con esa misma convención documentada: "positivo = a favor del
+    // agente, negativo = a favor nuestro"). No afecta el balance: deltaParaBalance siempre
+    // normaliza con Math.abs() antes de aplicar el signo según el tipo.
+    const storedAmount = input.type === "DESCARGA" ? -Math.abs(input.amount) : input.amount;
+
     await client.query(
       `INSERT INTO ledger_movements
         (id, idempotency_key, type, club_id, club_destino_id, agent_id, amount,
@@ -71,7 +81,7 @@ export async function registrarMovimiento(input: NewMovement) {
         input.clubId,
         input.clubDestinoId ?? null,
         input.agentId,
-        input.amount,
+        storedAmount,
         input.originalAmount ?? null,
         input.originalUnit ?? null,
         paymentMethod,
