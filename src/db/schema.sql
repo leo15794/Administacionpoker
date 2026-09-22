@@ -1015,7 +1015,16 @@ CREATE TABLE IF NOT EXISTS proveedores (
   name       TEXT NOT NULL,
   notes      TEXT,
   active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Auto-cierre (22/09/2026, pedido de Leo: "cuando se carga la info en resumen por club...
+  -- que se haga automaticamente en proveedores, asi no tenemos que cargar de nuevo todo") --
+  -- si se completan los dos campos, cada vez que se guarda "Ingreso por ventas" en Resumen
+  -- por club de auto_cierre_club_id, se aplica solo (sin tocar nada a mano) el cierre semanal
+  -- de este proveedor para esa misma semana, con este % de rakeback fijo. Si ya existe un
+  -- cierre para esa semana (por ejemplo porque se guardó dos veces el resumen), se salta sin
+  -- error -- nunca duplica.
+  auto_cierre_club_id      TEXT REFERENCES clubs(id),
+  auto_cierre_rakeback_pct NUMERIC(6,4)
 );
 
 -- Saldo operativo acumulado por proveedor+club (mismo criterio de signo que balances:

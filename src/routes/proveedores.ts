@@ -25,18 +25,33 @@ proveedoresRouter.get("/", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listProveedores(includeInactive));
 });
 
-const crearSchema = z.object({ name: z.string().min(1), notes: z.string().optional() });
+const crearSchema = z.object({
+  name: z.string().min(1),
+  notes: z.string().optional(),
+  autoCierreClubId: z.string().nullable().optional(),
+  autoCierreRakebackPct: z.number().nullable().optional(),
+});
 proveedoresRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = crearSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    res.status(201).json(await crearProveedor(parsed.data.name, parsed.data.notes));
+    res
+      .status(201)
+      .json(
+        await crearProveedor(parsed.data.name, parsed.data.notes, parsed.data.autoCierreClubId, parsed.data.autoCierreRakebackPct)
+      );
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
-const actualizarSchema = z.object({ name: z.string().optional(), notes: z.string().nullable().optional(), active: z.boolean().optional() });
+const actualizarSchema = z.object({
+  name: z.string().optional(),
+  notes: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+  autoCierreClubId: z.string().nullable().optional(),
+  autoCierreRakebackPct: z.number().nullable().optional(),
+});
 proveedoresRouter.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = actualizarSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

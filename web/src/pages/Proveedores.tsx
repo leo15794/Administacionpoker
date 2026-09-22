@@ -31,6 +31,7 @@ export default function Proveedores() {
   const [error, setError] = useState("");
 
   const [showNuevoProveedor, setShowNuevoProveedor] = useState(false);
+  const [editandoProveedor, setEditandoProveedor] = useState<any | null>(null);
   const [showCierre, setShowCierre] = useState(false);
   const [showPago, setShowPago] = useState(false);
   const [showGarantiaAjuste, setShowGarantiaAjuste] = useState<{ proveedorId?: string } | null>(null);
@@ -120,6 +121,27 @@ export default function Proveedores() {
           <div className="label">Garantía pendiente</div>
           <div className="value">{usd(totalGarantiaPendiente)}</div>
         </div>
+      </div>
+
+      <div className="panel">
+        <h3>Proveedores</h3>
+        <table>
+          <thead><tr><th>Nombre</th><th>Auto-cierre</th><th>Notas</th><th></th></tr></thead>
+          <tbody>
+            {proveedores.map((p) => (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+                <td className="muted" style={{ fontSize: 12 }}>
+                  {p.auto_cierre_club_id
+                    ? `${clubes.find((c) => c.id === p.auto_cierre_club_id)?.name ?? "?"} · ${pct(p.auto_cierre_rakeback_pct)}`
+                    : "Sin auto-cierre"}
+                </td>
+                <td className="muted" style={{ fontSize: 12 }} title={p.notes || undefined}>{p.notes || "—"}</td>
+                <td><button className="btn secondary small" onClick={() => setEditandoProveedor(p)}>Editar</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="tabs" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -300,7 +322,16 @@ export default function Proveedores() {
 
       {showNuevoProveedor && (
         <Modal title="Nuevo proveedor" onClose={() => setShowNuevoProveedor(false)}>
-          <NuevoProveedorForm onDone={() => { setShowNuevoProveedor(false); refresh(); }} />
+          <NuevoProveedorForm clubes={clubes} onDone={() => { setShowNuevoProveedor(false); refresh(); }} />
+        </Modal>
+      )}
+      {editandoProveedor && (
+        <Modal title={`Editar ${editandoProveedor.name}`} onClose={() => setEditandoProveedor(null)}>
+          <NuevoProveedorForm
+            proveedor={editandoProveedor}
+            clubes={clubes}
+            onDone={() => { setEditandoProveedor(null); refresh(); }}
+          />
         </Modal>
       )}
       {showCierre && (
@@ -335,9 +366,26 @@ export default function Proveedores() {
   );
 }
 
-function NuevoProveedorForm({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState("");
-  const [notes, setNotes] = useState("");
+// Sirve para crear Y para editar (pasando `proveedor`) -- el auto-cierre (club + % fijo) es
+// lo que permite que "Resumen por club" cierre este proveedor solo cuando se guarda esa
+// pantalla (22/09/2026, pedido de Leo: "que se haga automaticamente en proveedores, asi no
+// tenemos que cargar de nuevo todo"). Dejar el club en "Sin auto-cierre" es válido -- el
+// proveedor sigue existiendo, solo que su cierre semanal se sigue aplicando a mano desde acá.
+function NuevoProveedorForm({
+  proveedor,
+  clubes,
+  onDone,
+}: {
+  proveedor?: any;
+  clubes: any[];
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(proveedor?.name ?? "");
+  const [notes, setNotes] = useState(proveedor?.notes ?? "");
+  const [autoCierreClubId, setAutoCierreClubId] = useState(proveedor?.auto_cierre_club_id ?? "");
+  const [autoCierreRakebackPct, setAutoCierreRakebackPct] = useState(
+    proveedor?.auto_cierre_rakeback_pct != null ? String(Number(proveedor.auto_cierre_rakeback_pct) * 100) : "75"
+  );
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -345,12 +393,25 @@ function NuevoProveedorForm({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     setMsg(null);
     if (!name.trim()) return setMsg({ ok: false, text: "El nombre es obligatorio." });
+    if (autoCierreClubId && !(Number(autoCierreRakebackPct) > 0)) {
+      return setMsg({ ok: false, text: "Si elegís un club de auto-cierre, el % de rakeback tiene que ser mayor a 0." });
+    }
     setLoading(true);
+    const payload = {
+      name: name.trim(),
+      notes: notes.trim() || undefined,
+      autoCierreClubId: autoCierreClubId || null,
+      autoCierreRakebackPct: autoCierreClubId ? (Number(autoCierreRakebackPct) || 0) / 100 : null,
+    };
     try {
-      await api.crearProveedor({ name: name.trim(), notes: notes.trim() || undefined });
+      if (proveedor) {
+        await api.actualizarProveedor(proveedor.id, payload);
+      } else {
+        await api.crearProveedor(payload);
+      }
       onDone();
     } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo crear el proveedor." });
+      setMsg({ ok: false, text: err.message || "No se pudo guardar el proveedor." });
     } finally {
       setLoading(false);
     }
@@ -366,8 +427,29 @@ function NuevoProveedorForm({ onDone }: { onDone: () => void }) {
         <label>Notas (opcional)</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Descripción de la relación, referencia, etc." />
       </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Club de auto-cierre (opcional)</label>
+          <select value={autoCierreClubId} onChange={(e) => setAutoCierreClubId(e.target.value)}>
+            <option value="">Sin auto-cierre (cerrar a mano)</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        {autoCierreClubId && (
+          <div className="field">
+            <label>% rakeback fijo para el auto-cierre</label>
+            <input value={autoCierreRakebackPct} onChange={(e) => setAutoCierreRakebackPct(e.target.value)} type="number" step="0.01" />
+          </div>
+        )}
+      </div>
+      {autoCierreClubId && (
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          Cada vez que se guarde el resumen semanal de ese club (en "Resumen por club"), se va a aplicar solo el cierre
+          de este proveedor para esa semana, sin tener que volver acá.
+        </div>
+      )}
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Crear"}</button>
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : proveedor ? "Guardar cambios" : "Crear"}</button>
     </form>
   );
 }

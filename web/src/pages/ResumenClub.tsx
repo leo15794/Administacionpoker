@@ -278,7 +278,7 @@ export default function ResumenClub() {
     if (!resumen) return;
     setGuardando(true);
     try {
-      await api.guardarExtrasResumenClub({
+      const guardado = await api.guardarExtrasResumenClub({
         clubId: resumen.clubId,
         weekStart: resumen.weekStart,
         weekEnd: resumen.weekEnd ?? resumen.weekStart,
@@ -288,6 +288,17 @@ export default function ResumenClub() {
       const r = await api.resumenClub(clubId, weekStart);
       setResumen(r);
       setEditandoExtras(false);
+      // Auto-cierre de proveedores (22/09/2026): si este club tiene algún proveedor asociado,
+      // guardar acá también dispara solo su cierre semanal -- se avisa para que quede claro
+      // que ya quedó todo cerrado, sin tener que ir a la pestaña Proveedores a confirmarlo.
+      const cerrados = (guardado?.proveedoresCerrados ?? []).filter((p: any) => p.applied);
+      if (cerrados.length > 0) {
+        await alertDialog(
+          `Resumen guardado. También se aplicó solo el cierre de proveedor: ${cerrados
+            .map((p: any) => `${p.proveedorName} (${usd(p.cierre)})`)
+            .join(", ")}.`
+        );
+      }
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo guardar.");
     } finally {

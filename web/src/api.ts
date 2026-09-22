@@ -203,10 +203,22 @@ export const api = {
   // en Fénix GG, que nos entrega el 75% del rake TOTAL del club (no un agente al 75% de sus
   // propios jugadores, ver Cierres/Liquidaciones para ese caso). Nunca se mezcla con agents.
   proveedores: (includeInactive?: boolean) => request(`/proveedores${includeInactive ? "?includeInactive=1" : ""}`),
-  crearProveedor: (data: { name: string; notes?: string }) =>
-    request("/proveedores", { method: "POST", body: JSON.stringify(data) }),
-  actualizarProveedor: (id: string, data: { name?: string; notes?: string | null; active?: boolean }) =>
-    request(`/proveedores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  crearProveedor: (data: {
+    name: string;
+    notes?: string;
+    autoCierreClubId?: string | null;
+    autoCierreRakebackPct?: number | null;
+  }) => request("/proveedores", { method: "POST", body: JSON.stringify(data) }),
+  actualizarProveedor: (
+    id: string,
+    data: {
+      name?: string;
+      notes?: string | null;
+      active?: boolean;
+      autoCierreClubId?: string | null;
+      autoCierreRakebackPct?: number | null;
+    }
+  ) => request(`/proveedores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   proveedoresClubes: () => request("/proveedores/clubes"),
   saldosProveedores: () => request("/proveedores/saldos"),
   cierresProveedor: (proveedorId?: string) => request(`/proveedores/cierres${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),

@@ -12,23 +12,50 @@ export async function listProveedores(includeInactive = false) {
   return r.rows;
 }
 
-export async function crearProveedor(name: string, notes?: string) {
+export async function crearProveedor(
+  name: string,
+  notes?: string,
+  autoCierreClubId?: string | null,
+  autoCierreRakebackPct?: number | null
+) {
   const id = newId("prov");
   const r = await pool.query(
-    `INSERT INTO proveedores (id, name, notes, active) VALUES ($1,$2,$3,true) RETURNING *`,
-    [id, name.trim(), notes?.trim() || null]
+    `INSERT INTO proveedores (id, name, notes, active, auto_cierre_club_id, auto_cierre_rakeback_pct)
+     VALUES ($1,$2,$3,true,$4,$5) RETURNING *`,
+    [id, name.trim(), notes?.trim() || null, autoCierreClubId || null, autoCierreRakebackPct ?? null]
   );
   return r.rows[0];
 }
 
-export async function actualizarProveedor(id: string, patch: { name?: string; notes?: string | null; active?: boolean }) {
+export async function actualizarProveedor(
+  id: string,
+  patch: {
+    name?: string;
+    notes?: string | null;
+    active?: boolean;
+    autoCierreClubId?: string | null;
+    autoCierreRakebackPct?: number | null;
+  }
+) {
   const r = await pool.query(
     `UPDATE proveedores SET
        name = COALESCE($2, name),
        notes = CASE WHEN $3::boolean THEN $4 ELSE notes END,
-       active = COALESCE($5, active)
+       active = COALESCE($5, active),
+       auto_cierre_club_id = CASE WHEN $6::boolean THEN $7 ELSE auto_cierre_club_id END,
+       auto_cierre_rakeback_pct = CASE WHEN $8::boolean THEN $9 ELSE auto_cierre_rakeback_pct END
      WHERE id = $1 RETURNING *`,
-    [id, patch.name ?? null, patch.notes !== undefined, patch.notes ?? null, patch.active ?? null]
+    [
+      id,
+      patch.name ?? null,
+      patch.notes !== undefined,
+      patch.notes ?? null,
+      patch.active ?? null,
+      patch.autoCierreClubId !== undefined,
+      patch.autoCierreClubId || null,
+      patch.autoCierreRakebackPct !== undefined,
+      patch.autoCierreRakebackPct ?? null,
+    ]
   );
   if (!r.rows[0]) throw new Error("Proveedor no encontrado.");
   return r.rows[0];
@@ -183,6 +210,51 @@ export async function revertirCierreProveedor(id: string) {
   } finally {
     client.release();
   }
+}
+
+// Auto-cierre (22/09/2026, pedido de Leo): se llama desde el guardado de "Resumen por club"
+// (routes/dashboard.ts, POST /resumen-club/extras) -- busca todos los proveedores que tengan
+// este club como auto_cierre_club_id y les aplica el cierre semanal solo, sin que Leo tenga
+// que ir a la pestaña Proveedores y tocar nada. Si un proveedor ya tiene el cierre de esa
+// semana aplicado (por ejemplo porque el resumen se guardó dos veces), se lo salta sin error
+// -- nunca duplica ni revienta el guardado del resumen del club por esto.
+export interface ResultadoAutoCierreProveedor {
+  proveedorId: string;
+  proveedorName: string;
+  applied: boolean;
+  cierre?: number;
+  reason?: string;
+}
+
+export async function aplicarCierresAutomaticosParaClub(
+  clubId: string,
+  weekStart: string,
+  createdBy?: string
+): Promise<ResultadoAutoCierreProveedor[]> {
+  const r = await pool.query(
+    `SELECT id, name, auto_cierre_rakeback_pct FROM proveedores
+     WHERE active = true AND auto_cierre_club_id = $1 AND auto_cierre_rakeback_pct IS NOT NULL`,
+    [clubId]
+  );
+  const resultados: ResultadoAutoCierreProveedor[] = [];
+  for (const p of r.rows) {
+    try {
+      const cierre = await aplicarCierreProveedor({
+        proveedorId: p.id,
+        clubId,
+        weekStart,
+        rakebackPct: Number(p.auto_cierre_rakeback_pct),
+        notes: "Cierre automático al guardar el resumen semanal del club.",
+        createdBy,
+      });
+      resultados.push({ proveedorId: p.id, proveedorName: p.name, applied: true, cierre: Number(cierre.cierre) });
+    } catch (err: any) {
+      // "Ya existe un cierre..." es el caso normal de re-guardar el resumen -- no es un error
+      // real, solo significa que este proveedor ya estaba cerrado para esta semana.
+      resultados.push({ proveedorId: p.id, proveedorName: p.name, applied: false, reason: err.message });
+    }
+  }
+  return resultados;
 }
 
 export async function listCierresProveedor(proveedorId?: string) {

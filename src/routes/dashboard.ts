@@ -7,6 +7,7 @@ import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treas
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
+import { aplicarCierresAutomaticosParaClub } from "../repo/proveedores.js";
 import { getResumenTinyExtra, guardarTinyRebateUnion } from "../repo/tinyResumen.js";
 import { getResumenFinanciero } from "../repo/resumenFinanciero.js";
 
@@ -492,7 +493,18 @@ dashboardRouter.post("/resumen-club/extras", requireAuth, requireAdmin, async (r
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const r = await upsertClubWeeklyExtras({ ...parsed.data, createdBy: req.user?.email ?? null });
-    res.status(201).json(r);
+    // Auto-cierre de proveedores (22/09/2026, pedido de Leo): guardar el resumen del club es
+    // el único paso explícito de "esta semana ya está cargada" en esta pantalla -- se aprovecha
+    // ese mismo guardado para aplicar solo el cierre de cualquier proveedor asociado a este
+    // club, sin que haga falta ir a la pestaña Proveedores. Nunca hace fallar el guardado del
+    // resumen del club si algo de esto falla.
+    let proveedoresCerrados: Awaited<ReturnType<typeof aplicarCierresAutomaticosParaClub>> = [];
+    try {
+      proveedoresCerrados = await aplicarCierresAutomaticosParaClub(parsed.data.clubId, parsed.data.weekStart, req.user?.email);
+    } catch {
+      proveedoresCerrados = [];
+    }
+    res.status(201).json({ ...r, proveedoresCerrados });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
