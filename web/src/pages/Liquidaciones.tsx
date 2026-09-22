@@ -554,6 +554,25 @@ export default function Liquidaciones() {
           placeholder="Buscar agente..."
           style={{ width: "100%", maxWidth: 320, marginBottom: 8 }}
         />
+        {seleccionados.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            {seleccionados.map((id) => {
+              const a = agentes.find((x) => x.id === id);
+              return (
+                <span
+                  key={id}
+                  className="badge neutral"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                  onClick={() => toggleAgente(id)}
+                  title="Sacar de la liquidación"
+                >
+                  {a ? a.name : id}
+                  <span style={{ opacity: 0.6 }}>✕</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
         <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
           {agentesFiltrados.map((a) => (
             <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
