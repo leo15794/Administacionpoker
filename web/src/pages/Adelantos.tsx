@@ -232,7 +232,7 @@ export default function Adelantos() {
       </div>
 
       {showAlta && (
-        <Modal title="Nuevo adelanto" onClose={() => setShowAlta(false)}>
+        <Modal title="Nuevo(s) adelanto(s)" onClose={() => setShowAlta(false)} wide>
           <AltaForm
             agentes={agentes}
             clubes={clubes}
@@ -272,86 +272,153 @@ export default function Adelantos() {
   );
 }
 
-// Alta de un adelanto NUEVO e independiente — no se fija si el agente ya tiene otro(s) activos,
-// porque en la práctica puede recibir varios en la misma semana, en clubes distintos.
+// Alta de adelantos NUEVOS e independientes — en lote (22/09/2026, pedido de Leo, "así no
+// tenemos que hacerlo de a uno"): una fila por adelanto, cada una con su propio agente,
+// importe, medio y club de origen, todas se mandan juntas en un click. No se fija si un agente
+// ya tiene otro(s) adelanto(s) activos, ni si aparece repetido en más de una fila -- en la
+// práctica puede recibir varios en la misma tanda, en clubes distintos.
+type FilaAlta = { id: string; agentId: string; amount: string; medio: "" | "FICHAS" | "USDT"; clubOrigenId: string; notes: string };
+
+function filaAltaVacia(): FilaAlta {
+  return { id: Math.random().toString(36).slice(2), agentId: "", amount: "", medio: "", clubOrigenId: "", notes: "" };
+}
+
 function AltaForm({ agentes, clubes, onDone }: { agentes: any[]; clubes: any[]; onDone: () => void }) {
-  const [agentId, setAgentId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [medio, setMedio] = useState<"" | "FICHAS" | "USDT">("");
-  const [clubOrigenId, setClubOrigenId] = useState("");
-  const [notes, setNotes] = useState("");
+  const [filas, setFilas] = useState<FilaAlta[]>([filaAltaVacia()]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function actualizarFila(id: string, patch: Partial<FilaAlta>) {
+    setFilas((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
+  function agregarFila() {
+    setFilas((prev) => [...prev, filaAltaVacia()]);
+  }
+  function quitarFila(id: string) {
+    setFilas((prev) => (prev.length > 1 ? prev.filter((f) => f.id !== id) : prev));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!agentId) return setMsg({ ok: false, text: "Elegí un agente." });
-    const monto = Number(amount) || 0;
-    if (monto <= 0) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
-    if (medio && !clubOrigenId) return setMsg({ ok: false, text: "Un adelanto en fichas o USDT necesita club de origen." });
-    setLoading(true);
-    try {
-      await api.altaAdelanto({
-        agentId,
-        amount: monto,
-        medio: medio || null,
-        clubOrigenId: clubOrigenId || null,
-        notes: notes.trim() || undefined,
-      });
-      onDone();
-    } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo dar de alta el adelanto." });
-    } finally {
-      setLoading(false);
+    for (const f of filas) {
+      if (!f.agentId) return setMsg({ ok: false, text: "Todas las filas necesitan un agente elegido." });
+      if (!(Number(f.amount) > 0)) return setMsg({ ok: false, text: "Todos los montos tienen que ser mayores a 0." });
+      if (f.medio && !f.clubOrigenId) return setMsg({ ok: false, text: "Un adelanto en fichas o USDT necesita club de origen." });
     }
+    setLoading(true);
+    let exitos = 0;
+    const errores: string[] = [];
+    const filasConError: FilaAlta[] = [];
+    for (const f of filas) {
+      const agente = agentes.find((a) => a.id === f.agentId);
+      try {
+        await api.altaAdelanto({
+          agentId: f.agentId,
+          amount: Number(f.amount),
+          medio: f.medio || null,
+          clubOrigenId: f.clubOrigenId || null,
+          notes: f.notes.trim() || undefined,
+        });
+        exitos++;
+      } catch (err: any) {
+        errores.push(`${agente?.name ?? f.agentId}: ${err.message || "error"}`);
+        filasConError.push(f);
+      }
+    }
+    setLoading(false);
+    if (errores.length === 0) {
+      onDone();
+      return;
+    }
+    setMsg({
+      ok: false,
+      text: `${exitos} adelanto${exitos === 1 ? "" : "s"} cargado${exitos === 1 ? "" : "s"}, ${errores.length} con error — ${errores.join(" · ")}`,
+    });
+    // Deja cargadas solo las filas que fallaron -- las que sí se guardaron no hace falta reintentarlas.
+    setFilas(filasConError.length > 0 ? filasConError : [filaAltaVacia()]);
   }
 
   return (
     <form onSubmit={onSubmit}>
-      <div className="form-grid">
-        <div className="field">
-          <label>Agente</label>
-          <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">Elegir...</option>
-            {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label>Monto (USD)</label>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
-        </div>
-        <div className="field">
-          <label>Medio</label>
-          <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-            <option value="">Sin especificar (no mueve stock ni wallet)</option>
-            <option value="FICHAS">Fichas (mueve el stock del agente ya mismo)</option>
-            <option value="USDT">USDT (sale de la wallet ya mismo)</option>
-          </select>
-          <span className="muted" style={{ fontSize: 12 }}>
-            Se descuenta después en la liquidación real. "Sin especificar" es el comportamiento viejo — no mueve nada.
-          </span>
-        </div>
-        <div className="field">
-          <label>Club de origen{medio ? "" : " (opcional)"}</label>
-          <select value={clubOrigenId} onChange={(e) => setClubOrigenId(e.target.value)}>
-            <option value="">Sin especificar</option>
-            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <span className="muted" style={{ fontSize: 12 }}>
-            {medio
-              ? "De qué club salen las fichas/la wallet."
-              : "Solo de referencia (para rastrearlo contra la planilla) — el adelanto se compensa igual contra el rakeback de cualquier club."}
-          </span>
-        </div>
-      </div>
-      <div className="field">
-        <label>Notas (opcional)</label>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Motivo del adelanto, referencia, etc." />
+      <table>
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th>Monto (USD)</th>
+            <th>Medio</th>
+            <th>Club de origen</th>
+            <th>Notas</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.id}>
+              <td>
+                <select value={f.agentId} onChange={(e) => actualizarFila(f.id, { agentId: e.target.value })} style={{ minWidth: 140 }}>
+                  <option value="">Elegir...</option>
+                  {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </td>
+              <td>
+                <input
+                  value={f.amount}
+                  onChange={(e) => actualizarFila(f.id, { amount: e.target.value })}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  style={{ width: 100 }}
+                />
+              </td>
+              <td>
+                <select value={f.medio} onChange={(e) => actualizarFila(f.id, { medio: e.target.value as any })}>
+                  <option value="">Sin especificar</option>
+                  <option value="FICHAS">Fichas</option>
+                  <option value="USDT">USDT</option>
+                </select>
+              </td>
+              <td>
+                <select value={f.clubOrigenId} onChange={(e) => actualizarFila(f.id, { clubOrigenId: e.target.value })} style={{ minWidth: 130 }}>
+                  <option value="">Sin especificar</option>
+                  {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </td>
+              <td>
+                <input
+                  value={f.notes}
+                  onChange={(e) => actualizarFila(f.id, { notes: e.target.value })}
+                  placeholder="Motivo, referencia..."
+                  style={{ minWidth: 140 }}
+                />
+              </td>
+              <td>
+                <button
+                  type="button"
+                  className="btn secondary small"
+                  disabled={filas.length === 1}
+                  onClick={() => quitarFila(f.id)}
+                  style={{ color: "var(--danger, #e5484d)" }}
+                >
+                  Quitar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="button" className="btn secondary small" onClick={agregarFila} style={{ marginTop: 10 }}>
+        + Agregar otro adelanto
+      </button>
+      <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+        "Fichas" mueve el stock del agente ya mismo, "USDT" sale de la wallet ya mismo -- en los dos casos se
+        descuenta después en la liquidación real. "Sin especificar" es el comportamiento viejo, no mueve nada.
       </div>
 
-      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Dar de alta"}</button>
+      {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 10 }}>{msg.text}</div>}
+      <button className="btn" disabled={loading} style={{ marginTop: 10 }}>
+        {loading ? "Guardando..." : filas.length > 1 ? `Dar de alta (${filas.length})` : "Dar de alta"}
+      </button>
     </form>
   );
 }
