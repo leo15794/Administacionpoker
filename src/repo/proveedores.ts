@@ -525,7 +525,7 @@ export async function listLineasCierreProveedor(cierreId: string) {
   const r = await pool.query(
     `SELECT pcl.*, c.name as club_name, a.name as agent_name,
             wc.result as wc_result, wc.rake_total as wc_rake_total,
-            wc.rakeback as wc_rakeback, wc.rodeo as wc_rodeo
+            wc.rakeback as wc_rakeback, wc.rakeback_pct as wc_rakeback_pct, wc.rodeo as wc_rodeo
      FROM proveedor_cierre_lineas pcl
      JOIN clubs c ON c.id = pcl.club_id
      LEFT JOIN agents a ON a.id = pcl.agent_id

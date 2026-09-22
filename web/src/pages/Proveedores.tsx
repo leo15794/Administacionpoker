@@ -551,20 +551,30 @@ function CierreRow({
                   </tr>
                 </thead>
                 <tbody>
-                  {lineas.map((l) => (
-                    <tr key={l.id}>
-                      <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
-                      <td>{l.club_name}</td>
-                      <td>{l.agent_name ?? "—"}</td>
-                      <td>{l.resultado_total !== null ? usd(l.resultado_total) : "—"}</td>
-                      <td>{l.rake_total !== null ? usd(l.rake_total) : "—"}</td>
-                      <td>{l.rakeback_pct !== null ? pct(l.rakeback_pct) : "—"}</td>
-                      <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
-                      <td>{l.impacto_rodeo !== null ? usd(l.impacto_rodeo) : "—"}</td>
-                      <td>{usd(l.monto_crudo)}</td>
-                      <td><b>{usd(l.monto_aplicado)}</b></td>
-                    </tr>
-                  ))}
+                  {lineas.map((l) => {
+                    // Las líneas tipo AGENTE no guardan su propio resultado/rake/rakeback/rodeo
+                    // (solo el weekly_closing_id de referencia) -- listLineasCierreProveedor
+                    // trae ese desglose con un LEFT JOIN a weekly_closings (wc_*), se muestra
+                    // tal cual quedó aplicado en Cierres semanales, nunca se recalcula acá.
+                    const esAgente = l.tipo === "AGENTE";
+                    const resultado = esAgente ? l.wc_result : l.resultado_total;
+                    const rakeTotal = esAgente ? l.wc_rake_total : l.rake_total;
+                    const rodeo = esAgente ? l.wc_rodeo : l.impacto_rodeo;
+                    return (
+                      <tr key={l.id}>
+                        <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
+                        <td>{l.club_name}</td>
+                        <td>{l.agent_name ?? "—"}</td>
+                        <td>{resultado !== null && resultado !== undefined ? usd(resultado) : "—"}</td>
+                        <td>{rakeTotal !== null && rakeTotal !== undefined ? usd(rakeTotal) : "—"}</td>
+                        <td>{(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== null && (esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== undefined ? pct(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) : "—"}</td>
+                        <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
+                        <td>{rodeo !== null && rodeo !== undefined ? usd(rodeo) : "—"}</td>
+                        <td>{usd(l.monto_crudo)}</td>
+                        <td><b>{usd(l.monto_aplicado)}</b></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
