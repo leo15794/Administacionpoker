@@ -91,6 +91,16 @@ export default function Proveedores() {
     }
   }
 
+  async function onRecalcularCierre(id: string) {
+    if (!confirm("¿Recalcular este cierre con los datos actuales? Equivale a revertirlo y volver a aplicar las mismas líneas -- solo funciona si no hay pagos/cierres más nuevos encima.")) return;
+    try {
+      await api.recalcularCierreProveedor(id);
+      refresh();
+    } catch (err: any) {
+      alert(err.message || "No se pudo recalcular.");
+    }
+  }
+
   async function onEliminarCierre(id: string) {
     if (!confirm("¿Eliminar este cierre DEL TODO? No se puede deshacer (a diferencia de \"Revertir\", esto lo saca del historial).")) return;
     try {
@@ -253,7 +263,7 @@ export default function Proveedores() {
               </thead>
               <tbody>
                 {cierres.map((c) => (
-                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onEliminar={onEliminarCierre} />
+                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
                 ))}
               </tbody>
             </table>
@@ -408,10 +418,12 @@ export default function Proveedores() {
 function CierreRow({
   cierre,
   onRevertir,
+  onRecalcular,
   onEliminar,
 }: {
   cierre: any;
   onRevertir: (id: string) => void;
+  onRecalcular: (id: string) => void;
   onEliminar: (id: string) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -437,7 +449,10 @@ function CierreRow({
         <td>{usd(cierre.saldo_nuevo)}</td>
         <td>
           {cierre.status !== "REVERTIDO" && (
-            <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRevertir(cierre.id); }}>Revertir</button>
+            <>
+              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRecalcular(cierre.id); }}>Recalcular</button>{" "}
+              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRevertir(cierre.id); }}>Revertir</button>{" "}
+            </>
           )}
           {cierre.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}{" "}
           <button className="btn danger small" onClick={(e) => { e.stopPropagation(); onEliminar(cierre.id); }}>Eliminar</button>

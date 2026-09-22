@@ -9,6 +9,7 @@ import {
   listSaldosProveedores,
   aplicarCierreProveedor,
   revertirCierreProveedor,
+  recalcularCierreProveedor,
   listCierresProveedor,
   listLineasCierreProveedor,
   obtenerCierreAgentePreview,
@@ -192,6 +193,17 @@ proveedoresRouter.get("/agentes", requireAuth, requireAdmin, async (_req, res) =
 proveedoresRouter.delete("/cierres/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     res.json(await revertirCierreProveedor(req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Recalcular (22/09/2026, pedido de Leo: "si un cierre ya esta realizado que se pueda
+// recalcular... si no tengo que borrar todo y volver a hacerlo") -- revierte y vuelve a
+// aplicar las mismas líneas con los datos actuales, en un solo paso.
+proveedoresRouter.post("/cierres/:id/recalcular", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await recalcularCierreProveedor(req.params.id, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

@@ -241,6 +241,7 @@ export const api = {
     notes?: string;
   }) => request("/proveedores/cierres", { method: "POST", body: JSON.stringify(data) }),
   revertirCierreProveedor: (id: string) => request(`/proveedores/cierres/${id}`, { method: "DELETE" }),
+  recalcularCierreProveedor: (id: string) => request(`/proveedores/cierres/${id}/recalcular`, { method: "POST" }),
   eliminarCierreProveedorDefinitivo: (id: string) => request(`/proveedores/cierres/${id}/definitivo`, { method: "DELETE" }),
   pagosProveedor: (proveedorId?: string) => request(`/proveedores/pagos${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
   registrarPagoProveedor: (data: {

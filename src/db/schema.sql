@@ -1156,6 +1156,15 @@ CREATE TABLE IF NOT EXISTS proveedor_cierre_lineas (
 );
 CREATE INDEX IF NOT EXISTS proveedor_cierre_lineas_cierre_idx ON proveedor_cierre_lineas(cierre_id);
 
+-- La tabla proveedor_cierre_lineas ya existia de antes (CREATE TABLE IF NOT EXISTS de arriba
+-- no la toca si ya fue creada) -- estas dos lineas son las que realmente agregan club_rebate/
+-- impacto_rodeo en una base que ya tenia la tabla (mismo patron que auto_cierre_club_id mas
+-- arriba). Sin esto, "npm run migrate" no rompe pero tampoco agrega las columnas, y el cierre
+-- de proveedor falla con "column club_rebate of relation proveedor_cierre_lineas does not
+-- exist" -- bug real detectado 22/09/2026.
+ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS club_rebate NUMERIC(18,4);
+ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS impacto_rodeo NUMERIC(18,4);
+
 -- Pagos/cobros (USDT u otro medio) contra el saldo del proveedor -- separados del cálculo del
 -- cierre semanal (Leo, punto 4 del texto sobre Manzur: "los pagos USDT deben mostrarse por
 -- separado y aplicarse al saldo, no modificando la fórmula del cierre semanal").

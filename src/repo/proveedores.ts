@@ -404,6 +404,49 @@ export async function obtenerCierreAgentePreview(agentId: string, clubId: string
   return r.rows[0] ?? null;
 }
 
+// Recalcula un cierre ya aplicado, tomando los datos actuales en vez de tener que revertir a
+// mano y volver a cargarlo todo de nuevo (22/09/2026, pedido de Leo: "si un cierre ya esta
+// realizado que se pueda recalcular... si no tengo que borrar todo y volver a hacerlo"). Es
+// exactamente lo mismo que Leo haría a mano -- revertir (con las mismas validaciones y
+// restricciones que ya tiene revertirCierreProveedor: falla si hay pagos/cierres más nuevos
+// encima) y volver a aplicar las mismas líneas (mismos clubes/agentes/% de rakeback), pero
+// automático y en un solo paso. Como aplicarCierreProveedor siempre recalcula desde
+// getResumenClubSemanal / weekly_closings.final_closing (nunca desde lo guardado), el
+// resultado sale con los datos de hoy -- si algo cambió upstream (una corrección en un cierre
+// de agente, un ajuste en el resumen del club), el recálculo lo refleja.
+export async function recalcularCierreProveedor(id: string, createdBy?: string) {
+  const cierreR = await pool.query(`SELECT * FROM proveedor_cierres WHERE id = $1`, [id]);
+  const cierre = cierreR.rows[0];
+  if (!cierre) throw new Error("Cierre no encontrado.");
+  if (cierre.status === "REVERTIDO") throw new Error("Este cierre ya fue revertido -- no hay nada para recalcular.");
+
+  const lineasR = await pool.query(
+    `SELECT * FROM proveedor_cierre_lineas WHERE cierre_id = $1 ORDER BY created_at`,
+    [id]
+  );
+  if (lineasR.rows.length === 0) {
+    throw new Error("Este cierre no tiene líneas registradas -- no se puede recalcular (¿es un cierre viejo del formato anterior?).");
+  }
+
+  const lineasInput: LineaCierreProveedorInput[] = lineasR.rows.map((l) => ({
+    tipo: l.tipo as TipoLineaCierreProveedor,
+    clubId: l.club_id,
+    rakebackPct: l.rakeback_pct != null ? Number(l.rakeback_pct) : undefined,
+    agentId: l.agent_id ?? undefined,
+    notes: l.notes ?? undefined,
+  }));
+
+  await revertirCierreProveedor(id);
+
+  return aplicarCierreProveedor({
+    proveedorId: cierre.proveedor_id,
+    weekStart: cierre.week_start,
+    lineas: lineasInput,
+    notes: (cierre.notes ? `${cierre.notes} -- ` : "") + "Recalculado con los datos actuales.",
+    createdBy,
+  });
+}
+
 export async function listLineasCierreProveedor(cierreId: string) {
   const r = await pool.query(
     `SELECT pcl.*, c.name as club_name, a.name as agent_name
