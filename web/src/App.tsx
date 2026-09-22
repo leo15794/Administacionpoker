@@ -10,6 +10,7 @@ import ComisionesReferidos from "./pages/ComisionesReferidos";
 import ResumenFinanciero from "./pages/ResumenFinanciero";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
+import Proveedores from "./pages/Proveedores";
 import Adelantos from "./pages/Adelantos";
 import RakebackPendiente from "./pages/RakebackPendiente";
 import CuentasSocios from "./pages/CuentasSocios";
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="tesoreria" element={<Tesoreria />} />
           <Route path="wallet" element={<Wallet />} />
           <Route path="garantias" element={<Garantias />} />
+          <Route path="proveedores" element={<Proveedores />} />
           <Route path="adelantos" element={<Adelantos />} />
           <Route path="rakeback-pendiente" element={<RakebackPendiente />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />

@@ -55,6 +55,11 @@ const icon = {
       <rect x="2" y="6" width="20" height="14" rx="2" /><path d="M2 10h20" /><circle cx="16" cy="15" r="1.5" />
     </svg>
   ),
+  proveedores: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="7" width="18" height="13" rx="2" /><path d="M3 7l2-4h14l2 4" /><path d="M9 11v3" /><path d="M15 11v3" />
+    </svg>
+  ),
   adelantos: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
@@ -168,6 +173,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "plata" },
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "plata" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "plata" },
+  { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "plata" },
   { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "plata" },
   { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "plata" },
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "plata" },

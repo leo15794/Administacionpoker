@@ -1002,3 +1002,99 @@ CREATE TABLE IF NOT EXISTS tiny_rebate_union (
   UNIQUE (club_id, week_start, file_name)
 );
 CREATE INDEX IF NOT EXISTS idx_tiny_rebate_union_club_semana ON tiny_rebate_union(club_id, week_start);
+
+-- ============ PROVEEDORES (22/09/2026, pedido de Leo) ============
+-- Entidad SEPARADA de agents -- a propósito no se reutiliza la tabla de agentes ("no
+-- mezclarlo con lo que ya tenemos"): un proveedor es una relación distinta (ej. Manzur como
+-- "unión" en Fénix GG, que nos entrega el 75% del rake TOTAL del club, no un agente al 75%
+-- de sus propios jugadores como en Fénix Suprema -- ver Cierres/Liquidaciones para ese caso).
+-- Un mismo humano puede existir como agente (fila en agents) Y como proveedor (fila acá) al
+-- mismo tiempo, son cuentas independientes que nunca se tocan entre sí.
+CREATE TABLE IF NOT EXISTS proveedores (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  notes      TEXT,
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Saldo operativo acumulado por proveedor+club (mismo criterio de signo que balances:
+-- positivo = a favor del proveedor/le debemos, negativo = a favor nuestro/nos debe). Se
+-- actualiza con cada cierre semanal y cada pago -- nunca se toca a mano.
+CREATE TABLE IF NOT EXISTS proveedor_saldos (
+  id           TEXT PRIMARY KEY,
+  proveedor_id TEXT NOT NULL REFERENCES proveedores(id),
+  club_id      TEXT NOT NULL REFERENCES clubs(id),
+  amount       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(proveedor_id, club_id)
+);
+
+-- Cierre semanal de proveedor: fórmula fija Resultado total del club + (Rake total del club
+-- × rakeback_pct) -- a diferencia del cierre de un agente, NO es por jugador/import, se carga
+-- a mano con el total agregado del club completo (ver texto de Leo, 22/09/2026, sobre Manzur
+-- en Fénix GG). No incluye rodeo ni rebate -- si algún proveedor lo necesita en el futuro, se
+-- agrega aparte, no se asume acá.
+CREATE TABLE IF NOT EXISTS proveedor_cierres (
+  id               TEXT PRIMARY KEY,
+  proveedor_id     TEXT NOT NULL REFERENCES proveedores(id),
+  club_id          TEXT NOT NULL REFERENCES clubs(id),
+  week_start       DATE NOT NULL,
+  week_end         DATE NOT NULL,
+  resultado_total  NUMERIC(18,4) NOT NULL,
+  rake_total       NUMERIC(18,4) NOT NULL,
+  rakeback_pct     NUMERIC(6,4) NOT NULL,
+  rakeback_monto   NUMERIC(18,4) NOT NULL,
+  cierre           NUMERIC(18,4) NOT NULL,
+  saldo_anterior   NUMERIC(18,4) NOT NULL,
+  saldo_nuevo      NUMERIC(18,4) NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  notes            TEXT,
+  created_by       TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(proveedor_id, club_id, week_start)
+);
+
+-- Pagos/cobros (USDT u otro medio) contra el saldo del proveedor -- separados del cálculo del
+-- cierre semanal (Leo, punto 4 del texto sobre Manzur: "los pagos USDT deben mostrarse por
+-- separado y aplicarse al saldo, no modificando la fórmula del cierre semanal").
+CREATE TABLE IF NOT EXISTS proveedor_pagos (
+  id             TEXT PRIMARY KEY,
+  proveedor_id   TEXT NOT NULL REFERENCES proveedores(id),
+  club_id        TEXT NOT NULL REFERENCES clubs(id),
+  amount         NUMERIC(18,4) NOT NULL,
+  medio          TEXT NOT NULL DEFAULT 'USDT' CHECK (medio IN ('USDT','EFECTIVO','ZELLE','OTRO')),
+  direction      TEXT NOT NULL CHECK (direction IN ('PAGO','COBRO')),
+  saldo_anterior NUMERIC(18,4) NOT NULL,
+  saldo_nuevo    NUMERIC(18,4) NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  notes          TEXT,
+  occurred_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by     TEXT
+);
+
+-- Garantía de un proveedor -- mismo mecanismo que guarantees/guarantee_movements (BIT-034:
+-- separada del saldo operativo), pero en su propia tabla para no mezclar con las garantías
+-- de agentes.
+CREATE TABLE IF NOT EXISTS proveedor_garantias (
+  id           TEXT PRIMARY KEY,
+  proveedor_id TEXT NOT NULL REFERENCES proveedores(id),
+  amount       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  consumed     NUMERIC(18,4) NOT NULL DEFAULT 0,
+  active       BOOLEAN NOT NULL DEFAULT TRUE,
+  notes        TEXT,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS proveedor_garantia_movements (
+  id                  TEXT PRIMARY KEY,
+  proveedor_id        TEXT NOT NULL REFERENCES proveedores(id),
+  garantia_id         TEXT NOT NULL REFERENCES proveedor_garantias(id),
+  type                TEXT NOT NULL CHECK (type IN ('ALTA','AUMENTO','REDUCCION','CONSUMO','BAJA')),
+  amount              NUMERIC(18,4) NOT NULL,
+  resulting_amount    NUMERIC(18,4) NOT NULL,
+  resulting_consumed  NUMERIC(18,4) NOT NULL,
+  notes               TEXT,
+  created_by          TEXT,
+  occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);

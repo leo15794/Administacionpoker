@@ -199,6 +199,48 @@ export const api = {
   ajustarGarantia: (data: { agentId: string; type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/guarantees/ajuste", { method: "POST", body: JSON.stringify(data) }),
 
+  // Proveedores (22/09/2026): entidad separada de agentes/clubes -- ej. Manzur como "unión"
+  // en Fénix GG, que nos entrega el 75% del rake TOTAL del club (no un agente al 75% de sus
+  // propios jugadores, ver Cierres/Liquidaciones para ese caso). Nunca se mezcla con agents.
+  proveedores: (includeInactive?: boolean) => request(`/proveedores${includeInactive ? "?includeInactive=1" : ""}`),
+  crearProveedor: (data: { name: string; notes?: string }) =>
+    request("/proveedores", { method: "POST", body: JSON.stringify(data) }),
+  actualizarProveedor: (id: string, data: { name?: string; notes?: string | null; active?: boolean }) =>
+    request(`/proveedores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  proveedoresClubes: () => request("/proveedores/clubes"),
+  saldosProveedores: () => request("/proveedores/saldos"),
+  cierresProveedor: (proveedorId?: string) => request(`/proveedores/cierres${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
+  aplicarCierreProveedor: (data: {
+    proveedorId: string;
+    clubId: string;
+    weekStart: string;
+    weekEnd: string;
+    resultadoTotal: number;
+    rakeTotal: number;
+    rakebackPct: number;
+    notes?: string;
+  }) => request("/proveedores/cierres", { method: "POST", body: JSON.stringify(data) }),
+  revertirCierreProveedor: (id: string) => request(`/proveedores/cierres/${id}`, { method: "DELETE" }),
+  pagosProveedor: (proveedorId?: string) => request(`/proveedores/pagos${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
+  registrarPagoProveedor: (data: {
+    proveedorId: string;
+    clubId: string;
+    amount: number;
+    medio: "USDT" | "EFECTIVO" | "ZELLE" | "OTRO";
+    direction: "PAGO" | "COBRO";
+    notes?: string;
+  }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
+  revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
+  garantiasProveedores: () => request("/proveedores/garantias"),
+  garantiasProveedoresHistorial: (proveedorId?: string) =>
+    request(`/proveedores/garantias/historial${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
+  ajustarGarantiaProveedor: (data: {
+    proveedorId: string;
+    type: "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA";
+    amount: number;
+    notes?: string;
+  }) => request("/proveedores/garantias/ajuste", { method: "POST", body: JSON.stringify(data) }),
+
   // Adelantos de rakeback: por agente, pero cada adelanto es independiente — un agente puede
   // tener varios a la vez (distintos momentos, distintos clubes de origen).
   adelantos: () => request("/advances"),
