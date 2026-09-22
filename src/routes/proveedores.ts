@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listClubs } from "../repo/catalog.js";
+import { listClubs, listAgents } from "../repo/catalog.js";
 import {
   listProveedores,
   crearProveedor,
@@ -10,6 +10,8 @@ import {
   aplicarCierreProveedor,
   revertirCierreProveedor,
   listCierresProveedor,
+  listLineasCierreProveedor,
+  obtenerCierreAgentePreview,
   registrarPagoProveedor,
   revertirPagoProveedor,
   listPagosProveedor,
@@ -66,11 +68,17 @@ proveedoresRouter.get("/saldos", requireAuth, requireAdmin, async (_req, res) =>
   res.json(await listSaldosProveedores());
 });
 
+const lineaCierreSchema = z.object({
+  tipo: z.enum(["CLUB", "AGENTE"]),
+  clubId: z.string(),
+  rakebackPct: z.number().optional(),
+  agentId: z.string().optional(),
+  notes: z.string().optional(),
+});
 const cierreSchema = z.object({
   proveedorId: z.string(),
-  clubId: z.string(),
   weekStart: z.string(),
-  rakebackPct: z.number(),
+  lineas: z.array(lineaCierreSchema).min(1),
   notes: z.string().optional(),
 });
 proveedoresRouter.post("/cierres", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -87,6 +95,25 @@ proveedoresRouter.post("/cierres", requireAuth, requireAdmin, async (req: Authed
 proveedoresRouter.get("/cierres", requireAuth, requireAdmin, async (req, res) => {
   const proveedorId = typeof req.query.proveedorId === "string" && req.query.proveedorId ? req.query.proveedorId : undefined;
   res.json(await listCierresProveedor(proveedorId));
+});
+
+proveedoresRouter.get("/cierres/:id/lineas", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listLineasCierreProveedor(req.params.id));
+});
+
+// Preview del cierre ya aplicado de un agente (para armar una línea tipo AGENTE antes de
+// confirmar el cierre del proveedor) -- ver "Cierres semanales" en Proveedores.
+proveedoresRouter.get("/cierre-agente-preview", requireAuth, requireAdmin, async (req, res) => {
+  const { agentId, clubId, weekStart } = req.query;
+  if (typeof agentId !== "string" || typeof clubId !== "string" || typeof weekStart !== "string") {
+    return res.status(400).json({ error: "Faltan parámetros (agentId, clubId, weekStart)." });
+  }
+  res.json(await obtenerCierreAgentePreview(agentId, clubId, weekStart));
+});
+
+// Agentes: reutiliza el mismo catálogo de agentes (para armar líneas tipo AGENTE).
+proveedoresRouter.get("/agentes", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listAgents());
 });
 
 proveedoresRouter.delete("/cierres/:id", requireAuth, requireAdmin, async (req, res) => {

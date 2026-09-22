@@ -23,6 +23,7 @@ export default function Proveedores() {
   const [tab, setTab] = useState<Tab>("saldos");
   const [proveedores, setProveedores] = useState<any[] | null>(null);
   const [clubes, setClubes] = useState<any[]>([]);
+  const [agentes, setAgentes] = useState<any[]>([]);
   const [saldos, setSaldos] = useState<any[] | null>(null);
   const [cierres, setCierres] = useState<any[] | null>(null);
   const [pagos, setPagos] = useState<any[] | null>(null);
@@ -49,6 +50,7 @@ export default function Proveedores() {
   useEffect(() => {
     refresh();
     api.proveedoresClubes().then(setClubes);
+    api.agentesProveedores().then(setAgentes);
   }, []);
 
   if (error) {
@@ -187,6 +189,9 @@ export default function Proveedores() {
       {tab === "cierres" && (
         <div className="panel">
           <h3>Historial de cierres semanales</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Un cierre puede tener varias líneas (club y/o agente) -- tocá una fila para ver el detalle.
+          </div>
           {!cierres ? (
             <div className="muted">Cargando...</div>
           ) : cierres.length === 0 ? (
@@ -195,29 +200,12 @@ export default function Proveedores() {
             <table>
               <thead>
                 <tr>
-                  <th>Semana</th><th>Proveedor</th><th>Club</th><th>Resultado</th><th>Rake</th><th>%</th>
-                  <th>Rakeback</th><th>Cierre</th><th>Saldo resultante</th><th></th>
+                  <th>Semana</th><th>Proveedor</th><th>Cierre</th><th>Saldo resultante</th><th></th>
                 </tr>
               </thead>
               <tbody>
                 {cierres.map((c) => (
-                  <tr key={c.id} style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
-                    <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
-                    <td>{c.proveedor_name}</td>
-                    <td>{c.club_name}</td>
-                    <td>{usd(c.resultado_total)}</td>
-                    <td>{usd(c.rake_total)}</td>
-                    <td>{pct(c.rakeback_pct)}</td>
-                    <td>{usd(c.rakeback_monto)}</td>
-                    <td><span className={`badge ${Number(c.cierre) > 0 ? "pos" : Number(c.cierre) < 0 ? "neg" : "neutral"}`}>{usd(c.cierre)}</span></td>
-                    <td>{usd(c.saldo_nuevo)}</td>
-                    <td>
-                      {c.status !== "REVERTIDO" && (
-                        <button className="btn secondary small" onClick={() => onRevertirCierre(c.id)}>Revertir</button>
-                      )}
-                      {c.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}
-                    </td>
-                  </tr>
+                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} />
                 ))}
               </tbody>
             </table>
@@ -339,6 +327,7 @@ export default function Proveedores() {
           <CierreForm
             proveedores={proveedores}
             clubes={clubes}
+            agentes={agentes}
             onDone={() => { setShowCierre(false); refresh(); }}
           />
         </Modal>
@@ -363,6 +352,73 @@ export default function Proveedores() {
         </Modal>
       )}
     </div>
+  );
+}
+
+function CierreRow({ cierre, onRevertir }: { cierre: any; onRevertir: (id: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [lineas, setLineas] = useState<any[] | null>(null);
+
+  function toggle() {
+    const next = !abierto;
+    setAbierto(next);
+    if (next && !lineas) {
+      api.lineasCierreProveedor(cierre.id).then(setLineas).catch(() => setLineas([]));
+    }
+  }
+
+  return (
+    <>
+      <tr
+        style={{ cursor: "pointer", ...(cierre.status === "REVERTIDO" ? { opacity: 0.55 } : {}) }}
+        onClick={toggle}
+      >
+        <td>{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</td>
+        <td>{cierre.proveedor_name}</td>
+        <td><span className={`badge ${Number(cierre.cierre) > 0 ? "pos" : Number(cierre.cierre) < 0 ? "neg" : "neutral"}`}>{usd(cierre.cierre)}</span></td>
+        <td>{usd(cierre.saldo_nuevo)}</td>
+        <td>
+          {cierre.status !== "REVERTIDO" && (
+            <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRevertir(cierre.id); }}>Revertir</button>
+          )}
+          {cierre.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}
+        </td>
+      </tr>
+      {abierto && (
+        <tr>
+          <td colSpan={5} style={{ background: "rgba(255,255,255,0.02)" }}>
+            {!lineas ? (
+              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando líneas...</div>
+            ) : lineas.length === 0 ? (
+              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin líneas registradas (cierre del formato anterior).</div>
+            ) : (
+              <table style={{ margin: "4px 0" }}>
+                <thead>
+                  <tr>
+                    <th>Tipo</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>%</th>
+                    <th>Monto bruto</th><th>Aplicado al saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineas.map((l) => (
+                    <tr key={l.id}>
+                      <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
+                      <td>{l.club_name}</td>
+                      <td>{l.agent_name ?? "—"}</td>
+                      <td>{l.resultado_total !== null ? usd(l.resultado_total) : "—"}</td>
+                      <td>{l.rake_total !== null ? usd(l.rake_total) : "—"}</td>
+                      <td>{l.rakeback_pct !== null ? pct(l.rakeback_pct) : "—"}</td>
+                      <td>{usd(l.monto_crudo)}</td>
+                      <td><b>{usd(l.monto_aplicado)}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -454,67 +510,220 @@ function NuevoProveedorForm({
   );
 }
 
-// El resultado y el rake total NUNCA se tipean acá -- se traen del resumen semanal del club
-// (mismo que ya usa la pestaña "Resumen por club"), que suma los cierres de todos los agentes
-// de ese club+semana ya cargados por la vía normal ("Cierres semanales"). Pedido de Leo,
-// 22/09/2026: "no podemos hacer el cierre semanal de los clubes y que se gestione lo mismo
-// para esta pestaña? si no tenemos que hacer dos cierres con lo mismo". Este formulario es
-// entonces un paso DESPUÉS de cerrar el club como siempre, nunca una carga en paralelo.
-function CierreForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
-  const [proveedorId, setProveedorId] = useState("");
-  const [clubId, setClubId] = useState("");
-  const [semanas, setSemanas] = useState<any[] | null>(null);
-  const [weekStart, setWeekStart] = useState("");
+// Un cierre de proveedor cubre UNA semana y puede tener varias líneas (22/09/2026, pedido de
+// Leo, caso Manzur: línea CLUB para Fénix GG donde es "la unión" + línea AGENTE para M CHOCO
+// en Fénix Suprema, que ya tiene su cierre normal en Cierres semanales). Línea CLUB: el total
+// del club (nunca se re-tipea, sale de "Resumen por club"), se guarda invertido -- esa
+// inversión es exclusiva de acá. Línea AGENTE: el cierre YA APLICADO de un agente puntual en
+// Cierres semanales, tal cual, sin invertir.
+type LineaTipo = "CLUB" | "AGENTE";
+interface LineaState {
+  key: number;
+  tipo: LineaTipo;
+  clubId: string;
+  rakebackPct: string; // solo CLUB
+  agentId: string; // solo AGENTE
+}
+
+let lineaKeySeq = 1;
+function nuevaLinea(): LineaState {
+  return { key: lineaKeySeq++, tipo: "CLUB", clubId: "", rakebackPct: "75", agentId: "" };
+}
+
+function LineaClubEditor({
+  linea,
+  clubes,
+  weekStart,
+  onChange,
+  onRemove,
+  soloUna,
+}: {
+  linea: LineaState;
+  clubes: any[];
+  weekStart: string;
+  onChange: (l: LineaState) => void;
+  onRemove: () => void;
+  soloUna: boolean;
+}) {
   const [resumen, setResumen] = useState<any | null>(null);
-  const [cargandoResumen, setCargandoResumen] = useState(false);
-  const [rakebackPct, setRakebackPct] = useState("75");
+  const [cargando, setCargando] = useState(false);
+
+  useEffect(() => {
+    setResumen(null);
+    if (linea.tipo !== "CLUB" || !linea.clubId || !weekStart) return;
+    setCargando(true);
+    api
+      .resumenClub(linea.clubId, weekStart)
+      .then(setResumen)
+      .catch(() => setResumen(null))
+      .finally(() => setCargando(false));
+  }, [linea.tipo, linea.clubId, weekStart]);
+
+  const pctNum = (Number(linea.rakebackPct) || 0) / 100;
+  const resultadoTotal = resumen ? Number(resumen.resultadoTotal) : null;
+  const rakeTotal = resumen ? Number(resumen.rakeTotal) : null;
+  const montoCrudo = resultadoTotal !== null && rakeTotal !== null ? resultadoTotal + rakeTotal * pctNum : null;
+  const sinCierresDelClub = resumen && Number(resumen.agentesConCierre) === 0;
+
+  return (
+    <div className="panel" style={{ background: "rgba(255,255,255,0.02)", marginBottom: 10 }}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Club</label>
+          <select value={linea.clubId} onChange={(e) => onChange({ ...linea, clubId: e.target.value })}>
+            <option value="">Elegir...</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>% rakeback sobre el rake total del club</label>
+          <input value={linea.rakebackPct} onChange={(e) => onChange({ ...linea, rakebackPct: e.target.value })} type="number" step="0.01" />
+        </div>
+      </div>
+      {cargando && <div className="muted" style={{ fontSize: 12 }}>Trayendo el resumen del club...</div>}
+      {sinCierresDelClub && (
+        <div className="error" style={{ fontSize: 12 }}>
+          Esta semana no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".
+        </div>
+      )}
+      {resumen && !sinCierresDelClub && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          Resultado: {usd(resultadoTotal ?? 0)} (de {resumen.agentesConCierre} agente{Number(resumen.agentesConCierre) === 1 ? "" : "s"}) · Rake:{" "}
+          {usd(rakeTotal ?? 0)} · Cierre bruto = {usd(montoCrudo ?? 0)} · Se guarda invertido:{" "}
+          <b>{usd(montoCrudo !== null ? -montoCrudo : 0)}</b>
+        </div>
+      )}
+      {!soloUna && (
+        <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={onRemove}>Quitar línea</button>
+      )}
+    </div>
+  );
+}
+
+function LineaAgenteEditor({
+  linea,
+  clubes,
+  agentes,
+  weekStart,
+  onChange,
+  onRemove,
+  soloUna,
+}: {
+  linea: LineaState;
+  clubes: any[];
+  agentes: any[];
+  weekStart: string;
+  onChange: (l: LineaState) => void;
+  onRemove: () => void;
+  soloUna: boolean;
+}) {
+  const [preview, setPreview] = useState<any | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [noEncontrado, setNoEncontrado] = useState(false);
+
+  useEffect(() => {
+    setPreview(null);
+    setNoEncontrado(false);
+    if (linea.tipo !== "AGENTE" || !linea.clubId || !linea.agentId || !weekStart) return;
+    setCargando(true);
+    api
+      .cierreAgentePreview(linea.agentId, linea.clubId, weekStart)
+      .then((r) => {
+        if (!r) setNoEncontrado(true);
+        setPreview(r);
+      })
+      .catch(() => setNoEncontrado(true))
+      .finally(() => setCargando(false));
+  }, [linea.tipo, linea.clubId, linea.agentId, weekStart]);
+
+  return (
+    <div className="panel" style={{ background: "rgba(255,255,255,0.02)", marginBottom: 10 }}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Club</label>
+          <select value={linea.clubId} onChange={(e) => onChange({ ...linea, clubId: e.target.value })}>
+            <option value="">Elegir...</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Agente</label>
+          <select value={linea.agentId} onChange={(e) => onChange({ ...linea, agentId: e.target.value })}>
+            <option value="">Elegir...</option>
+            {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+      </div>
+      {cargando && <div className="muted" style={{ fontSize: 12 }}>Buscando el cierre del agente...</div>}
+      {noEncontrado && !cargando && linea.clubId && linea.agentId && (
+        <div className="error" style={{ fontSize: 12 }}>
+          Este agente no tiene un cierre aplicado en ese club para esa semana -- cargalo primero en "Cierres semanales".
+        </div>
+      )}
+      {preview && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          Cierre de {preview.agent_name} en {preview.club_name}: <b>{usd(preview.final_closing)}</b> -- se agrega tal cual (sin invertir).
+        </div>
+      )}
+      {!soloUna && (
+        <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={onRemove}>Quitar línea</button>
+      )}
+    </div>
+  );
+}
+
+function CierreForm({
+  proveedores,
+  clubes,
+  agentes,
+  onDone,
+}: {
+  proveedores: any[];
+  clubes: any[];
+  agentes: any[];
+  onDone: () => void;
+}) {
+  const [proveedorId, setProveedorId] = useState("");
+  const [weekStart, setWeekStart] = useState("");
   const [notes, setNotes] = useState("");
+  const [lineas, setLineas] = useState<LineaState[]>([nuevaLinea()]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setWeekStart("");
-    setResumen(null);
-    if (!clubId) {
-      setSemanas(null);
-      return;
-    }
-    api.semanasResumenClub(clubId).then(setSemanas).catch(() => setSemanas([]));
-  }, [clubId]);
-
-  useEffect(() => {
-    setResumen(null);
-    if (!clubId || !weekStart) return;
-    setCargandoResumen(true);
-    api
-      .resumenClub(clubId, weekStart)
-      .then(setResumen)
-      .catch(() => setResumen(null))
-      .finally(() => setCargandoResumen(false));
-  }, [clubId, weekStart]);
-
-  const pctNum = (Number(rakebackPct) || 0) / 100;
-  const resultadoTotal = resumen ? Number(resumen.resultadoTotal) : null;
-  const rakeTotal = resumen ? Number(resumen.rakeTotal) : null;
-  const rakebackMonto = rakeTotal !== null ? rakeTotal * pctNum : null;
-  const cierre = resultadoTotal !== null && rakebackMonto !== null ? resultadoTotal + rakebackMonto : null;
-  const sinCierresDelClub = resumen && Number(resumen.agentesConCierre) === 0;
+  function actualizarLinea(idx: number, l: LineaState) {
+    setLineas((prev) => prev.map((x, i) => (i === idx ? l : x)));
+  }
+  function quitarLinea(idx: number) {
+    setLineas((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function agregarLinea() {
+    setLineas((prev) => [...prev, nuevaLinea()]);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
-    if (!weekStart) return setMsg({ ok: false, text: "Elegí la semana (tiene que tener cierres del club ya cargados)." });
-    if (sinCierresDelClub) {
-      return setMsg({ ok: false, text: 'Esta semana todavía no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".' });
+    if (!proveedorId) return setMsg({ ok: false, text: "Elegí un proveedor." });
+    if (!weekStart) return setMsg({ ok: false, text: "Elegí la semana." });
+    for (const l of lineas) {
+      if (!l.clubId) return setMsg({ ok: false, text: "Todas las líneas necesitan un club." });
+      if (l.tipo === "CLUB" && !(Number(l.rakebackPct) >= 0)) {
+        return setMsg({ ok: false, text: "El % de rakeback de cada línea de club tiene que ser un número." });
+      }
+      if (l.tipo === "AGENTE" && !l.agentId) {
+        return setMsg({ ok: false, text: "Todas las líneas de agente necesitan un agente." });
+      }
     }
     setLoading(true);
     try {
       await api.aplicarCierreProveedor({
         proveedorId,
-        clubId,
         weekStart,
-        rakebackPct: pctNum,
+        lineas: lineas.map((l) =>
+          l.tipo === "CLUB"
+            ? { tipo: "CLUB" as const, clubId: l.clubId, rakebackPct: (Number(l.rakebackPct) || 0) / 100 }
+            : { tipo: "AGENTE" as const, clubId: l.clubId, agentId: l.agentId }
+        ),
         notes: notes.trim() || undefined,
       });
       onDone();
@@ -536,53 +745,54 @@ function CierreForm({ proveedores, clubes, onDone }: { proveedores: any[]; clube
           </select>
         </div>
         <div className="field">
-          <label>Club</label>
-          <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
-            <option value="">Elegir...</option>
-            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label>Semana (ya cerrada en el club)</label>
-          <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} disabled={!clubId}>
-            <option value="">{clubId ? "Elegir..." : "Elegí un club primero"}</option>
-            {(semanas ?? []).map((s) => (
-              <option key={s.week_start} value={s.week_start}>
-                {dateShort(s.week_start)} - {dateShort(s.week_end)}
-              </option>
-            ))}
-          </select>
-          {clubId && semanas && semanas.length === 0 && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Este club todavía no tiene ningún cierre semanal cargado.
-            </div>
-          )}
-        </div>
-        <div className="field">
-          <label>% rakeback</label>
-          <input value={rakebackPct} onChange={(e) => setRakebackPct(e.target.value)} type="number" step="0.01" />
+          <label>Semana (lunes de inicio)</label>
+          <input value={weekStart} onChange={(e) => setWeekStart(e.target.value)} type="date" />
         </div>
       </div>
+
+      <div style={{ marginTop: 10, marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Líneas del cierre</div>
+      {lineas.map((l, idx) => (
+        <div key={l.key}>
+          <div className="field" style={{ maxWidth: 260 }}>
+            <label>Tipo de línea</label>
+            <select value={l.tipo} onChange={(e) => actualizarLinea(idx, { ...l, tipo: e.target.value as LineaTipo })}>
+              <option value="CLUB">Club total (ej. "es la unión")</option>
+              <option value="AGENTE">Cierre de un agente puntual</option>
+            </select>
+          </div>
+          {l.tipo === "CLUB" ? (
+            <LineaClubEditor
+              linea={l}
+              clubes={clubes}
+              weekStart={weekStart}
+              onChange={(nl) => actualizarLinea(idx, nl)}
+              onRemove={() => quitarLinea(idx)}
+              soloUna={lineas.length === 1}
+            />
+          ) : (
+            <LineaAgenteEditor
+              linea={l}
+              clubes={clubes}
+              agentes={agentes}
+              weekStart={weekStart}
+              onChange={(nl) => actualizarLinea(idx, nl)}
+              onRemove={() => quitarLinea(idx)}
+              soloUna={lineas.length === 1}
+            />
+          )}
+        </div>
+      ))}
+      <button type="button" className="btn secondary small" onClick={agregarLinea} style={{ marginBottom: 10 }}>
+        + Agregar línea
+      </button>
+
       <div className="field">
         <label>Notas (opcional)</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, etc." />
       </div>
 
-      {cargandoResumen && <div className="muted" style={{ fontSize: 13 }}>Trayendo el resumen del club...</div>}
-      {sinCierresDelClub && (
-        <div className="error" style={{ fontSize: 13 }}>
-          Esta semana no tiene ningún cierre cargado para este club -- cargalo primero en "Cierres semanales".
-        </div>
-      )}
-      {resumen && !sinCierresDelClub && (
-        <div className="muted" style={{ fontSize: 13, margin: "10px 0" }}>
-          Resultado total del club: {usd(resultadoTotal ?? 0)} (de {resumen.agentesConCierre} agente{Number(resumen.agentesConCierre) === 1 ? "" : "s"}) ·
-          Rake total: {usd(rakeTotal ?? 0)} · Rakeback: {usd(rakebackMonto ?? 0)} · Cierre = <b>{usd(cierre ?? 0)}</b>
-        </div>
-      )}
-
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading || !resumen || sinCierresDelClub}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
+      <button className="btn" disabled={loading}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
     </form>
   );
 }

@@ -85,74 +85,197 @@ async function getSaldoParaUpdate(client: PoolClient, proveedorId: string, clubI
   return r.rows[0];
 }
 
+export type TipoLineaCierreProveedor = "CLUB" | "AGENTE";
+
+export interface LineaCierreProveedorInput {
+  tipo: TipoLineaCierreProveedor;
+  clubId: string;
+  /** Requerido para tipo CLUB (ej. 0.75 = 75%). */
+  rakebackPct?: number;
+  /** Requerido para tipo AGENTE: el agente cuyo weekly_closing (Cierres semanales) ya
+   * aplicado para este club+semana se va a tomar tal cual (ver repo/closings.ts). */
+  agentId?: string;
+  notes?: string;
+}
+
 export interface CierreProveedorInput {
   proveedorId: string;
-  clubId: string;
   weekStart: string; // YYYY-MM-DD
-  rakebackPct: number; // ej. 0.75
+  lineas: LineaCierreProveedorInput[];
   notes?: string;
   createdBy?: string;
 }
 
 /**
- * Aplica el cierre semanal de un proveedor: cierre = resultado_total + (rake_total ×
- * rakeback_pct). A pedido de Leo (22/09/2026: "no podemos hacer el cierre semanal de los
- * clubes y que se gestione lo mismo para esta pestaña? si no tenemos que hacer dos cierres
- * con lo mismo"), resultado_total y rake_total NO se cargan a mano acá -- se toman del
- * resumen semanal del club (repo/clubResumen.ts, getResumenClubSemanal), que ya suma los
- * cierres de TODOS los agentes de ese club+semana cargados por la vía normal (Cierres
- * semanales). Este cierre de proveedor es entonces un paso más DESPUÉS de cerrar el club
- * como siempre, nunca una carga independiente de los mismos números.
- * Actualiza el saldo acumulado del proveedor+club de forma atómica y deja el
- * saldo_anterior/saldo_nuevo registrado en la fila para poder revertir sin ambigüedad.
+ * Aplica el cierre semanal de un proveedor, compuesto por una o más líneas (22/09/2026,
+ * pedido de Leo -- caso Manzur: una línea CLUB para Fénix GG donde es "la unión" + una
+ * línea AGENTE para M CHOCO en Fénix Suprema, que ya tiene su cierre normal en Cierres
+ * semanales.
+ *
+ * Línea CLUB: cierre = resultado_total del club + (rake_total del club × rakeback_pct),
+ * sacado de getResumenClubSemanal (mismos totales que "Resumen por club", nunca se re-tipean).
+ * Se guarda INVERTIDO (× -1) -- ESTA inversión es exclusiva del cierre de Proveedores, a
+ * pedido explícito de Leo (22/09/2026): "tenemos que hacerlo solo para la sección de
+ * proveedores... al momento de hacer el cierre dentro de los proveedores que se vaya x -1
+ * ahí, no en todo el sistema" -- no toca clubResumen, closings, ledger ni ninguna otra
+ * parte del sistema.
+ *
+ * Línea AGENTE: se busca el weekly_closing YA APLICADO de ese agente+club+semana (Cierres
+ * semanales) y se usa su final_closing TAL CUAL, sin invertir. Ver explicación de Leo sobre
+ * M CHOCO/Manzur: al pasar de "cierre del agente" a "impacto en Manzur" el signo se invierte
+ * una vez; al persistir el impacto de Manzur en el saldo de Proveedores (convención estándar
+ * del sistema) se invierte una segunda vez -- las dos inversiones se cancelan, así que la
+ * línea de agente entra sin tocar su signo original.
+ *
+ * Cada línea actualiza el saldo de proveedor_saldos correspondiente a su propio club (un
+ * mismo cierre puede tocar varios clubes a la vez, ej. Fénix Suprema y Fénix GG). Todo en
+ * una sola transacción: o se aplican todas las líneas, o ninguna.
  */
 export async function aplicarCierreProveedor(input: CierreProveedorInput) {
-  if (input.rakebackPct < 0 || input.rakebackPct > 1) {
-    throw new Error("El % de rakeback tiene que estar entre 0 y 1 (ej. 0.75 = 75%).");
+  if (!input.lineas || input.lineas.length === 0) {
+    throw new Error("El cierre necesita al menos una línea (club o agente).");
   }
-  const resumen = await getResumenClubSemanal(input.clubId, input.weekStart);
-  if (!resumen) throw new Error("Club no encontrado.");
-  if (resumen.agentesConCierre === 0) {
-    throw new Error(
-      "Todavía no hay ningún cierre semanal cargado para este club en esa semana -- cargá primero el cierre normal en \"Cierres semanales\" (con todos los agentes que correspondan) y después aplicá el cierre de proveedor."
-    );
+  for (const linea of input.lineas) {
+    if (linea.tipo === "CLUB") {
+      if (linea.rakebackPct === undefined || linea.rakebackPct < 0 || linea.rakebackPct > 1) {
+        throw new Error("El % de rakeback tiene que estar entre 0 y 1 (ej. 0.75 = 75%) en cada línea de club.");
+      }
+    } else if (linea.tipo === "AGENTE") {
+      if (!linea.agentId) throw new Error("Cada línea de tipo agente necesita un agente.");
+    } else {
+      throw new Error("Tipo de línea inválido.");
+    }
   }
-  if (!resumen.weekEnd) throw new Error("El resumen del club no tiene fecha de fin de semana todavía.");
-  const resultadoTotal = resumen.resultadoTotal;
-  const rakeTotal = resumen.rakeTotal;
-  const weekEnd = resumen.weekEnd;
 
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const saldo = await getSaldoParaUpdate(client, input.proveedorId, input.clubId);
-    const rakebackMonto = rakeTotal * input.rakebackPct;
-    const cierre = resultadoTotal + rakebackMonto;
-    const saldoAnterior = Number(saldo.amount);
-    const saldoNuevo = saldoAnterior + cierre;
+    let weekEnd: string | null = null;
+    // Acumula, por club, el saldo corriente DENTRO de este mismo cierre (para que dos líneas
+    // del mismo club en un mismo cierre se encadenen bien, en vez de pisarse).
+    const saldoPorClub = new Map<string, { id: string; anterior: number; actual: number }>();
+
+    async function getOrInitSaldo(clubId: string) {
+      let entry = saldoPorClub.get(clubId);
+      if (!entry) {
+        const saldo = await getSaldoParaUpdate(client, input.proveedorId, clubId);
+        entry = { id: saldo.id, anterior: Number(saldo.amount), actual: Number(saldo.amount) };
+        saldoPorClub.set(clubId, entry);
+      }
+      return entry;
+    }
+
+    const lineasPreparadas: Array<{
+      tipo: TipoLineaCierreProveedor;
+      clubId: string;
+      agentId: string | null;
+      weeklyClosingId: string | null;
+      resultadoTotal: number | null;
+      rakeTotal: number | null;
+      rakebackPct: number | null;
+      montoCrudo: number;
+      montoAplicado: number;
+      saldoAnterior: number;
+      saldoNuevo: number;
+      notes: string | null;
+    }> = [];
+
+    for (const linea of input.lineas) {
+      if (linea.tipo === "CLUB") {
+        const resumen = await getResumenClubSemanal(linea.clubId, input.weekStart);
+        if (!resumen) throw new Error("Club no encontrado.");
+        if (resumen.agentesConCierre === 0) {
+          throw new Error(
+            `Todavía no hay ningún cierre semanal cargado para "${resumen.clubName ?? "este club"}" en esa semana -- cargá primero el cierre normal en "Cierres semanales" y después aplicá el cierre de proveedor.`
+          );
+        }
+        if (!resumen.weekEnd) throw new Error("El resumen del club no tiene fecha de fin de semana todavía.");
+        weekEnd = weekEnd ?? resumen.weekEnd;
+
+        const rakebackMonto = resumen.rakeTotal * (linea.rakebackPct as number);
+        const montoCrudo = resumen.resultadoTotal + rakebackMonto;
+        const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
+
+        const entry = await getOrInitSaldo(linea.clubId);
+        const saldoAnterior = entry.actual;
+        entry.actual += montoAplicado;
+
+        lineasPreparadas.push({
+          tipo: "CLUB",
+          clubId: linea.clubId,
+          agentId: null,
+          weeklyClosingId: null,
+          resultadoTotal: resumen.resultadoTotal,
+          rakeTotal: resumen.rakeTotal,
+          rakebackPct: linea.rakebackPct as number,
+          montoCrudo,
+          montoAplicado,
+          saldoAnterior,
+          saldoNuevo: entry.actual,
+          notes: linea.notes ?? null,
+        });
+      } else {
+        const wc = await client.query(
+          `SELECT wc.*, a.name as agent_name FROM weekly_closings wc
+           JOIN agents a ON a.id = wc.agent_id
+           WHERE wc.agent_id = $1 AND wc.club_id = $2 AND wc.week_start = $3 AND wc.status <> 'REVERTIDO'
+           ORDER BY wc.created_at DESC LIMIT 1`,
+          [linea.agentId, linea.clubId, input.weekStart]
+        );
+        const closing = wc.rows[0];
+        if (!closing) {
+          throw new Error(
+            `El agente no tiene un cierre aplicado en ese club para esa semana -- cargalo primero en "Cierres semanales".`
+          );
+        }
+        weekEnd = weekEnd ?? closing.week_end;
+
+        const montoCrudo = Number(closing.final_closing);
+        const montoAplicado = montoCrudo; // sin invertir (las dos inversiones se cancelan)
+
+        const entry = await getOrInitSaldo(linea.clubId);
+        const saldoAnterior = entry.actual;
+        entry.actual += montoAplicado;
+
+        lineasPreparadas.push({
+          tipo: "AGENTE",
+          clubId: linea.clubId,
+          agentId: linea.agentId as string,
+          weeklyClosingId: closing.id,
+          resultadoTotal: null,
+          rakeTotal: null,
+          rakebackPct: null,
+          montoCrudo,
+          montoAplicado,
+          saldoAnterior,
+          saldoNuevo: entry.actual,
+          notes: linea.notes ?? null,
+        });
+      }
+    }
+
+    if (!weekEnd) throw new Error("No se pudo determinar la fecha de fin de semana.");
+
+    const cierreTotal = lineasPreparadas.reduce((acc, l) => acc + l.montoAplicado, 0);
+    const saldoAnteriorTotal = Array.from(saldoPorClub.values()).reduce((acc, s) => acc + s.anterior, 0);
+    const saldoNuevoTotal = Array.from(saldoPorClub.values()).reduce((acc, s) => acc + s.actual, 0);
 
     const id = newId("pcie");
     let row;
     try {
       const r = await client.query(
         `INSERT INTO proveedor_cierres
-          (id, proveedor_id, club_id, week_start, week_end, resultado_total, rake_total,
-           rakeback_pct, rakeback_monto, cierre, saldo_anterior, saldo_nuevo, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+          (id, proveedor_id, club_id, week_start, week_end, cierre, saldo_anterior, saldo_nuevo, notes, created_by)
+         VALUES ($1,$2,NULL,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
         [
           id,
           input.proveedorId,
-          input.clubId,
           input.weekStart,
           weekEnd,
-          resultadoTotal,
-          rakeTotal,
-          input.rakebackPct,
-          rakebackMonto,
-          cierre,
-          saldoAnterior,
-          saldoNuevo,
+          cierreTotal,
+          saldoAnteriorTotal,
+          saldoNuevoTotal,
           input.notes ?? null,
           input.createdBy ?? null,
         ]
@@ -160,24 +283,79 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       row = r.rows[0];
     } catch (err: any) {
       if (err.code === "23505") {
-        throw new Error("Ya existe un cierre para este proveedor+club en esa semana (week_start). Revertí el anterior si necesitás cargarlo de nuevo.");
+        throw new Error("Ya existe un cierre para este proveedor en esa semana. Revertí el anterior si necesitás cargarlo de nuevo.");
       }
       throw err;
     }
 
-    await client.query(
-      `UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`,
-      [saldoNuevo, saldo.id]
-    );
+    for (const linea of lineasPreparadas) {
+      await client.query(
+        `INSERT INTO proveedor_cierre_lineas
+          (id, cierre_id, tipo, club_id, agent_id, weekly_closing_id, resultado_total, rake_total,
+           rakeback_pct, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [
+          newId("pclin"),
+          id,
+          linea.tipo,
+          linea.clubId,
+          linea.agentId,
+          linea.weeklyClosingId,
+          linea.resultadoTotal,
+          linea.rakeTotal,
+          linea.rakebackPct,
+          linea.montoCrudo,
+          linea.montoAplicado,
+          linea.saldoAnterior,
+          linea.saldoNuevo,
+          linea.notes,
+        ]
+      );
+    }
+
+    for (const [clubId, entry] of saldoPorClub) {
+      await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
+        entry.actual,
+        entry.id,
+      ]);
+    }
 
     await client.query("COMMIT");
-    return row;
+    return { ...row, lineas: lineasPreparadas };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+// Preview para el formulario de "Cierres semanales" en Proveedores: busca el weekly_closing
+// ya aplicado de un agente+club+semana (sin aplicar nada) -- para mostrar el monto ANTES de
+// que Leo confirme agregar esa línea al cierre del proveedor.
+export async function obtenerCierreAgentePreview(agentId: string, clubId: string, weekStart: string) {
+  const r = await pool.query(
+    `SELECT wc.*, a.name as agent_name, c.name as club_name FROM weekly_closings wc
+     JOIN agents a ON a.id = wc.agent_id
+     JOIN clubs c ON c.id = wc.club_id
+     WHERE wc.agent_id = $1 AND wc.club_id = $2 AND wc.week_start = $3 AND wc.status <> 'REVERTIDO'
+     ORDER BY wc.created_at DESC LIMIT 1`,
+    [agentId, clubId, weekStart]
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function listLineasCierreProveedor(cierreId: string) {
+  const r = await pool.query(
+    `SELECT pcl.*, c.name as club_name, a.name as agent_name
+     FROM proveedor_cierre_lineas pcl
+     JOIN clubs c ON c.id = pcl.club_id
+     LEFT JOIN agents a ON a.id = pcl.agent_id
+     WHERE pcl.cierre_id = $1
+     ORDER BY pcl.created_at`,
+    [cierreId]
+  );
+  return r.rows;
 }
 
 export async function revertirCierreProveedor(id: string) {
@@ -189,17 +367,42 @@ export async function revertirCierreProveedor(id: string) {
     if (!cierre) throw new Error("Cierre no encontrado.");
     if (cierre.status === "REVERTIDO") throw new Error("Este cierre ya fue revertido.");
 
-    const saldo = await getSaldoParaUpdate(client, cierre.proveedor_id, cierre.club_id);
-    if (Number(saldo.amount) !== Number(cierre.saldo_nuevo)) {
-      throw new Error(
-        "El saldo del proveedor cambió desde este cierre (hay pagos o cierres más nuevos encima) -- no se puede revertir sin desarmar antes lo que se aplicó después."
-      );
+    const lineasR = await client.query(
+      `SELECT * FROM proveedor_cierre_lineas WHERE cierre_id = $1 ORDER BY created_at`,
+      [id]
+    );
+    const lineas = lineasR.rows;
+    if (lineas.length === 0) {
+      throw new Error("Este cierre no tiene líneas registradas -- no se puede revertir de forma segura (¿es un cierre viejo del formato anterior?).");
     }
 
-    await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
-      cierre.saldo_anterior,
-      saldo.id,
-    ]);
+    // Agrupa por club: la primera línea de cada club marca el saldo "antes" de este cierre,
+    // la última marca el saldo "después" -- así dos líneas del mismo club dentro de un mismo
+    // cierre (poco común, pero posible) se revierten juntas de forma consistente.
+    const porClub = new Map<string, { primeraAnterior: number; ultimaNueva: number }>();
+    for (const l of lineas) {
+      const clubId = l.club_id as string;
+      const existente = porClub.get(clubId);
+      if (!existente) {
+        porClub.set(clubId, { primeraAnterior: Number(l.saldo_anterior), ultimaNueva: Number(l.saldo_nuevo) });
+      } else {
+        existente.ultimaNueva = Number(l.saldo_nuevo);
+      }
+    }
+
+    for (const [clubId, { primeraAnterior, ultimaNueva }] of porClub) {
+      const saldo = await getSaldoParaUpdate(client, cierre.proveedor_id, clubId);
+      if (Number(saldo.amount) !== ultimaNueva) {
+        throw new Error(
+          "El saldo del proveedor cambió desde este cierre (hay pagos o cierres más nuevos encima) -- no se puede revertir sin desarmar antes lo que se aplicó después."
+        );
+      }
+      await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
+        primeraAnterior,
+        saldo.id,
+      ]);
+    }
+
     await client.query(`UPDATE proveedor_cierres SET status = 'REVERTIDO' WHERE id = $1`, [id]);
 
     await client.query("COMMIT");
@@ -215,7 +418,9 @@ export async function revertirCierreProveedor(id: string) {
 // Auto-cierre (22/09/2026, pedido de Leo): se llama desde el guardado de "Resumen por club"
 // (routes/dashboard.ts, POST /resumen-club/extras) -- busca todos los proveedores que tengan
 // este club como auto_cierre_club_id y les aplica el cierre semanal solo, sin que Leo tenga
-// que ir a la pestaña Proveedores y tocar nada. Si un proveedor ya tiene el cierre de esa
+// que ir a la pestaña Proveedores y tocar nada. Por ahora el auto-cierre siempre genera una
+// única línea de tipo CLUB (el caso simple); líneas de agente se siguen cargando a mano desde
+// "Cierres semanales" en Proveedores. Si un proveedor ya tiene el cierre de esa
 // semana aplicado (por ejemplo porque el resumen se guardó dos veces), se lo salta sin error
 // -- nunca duplica ni revienta el guardado del resumen del club por esto.
 export interface ResultadoAutoCierreProveedor {
@@ -241,9 +446,8 @@ export async function aplicarCierresAutomaticosParaClub(
     try {
       const cierre = await aplicarCierreProveedor({
         proveedorId: p.id,
-        clubId,
         weekStart,
-        rakebackPct: Number(p.auto_cierre_rakeback_pct),
+        lineas: [{ tipo: "CLUB", clubId, rakebackPct: Number(p.auto_cierre_rakeback_pct) }],
         notes: "Cierre automático al guardar el resumen semanal del club.",
         createdBy,
       });
@@ -261,10 +465,9 @@ export async function listCierresProveedor(proveedorId?: string) {
   const where = proveedorId ? "WHERE pc.proveedor_id = $1" : "";
   const values = proveedorId ? [proveedorId] : [];
   const r = await pool.query(
-    `SELECT pc.*, p.name as proveedor_name, c.name as club_name
+    `SELECT pc.*, p.name as proveedor_name
      FROM proveedor_cierres pc
      JOIN proveedores p ON p.id = pc.proveedor_id
-     JOIN clubs c ON c.id = pc.club_id
      ${where}
      ORDER BY pc.week_start DESC, pc.created_at DESC
      LIMIT 500`,

@@ -1045,22 +1045,27 @@ CREATE TABLE IF NOT EXISTS proveedor_saldos (
   UNIQUE(proveedor_id, club_id)
 );
 
--- Cierre semanal de proveedor: fórmula fija Resultado total del club + (Rake total del club
--- × rakeback_pct) -- a diferencia del cierre de un agente, NO es por jugador/import, se carga
--- a mano con el total agregado del club completo (ver texto de Leo, 22/09/2026, sobre Manzur
--- en Fénix GG). No incluye rodeo ni rebate -- si algún proveedor lo necesita en el futuro, se
--- agrega aparte, no se asume acá.
+-- Cierre semanal de proveedor (22/09/2026, rediseñado a pedido de Leo para el caso Manzur:
+-- "esto está en proceso de crecimiento, hacelo completo"). Un cierre de proveedor cubre UNA
+-- semana (proveedor_id + week_start es la clave, ya NO un solo club_id como antes) y puede
+-- estar compuesto por VARIAS líneas (proveedor_cierre_lineas): cada línea es o bien el total
+-- de UN club ("Manzur es la unión", ej. Fénix GG) o bien el cierre de UN agente puntual ya
+-- aplicado en Cierres semanales (ej. M CHOCO en Fénix Suprema, mismo agente que ya tiene su
+-- propia cuenta normal en Agentes -- ver "no mezclarlo" del 22/09). Esta tabla queda como
+-- cabecera/resumen: cierre = suma de monto_aplicado de todas sus líneas; saldo_anterior/
+-- saldo_nuevo son la suma de los saldos (por club, ver proveedor_saldos) tocados por este
+-- cierre, antes y después -- el detalle exacto por club/línea vive en proveedor_cierre_lineas.
 CREATE TABLE IF NOT EXISTS proveedor_cierres (
   id               TEXT PRIMARY KEY,
   proveedor_id     TEXT NOT NULL REFERENCES proveedores(id),
-  club_id          TEXT NOT NULL REFERENCES clubs(id),
+  club_id          TEXT REFERENCES clubs(id), -- legado (una sola línea); NULL en cierres multi-línea nuevos
   week_start       DATE NOT NULL,
   week_end         DATE NOT NULL,
-  resultado_total  NUMERIC(18,4) NOT NULL,
-  rake_total       NUMERIC(18,4) NOT NULL,
-  rakeback_pct     NUMERIC(6,4) NOT NULL,
-  rakeback_monto   NUMERIC(18,4) NOT NULL,
-  cierre           NUMERIC(18,4) NOT NULL,
+  resultado_total  NUMERIC(18,4), -- legado, solo tenía sentido con un único club
+  rake_total       NUMERIC(18,4), -- legado
+  rakeback_pct     NUMERIC(6,4),  -- legado
+  rakeback_monto   NUMERIC(18,4), -- legado
+  cierre           NUMERIC(18,4) NOT NULL, -- total real: suma de monto_aplicado de todas las líneas
   saldo_anterior   NUMERIC(18,4) NOT NULL,
   saldo_nuevo      NUMERIC(18,4) NOT NULL,
   status           TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
@@ -1069,6 +1074,48 @@ CREATE TABLE IF NOT EXISTS proveedor_cierres (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(proveedor_id, club_id, week_start)
 );
+-- Columnas legado pasan a ser opcionales: un cierre multi-línea (varios clubes y/o agentes)
+-- ya no tiene un único club_id/resultado_total/rake_total/rakeback_pct/rakeback_monto propio.
+ALTER TABLE proveedor_cierres ALTER COLUMN club_id DROP NOT NULL;
+ALTER TABLE proveedor_cierres ALTER COLUMN resultado_total DROP NOT NULL;
+ALTER TABLE proveedor_cierres ALTER COLUMN rake_total DROP NOT NULL;
+ALTER TABLE proveedor_cierres ALTER COLUMN rakeback_pct DROP NOT NULL;
+ALTER TABLE proveedor_cierres ALTER COLUMN rakeback_monto DROP NOT NULL;
+-- La clave idempotente pasa a ser proveedor+semana (ya no proveedor+club+semana): un cierre
+-- ahora puede cubrir varios clubes a la vez, así que el UNIQUE viejo (que además exigía club_id
+-- NOT NULL) ya no aplica. Índice parcial que ignora los REVERTIDO, mismo patrón que
+-- weekly_closings (permite re-cerrar una semana después de revertir el cierre anterior).
+ALTER TABLE proveedor_cierres DROP CONSTRAINT IF EXISTS proveedor_cierres_proveedor_id_club_id_week_start_key;
+CREATE UNIQUE INDEX IF NOT EXISTS proveedor_cierres_proveedor_week_active_key
+  ON proveedor_cierres(proveedor_id, week_start)
+  WHERE status <> 'REVERTIDO';
+
+-- Detalle línea por línea de un proveedor_cierre (22/09/2026). tipo=CLUB: se toma el total del
+-- club completo (getResumenClubSemanal) y se guarda INVERTIDO (x -1) -- ESTA inversión es
+-- exclusiva de Proveedores, no toca la convención de signo del resto del sistema (agentes,
+-- resumen por club, etc. siguen igual que siempre). tipo=AGENTE: se toma el final_closing YA
+-- CALCULADO de un weekly_closings existente de ese agente+club+semana (Cierres semanales) y se
+-- guarda TAL CUAL, sin invertir -- ver explicación de Leo sobre M CHOCO/Manzur: al pasar por
+-- Manzur el signo del agente se invierte una vez, y al persistir en Proveedores se invierte
+-- una segunda vez, así que las dos inversiones se cancelan matemáticamente.
+CREATE TABLE IF NOT EXISTS proveedor_cierre_lineas (
+  id                TEXT PRIMARY KEY,
+  cierre_id         TEXT NOT NULL REFERENCES proveedor_cierres(id),
+  tipo              TEXT NOT NULL CHECK (tipo IN ('CLUB','AGENTE')),
+  club_id           TEXT NOT NULL REFERENCES clubs(id),
+  agent_id          TEXT REFERENCES agents(id),                    -- solo tipo AGENTE
+  weekly_closing_id TEXT REFERENCES weekly_closings(id),            -- solo tipo AGENTE (trazabilidad)
+  resultado_total   NUMERIC(18,4),  -- solo tipo CLUB
+  rake_total        NUMERIC(18,4),  -- solo tipo CLUB
+  rakeback_pct      NUMERIC(6,4),   -- solo tipo CLUB
+  monto_crudo       NUMERIC(18,4) NOT NULL, -- el cierre "en bruto" de la línea, SIN invertir
+  monto_aplicado    NUMERIC(18,4) NOT NULL, -- lo que realmente se sumó al saldo proveedor+club de esta línea
+  saldo_anterior    NUMERIC(18,4) NOT NULL, -- saldo de ese proveedor+club antes de esta línea (dentro del mismo cierre)
+  saldo_nuevo       NUMERIC(18,4) NOT NULL, -- saldo de ese proveedor+club después de esta línea
+  notes             TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS proveedor_cierre_lineas_cierre_idx ON proveedor_cierre_lineas(cierre_id);
 
 -- Pagos/cobros (USDT u otro medio) contra el saldo del proveedor -- separados del cálculo del
 -- cierre semanal (Leo, punto 4 del texto sobre Manzur: "los pagos USDT deben mostrarse por

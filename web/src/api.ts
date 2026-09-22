@@ -220,13 +220,22 @@ export const api = {
     }
   ) => request(`/proveedores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   proveedoresClubes: () => request("/proveedores/clubes"),
+  agentesProveedores: () => request("/proveedores/agentes"),
   saldosProveedores: () => request("/proveedores/saldos"),
   cierresProveedor: (proveedorId?: string) => request(`/proveedores/cierres${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
+  lineasCierreProveedor: (cierreId: string) => request(`/proveedores/cierres/${cierreId}/lineas`),
+  cierreAgentePreview: (agentId: string, clubId: string, weekStart: string) =>
+    request(`/proveedores/cierre-agente-preview?agentId=${agentId}&clubId=${clubId}&weekStart=${weekStart}`),
   aplicarCierreProveedor: (data: {
     proveedorId: string;
-    clubId: string;
     weekStart: string;
-    rakebackPct: number;
+    lineas: Array<{
+      tipo: "CLUB" | "AGENTE";
+      clubId: string;
+      rakebackPct?: number;
+      agentId?: string;
+      notes?: string;
+    }>;
     notes?: string;
   }) => request("/proveedores/cierres", { method: "POST", body: JSON.stringify(data) }),
   revertirCierreProveedor: (id: string) => request(`/proveedores/cierres/${id}`, { method: "DELETE" }),
