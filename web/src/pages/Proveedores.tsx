@@ -67,7 +67,13 @@ export default function Proveedores() {
   }
   if (!proveedores) return <div className="muted">Cargando...</div>;
 
-  const totalSaldo = (saldos ?? []).reduce((s, x) => s + Number(x.amount), 0);
+  // Separado en dos KPIs en vez de un solo neto (22/09/2026, pedido de Leo: "esta mal lo de
+  // saldo total a favor del proveedor... ese dinero es para nosotros" -- un total neto puede
+  // dar negativo cuando la mayoría de los clubes nos deben a nosotros, y el cartel decía
+  // siempre "a favor del proveedor" sin importar el signo real. Con dos números separados no
+  // hay ambigüedad posible.
+  const totalAFavorProveedor = (saldos ?? []).reduce((s, x) => s + Math.max(Number(x.amount), 0), 0);
+  const totalAFavorNuestro = (saldos ?? []).reduce((s, x) => s + Math.max(-Number(x.amount), 0), 0);
   const totalGarantizado = (garantias ?? []).reduce((s, g) => s + Number(g.amount), 0);
   const totalGarantiaPendiente = (garantias ?? []).reduce((s, g) => s + (Number(g.amount) - Number(g.consumed)), 0);
 
@@ -164,8 +170,12 @@ export default function Proveedores() {
           <div className="value">{proveedores.length}</div>
         </div>
         <div className="kpi-card">
-          <div className="label">Saldo total (a favor del proveedor)</div>
-          <div className="value">{usd(totalSaldo)}</div>
+          <div className="label">A favor del proveedor (le debemos)</div>
+          <div className="value">{usd(totalAFavorProveedor)}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="label">A favor nuestro (nos debe)</div>
+          <div className="value">{usd(totalAFavorNuestro)}</div>
         </div>
         <div className="kpi-card">
           <div className="label">Garantizado</div>
@@ -222,24 +232,14 @@ export default function Proveedores() {
             <table>
               <thead><tr><th>Proveedor</th><th>Club</th><th>Saldo</th><th>Actualizado</th></tr></thead>
               <tbody>
-                {saldos.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.proveedor_name}</td>
-                    <td>{s.club_name}</td>
-                    <td>
-                      <span className={`badge ${Number(s.amount) > 0 ? "pos" : Number(s.amount) < 0 ? "neg" : "neutral"}`}>
-                        {usd(s.amount)}
-                      </span>
-                    </td>
-                    <td className="muted">{dateShort(s.updated_at)}</td>
-                  </tr>
-                ))}
+                {saldos.map((s) => <SaldoRow key={s.id} saldo={s} />)}
               </tbody>
             </table>
           )}
           <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
             Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Se actualiza solo con
-            cada cierre semanal y cada pago/cobro -- nunca se edita a mano.
+            cada cierre semanal y cada pago/cobro -- nunca se edita a mano. Tocá una fila para ver el detalle de los
+            movimientos que arman ese saldo.
           </div>
         </div>
       )}
@@ -412,6 +412,71 @@ export default function Proveedores() {
         </Modal>
       )}
     </div>
+  );
+}
+
+// Fila expandible de saldo (22/09/2026, pedido de Leo: "en algun lado tendria que tener el
+// saldo que van sumando y restando, porque asi queda muy mezclado") -- al tocarla, trae el
+// historial de movimientos (cierres de club/agente + pagos/cobros) de ESE proveedor+club
+// puntual, con el saldo antes/después de cada uno, para ver de dónde sale el número final.
+function SaldoRow({ saldo }: { saldo: any }) {
+  const [abierto, setAbierto] = useState(false);
+  const [movimientos, setMovimientos] = useState<any[] | null>(null);
+
+  function toggle() {
+    const next = !abierto;
+    setAbierto(next);
+    if (next && !movimientos) {
+      api.movimientosSaldoProveedor(saldo.proveedor_id, saldo.club_id).then(setMovimientos).catch(() => setMovimientos([]));
+    }
+  }
+
+  return (
+    <>
+      <tr style={{ cursor: "pointer" }} onClick={toggle}>
+        <td>{saldo.proveedor_name}</td>
+        <td>{saldo.club_name}</td>
+        <td>
+          <span className={`badge ${Number(saldo.amount) > 0 ? "pos" : Number(saldo.amount) < 0 ? "neg" : "neutral"}`}>
+            {usd(saldo.amount)}
+          </span>
+        </td>
+        <td className="muted">{dateShort(saldo.updated_at)}</td>
+      </tr>
+      {abierto && (
+        <tr>
+          <td colSpan={4} style={{ background: "rgba(255,255,255,0.02)" }}>
+            {!movimientos ? (
+              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando movimientos...</div>
+            ) : movimientos.length === 0 ? (
+              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin movimientos registrados para este club.</div>
+            ) : (
+              <table style={{ margin: 8 }}>
+                <thead>
+                  <tr>
+                    <th>Fecha</th><th>Movimiento</th><th>Delta</th><th>Saldo antes</th><th>Saldo después</th><th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movimientos.map((m) => (
+                    <tr key={m.id} style={m.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
+                      <td className="muted">{dateShort(m.fecha)}</td>
+                      <td>{m.label}</td>
+                      <td>
+                        <span className={`badge ${m.delta > 0 ? "pos" : m.delta < 0 ? "neg" : "neutral"}`}>{usd(m.delta)}</span>
+                      </td>
+                      <td className="muted">{usd(m.saldoAnterior)}</td>
+                      <td className="muted">{usd(m.saldoNuevo)}</td>
+                      <td className="muted">{m.status === "REVERTIDO" ? "Revertido" : "Aplicado"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

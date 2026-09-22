@@ -134,6 +134,76 @@ export async function listSaldosProveedores() {
   return r.rows;
 }
 
+// Historial de movimientos que arman el saldo de un proveedor+club (22/09/2026, pedido de
+// Leo: "en algun lado tendria que tener el saldo que van sumando y restando, porque asi queda
+// muy mezclado") -- junta las líneas de cierre (club o agente) y los pagos/cobros de ESE club
+// puntual, ordenados por fecha, cada uno con el saldo antes/después ya guardado (nunca se
+// recalcula acá, son los mismos saldo_anterior/saldo_nuevo que se persistieron al aplicar cada
+// movimiento). Sirve para ver de dónde salió el número final sin tener que sumar a mano.
+export interface MovimientoSaldoProveedor {
+  id: string;
+  tipo: "CIERRE_CLUB" | "CIERRE_AGENTE" | "PAGO" | "COBRO";
+  fecha: string;
+  label: string;
+  delta: number;
+  saldoAnterior: number;
+  saldoNuevo: number;
+  status: string;
+}
+
+export async function listMovimientosSaldoProveedor(proveedorId: string, clubId: string): Promise<MovimientoSaldoProveedor[]> {
+  const cierresR = await pool.query(
+    `SELECT pcl.id, pcl.tipo, pcl.monto_aplicado, pcl.saldo_anterior, pcl.saldo_nuevo, pcl.created_at,
+            pc.week_start, pc.status, a.name as agent_name
+     FROM proveedor_cierre_lineas pcl
+     JOIN proveedor_cierres pc ON pc.id = pcl.cierre_id
+     LEFT JOIN agents a ON a.id = pcl.agent_id
+     WHERE pc.proveedor_id = $1 AND pcl.club_id = $2
+     ORDER BY pcl.created_at`,
+    [proveedorId, clubId]
+  );
+  const pagosR = await pool.query(
+    `SELECT id, direction, amount, saldo_anterior, saldo_nuevo, status, occurred_at, medio
+     FROM proveedor_pagos
+     WHERE proveedor_id = $1 AND club_id = $2
+     ORDER BY occurred_at`,
+    [proveedorId, clubId]
+  );
+
+  const movimientos: MovimientoSaldoProveedor[] = [];
+  for (const row of cierresR.rows) {
+    movimientos.push({
+      id: row.id,
+      tipo: row.tipo === "AGENTE" ? "CIERRE_AGENTE" : "CIERRE_CLUB",
+      fecha: row.created_at,
+      label:
+        row.tipo === "AGENTE"
+          ? `Cierre de agente (${row.agent_name ?? "?"}) -- semana ${row.week_start}`
+          : `Cierre de club -- semana ${row.week_start}`,
+      delta: Number(row.monto_aplicado),
+      saldoAnterior: Number(row.saldo_anterior),
+      saldoNuevo: Number(row.saldo_nuevo),
+      status: row.status,
+    });
+  }
+  for (const row of pagosR.rows) {
+    const delta = row.direction === "PAGO" ? -Math.abs(Number(row.amount)) : Math.abs(Number(row.amount));
+    movimientos.push({
+      id: row.id,
+      tipo: row.direction === "PAGO" ? "PAGO" : "COBRO",
+      fecha: row.occurred_at,
+      label: `${row.direction === "PAGO" ? "Pago" : "Cobro"} (${row.medio})`,
+      delta,
+      saldoAnterior: Number(row.saldo_anterior),
+      saldoNuevo: Number(row.saldo_nuevo),
+      status: row.status,
+    });
+  }
+
+  movimientos.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+  return movimientos;
+}
+
 async function getSaldoParaUpdate(client: PoolClient, proveedorId: string, clubId: string) {
   const existing = await client.query(
     `SELECT * FROM proveedor_saldos WHERE proveedor_id = $1 AND club_id = $2 FOR UPDATE`,

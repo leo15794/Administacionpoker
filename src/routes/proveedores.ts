@@ -7,6 +7,7 @@ import {
   crearProveedor,
   actualizarProveedor,
   listSaldosProveedores,
+  listMovimientosSaldoProveedor,
   aplicarCierreProveedor,
   revertirCierreProveedor,
   recalcularCierreProveedor,
@@ -121,6 +122,15 @@ proveedoresRouter.delete("/auto-cierre-clubes/:configId", requireAuth, requireAd
 
 proveedoresRouter.get("/saldos", requireAuth, requireAdmin, async (_req, res) => {
   res.json(await listSaldosProveedores());
+});
+
+proveedoresRouter.get("/saldos/movimientos", requireAuth, requireAdmin, async (req, res) => {
+  const proveedorId = req.query.proveedorId;
+  const clubId = req.query.clubId;
+  if (typeof proveedorId !== "string" || typeof clubId !== "string") {
+    return res.status(400).json({ error: "Falta proveedorId o clubId." });
+  }
+  res.json(await listMovimientosSaldoProveedor(proveedorId, clubId));
 });
 
 const lineaCierreSchema = z.object({

@@ -222,6 +222,8 @@ export const api = {
   proveedoresClubes: () => request("/proveedores/clubes"),
   agentesProveedores: () => request("/proveedores/agentes"),
   saldosProveedores: () => request("/proveedores/saldos"),
+  movimientosSaldoProveedor: (proveedorId: string, clubId: string) =>
+    request(`/proveedores/saldos/movimientos?proveedorId=${proveedorId}&clubId=${clubId}`),
   cierresProveedor: (proveedorId?: string) => request(`/proveedores/cierres${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
   lineasCierreProveedor: (cierreId: string) => request(`/proveedores/cierres/${cierreId}/lineas`),
   cierreAgentePreview: (agentId: string, clubId: string, weekStart: string) =>
