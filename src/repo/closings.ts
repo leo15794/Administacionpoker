@@ -321,12 +321,21 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       }
     }
 
-    // Rakeback pendiente (22/09/2026): el stock físico/balance del agente SOLO se mueve
-    // automáticamente por el resultado de mesas (Win/Lose) -- rakeback, rebate, Rodeo y ajuste
-    // manual quedan pendientes de pago (ver bloque nuevo debajo), nunca entran acá. Antes esto
-    // usaba montoAgente (el cierre económico completo), mezclando fichas físicas con comisiones
-    // -- pedido explícito de Leo (22/09/2026) para separarlos.
-    const montoStock = calc.result;
+    // Rakeback pendiente del AGENTE — REVERTIDO (24/09/2026, pedido de Leo): el 22/09/2026 se
+    // había separado el balance del agente en dos partes (solo el resultado de mesas al
+    // balance, el resto -- rakeback/rebate/Rodeo/ajuste -- como "rakeback pendiente" aparte).
+    // Leo confirmó que esa separación estaba mal ("en base a eso se paga o nos pagan a
+    // nosotros" -- el Saldo tiene que ser el cierre económico COMPLETO, no solo la parte de
+    // mesas) y pidió explícitamente revertirla. montoStock vuelve a ser montoAgente (el cierre
+    // final completo), igual que antes del 22/09 -- el bloque de "Alta del rakeback pendiente
+    // del agente" que existía acá abajo queda eliminado: monto_pendiente_agente daría siempre
+    // 0 si se lo dejaba (montoAgente - montoStock), así que ya no tiene sentido. Las filas
+    // rakeback_pendiente con role='AGENTE' que ya existan de cierres viejos (22/09 al 24/09)
+    // NO se tocan acá -- siguen consumibles desde Adelantos/Liquidaciones como hasta ahora,
+    // esto solo cambia los cierres que se apliquen de ahora en adelante. El rebate desviado a
+    // un SUPERVISOR (rebateDestino='RAKEBACK_SUPERVISOR', más abajo) es un mecanismo distinto y
+    // no se toca: sigue quedando pendiente de pago aparte, como pidió Leo el 22/09.
+    const montoStock = montoAgente;
     await client.query(
       `INSERT INTO ledger_movements
         (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
@@ -338,7 +347,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.agentId,
         montoStock,
         input.weekEnd,
-        `Cierre semanal ${input.weekStart} al ${input.weekEnd} (Win/Lose de mesas — el rakeback/rebate/Rodeo queda pendiente de pago aparte)` +
+        `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
           (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
           (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback pendiente de supervisor.` : ""),
       ]
@@ -352,11 +361,9 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       [newId("bal"), input.agentId, input.clubId, montoStock]
     );
 
-    // Alta del rakeback pendiente del agente: todo lo que NO es Win/Lose (rakeback + rebate +
-    // Rodeo + ajuste manual, salvo el rebate desviado a supervisor, que va aparte abajo) --
-    // queda a la espera de decidir cómo se paga (fichas, USDT, o se deja así). montoAgente ya
-    // excluye el rebate cuando hay supervisor (ver arriba), así que esta resta da exactamente
-    // lo que falta para completar el cierre económico del agente.
+    // montoPendienteAgente queda en 0 siempre (montoAgente - montoStock, y ahora son iguales) --
+    // se mantiene la variable para no tocar el bloque de abajo (rebate desviado a supervisor,
+    // que sigue vigente) más de lo necesario; el "if" de abajo simplemente nunca se dispara.
     const montoPendienteAgente = montoAgente - montoStock;
     if (Math.abs(montoPendienteAgente) > 0.004) {
       const pendienteAgenteId = newId("rp");
