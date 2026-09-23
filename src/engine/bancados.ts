@@ -34,10 +34,11 @@ export interface BancadoEstado {
 export interface BancadoOrigen {
   resultadoMesas: number;
   rakeTotal: number;
-  // Ticket promocional (21/09/2026): un regalo que le hacemos a un jugador bancado, pagado por
-  // DigiPlayers -- NO por el bancado. Se resta solo de gananciaBancaMesas (nuestra parte); no
-  // toca pagoJugadorTotal, makeup ni capital -- al bancado le queda todo exactamente igual que
-  // si el ticket no hubiera existido.
+  // Ticket promocional (21/09/2026, ajustado 23/09/2026): un regalo que le hacemos a un
+  // jugador bancado, pagado por DigiPlayers -- NO por el bancado. Se resta de gananciaBancaMesas
+  // (nuestra parte) Y reduce la pérdida neta que alimenta el makeup (ver calcularCierreBancado):
+  // al jugador se le "perdona" esa parte de su pérdida para el cálculo de la memoria. No toca
+  // resultadoMesas, pagoJugadorTotal ni capital -- esos siguen siendo el resultado real de mesas.
   ticketPromocional?: number;
 }
 
@@ -73,9 +74,18 @@ export function calcularCierreBancado(
 ): BancadoCierreCalculado {
   const resultado = origen.resultadoMesas;
   const rakebackTotal = Math.max(0, origen.rakeTotal * cfg.rakebackPct);
+  const ticketPromocional = origen.ticketPromocional ?? 0;
 
+  // El ticket promocional es un regalo que DigiPlayers le hace al jugador (no el bancado) para
+  // cubrir parte de su pérdida en mesas -- por eso, a los fines del makeup ("la memoria" del
+  // bancado), la pérdida que se le carga es la pérdida NETA de ese regalo, no la pérdida bruta
+  // de mesas (23/09/2026, pedido explícito de Leo con ejemplo numérico: resultado -189.22 +
+  // ticket 48 = pérdida neta 141.22 -> makeup nuevo 138.07 en vez de 186.07). El resultado de
+  // mesas "crudo" (resultadoMesas / capitalDespues / pagoJugadorMesas) NO se toca -- sigue
+  // siendo el resultado real de las manos jugadas.
+  const resultadoNetoTicket = resultado + ticketPromocional;
   const makeupAnterior = Math.max(0, estado.makeupActual ?? cfg.makeupInicial ?? 0);
-  const perdidaAgregaMakeup = resultado < 0 ? Math.abs(resultado) : 0;
+  const perdidaAgregaMakeup = resultadoNetoTicket < 0 ? Math.abs(resultadoNetoTicket) : 0;
   const makeupAntesRB = makeupAnterior + perdidaAgregaMakeup;
 
   const rakebackAMakeup = Math.min(rakebackTotal, makeupAntesRB);
@@ -93,9 +103,9 @@ export function calcularCierreBancado(
   // Rakeback Banca: % independiente sobre el rake total (no depende de si hubo pérdida o
   // ganancia en mesas, ni del makeup) — se suma directo como ganancia real de la banca.
   const rakebackBancaTotal = Math.max(0, origen.rakeTotal * cfg.rakebackBancaPct);
-  const ticketPromocional = origen.ticketPromocional ?? 0;
   // El ticket sale de nuestro bolsillo, no del bancado -- se resta ACA, sobre lo que nos queda
-  // a nosotros, despues de calcular su parte real (que no se toca).
+  // a nosotros, despues de calcular su parte real (que no se toca). (ticketPromocional ya se
+  // extrajo arriba, antes del cálculo de makeup -- ver comentario ahí.)
   const gananciaBancaMesas = gananciaBancaMesasPuras + rakebackBancaTotal - ticketPromocional;
 
   // Puramente informativo — nunca mueve plata, solo para ver cuánto le corresponde reclamar a
