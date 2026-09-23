@@ -45,6 +45,11 @@ export interface ResumenAgentePDF {
     rakebackBruto: number;
     rakebackNeto: number;
     rodeo: number;
+    // Ajuste manual cargado al momento del cierre (ej. "tarjeta vip", descuentos puntuales, etc)
+    // -- pedido de Leo (24/09/2026): sin esto el "Total club" no cerraba contra
+    // Resultado+Rebate+Rakeback y no se veía por qué (ver engine/cierre.ts calc.ajusteManual).
+    ajusteManual: number;
+    ajusteManualNota: string | null;
     totalClub: number;
     ventas: number; // siempre 0 -- no hay ningún dato de "ventas" en el sistema (ver nota abajo)
     closingId: string;
@@ -129,6 +134,8 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
     rakebackBruto: Number(wc.rakeback),
     rakebackNeto: Number(wc.rakeback) + Number(wc.rebate),
     rodeo: Number(wc.rodeo),
+    ajusteManual: Number(wc.ajuste_manual ?? 0),
+    ajusteManualNota: wc.ajuste_manual_nota ?? null,
     totalClub: Number(wc.final_closing),
     ventas: 0,
     closingId: wc.id,

@@ -170,16 +170,25 @@ async function generarResumenAgentesPdf(datos: any[]) {
     y += 8;
 
     const mostrarRodeo = r.clubes.some((c: any) => Number(c.rodeo) !== 0);
-    const headResumen = ["Club", "Resultado", "Rebate", "Rakeback bruto", "Rakeback neto", ...(mostrarRodeo ? ["Rodeo"] : []), "Total club"];
+    // Ajuste manual (24/09/2026, pedido de Leo): sin esto "Total club" no cerraba contra
+    // Resultado+Rebate+Rakeback y no había forma de ver por qué (ej. un descuento de "tarjeta
+    // vip" cargado al cierre) -- se muestra la columna solo si hay algún ajuste distinto de 0.
+    const mostrarAjuste = r.clubes.some((c: any) => Number(c.ajusteManual) !== 0);
+    const headResumen = [
+      "Club", "Resultado", "Rebate", "Rakeback bruto", "Rakeback neto",
+      ...(mostrarRodeo ? ["Rodeo"] : []), ...(mostrarAjuste ? ["Ajuste"] : []), "Total club",
+    ];
     const bodyResumen = r.clubes.map((c: any) => [
       c.clubName, usd(c.resultado), usd(c.rebate), usd(c.rakebackBruto), usd(c.rakebackNeto),
-      ...(mostrarRodeo ? [usd(c.rodeo)] : []), usd(c.totalClub),
+      ...(mostrarRodeo ? [usd(c.rodeo)] : []), ...(mostrarAjuste ? [usd(c.ajusteManual)] : []), usd(c.totalClub),
     ]);
     const sumClub = (fn: (c: any) => number) => r.clubes.reduce((s: number, c: any) => s + fn(c), 0);
     const footResumen = [
       "TOTAL SEMANAL", usd(sumClub((c: any) => c.resultado)), usd(sumClub((c: any) => c.rebate)),
       usd(sumClub((c: any) => c.rakebackBruto)), usd(sumClub((c: any) => c.rakebackNeto)),
-      ...(mostrarRodeo ? [usd(sumClub((c: any) => c.rodeo))] : []), usd(sumClub((c: any) => c.totalClub)),
+      ...(mostrarRodeo ? [usd(sumClub((c: any) => c.rodeo))] : []),
+      ...(mostrarAjuste ? [usd(sumClub((c: any) => c.ajusteManual))] : []),
+      usd(sumClub((c: any) => c.totalClub)),
     ];
     autoTable(doc, {
       startY: y,
@@ -191,7 +200,23 @@ async function generarResumenAgentesPdf(datos: any[]) {
       headStyles: { fillColor: [40, 50, 90] },
       footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
     });
-    y = (doc as any).lastAutoTable.finalY + 10;
+    y = (doc as any).lastAutoTable.finalY + 4;
+
+    // Notas de los ajustes (el motivo cargado al momento del cierre, ej. "tarjeta vip") -- la
+    // columna de arriba solo tiene el número, esto explica el POR QUÉ club por club.
+    const notasAjuste = r.clubes.filter((c: any) => Number(c.ajusteManual) !== 0 && c.ajusteManualNota);
+    if (notasAjuste.length > 0) {
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(90);
+      notasAjuste.forEach((c: any) => {
+        doc.text(`Ajuste ${c.clubName} (${usd(c.ajusteManual)}): ${c.ajusteManualNota}`, margen, y);
+        y += 4;
+      });
+      doc.setTextColor(0);
+      doc.setFont("helvetica", "normal");
+    }
+    y += 6;
 
     const ec = r.estadoCuenta;
     autoTable(doc, {
