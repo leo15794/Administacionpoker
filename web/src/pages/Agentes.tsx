@@ -909,6 +909,14 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       setErrorSubagente("El % de rakeback propio es obligatorio (0 a 100) si se pone un nombre de subagente.");
       return;
     }
+    // Bug real (24/09/2026): si se carga el % pero se deja el nombre vacío, antes esto guardaba
+    // "null, null" en silencio (sin ningún error) -- Leo cargaba el % pensando que había quedado
+    // guardado y en la base no quedaba nada. El nombre de subagente es obligatorio para poder
+    // guardar cualquier %.
+    if (!nombre && pctNum !== null) {
+      setErrorSubagente("Hace falta ponerle un nombre al subagente para poder guardar el %.");
+      return;
+    }
     setGuardandoSubagente(true);
     setErrorSubagente("");
     try {
