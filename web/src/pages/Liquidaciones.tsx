@@ -206,8 +206,13 @@ export default function Liquidaciones() {
   // alcanza -- el efecto de abajo resetea weekStart a "" cada vez que cambian los seleccionados
   // (caso normal: elegir agentes de nuevo desde cero). Este ref lleva el weekStart/nombre que
   // hay que restaurar DESPUÉS de ese reset, para el único caso en que sí queremos saltar
-  // directo a una semana puntual.
-  const retomarRef = useRef<{ weekStart: string; nombreGrupo: string } | null>(null);
+  // directo a una semana puntual. estadoOriginal viaja junto: si se retoma una liquidación que
+  // ya estaba "Pagada", NO queremos que el autoguardado la pise y la vuelva a marcar "Pendiente"
+  // -- se puede mirar/ajustar sin que cambie su estado (pedido de Leo, 24/09/2026).
+  const retomarRef = useRef<{ weekStart: string; nombreGrupo: string; estadoOriginal: string } | null>(null);
+  // true mientras lo que está cargado en pantalla vino de "Retomar" una liquidación ya PAGADA --
+  // pausa el autoguardado por completo hasta que se vuelva a elegir agentes desde cero.
+  const [soloRevision, setSoloRevision] = useState(false);
 
   useEffect(() => {
     setSemanas([]);
@@ -215,6 +220,7 @@ export default function Liquidaciones() {
     const retomar = retomarRef.current;
     retomarRef.current = null;
     setWeekStart(retomar?.weekStart ?? "");
+    setSoloRevision(retomar?.estadoOriginal === "PAGADA");
     if (seleccionados.length === 0) return;
     api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
     if (retomar) {
@@ -227,10 +233,11 @@ export default function Liquidaciones() {
     }
   }, [seleccionados]);
 
-  // Retoma un autoguardado PENDIENTE desde el historial: vuelve a elegir ese mismo grupo de
-  // agentes + esa semana, para terminar de definir cómo pagar (ver panel "Registrar pago").
+  // Vuelve a elegir ese mismo grupo de agentes + esa semana desde el historial -- para las
+  // "Pendiente de pago", para terminar de definir cómo pagar; para las "Pagada", solo para
+  // volver a verla o ajustarla sin que eso la marque como pendiente de nuevo.
   function retomarLiquidacionPendiente(h: any) {
-    retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo };
+    retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo, estadoOriginal: h.estado };
     setSeleccionados(h.agent_ids);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -296,7 +303,9 @@ export default function Liquidaciones() {
   // "Guardar en historial" (esa sigue siendo la foto definitiva que el usuario confirma a mano).
   const autoguardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!data || seleccionados.length === 0 || !weekStart) return;
+    // soloRevision=true: esto se retomó desde una liquidación ya "Pagada" -- se puede mirar y
+    // tocar, pero no autoguarda nada mientras tanto (si no, la marcaría "Pendiente" de nuevo).
+    if (!data || seleccionados.length === 0 || !weekStart || soloRevision) return;
     if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     autoguardadoTimer.current = setTimeout(() => {
       api
@@ -1338,11 +1347,9 @@ export default function Liquidaciones() {
                   <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
                   <td><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
-                    {h.estado === "PENDIENTE" && (
-                      <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
-                        Retomar
-                      </button>
-                    )}
+                    <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
+                      {h.estado === "PENDIENTE" ? "Retomar" : "Revisar"}
+                    </button>
                     <button
                       className="btn secondary small"
                       onClick={() =>
