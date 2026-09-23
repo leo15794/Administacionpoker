@@ -25,6 +25,31 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
      GROUP BY c.id, c.name ORDER BY c.name`
   );
 
+  // Mismo "Saldo neto por club", pero separado por sistema (24/09/2026, pedido de Leo). El
+  // sistema de un balance no se guarda en la tabla balances (no es un dato snapshot -- un
+  // balance es la foto ACTUAL, no de un momento puntual), así que se resuelve en vivo con el
+  // mismo criterio que en todo el resto del sistema: el deal vigente agente↔club si existe, si
+  // no el default_system del agente (ver repo/catalog.ts resolverConfigVigente / repo/
+  // accountStock.ts listRaw). Solo entran clubes que SÍ tienen algún balance distinto de 0 con
+  // ese sistema -- un club sin nada no aparece en ninguna de las dos listas, igual que ya hace
+  // Stock consolidado con "Sin cuentas con este sistema".
+  const porClubPorSistema = await pool.query(
+    `SELECT c.id as club_id, c.name as club,
+            COALESCE(
+              (SELECT d.system FROM agent_club_deals d
+               WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
+               ORDER BY d.valid_from DESC LIMIT 1),
+              a.default_system
+            ) as system,
+            COUNT(DISTINCT b.agent_id) as agentes, COALESCE(SUM(b.amount),0) as saldo_neto
+     FROM balances b
+     JOIN clubs c ON c.id = b.club_id
+     JOIN agents a ON a.id = b.agent_id
+     WHERE b.amount <> 0
+     GROUP BY c.id, c.name, system
+     ORDER BY c.name, system`
+  );
+
   const clubsCount = await pool.query(`SELECT COUNT(*)::int as n FROM clubs WHERE active = true`);
   const agentsCount = await pool.query(`SELECT COUNT(*)::int as n FROM agents WHERE active = true`);
 
@@ -93,11 +118,26 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
         rake_total: r.rakeTotal,
         ganancia: r.gananciaNeta,
         cierre_agentes: r.cierreTotalAgentes,
+        // Desglose por sistema (24/09/2026, pedido de Leo: "necesito que separemos los
+        // win/lose de los prepagos", también en el Resumen de Operación) -- ver el comentario
+        // en repo/clubResumen.ts sobre qué SÍ se puede separar (rake/ganancia por
+        // rake/cierre, por agente) y qué no (rodeo del club, ventas, tasa fija, y el
+        // override de Tiny, que quedan como "otros ingresos del club" sin dividir).
+        rake_total_win_lose: r.rakeTotalWinLose,
+        rake_total_prepago: r.rakeTotalPrepago,
+        ganancia_win_lose: r.gananciaPorRakeWinLose,
+        ganancia_prepago: r.gananciaPorRakePrepago,
+        cierre_agentes_win_lose: r.cierreTotalAgentesWinLose,
+        cierre_agentes_prepago: r.cierreTotalAgentesPrepago,
       });
     }
     resultadoPorClub.sort((a, b) => a.club_name.localeCompare(b.club_name));
   }
   const gananciaNetaSemana = resultadoPorClub.reduce((s, c) => s + Number(c.ganancia), 0);
+  const gananciaNetaSemanaWinLose = resultadoPorClub.reduce((s, c) => s + Number(c.ganancia_win_lose), 0);
+  const gananciaNetaSemanaPrepago = resultadoPorClub.reduce((s, c) => s + Number(c.ganancia_prepago), 0);
+  const rakeSemanaWinLose = resultadoPorClub.reduce((s, c) => s + Number(c.rake_total_win_lose), 0);
+  const rakeSemanaPrepago = resultadoPorClub.reduce((s, c) => s + Number(c.rake_total_prepago), 0);
 
   // Wallet (tesorería) neta: mismo cálculo que /tesoreria, para poder mostrar el saldo de
   // wallet junto al resto de los KPIs ejecutivos sin tener que ir a otra pantalla.
@@ -143,8 +183,18 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       rakeSemana: gananciaSemana.rows[0] ? Number(gananciaSemana.rows[0].rake_total) : null,
       gananciaSemanaInicio: gananciaSemana.rows[0]?.week_start ?? null,
       gananciaSemanaFin: gananciaSemana.rows[0]?.week_end ?? null,
+      // Win/Lose vs Prepago (24/09/2026, pedido de Leo) -- ganancia/rake atribuibles a cada
+      // sistema, sumado desde resultadoPorClub (ver ahí qué queda sin dividir: rodeo del club,
+      // ventas, tasa fija, override de Tiny). gananciaSemanaWinLose + gananciaSemanaPrepago NO
+      // suma exacto gananciaSemana salvo que ningún club tenga esos "otros ingresos" -- la
+      // diferencia es justamente eso, no un error.
+      gananciaSemanaWinLose: gananciaSemana.rows[0] ? gananciaNetaSemanaWinLose : null,
+      gananciaSemanaPrepago: gananciaSemana.rows[0] ? gananciaNetaSemanaPrepago : null,
+      rakeSemanaWinLose: gananciaSemana.rows[0] ? rakeSemanaWinLose : null,
+      rakeSemanaPrepago: gananciaSemana.rows[0] ? rakeSemanaPrepago : null,
     },
     porClub: porClub.rows,
+    porClubPorSistema: porClubPorSistema.rows,
     resultadoPorClub,
     historicoSemanal: historicoSemanal.rows.reverse(),
     balances,

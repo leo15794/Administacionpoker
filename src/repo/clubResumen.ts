@@ -59,6 +59,10 @@ export interface FilaAgenteResumenClub {
   // informativo, NUNCA entra en ningún cálculo de ganancia neta ni de cierre; se cruzan de
   // verdad en Liquidaciones (ver repo/cargaCruces.ts), esto es solo para verlo acá también.
   cargasTesoreria: number;
+  // Sistema vigente de ESTE cierre puntual (snapshot en weekly_closings.system al momento de
+  // aplicarlo) -- 24/09/2026, pedido de Leo: "necesito que separemos los win/lose de los
+  // prepagos", ver los campos *WinLose/*Prepago más abajo en ResumenClubSemanal.
+  system: "PREPAGO" | "WIN_LOSE";
 }
 
 export interface ResumenClubSemanal {
@@ -86,6 +90,20 @@ export interface ResumenClubSemanal {
   resultadoTotal: number;
   ajusteManualTotal: number;
   cargasTesoreriaTotal: number;
+  // Desglose por sistema (24/09/2026, pedido de Leo): lo que SÍ es atribuible a cada agente
+  // puntual (rake, rakeback, "ganancia por rake" = rake*ratio - rakeback, cierre final) se
+  // separa limpio entre WIN_LOSE y PREPAGO acá abajo. Lo que NO se puede separar porque es del
+  // CLUB entero, no de un agente (rodeoClubShare, ingresoPorVentas, tasaSemanalFija, y el
+  // override de Tiny que reemplaza gananciaNeta entera por el settlement) sigue siendo un solo
+  // número compartido -- gananciaNeta = gananciaPorRakeWinLose + gananciaPorRakePrepago +
+  // "otros ingresos del club" (la diferencia), salvo en clubes Tiny donde gananciaNeta viene
+  // pisada por el settlement y no es reconstruible desde el split.
+  rakeTotalWinLose: number;
+  rakeTotalPrepago: number;
+  gananciaPorRakeWinLose: number;
+  gananciaPorRakePrepago: number;
+  cierreTotalAgentesWinLose: number;
+  cierreTotalAgentesPrepago: number;
 }
 
 export async function getResumenClubSemanal(clubId: string, weekStart: string): Promise<ResumenClubSemanal | null> {
@@ -97,7 +115,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
-            wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share,
+            wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share, wc.system,
             wc.jugadores, wc.ring_game, wc.mtt, wc.sng, wc.ajuste_manual,
             (SELECT d.club_payout_ratio_override FROM agent_club_deals d
              WHERE d.agent_id = wc.agent_id AND d.club_id = wc.club_id AND d.valid_to IS NULL
@@ -141,12 +159,19 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   let ajusteManualTotal = 0;
   let cargasTesoreriaTotal = 0;
   let weekEnd: string | null = null;
+  let rakeTotalWinLose = 0;
+  let rakeTotalPrepago = 0;
+  let gananciaPorRakeWinLose = 0;
+  let gananciaPorRakePrepago = 0;
+  let cierreTotalAgentesWinLose = 0;
+  let cierreTotalAgentesPrepago = 0;
   for (const r of cierresRes.rows) {
     const rake = Number(r.rake_total);
     const rakeback = Number(r.rakeback);
     const ratio = r.ratio_override !== null ? Number(r.ratio_override) : ratioDefaultClub;
     const gananciaFila = rake * ratio - rakeback;
     const comisionPlataformaFila = rake * (1 - ratio);
+    const system: "PREPAGO" | "WIN_LOSE" = r.system;
     filas.push({
       agentId: r.agent_id,
       agentName: r.agent_name,
@@ -166,6 +191,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
       cierreFinalAgente: Number(r.final_closing),
       ajusteManual: Number(r.ajuste_manual ?? 0),
       cargasTesoreria: cargasPorAgente.get(r.agent_id) ?? 0,
+      system,
     });
     rakeTotal += rake;
     comisionesAgentes += rakeback;
@@ -180,6 +206,15 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     ajusteManualTotal += Number(r.ajuste_manual ?? 0);
     cargasTesoreriaTotal += cargasPorAgente.get(r.agent_id) ?? 0;
     if (!weekEnd) weekEnd = r.week_end;
+    if (system === "WIN_LOSE") {
+      rakeTotalWinLose += rake;
+      gananciaPorRakeWinLose += gananciaFila;
+      cierreTotalAgentesWinLose += Number(r.final_closing);
+    } else {
+      rakeTotalPrepago += rake;
+      gananciaPorRakePrepago += gananciaFila;
+      cierreTotalAgentesPrepago += Number(r.final_closing);
+    }
   }
 
   const extrasRes = await pool.query(
@@ -226,6 +261,12 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     resultadoTotal,
     ajusteManualTotal,
     cargasTesoreriaTotal,
+    rakeTotalWinLose,
+    rakeTotalPrepago,
+    gananciaPorRakeWinLose,
+    gananciaPorRakePrepago,
+    cierreTotalAgentesWinLose,
+    cierreTotalAgentesPrepago,
   };
 }
 

@@ -74,6 +74,11 @@ export default function Resumen() {
         >
           <div className="label">Ganancia de la semana</div>
           <div className="value pos">{data.kpis.gananciaSemana != null ? usd(data.kpis.gananciaSemana) : "—"}</div>
+          {data.kpis.gananciaSemanaWinLose != null && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Win/Lose {usd(data.kpis.gananciaSemanaWinLose)} · Prepago {usd(data.kpis.gananciaSemanaPrepago)}
+            </div>
+          )}
         </div>
         <div
           className="kpi-card row-click"
@@ -86,6 +91,11 @@ export default function Resumen() {
         >
           <div className="label">Rake de la semana</div>
           <div className="value">{data.kpis.rakeSemana != null ? usd(data.kpis.rakeSemana) : "—"}</div>
+          {data.kpis.rakeSemanaWinLose != null && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Win/Lose {usd(data.kpis.rakeSemanaWinLose)} · Prepago {usd(data.kpis.rakeSemanaPrepago)}
+            </div>
+          )}
         </div>
         <div
           className={`kpi-card row-click${filtroSigno === "nosDeben" ? " kpi-active" : ""}`}
@@ -193,6 +203,10 @@ export default function Resumen() {
         </table>
       </div>
 
+      {data.porClubPorSistema && data.porClubPorSistema.length > 0 && (
+        <SaldoPorClubPorSistema porClubPorSistema={data.porClubPorSistema} onClickClub={(clubId, club) => setDetalle({ title: `Movimientos — ${club}`, clubId })} />
+      )}
+
       {data.resultadoPorClub && data.resultadoPorClub.length > 0 && (
         <div className="panel">
           <div className="topbar" style={{ marginBottom: 14 }}>
@@ -237,6 +251,10 @@ export default function Resumen() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {data.resultadoPorClub && data.resultadoPorClub.length > 0 && (
+        <ResultadoPorClubPorSistema resultadoPorClub={data.resultadoPorClub} />
       )}
 
       <div className="panel" ref={tablaSaldosRef}>
@@ -303,6 +321,101 @@ export default function Resumen() {
           <MovimientosHistorial agentId={detalle.agentId} clubId={detalle.clubId} />
         </Modal>
       )}
+    </div>
+  );
+}
+
+// "Saldo neto por club" separado por sistema (24/09/2026, pedido de Leo: "necesito que los
+// separes en resumen", extendido a Operación > Resumen). El sistema de un balance no viene
+// guardado ahí (ver repo/dashboard.ts porClubPorSistema) -- se resuelve en vivo, así que un
+// club sin ningún balance con ese sistema simplemente no tiene fila ahí (no se inventa un 0).
+function SaldoPorClubPorSistema({
+  porClubPorSistema,
+  onClickClub,
+}: {
+  porClubPorSistema: any[];
+  onClickClub: (clubId: string, club: string) => void;
+}) {
+  const winLose = porClubPorSistema.filter((c) => c.system === "WIN_LOSE");
+  const prepago = porClubPorSistema.filter((c) => c.system === "PREPAGO");
+  function Tabla({ titulo, filas }: { titulo: string; filas: any[] }) {
+    return (
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <h3>{titulo}</h3>
+        {filas.length === 0 ? (
+          <div className="muted">Sin saldos con este sistema.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr><th>Club</th><th>Agentes con saldo</th><th>Saldo neto</th></tr>
+            </thead>
+            <tbody>
+              {filas.map((c: any) => (
+                <tr key={c.club_id} className="row-click" onClick={() => onClickClub(c.club_id, c.club)}>
+                  <td>{c.club}</td>
+                  <td>{c.agentes}</td>
+                  <td>
+                    <span className={`badge ${Number(c.saldo_neto) > 0 ? "pos" : Number(c.saldo_neto) < 0 ? "neg" : "neutral"}`}>
+                      {usd(c.saldo_neto)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <Tabla titulo="Saldo neto por club — Win/Lose" filas={winLose} />
+      <Tabla titulo="Saldo neto por club — Prepago" filas={prepago} />
+    </div>
+  );
+}
+
+// "Resultado por club" separado por sistema (24/09/2026, pedido de Leo). Solo se puede separar
+// lo que es atribuible a un agente puntual (rake, ganancia por rake, cierre) -- lo que es del
+// CLUB entero (rodeo, ventas, tasa fija, override de Tiny) queda afuera de estas dos tablas, ya
+// que no tiene sentido partirlo a la mitad; sigue estando en la tabla "Resultado por club" de
+// arriba (el total real). Por eso la suma de estas dos tablas NO da exacto el total de esa
+// tabla en clubes con esos "otros ingresos" -- no es un error.
+function ResultadoPorClubPorSistema({ resultadoPorClub }: { resultadoPorClub: any[] }) {
+  function Tabla({ titulo, sufijo }: { titulo: string; sufijo: "win_lose" | "prepago" }) {
+    const filas = resultadoPorClub.filter((c) => Number(c[`rake_total_${sufijo}`]) !== 0 || Number(c[`cierre_agentes_${sufijo}`]) !== 0);
+    return (
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <h3>{titulo}</h3>
+        {filas.length === 0 ? (
+          <div className="muted">Sin cierres con este sistema esta semana.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr><th>Club</th><th>Rake</th><th>Ganancia nuestra</th><th>Cierre agentes</th></tr>
+            </thead>
+            <tbody>
+              {filas.map((c: any) => (
+                <tr key={c.club_id}>
+                  <td>{c.club_name}</td>
+                  <td>{usd(c[`rake_total_${sufijo}`])}</td>
+                  <td>{usd(c[`ganancia_${sufijo}`])}</td>
+                  <td><span className={`badge ${Number(c[`cierre_agentes_${sufijo}`]) >= 0 ? "pos" : "neg"}`}>{usd(c[`cierre_agentes_${sufijo}`])}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <Tabla titulo="Resultado por club — Win/Lose" sufijo="win_lose" />
+      <Tabla titulo="Resultado por club — Prepago" sufijo="prepago" />
+      <div className="muted" style={{ fontSize: 12, marginTop: -8, marginBottom: 16 }}>
+        "Ganancia nuestra" acá es solo la parte atribuible al rake de cada agente — el rodeo del club, ventas y tasa fija (si el club los tiene) quedan afuera de este desglose y siguen en el total de "Resultado por club" de arriba.
+      </div>
     </div>
   );
 }
