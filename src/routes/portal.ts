@@ -133,6 +133,24 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
       [req.user!.userId]
     );
 
+    // "Pagos" (24/09/2026, pedido de Leo): balance de TODO lo que le pasa a los agentes a cargo
+    // -- pagos que les mandamos, cargas/descargas de fichas, transferencias entre clubes, ajustes,
+    // etc (ledger_movements crudo, mismo dato que ya ve cada agente en su propio "Mi cuenta" --
+    // acá agregado para todo el grupo del supervisor, con el nombre del agente en cada fila para
+    // poder distinguir). Incluye también al propio supervisor (puede tener su propia cuenta con
+    // movimientos). REVERTIDO se excluye -- esos quedan reemplazados por el movimiento de reversa.
+    const agentIdsGrupo = [supervisor.id, ...agentesACargo.rows.map((a: any) => a.id)];
+    const movimientosAgentes = await pool.query(
+      `SELECT m.*, a.name as agent_name, c.name as club_name
+       FROM ledger_movements m
+       JOIN agents a ON a.id = m.agent_id
+       JOIN clubs c ON c.id = m.club_id
+       WHERE m.agent_id = ANY($1::text[]) AND m.status <> 'REVERTIDO'
+       ORDER BY m.occurred_at DESC
+       LIMIT 300`,
+      [agentIdsGrupo]
+    );
+
     res.json({
       supervisor,
       agentes: agentesACargo.rows,
@@ -140,6 +158,7 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
       referidos: referidos.rows,
       saldo_referidos_total: referidos.rows.reduce((acc: number, r: any) => acc + Number(r.saldo), 0),
       movimientos_referidos: movimientos.rows,
+      movimientos_agentes: movimientosAgentes.rows,
     });
   } catch (err: any) {
     console.error("Error en /portal/mi-supervision:", err);

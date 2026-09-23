@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd } from "../fmt";
+import { usd, dateShort } from "../fmt";
+
+// Mismas etiquetas que usa el admin en Movimientos (web/src/components/MovimientosHistorial.tsx)
+// -- acá en versión de solo lectura, sin acciones de revertir/eliminar (eso es admin-only).
+const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
+  CARGA: "Carga",
+  DESCARGA: "Descarga",
+  COBRO: "Cobro",
+  PAGO: "Pago",
+  TRANSFERENCIA_ENTRE_CLUBES: "Transferencia",
+  TICKET_PROMOCIONAL: "Ticket promocional",
+  AJUSTE: "Ajuste",
+  CIERRE_SEMANAL: "Cierre semanal",
+  PAGO_RAKEBACK: "Pago de rakeback pendiente",
+  ADELANTO_RAKEBACK: "Adelanto de rakeback (USDT)",
+};
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   PREPAGO: "Prepago",
@@ -92,6 +107,34 @@ export default function MiSupervision() {
                     <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}</span></td>
                     <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{usd(m.amount)}</td>
                     <td>{usd(m.resulting_saldo)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data.movimientos_agentes && data.movimientos_agentes.length > 0 && (
+        <div className="panel">
+          <h3>Pagos y movimientos</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y
+            descargas de fichas, transferencias entre clubes y ajustes -- para que puedan ver de
+            un vistazo cuándo les mandamos plata o hicimos algún cambio.
+          </div>
+          <div style={{ maxHeight: 380, overflowY: "auto" }}>
+            <table>
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Agente</th><th>Club</th><th>Monto</th><th>Observación</th></tr></thead>
+              <tbody>
+                {data.movimientos_agentes.map((m: any) => (
+                  <tr key={m.id}>
+                    <td className="muted">{dateShort(m.occurred_at)}</td>
+                    <td><span className="badge neutral">{TIPO_MOVIMIENTO_LABEL[m.type] ?? m.type}</span></td>
+                    <td>{m.agent_name}</td>
+                    <td>{m.club_name}</td>
+                    <td><span className={`badge ${Number(m.amount) > 0 ? "pos" : Number(m.amount) < 0 ? "neg" : "neutral"}`}>{usd(m.amount)}</span></td>
+                    <td className="muted" style={{ fontSize: 12 }}>{m.observation || "—"}</td>
                   </tr>
                 ))}
               </tbody>
