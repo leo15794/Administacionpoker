@@ -655,7 +655,7 @@ export default function Liquidaciones() {
     if (!revisandoId) return;
     if (
       !(await confirmDialog(
-        "Esto libera los adelantos/cargas que quedaron descontados por esta liquidación, para poder recalcularla y volver a cruzarlos distinto. Al guardar de nuevo, va a reemplazar esta misma fila del historial (sigue quedando como "Pagada"). ¿Confirmás?"
+        `Esto libera los adelantos/cargas que quedaron descontados por esta liquidación, para poder recalcularla y volver a cruzarlos distinto. Al guardar de nuevo, va a reemplazar esta misma fila del historial (sigue quedando como "Pagada"). ¿Confirmás?`
       ))
     )
       return;
