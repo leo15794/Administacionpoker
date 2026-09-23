@@ -277,27 +277,47 @@ function PrepagoTab({ prepago }: { prepago: any[] | null }) {
   );
 }
 
+// Separado en dos tablas por sistema (24/09/2026, pedido de Leo: "necesito que separemos los
+// win/lose de los prepagos") -- antes una sola tabla sumaba juntas cuentas WIN_LOSE y PREPAGO
+// del mismo grupo+club, cosa que mezclaba dos naturalezas de stock distintas.
+function TablaConsolidadoPorSistema({ titulo, filas }: { titulo: string; filas: any[] }) {
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <h3>{titulo}</h3>
+      {filas.length === 0 ? (
+        <div className="muted">Sin cuentas con este sistema.</div>
+      ) : (
+        <table>
+          <thead>
+            <tr><th>Supervisor / agente</th><th>Club</th><th>Cuentas incluidas</th><th>Unidades</th><th>USD físico ref.</th></tr>
+          </thead>
+          <tbody>
+            {filas.map((c) => (
+              <tr key={`${c.grupo}::${c.club_id}`}>
+                <td><strong>{c.grupo}</strong></td>
+                <td>{c.club_name}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{c.cuentas.join(", ")}</td>
+                <td>{num(c.unidades)}</td>
+                <td>{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function ConsolidadoTab({ consolidado }: { consolidado: any[] | null }) {
   if (!consolidado) return <div className="muted">Cargando...</div>;
+  const winLose = consolidado.filter((c) => c.system === "WIN_LOSE");
+  const prepago = consolidado.filter((c) => c.system === "PREPAGO");
+  const otros = consolidado.filter((c) => c.system !== "WIN_LOSE" && c.system !== "PREPAGO");
   return (
-    <div className="panel">
-      <h3>Stock consolidado por supervisor y club</h3>
-      <table>
-        <thead>
-          <tr><th>Supervisor / agente</th><th>Club</th><th>Cuentas incluidas</th><th>Unidades</th><th>USD físico ref.</th></tr>
-        </thead>
-        <tbody>
-          {consolidado.map((c) => (
-            <tr key={`${c.grupo}::${c.club_id}`}>
-              <td><strong>{c.grupo}</strong></td>
-              <td>{c.club_name}</td>
-              <td className="muted" style={{ fontSize: 12 }}>{c.cuentas.join(", ")}</td>
-              <td>{num(c.unidades)}</td>
-              <td>{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      <TablaConsolidadoPorSistema titulo="Stock consolidado — Win/Lose" filas={winLose} />
+      <TablaConsolidadoPorSistema titulo="Stock consolidado — Prepago" filas={prepago} />
+      {otros.length > 0 && <TablaConsolidadoPorSistema titulo="Stock consolidado — Otros sistemas" filas={otros} />}
     </div>
   );
 }

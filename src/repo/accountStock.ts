@@ -125,17 +125,21 @@ export async function eliminarStock(id: string) {
 
 // "Stock consolidado" — agrupado por grupo (supervisor o el propio agente) + club, excluyendo
 // las cuentas espejo (excluded=true) para no duplicar plata.
+// Agrupa por grupo+club+SISTEMA (24/09/2026, pedido de Leo: "necesito que separemos los
+// win/lose de los prepagos" -- antes una cuenta WIN_LOSE y una PREPAGO del mismo grupo+club
+// quedaban sumadas juntas en un solo total, cosa que no tiene sentido: son dos naturalezas de
+// stock distintas -- el prepago es pasivo propio (ver getObligacionPrepago), el win/lose no.
 export async function getStockConsolidado() {
   const rows = await listRaw();
   const map = new Map<
     string,
-    { grupo: string; club_id: string; club_name: string; unidades: number; usd: number; conTasa: number; cuentas: string[] }
+    { grupo: string; club_id: string; club_name: string; system: string; unidades: number; usd: number; conTasa: number; cuentas: string[] }
   >();
   for (const r of rows) {
     if (r.excluded) continue;
-    const key = `${r.grupo}::${r.club_id}`;
+    const key = `${r.grupo}::${r.club_id}::${r.system}`;
     if (!map.has(key)) {
-      map.set(key, { grupo: r.grupo, club_id: r.club_id, club_name: r.club_name, unidades: 0, usd: 0, conTasa: 0, cuentas: [] });
+      map.set(key, { grupo: r.grupo, club_id: r.club_id, club_name: r.club_name, system: r.system, unidades: 0, usd: 0, conTasa: 0, cuentas: [] });
     }
     const bucket = map.get(key)!;
     bucket.unidades += Number(r.units);
@@ -146,8 +150,8 @@ export async function getStockConsolidado() {
     bucket.cuentas.push(r.agent_name);
   }
   return [...map.values()]
-    .map((b) => ({ grupo: b.grupo, club_id: b.club_id, club_name: b.club_name, unidades: b.unidades, cuentas: b.cuentas, usd: b.conTasa > 0 ? b.usd : null }))
-    .sort((a, b) => a.grupo.localeCompare(b.grupo) || a.club_name.localeCompare(b.club_name));
+    .map((b) => ({ grupo: b.grupo, club_id: b.club_id, club_name: b.club_name, system: b.system, unidades: b.unidades, cuentas: b.cuentas, usd: b.conTasa > 0 ? b.usd : null }))
+    .sort((a, b) => a.grupo.localeCompare(b.grupo) || a.club_name.localeCompare(b.club_name) || a.system.localeCompare(b.system));
 }
 
 // "Obligación prepago" — cuentas no excluidas cuyo sistema vigente es PREPAGO, con su
