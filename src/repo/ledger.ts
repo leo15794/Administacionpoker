@@ -211,7 +211,17 @@ export async function listBalancesByAgent(agentId: string) {
 
 export async function listAllBalances() {
   const r = await pool.query(
-    `SELECT b.*, a.name as agent_name, c.name as club_name
+    // system (24/09/2026, pedido de Leo: "faltaria hacerlo para los agentes" -- separar
+    // Win/Lose de Prepago también en "Saldos por agente y club"): mismo criterio de siempre
+    // (deal vigente agente↔club si existe, si no default_system del agente), resuelto en vivo
+    // porque un balance es la foto ACTUAL, no un snapshot -- no tiene su propio "system" guardado.
+    `SELECT b.*, a.name as agent_name, c.name as club_name,
+            COALESCE(
+              (SELECT d.system FROM agent_club_deals d
+               WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
+               ORDER BY d.valid_from DESC LIMIT 1),
+              a.default_system
+            ) as system
      FROM balances b JOIN agents a ON a.id = b.agent_id JOIN clubs c ON c.id = b.club_id
      ORDER BY a.name, c.name`
   );

@@ -11,6 +11,9 @@ import MovimientosHistorial from "../components/MovimientosHistorial";
 // KPIs de arriba como para el filtro por signo de la tabla de abajo, así "hacer click en la KPI"
 // y "ver el detalle que la compone" son siempre la misma cuenta.
 type FiltroSigno = "todos" | "nosDeben" | "debemos";
+// Win/Lose vs Prepago (24/09/2026, pedido de Leo: "faltaria hacerlo para los agentes") -- mismo
+// criterio que el filtro por signo, aplicado a la tabla de saldos por agente+club.
+type FiltroSistema = "todos" | "WIN_LOSE" | "PREPAGO";
 
 function pasaFiltroSigno(amount: number, signo: FiltroSigno) {
   if (signo === "nosDeben") return amount < 0;
@@ -24,6 +27,7 @@ export default function Resumen() {
   const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("");
   const [filtroSigno, setFiltroSigno] = useState<FiltroSigno>("todos");
+  const [filtroSistema, setFiltroSistema] = useState<FiltroSistema>("todos");
   const [detalle, setDetalle] = useState<{ title: string; agentId?: string; clubId?: string } | null>(null);
   const tablaSaldosRef = useRef<HTMLDivElement>(null);
 
@@ -46,12 +50,21 @@ export default function Resumen() {
   const balancesFiltrados = data.balances
     .filter((b: any) => Number(b.amount) !== 0)
     .filter((b: any) => pasaFiltroSigno(Number(b.amount), filtroSigno))
+    .filter((b: any) => filtroSistema === "todos" || b.system === filtroSistema)
     .filter((b: any) => {
       const q = filtro.trim().toLowerCase();
       if (!q) return true;
       return b.agent_name.toLowerCase().includes(q) || b.club_name.toLowerCase().includes(q);
     })
     .sort((a: any, b: any) => Number(b.amount) - Number(a.amount));
+
+  // Win/Lose vs Prepago para los KPIs "Agentes nos deben"/"Debemos a agentes" (24/09/2026,
+  // pedido de Leo) -- se calcula acá mismo desde data.balances (ya trae `system`, ver
+  // repo/ledger.ts listAllBalances) en vez de pedirle otro campo al backend.
+  const nosDebenWinLose = data.balances.filter((b: any) => Number(b.amount) < 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s - Number(b.amount), 0);
+  const nosDebenPrepago = data.balances.filter((b: any) => Number(b.amount) < 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s - Number(b.amount), 0);
+  const debemosWinLose = data.balances.filter((b: any) => Number(b.amount) > 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const debemosPrepago = data.balances.filter((b: any) => Number(b.amount) > 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   return (
     <div>
@@ -104,6 +117,9 @@ export default function Resumen() {
         >
           <div className="label">Agentes nos deben</div>
           <div className="value neg">{usd(data.kpis.agentesNosDeben)}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Win/Lose {usd(nosDebenWinLose)} · Prepago {usd(nosDebenPrepago)}
+          </div>
         </div>
         <div
           className={`kpi-card row-click${filtroSigno === "debemos" ? " kpi-active" : ""}`}
@@ -112,6 +128,9 @@ export default function Resumen() {
         >
           <div className="label">Debemos a agentes</div>
           <div className="value pos">{usd(data.kpis.debemosAAgentes)}</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Win/Lose {usd(debemosWinLose)} · Prepago {usd(debemosPrepago)}
+          </div>
         </div>
         <div className="kpi-card row-click" onClick={() => nav("/dashboard/wallet")} title="Ir a Wallet — historial completo de movimientos">
           <div className="label">Saldo Wallet</div>
@@ -275,7 +294,7 @@ export default function Resumen() {
               onClick={() =>
                 exportCsv(
                   "saldos_por_agente_y_club.csv",
-                  balancesFiltrados.map((b: any) => ({ agente: b.agent_name, club: b.club_name, saldo: b.amount }))
+                  balancesFiltrados.map((b: any) => ({ agente: b.agent_name, club: b.club_name, sistema: b.system, saldo: b.amount }))
                 )
               }
             >
@@ -294,9 +313,25 @@ export default function Resumen() {
             Debemos
           </button>
         </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button className={`chip${filtroSistema === "todos" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("todos")}>
+            Todos los sistemas
+          </button>
+          <button className={`chip${filtroSistema === "WIN_LOSE" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("WIN_LOSE")}>
+            Win/Lose
+          </button>
+          <button className={`chip${filtroSistema === "PREPAGO" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("PREPAGO")}>
+            Prepago
+          </button>
+        </div>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + Number(b.amount), 0))}
+          {" · "}
+          Saldo Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0))}
+        </div>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Club</th><th>Saldo</th></tr>
+            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Saldo</th></tr>
           </thead>
           <tbody>
             {balancesFiltrados.map((b: any) => (
@@ -307,6 +342,7 @@ export default function Resumen() {
               >
                 <td>{b.agent_name}</td>
                 <td>{b.club_name}</td>
+                <td><span className="badge neutral">{b.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span></td>
                 <td>
                   <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>
                 </td>
