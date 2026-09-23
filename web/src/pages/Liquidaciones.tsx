@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -202,19 +202,38 @@ export default function Liquidaciones() {
     setData(null);
   }
 
+  // "Retomar" desde el historial (24/09/2026): setear seleccionados + weekStart a la vez no
+  // alcanza -- el efecto de abajo resetea weekStart a "" cada vez que cambian los seleccionados
+  // (caso normal: elegir agentes de nuevo desde cero). Este ref lleva el weekStart/nombre que
+  // hay que restaurar DESPUÉS de ese reset, para el único caso en que sí queremos saltar
+  // directo a una semana puntual.
+  const retomarRef = useRef<{ weekStart: string; nombreGrupo: string } | null>(null);
+
   useEffect(() => {
     setSemanas([]);
-    setWeekStart("");
     setData(null);
+    const retomar = retomarRef.current;
+    retomarRef.current = null;
+    setWeekStart(retomar?.weekStart ?? "");
     if (seleccionados.length === 0) return;
     api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
-    // Nombre por default: si es un solo agente, su nombre; si son varios, en blanco para que lo
-    // pongan a mano (ej. "Prodigio") — no hay forma de adivinar cómo se llama el grupo.
-    if (seleccionados.length === 1) {
+    if (retomar) {
+      setNombreGrupo(retomar.nombreGrupo);
+    } else if (seleccionados.length === 1) {
+      // Nombre por default: si es un solo agente, su nombre; si son varios, en blanco para que
+      // lo pongan a mano (ej. "Prodigio") — no hay forma de adivinar cómo se llama el grupo.
       const a = agentes.find((x) => x.id === seleccionados[0]);
       if (a) setNombreGrupo(a.name);
     }
   }, [seleccionados]);
+
+  // Retoma un autoguardado PENDIENTE desde el historial: vuelve a elegir ese mismo grupo de
+  // agentes + esa semana, para terminar de definir cómo pagar (ver panel "Registrar pago").
+  function retomarLiquidacionPendiente(h: any) {
+    retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo };
+    setSeleccionados(h.agent_ids);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   // preservarAplicado=true después de aplicar un cruce: solo refresca los datos (pendientes
   // actualizados) sin resetear lo que ya se descontó en esta liquidación ni la nota/adelanto
@@ -268,6 +287,40 @@ export default function Liquidaciones() {
   const filasConAjustes = data
     ? data.filas.map((f: any) => ({ ...f, ventas: Number(ventasPorFila[filaKey(f)]) || 0, tickets: Number(ticketsPorFila[filaKey(f)]) || 0 }))
     : [];
+
+  // Autoguardado (24/09/2026, pedido de Leo): "vos elegís a los agentes a cerrar y hacés la
+  // liquidación, cuando calculás eso debería quedar guardado" -- a veces no se sabe todavía cómo
+  // va a querer cobrar el agente hasta que se le manda la liquidación. Apenas hay un cálculo
+  // (data) para un grupo+semana, se guarda solo como borrador PENDIENTE -- debounced 1s para no
+  // pegarle a la API en cada tecla mientras se completan ventas/tickets/nota. No reemplaza
+  // "Guardar en historial" (esa sigue siendo la foto definitiva que el usuario confirma a mano).
+  const autoguardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!data || seleccionados.length === 0 || !weekStart) return;
+    if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
+    autoguardadoTimer.current = setTimeout(() => {
+      api
+        .autoguardarLiquidacion({
+          nombreGrupo: nombreGrupo || "Liquidación",
+          agentIds: seleccionados,
+          weekStart: data.weekStart,
+          weekEnd: data.weekEnd,
+          filas: filasConAjustes,
+          total: data.total,
+          adelantosAplicados: aplicado + totalCruzado,
+          adelantosManual,
+          cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
+          totalAPagar,
+          nota,
+        })
+        .then(() => refrescarHistorial())
+        .catch(() => {}); // best-effort -- nunca bloquea ni avisa nada al usuario
+    }, 1000);
+    return () => {
+      if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga]);
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
@@ -378,6 +431,9 @@ export default function Liquidaciones() {
         if (seleccionados.length > 0 && weekStart) {
           const dataActualizada = await api.liquidacion(seleccionados, weekStart);
           setData(dataActualizada);
+          // Ya se registró un movimiento real para este grupo+semana -- si había un
+          // autoguardado PENDIENTE, queda resuelto (pedido de Leo: automático al registrar el pago).
+          api.resolverLiquidacionPendiente(seleccionados, weekStart).then(refrescarHistorial).catch(() => {});
         }
       } catch (err: any) {
         setMovMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
@@ -449,6 +505,11 @@ export default function Liquidaciones() {
     if (seleccionados.length > 0 && weekStart) {
       const dataActualizada = await api.liquidacion(seleccionados, weekStart);
       setData(dataActualizada);
+      if (exitos > 0) {
+        // Mismo criterio que en COBRO -- al menos un pago se registró de verdad para este
+        // grupo+semana, así que el autoguardado pendiente (si había) queda resuelto.
+        api.resolverLiquidacionPendiente(seleccionados, weekStart).then(refrescarHistorial).catch(() => {});
+      }
     }
     setRegistrandoMov(false);
   }
@@ -1256,20 +1317,32 @@ export default function Liquidaciones() {
           <table>
             <thead>
               <tr>
-                <th>Fecha</th><th>Nombre</th><th>Semana</th><th>Rakeback total</th>
+                <th>Fecha</th><th>Estado</th><th>Nombre</th><th>Semana</th><th>Rakeback total</th>
                 <th>Descontado</th><th>Total pagado</th><th></th>
               </tr>
             </thead>
             <tbody>
               {historial.map((h) => (
                 <tr key={h.id}>
-                  <td>{dateShort(h.created_at)}</td>
+                  <td className="muted">{dateShort(h.created_at)}</td>
+                  <td>
+                    {h.estado === "PENDIENTE" ? (
+                      <span className="badge neg" title="Se calculó pero todavía no se registró ningún pago ni cobro para este grupo/semana">Pendiente de pago</span>
+                    ) : (
+                      <span className="badge pos">Pagada</span>
+                    )}
+                  </td>
                   <td>{h.nombre_grupo}</td>
                   <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
                   <td>{usd(h.total)}</td>
                   <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
                   <td><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
+                    {h.estado === "PENDIENTE" && (
+                      <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
+                        Retomar
+                      </button>
+                    )}
                     <button
                       className="btn secondary small"
                       onClick={() =>

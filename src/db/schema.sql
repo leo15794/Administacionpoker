@@ -1256,3 +1256,22 @@ CREATE TABLE IF NOT EXISTS weekly_closing_player_details (
 );
 CREATE INDEX IF NOT EXISTS idx_wcpd_closing ON weekly_closing_player_details(closing_id);
 CREATE INDEX IF NOT EXISTS idx_wcpd_player ON weekly_closing_player_details(player_id);
+
+-- "Liquidaciones pendientes de pago" (24/09/2026, pedido de Leo): a veces no se sabe todavía
+-- cómo va a querer cobrar el agente (fichas a un jugador puntual vs USDT) hasta que se le manda
+-- la liquidación -- antes, si nadie apretaba "Guardar en historial" a mano, ese cálculo
+-- (adelantos/cargas descontados, ventas/tickets, nota) se perdía apenas se cambiaba de agente o
+-- se cerraba la pantalla. Ahora se autoguarda solo, como estado='PENDIENTE', apenas se calcula
+-- una liquidación para un grupo de agentes + semana -- y pasa a 'PAGADA' automáticamente en
+-- cuanto se registra CUALQUIER pago o cobro real para ese mismo grupo+semana (ver
+-- routes/catalog.ts). DEFAULT 'PAGADA' a propósito: todo lo que ya estaba guardado hasta ahora
+-- (con el botón manual "Guardar en historial") se asume resuelto, no aparece como pendiente.
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'PAGADA';
+-- grupo_key = agent_ids ordenados y unidos por coma -- para poder buscar/upsertear por "mismo
+-- grupo de agentes" sin importar el orden en que se seleccionaron.
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS grupo_key TEXT;
+-- Como mucho UN autoguardado "vivo" (PENDIENTE) por grupo+semana -- cada recálculo lo pisa en
+-- vez de acumular filas repetidas. Las filas PAGADA (manuales o ya resueltas) no tienen este
+-- límite, son historial de verdad.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidaciones_pendiente_unica
+  ON liquidaciones_guardadas(grupo_key, week_start) WHERE estado = 'PENDIENTE';

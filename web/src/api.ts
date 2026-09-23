@@ -98,6 +98,26 @@ export const api = {
     totalAPagar: number;
     nota?: string | null;
   }) => request("/catalog/liquidacion/guardar", { method: "POST", body: JSON.stringify(data) }),
+  // Autoguardado (24/09/2026): mismo payload que guardarLiquidacion, pero pisa el borrador
+  // PENDIENTE de este grupo+semana en vez de crear una fila nueva cada vez -- se llama solo,
+  // sin que el usuario aprete nada.
+  autoguardarLiquidacion: (data: {
+    nombreGrupo: string;
+    agentIds: string[];
+    weekStart: string;
+    weekEnd: string;
+    filas: any[];
+    total: number;
+    adelantosAplicados: number;
+    adelantosManual: number;
+    cargasAplicadas: number;
+    totalAPagar: number;
+    nota?: string | null;
+  }) => request("/catalog/liquidacion/autoguardar", { method: "POST", body: JSON.stringify(data) }),
+  // Marca como resuelto el autoguardado pendiente de este grupo+semana (si había uno) -- se
+  // llama apenas se registra un pago o cobro real para estos mismos agentes.
+  resolverLiquidacionPendiente: (agentIds: string[], weekStart: string) =>
+    request("/catalog/liquidacion/resolver", { method: "POST", body: JSON.stringify({ agentIds, weekStart }) }),
   historialLiquidaciones: () => request("/catalog/liquidacion/historial"),
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 

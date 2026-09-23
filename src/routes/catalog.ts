@@ -385,14 +385,20 @@ const guardarLiquidacionSchema = z.object({
   nota: z.string().nullable().optional(),
 });
 
+// grupo_key: mismo grupo de agentes sin importar el orden en que se tildaron -- para poder
+// upsertear el autoguardado "vivo" (ver abajo) y para matchear el resolver contra el guardado.
+function grupoKey(agentIds: string[]): string {
+  return [...agentIds].sort().join(",");
+}
+
 catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = guardarLiquidacionSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const d = parsed.data;
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA') RETURNING *`,
     [
       newId("liq"),
       d.nombreGrupo,
@@ -407,9 +413,71 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
       d.totalAPagar,
       d.nota ?? null,
       req.user?.email ?? null,
+      grupoKey(d.agentIds),
     ]
   );
   res.status(201).json(r.rows[0]);
+});
+
+// Autoguardado (24/09/2026, pedido de Leo): apenas se calcula una liquidación para un grupo de
+// agentes + semana, se guarda sola como PENDIENTE -- sin que nadie tenga que tocar "Guardar en
+// historial". Después, cuando se sepa cómo pagarla (fichas o USDT), se retoma desde el
+// historial. Upsert por (grupo_key, week_start): cada recálculo (cambia una venta, un ticket, la
+// nota) PISA el mismo borrador en vez de acumular filas repetidas -- ver índice único parcial en
+// schema.sql. Puramente informativo: no mueve plata ni toca ningún otro dato.
+catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = guardarLiquidacionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const d = parsed.data;
+  const key = grupoKey(d.agentIds);
+  const r = await pool.query(
+    `INSERT INTO liquidaciones_guardadas
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDIENTE')
+     ON CONFLICT (grupo_key, week_start) WHERE estado = 'PENDIENTE'
+     DO UPDATE SET nombre_grupo = EXCLUDED.nombre_grupo, agent_ids = EXCLUDED.agent_ids,
+       week_end = EXCLUDED.week_end, filas = EXCLUDED.filas, total = EXCLUDED.total,
+       adelantos_aplicados = EXCLUDED.adelantos_aplicados, adelantos_manual = EXCLUDED.adelantos_manual,
+       cargas_aplicadas = EXCLUDED.cargas_aplicadas, total_a_pagar = EXCLUDED.total_a_pagar,
+       nota = EXCLUDED.nota, created_by = EXCLUDED.created_by, created_at = now()
+     RETURNING *`,
+    [
+      newId("liq"),
+      d.nombreGrupo,
+      d.agentIds,
+      d.weekStart,
+      d.weekEnd,
+      JSON.stringify(d.filas),
+      d.total,
+      d.adelantosAplicados,
+      d.adelantosManual,
+      d.cargasAplicadas,
+      d.totalAPagar,
+      d.nota ?? null,
+      req.user?.email ?? null,
+      key,
+    ]
+  );
+  res.status(201).json(r.rows[0]);
+});
+
+// Marca como resuelto (PAGADA) el autoguardado PENDIENTE de este grupo+semana, si existe -- se
+// llama apenas se registra CUALQUIER pago o cobro real para estos mismos agentes (ver
+// Liquidaciones.tsx, registrarMov). No hace nada si no había ningún borrador pendiente.
+const resolverLiquidacionSchema = z.object({
+  agentIds: z.array(z.string()).min(1),
+  weekStart: z.string(),
+});
+catalogRouter.post("/liquidacion/resolver", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = resolverLiquidacionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const r = await pool.query(
+    `UPDATE liquidaciones_guardadas SET estado = 'PAGADA'
+     WHERE grupo_key = $1 AND week_start = $2 AND estado = 'PENDIENTE'
+     RETURNING id`,
+    [grupoKey(parsed.data.agentIds), parsed.data.weekStart]
+  );
+  res.json({ ok: true, resueltas: r.rowCount ?? 0 });
 });
 
 // Historial de liquidaciones guardadas — más reciente primero.
