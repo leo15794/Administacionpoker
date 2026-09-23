@@ -215,14 +215,30 @@ export async function listAllBalances() {
     // Win/Lose de Prepago también en "Saldos por agente y club"): mismo criterio de siempre
     // (deal vigente agente↔club si existe, si no default_system del agente), resuelto en vivo
     // porque un balance es la foto ACTUAL, no un snapshot -- no tiene su propio "system" guardado.
+    // ultimo_cierre_* (24/09/2026, pedido de Leo: "en saldos por agente y club" -- que a cada
+    // agente WIN_LOSE se le vea el cierre final de SU ÚLTIMA semana cerrada, aparte del saldo
+    // acumulado de la cuenta corriente, que ya sube/baja solo con los cierres y los
+    // pagos/cobros/retiros posteriores -- ver DELTA_SQL en repo/agentesResumen.ts, mismo
+    // principio). Es puramente informativo: no participa en ningún cálculo, solo se muestra.
     `SELECT b.*, a.name as agent_name, c.name as club_name,
             COALESCE(
               (SELECT d.system FROM agent_club_deals d
                WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
                ORDER BY d.valid_from DESC LIMIT 1),
               a.default_system
-            ) as system
-     FROM balances b JOIN agents a ON a.id = b.agent_id JOIN clubs c ON c.id = b.club_id
+            ) as system,
+            ultimo_cierre.final_closing as ultimo_cierre_monto,
+            ultimo_cierre.week_start as ultimo_cierre_week_start,
+            ultimo_cierre.week_end as ultimo_cierre_week_end
+     FROM balances b
+     JOIN agents a ON a.id = b.agent_id
+     JOIN clubs c ON c.id = b.club_id
+     LEFT JOIN LATERAL (
+       SELECT wc.final_closing, wc.week_start, wc.week_end
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+       ORDER BY wc.week_end DESC LIMIT 1
+     ) ultimo_cierre ON true
      ORDER BY a.name, c.name`
   );
   return r.rows;

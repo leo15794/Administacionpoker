@@ -294,7 +294,13 @@ export default function Resumen() {
               onClick={() =>
                 exportCsv(
                   "saldos_por_agente_y_club.csv",
-                  balancesFiltrados.map((b: any) => ({ agente: b.agent_name, club: b.club_name, sistema: b.system, saldo: b.amount }))
+                  balancesFiltrados.map((b: any) => ({
+                    agente: b.agent_name,
+                    club: b.club_name,
+                    sistema: b.system,
+                    cierre_ultima_semana: b.system === "WIN_LOSE" ? b.ultimo_cierre_monto : "",
+                    saldo: b.amount,
+                  }))
                 )
               }
             >
@@ -331,7 +337,7 @@ export default function Resumen() {
         </div>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Saldo</th></tr>
+            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Saldo</th></tr>
           </thead>
           <tbody>
             {balancesFiltrados.map((b: any) => (
@@ -343,6 +349,23 @@ export default function Resumen() {
                 <td>{b.agent_name}</td>
                 <td>{b.club_name}</td>
                 <td><span className="badge neutral">{b.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span></td>
+                <td>
+                  {/* Solo Win/Lose (24/09/2026, pedido de Leo: "Todos los agentes WIN/LOSE en su
+                      resumen deberia aparecer el cierre final de la semana") -- el cierre de la
+                      última semana cerrada de ESTE agente+club, puramente informativo: el Saldo
+                      de al lado ya lo tiene sumado y sigue moviéndose solo con lo que pase la
+                      semana que viene (pagos/cobros/retiros), este número no. */}
+                  {b.system === "WIN_LOSE" && b.ultimo_cierre_monto !== null ? (
+                    <span title={`Semana ${dateShort(b.ultimo_cierre_week_start)} - ${dateShort(b.ultimo_cierre_week_end)}`}>
+                      <span className={`badge ${Number(b.ultimo_cierre_monto) > 0 ? "pos" : Number(b.ultimo_cierre_monto) < 0 ? "neg" : "neutral"}`}>
+                        {usd(b.ultimo_cierre_monto)}
+                      </span>
+                      <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{dateShort(b.ultimo_cierre_week_end)}</span>
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
                 <td>
                   <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>
                 </td>
