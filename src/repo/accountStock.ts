@@ -162,17 +162,20 @@ export async function getObligacionPrepago() {
   return rows.filter((r) => !r.excluded && r.system === "PREPAGO");
 }
 
-// "Resumen": stock general por club (todas las cuentas no excluidas, sin importar sistema) +
-// el total de obligación prepago.
+// "Resumen": stock general por club, separado por sistema (24/09/2026, pedido de Leo: "tambien
+// necesito que los separes en resumen" -- misma mezcla que tenía Stock consolidado: una cuenta
+// WIN_LOSE y una PREPAGO del mismo club quedaban sumadas juntas en un solo total) + el total de
+// obligación prepago.
 export async function getResumenStock() {
   const rows = await listRaw();
-  const porClub = new Map<string, { club_id: string; club_name: string; cuentas: number; unidades: number; usd: number; conTasa: number }>();
+  const porClub = new Map<string, { club_id: string; club_name: string; system: string; cuentas: number; unidades: number; usd: number; conTasa: number }>();
   for (const r of rows) {
     if (r.excluded) continue;
-    if (!porClub.has(r.club_id)) {
-      porClub.set(r.club_id, { club_id: r.club_id, club_name: r.club_name, cuentas: 0, unidades: 0, usd: 0, conTasa: 0 });
+    const key = `${r.club_id}::${r.system}`;
+    if (!porClub.has(key)) {
+      porClub.set(key, { club_id: r.club_id, club_name: r.club_name, system: r.system, cuentas: 0, unidades: 0, usd: 0, conTasa: 0 });
     }
-    const b = porClub.get(r.club_id)!;
+    const b = porClub.get(key)!;
     b.cuentas += 1;
     b.unidades += Number(r.units);
     if (r.usd_ref !== null) {
@@ -184,8 +187,8 @@ export async function getResumenStock() {
   const totalPrepagoUsd = prepago.reduce((acc, r) => acc + (r.usd_ref !== null ? Number(r.usd_ref) : 0), 0);
   return {
     porClub: [...porClub.values()]
-      .map((b) => ({ club_id: b.club_id, club_name: b.club_name, cuentas: b.cuentas, unidades: b.unidades, usd: b.conTasa > 0 ? b.usd : null }))
-      .sort((a, b) => a.club_name.localeCompare(b.club_name)),
+      .map((b) => ({ club_id: b.club_id, club_name: b.club_name, system: b.system, cuentas: b.cuentas, unidades: b.unidades, usd: b.conTasa > 0 ? b.usd : null }))
+      .sort((a, b) => a.club_name.localeCompare(b.club_name) || a.system.localeCompare(b.system)),
     totalPrepagoUsd,
   };
 }

@@ -175,14 +175,27 @@ function ResumenTab({ resumen, deudas }: { resumen: any; deudas: any }) {
         </div>
       </div>
 
-      <div className="panel">
-        <h3>Stock general por club</h3>
+      <TablaStockPorClub titulo="Stock general por club — Win/Lose" filas={resumen.porClub.filter((c: any) => c.system === "WIN_LOSE")} />
+      <TablaStockPorClub titulo="Stock general por club — Prepago" filas={resumen.porClub.filter((c: any) => c.system === "PREPAGO")} />
+    </div>
+  );
+}
+
+// Separado por sistema (24/09/2026, pedido de Leo: "tambien necesito que los separes en
+// resumen") -- mismo criterio que TablaConsolidadoPorSistema de la pestaña "Consolidado".
+function TablaStockPorClub({ titulo, filas }: { titulo: string; filas: any[] }) {
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <h3>{titulo}</h3>
+      {filas.length === 0 ? (
+        <div className="muted">Sin cuentas con este sistema.</div>
+      ) : (
         <table>
           <thead>
             <tr><th>Club</th><th>Cuentas</th><th>Unidades</th><th>USD físico ref.</th></tr>
           </thead>
           <tbody>
-            {resumen.porClub.map((c: any) => (
+            {filas.map((c: any) => (
               <tr key={c.club_id}>
                 <td>{c.club_name}</td>
                 <td>{c.cuentas}</td>
@@ -192,7 +205,7 @@ function ResumenTab({ resumen, deudas }: { resumen: any; deudas: any }) {
             ))}
           </tbody>
         </table>
-      </div>
+      )}
     </div>
   );
 }
