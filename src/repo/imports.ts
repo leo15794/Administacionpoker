@@ -37,8 +37,20 @@ export interface AgenteAgregado {
   /** Detalle por jugador (23/09/2026, "Resumen por agente" en PDF): resultado/rake crudos de
    * cada jugador de este agente esta semana -- se reenvía tal cual (mismo patrón que
    * rodeoJugadores de arriba) al aplicar el cierre, para que repo/closings.ts persista el
-   * desglose en weekly_closing_player_details. */
-  jugadoresDetalle: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
+   * desglose en weekly_closing_player_details. playerId/subagenteName/subagenteRakebackPct
+   * (23/09/2026, pedido de Leo) son solo para que el frontend pueda mostrar/editar el
+   * subagente de cada jugador ACÁ MISMO, en el momento de armar el cierre -- nunca se mandan
+   * de vuelta al aplicar (closings.ts siempre relee el valor vigente de la base en ese
+   * momento, no confía en lo que vino en la previa). */
+  jugadoresDetalle: {
+    playerId: string;
+    playerExternalId: string;
+    playerName: string;
+    resultado: number;
+    rake: number;
+    subagenteName: string | null;
+    subagenteRakebackPct: number | null;
+  }[];
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
@@ -251,15 +263,20 @@ export async function upsertPlayer(
   clubId: string,
   row: SupremaPlayerRow,
   agentId: string | null
-): Promise<{ id: string; bancado: boolean }> {
+): Promise<{ id: string; bancado: boolean; subagenteName: string | null; subagenteRakebackPct: number | null }> {
   const r = await pool.query(
     `INSERT INTO players (id, external_id, display_name, club_id, agent_id)
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id
-     RETURNING id, bancado`,
+     RETURNING id, bancado, subagente_name, subagente_rakeback_pct`,
     [newId("player"), row.playerId, row.playerName, clubId, agentId]
   );
-  return { id: r.rows[0].id, bancado: r.rows[0]?.bancado ?? false };
+  return {
+    id: r.rows[0].id,
+    bancado: r.rows[0]?.bancado ?? false,
+    subagenteName: r.rows[0]?.subagente_name ?? null,
+    subagenteRakebackPct: r.rows[0]?.subagente_rakeback_pct != null ? Number(r.rows[0].subagente_rakeback_pct) : null,
+  };
 }
 
 /**
@@ -377,7 +394,15 @@ export async function analizarImportacionSuprema(
         acc.mtt = (acc.mtt ?? 0) + (row.mtt ?? 0);
         acc.sngOtros = (acc.sngOtros ?? 0) + (row.sngOtros ?? 0);
         if (row.rodeo !== 0) acc.rodeoJugadores.push({ playerExternalId: row.playerId, baseRodeo: row.rodeo });
-        acc.jugadoresDetalle.push({ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake });
+        acc.jugadoresDetalle.push({
+          playerId: jugadorUpsert.id,
+          playerExternalId: row.playerId,
+          playerName: row.playerName,
+          resultado: row.resultado,
+          rake: row.rake,
+          subagenteName: jugadorUpsert.subagenteName,
+          subagenteRakebackPct: jugadorUpsert.subagenteRakebackPct,
+        });
       } else {
         agentesMap.set(resolucion.agentId, {
           agentId: resolucion.agentId,
@@ -389,7 +414,15 @@ export async function analizarImportacionSuprema(
           mtt: row.mtt,
           sngOtros: row.sngOtros,
           rodeoJugadores: row.rodeo !== 0 ? [{ playerExternalId: row.playerId, baseRodeo: row.rodeo }] : [],
-          jugadoresDetalle: [{ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake }],
+          jugadoresDetalle: [{
+            playerId: jugadorUpsert.id,
+            playerExternalId: row.playerId,
+            playerName: row.playerName,
+            resultado: row.resultado,
+            rake: row.rake,
+            subagenteName: jugadorUpsert.subagenteName,
+            subagenteRakebackPct: jugadorUpsert.subagenteRakebackPct,
+          }],
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,

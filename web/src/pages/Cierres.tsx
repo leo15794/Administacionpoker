@@ -5,6 +5,7 @@ import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import ActionsMenu from "../components/ActionsMenu";
+import Modal from "../components/Modal";
 
 // Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
 // entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
@@ -813,7 +814,15 @@ type FilaImport = {
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
   // Detalle por jugador (23/09/2026, "Resumen por agente" en PDF) — se reenvía tal cual al
   // aplicar, para que el backend persista el desglose (repo/closings.ts).
-  jugadoresDetalle: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
+  jugadoresDetalle: {
+    playerId: string;
+    playerExternalId: string;
+    playerName: string;
+    resultado: number;
+    rake: number;
+    subagenteName: string | null;
+    subagenteRakebackPct: number | null;
+  }[];
   // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD cargado a mano fila
   // por fila en esta misma grilla — se suma/resta directo al cierre final del agente (ver
   // engine/cierre.ts). ajusteManualNota es obligatoria si el monto no es 0.
@@ -859,6 +868,16 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   const [hojasDetectadas, setHojasDetectadas] = useState<{ sheetName: string; clubIdSugerido: string | null }[]>([]);
   const [clubElegidoPorHoja, setClubElegidoPorHoja] = useState<Record<string, string>>({}); // sheetName -> clubId
   const [hojaIgnorada, setHojaIgnorada] = useState<Record<string, boolean>>({}); // sheetName -> se saltea esta semana
+  // Subagentes por jugador (23/09/2026, pedido de Leo): poder elegir el % de rakeback propio de
+  // un jugador ACÁ MISMO, al momento de armar el cierre, sin tener que ir a Agentes. Guarda
+  // directo contra el jugador (api.setSubagenteJugador) -- independiente de aplicar el cierre.
+  const [subagenteModalFila, setSubagenteModalFila] = useState<string | null>(null); // fila.key
+  const [subagenteNombre, setSubagenteNombre] = useState("");
+  const [subagentePct, setSubagentePct] = useState("");
+  const [editandoSubagentePlayerId, setEditandoSubagentePlayerId] = useState<string | null>(null);
+  const [guardandoSubagente, setGuardandoSubagente] = useState(false);
+  const [errorSubagente, setErrorSubagente] = useState("");
+
   const [confirmado, setConfirmado] = useState(false); // true = ya se eligió club para cada hoja y se procesó
   const [sinAgentePorClub, setSinAgentePorClub] = useState<{ clubId: string; clubName: string; items: any[] }[]>([]);
   // Superagentes que no existían en el catálogo y se crearon SOLOS en esta corrida porque el
@@ -1112,6 +1131,46 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
   function toggleIncluded(key: string) {
     setFilas((fs) => fs.map((f) => (f.key === key ? { ...f, included: !f.included } : f)));
+  }
+
+  function abrirEdicionSubagente(playerId: string, actual: { subagenteName: string | null; subagenteRakebackPct: number | null }) {
+    setEditandoSubagentePlayerId(playerId);
+    setSubagenteNombre(actual.subagenteName ?? "");
+    setSubagentePct(actual.subagenteRakebackPct != null ? String(actual.subagenteRakebackPct * 100) : "");
+    setErrorSubagente("");
+  }
+
+  async function guardarSubagente(filaKey: string, playerId: string) {
+    const nombre = subagenteNombre.trim();
+    const pctNum = subagentePct.trim() ? Number(subagentePct) / 100 : null;
+    if (nombre && (pctNum === null || !(pctNum >= 0 && pctNum <= 1))) {
+      setErrorSubagente("El % de rakeback propio es obligatorio (0 a 100) si se pone un nombre de subagente.");
+      return;
+    }
+    setGuardandoSubagente(true);
+    setErrorSubagente("");
+    try {
+      const r = await api.setSubagenteJugador(playerId, nombre || null, nombre ? pctNum : null);
+      setFilas((fs) =>
+        fs.map((f) =>
+          f.key === filaKey
+            ? {
+                ...f,
+                jugadoresDetalle: f.jugadoresDetalle.map((j) =>
+                  j.playerId === playerId
+                    ? { ...j, subagenteName: r.subagente_name, subagenteRakebackPct: r.subagente_rakeback_pct != null ? Number(r.subagente_rakeback_pct) : null }
+                    : j
+                ),
+              }
+            : f
+        )
+      );
+      setEditandoSubagentePlayerId(null);
+    } catch (err: any) {
+      setErrorSubagente(err.message || "No se pudo guardar.");
+    } finally {
+      setGuardandoSubagente(false);
+    }
   }
 
   // Cambiar el ajuste manual (o su nota) invalida la vista previa de esa fila -- si no, el
@@ -1651,7 +1710,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             <thead>
               <tr>
                 <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
-                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
+                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Subagentes</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
             <tbody>
@@ -1701,6 +1760,17 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                           <> · <Monto value={f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo} /></>
                         )}
                       </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {f.jugadoresDetalle.length > 0 ? (
+                      <button className="btn secondary small" onClick={() => setSubagenteModalFila(f.key)}>
+                        {f.jugadoresDetalle.filter((j) => j.subagenteName).length > 0
+                          ? `${f.jugadoresDetalle.filter((j) => j.subagenteName).length} con subagente`
+                          : `Ver ${f.jugadoresDetalle.length} jug.`}
+                      </button>
                     ) : (
                       <span className="muted">—</span>
                     )}
@@ -1788,6 +1858,63 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       )}
       </>
       )}
+
+      {subagenteModalFila && (() => {
+        const fila = filas.find((f) => f.key === subagenteModalFila);
+        if (!fila) return null;
+        return (
+          <Modal title={`Subagentes · ${fila.agentName} (${fila.clubName})`} onClose={() => setSubagenteModalFila(null)}>
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>
+              Asignale a un jugador puntual su propio % de rakeback (distinto al {(fila.rakebackPct * 100).toFixed(1)}% del
+              agente) agrupándolo bajo un nombre de subagente — queda guardado para este y los próximos cierres, y se usa
+              en el PDF de "Resumen por agente".
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 420, overflowY: "auto" }}>
+              {fila.jugadoresDetalle.map((j) => (
+                <div key={j.playerId} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", borderBottom: "1px solid var(--border)", paddingBottom: 6 }}>
+                  <span style={{ minWidth: 140 }}>{j.playerName}</span>
+                  {editandoSubagentePlayerId === j.playerId ? (
+                    <>
+                      <input
+                        value={subagenteNombre}
+                        onChange={(e) => setSubagenteNombre(e.target.value)}
+                        placeholder="Sin subagente"
+                        style={{ fontSize: 11.5, width: 120 }}
+                      />
+                      <input
+                        value={subagentePct}
+                        onChange={(e) => setSubagentePct(e.target.value)}
+                        placeholder="% RB propio"
+                        type="number"
+                        step="0.01"
+                        style={{ fontSize: 11.5, width: 90 }}
+                      />
+                      <button className="btn small" disabled={guardandoSubagente} onClick={() => guardarSubagente(fila.key, j.playerId)}>
+                        {guardandoSubagente ? "..." : "Guardar"}
+                      </button>
+                      <button className="btn secondary small" onClick={() => setEditandoSubagentePlayerId(null)}>Cancelar</button>
+                    </>
+                  ) : (
+                    <>
+                      {j.subagenteName ? (
+                        <span className="badge" style={{ fontSize: 11 }}>
+                          Subagente "{j.subagenteName}" · {(Number(j.subagenteRakebackPct) * 100).toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="muted" style={{ fontSize: 11 }}>Sin subagente</span>
+                      )}
+                      <button className="btn secondary small" style={{ fontSize: 11 }} onClick={() => abrirEdicionSubagente(j.playerId, j)}>
+                        Editar
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            {errorSubagente && <div className="error" style={{ marginTop: 10 }}>{errorSubagente}</div>}
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

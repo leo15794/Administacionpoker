@@ -112,7 +112,15 @@ export async function analizarImportacionTeamBackGG(
         acc.jugadores += 1;
         acc.resultado += row.resultado;
         acc.rakeTotal += row.rake;
-        acc.jugadoresDetalle.push({ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake });
+        acc.jugadoresDetalle.push({
+          playerId: jugadorUpsert.id,
+          playerExternalId: row.playerId,
+          playerName: row.playerName,
+          resultado: row.resultado,
+          rake: row.rake,
+          subagenteName: jugadorUpsert.subagenteName,
+          subagenteRakebackPct: jugadorUpsert.subagenteRakebackPct,
+        });
       } else {
         agentesMap.set(resolucion.agentId, {
           agentId: resolucion.agentId,
@@ -121,7 +129,15 @@ export async function analizarImportacionTeamBackGG(
           resultado: row.resultado,
           rakeTotal: row.rake,
           rodeoJugadores: [], // no existe "Rodeo" en esta plataforma
-          jugadoresDetalle: [{ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake }],
+          jugadoresDetalle: [{
+            playerId: jugadorUpsert.id,
+            playerExternalId: row.playerId,
+            playerName: row.playerName,
+            resultado: row.resultado,
+            rake: row.rake,
+            subagenteName: jugadorUpsert.subagenteName,
+            subagenteRakebackPct: jugadorUpsert.subagenteRakebackPct,
+          }],
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,
