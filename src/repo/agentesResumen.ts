@@ -180,16 +180,30 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
     const clubId = closingIdToClubId.get(d.closing_id) ?? "";
     const live = liveSubagenteMap.get(`${clubId}__${d.player_external_id}`);
     const subagenteName: string | null = live?.name ?? null;
-    const subagentePct: number | null = live && live.name ? live.pct : null;
+    // pctOverride vale con O SIN nombre (24/09/2026, pedido de Leo: "que no sea obligatorio lo
+    // del subagente") -- el nombre solo decide si además arma una liquidación de subagente
+    // aparte (sección "Subagentes" del PDF); el % en sí siempre reemplaza al % del agente en la
+    // fila normal de ese jugador, tenga nombre o no.
+    const pctOverride: number | null = live?.pct ?? null;
     d.subagente_name = subagenteName;
-    d.subagente_rakeback_pct = subagentePct;
-    if (subagenteName && subagentePct !== null) {
-      const rbSubBruto = Number(d.rake) * subagentePct;
-      d.subagente_rakeback = rbSubBruto + Number(d.rebate);
-      d.subagente_cierre = Number(d.resultado) + Number(d.subagente_rakeback);
+    d.subagente_rakeback_pct = pctOverride;
+    if (pctOverride !== null) {
+      const rakebackBrutoOverride = Number(d.rake) * pctOverride;
+      const rakebackOverride = rakebackBrutoOverride + Number(d.rebate); // neto
+      const cierreOverride = Number(d.resultado) + rakebackOverride;
+      d.subagente_rakeback = rakebackOverride;
+      d.subagente_cierre = cierreOverride;
+      // Fila normal del jugador: con % propio configurado, ESE % reemplaza al % del agente acá
+      // -- pedido explícito de Leo, "solo necesitamos el % de rakeback para los jugadores".
+      d.rakeback_pct_efectivo = pctOverride;
+      d.rakeback_efectivo = rakebackOverride;
+      d.cierre_efectivo = cierreOverride;
     } else {
       d.subagente_rakeback = null;
       d.subagente_cierre = null;
+      d.rakeback_pct_efectivo = Number(d.rakeback_pct);
+      d.rakeback_efectivo = Number(d.rakeback);
+      d.cierre_efectivo = Number(d.cierre_jugador);
     }
   }
 
@@ -214,9 +228,11 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
         rake: Number(d.rake),
         rebate: Number(d.rebate),
         resultadoAjustado: Number(d.resultado_ajustado),
-        rakebackPct: Number(d.rakeback_pct),
-        rakeback: Number(d.rakeback),
-        cierre: Number(d.cierre_jugador),
+        // Con % propio configurado (con o sin nombre de subagente) esto ya viene calculado a SU
+        // % en vez del % del agente -- ver el loop de arriba (pctOverride).
+        rakebackPct: Number(d.rakeback_pct_efectivo),
+        rakeback: Number(d.rakeback_efectivo),
+        cierre: Number(d.cierre_efectivo),
         subagenteName: d.subagente_name,
       })),
       partidas: null,

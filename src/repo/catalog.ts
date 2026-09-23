@@ -231,16 +231,20 @@ export async function getJugadoresDeAgenteEnClub(clubId: string, agentId: string
   return r.rows;
 }
 
-// "Subagente" (23/09/2026): % de rakeback propio de un jugador puntual, distinto al % general
-// de su agente -- ver nota completa en schema.sql (columnas players.subagente_name /
-// subagente_rakeback_pct) y "Resumen por agente" en PDF. subagenteName null limpia la
-// configuración (jugador vuelve a ser "normal", cobra 100% vía su agente). pct es obligatorio
-// si subagenteName no es null -- se valida en la ruta (routes/catalog.ts), no acá.
+// "Subagente" (23/09/2026, ajustado 24/09/2026 -- pedido de Leo: "que no sea obligatorio lo del
+// subagente"): % de rakeback propio de un jugador puntual, distinto al % general de su agente
+// -- ver nota completa en schema.sql (columnas players.subagente_name/subagente_rakeback_pct) y
+// "Resumen por agente" en PDF. Nombre y % son INDEPENDIENTES:
+//  - Solo % (sin nombre): "override" personal -- ese jugador cobra a SU % en vez del % del
+//    agente, directo en su fila normal del cierre. No arma ninguna liquidación aparte.
+//  - Nombre + %: además arma una liquidación aparte para ese "subagente" (puede agrupar varios
+//    jugadores bajo el mismo nombre), en la sección "Subagentes" del PDF.
+// subagenteName null Y rakebackPct null limpia todo (jugador vuelve a ser 100% normal).
 export async function setSubagenteJugador(playerId: string, subagenteName: string | null, rakebackPct: number | null) {
   const r = await pool.query(
     `UPDATE players SET subagente_name = $1, subagente_rakeback_pct = $2 WHERE id = $3
      RETURNING id, subagente_name, subagente_rakeback_pct`,
-    [subagenteName, subagenteName ? rakebackPct : null, playerId]
+    [subagenteName, rakebackPct, playerId]
   );
   return r.rows[0] ?? null;
 }

@@ -1147,18 +1147,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       setErrorSubagente("El % de rakeback propio es obligatorio (0 a 100) si se pone un nombre de subagente.");
       return;
     }
-    // Bug real (24/09/2026): si se carga el % pero se deja el nombre vacío, antes esto guardaba
-    // "null, null" en silencio (sin ningún error) -- Leo cargaba el % pensando que había quedado
-    // guardado y en la base no quedaba nada. El nombre de subagente es obligatorio para poder
-    // guardar cualquier %.
-    if (!nombre && pctNum !== null) {
-      setErrorSubagente("Hace falta ponerle un nombre al subagente para poder guardar el %.");
-      return;
-    }
     setGuardandoSubagente(true);
     setErrorSubagente("");
     try {
-      const r = await api.setSubagenteJugador(playerId, nombre || null, nombre ? pctNum : null);
+      const r = await api.setSubagenteJugador(playerId, nombre || null, pctNum);
       setFilas((fs) =>
         fs.map((f) =>
           f.key === filaKey
@@ -1896,8 +1888,9 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <Modal title={`Subagentes · ${fila.agentName} (${fila.clubName})`} onClose={() => setSubagenteModalFila(null)}>
             <div className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>
               Asignale a un jugador puntual su propio % de rakeback (distinto al {(fila.rakebackPct * 100).toFixed(1)}% del
-              agente) agrupándolo bajo un nombre de subagente — queda guardado para este y los próximos cierres, y se usa
-              en el PDF de "Resumen por agente".
+              agente) — el nombre de subagente es opcional: poné solo el % si es un override personal de ese jugador, o
+              sumale un nombre si además querés armarle una liquidación aparte (para eso sí hace falta el nombre). Queda
+              guardado para este y los próximos cierres, y se usa en el PDF de "Resumen por agente".
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 420, overflowY: "auto" }}>
               {fila.jugadoresDetalle.map((j) => (
@@ -1929,6 +1922,10 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       {j.subagenteName ? (
                         <span className="badge" style={{ fontSize: 11 }}>
                           Subagente "{j.subagenteName}" · {(Number(j.subagenteRakebackPct) * 100).toFixed(1)}%
+                        </span>
+                      ) : j.subagenteRakebackPct != null ? (
+                        <span className="badge" style={{ fontSize: 11 }}>
+                          % propio: {(Number(j.subagenteRakebackPct) * 100).toFixed(1)}%
                         </span>
                       ) : (
                         <span className="muted" style={{ fontSize: 11 }}>Sin subagente</span>

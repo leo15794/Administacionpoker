@@ -494,7 +494,9 @@ catalogRouter.patch("/players/:id/bancado", requireAuth, requireAdmin, async (re
 
 // Subagente de un jugador puntual (% de rakeback propio, distinto al de su agente) — ver
 // schema.sql (columnas players.subagente_name/subagente_rakeback_pct) y repo/catalog.ts.
-// subagenteName null limpia la config; si viene, rakebackPct es obligatorio (0..1).
+// Nombre y % son independientes: se puede guardar solo el % (override personal del jugador,
+// sin armar una liquidación de subagente aparte) o nombre + % (arma la liquidación aparte,
+// ver "Resumen por agente"). Si viene nombre, el % es obligatorio (0..1) -- al revés no.
 const subagenteSchema = z.object({
   subagenteName: z.string().trim().min(1).max(80).nullable(),
   rakebackPct: z.number().min(0).max(1).nullable(),
