@@ -1275,3 +1275,14 @@ ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS grupo_key TEXT;
 -- límite, son historial de verdad.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidaciones_pendiente_unica
   ON liquidaciones_guardadas(grupo_key, week_start) WHERE estado = 'PENDIENTE';
+
+-- "Revisar" / rehacer una liquidación ya Pagada (23/09/2026 cont., pedido de Leo: "si ponemos
+-- revisar deberia darte la opcion para rehacerla y por ejemplo el monto descontado lo puedas
+-- volver a usar"): para poder liberar los adelantos/cargas que esta liquidación puntual dejó
+-- consumidos (rakeback_advances/carga_pendientes_cruce, ver repo/advances.ts y
+-- repo/cargaCruces.ts) hace falta saber CUÁLES movimientos de consumo le corresponden -- antes
+-- no se guardaba esa referencia. Se llenan en /liquidacion/guardar y /liquidacion/autoguardar con
+-- lo que haya en la sesión del navegador al momento de guardar; POST /liquidacion/liberar-cruces
+-- los deshace (mismo mecanismo que "Deshacer último cruce" en Liquidaciones.tsx) y los vacía acá.
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS adelanto_movement_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS carga_movement_ids TEXT[] NOT NULL DEFAULT '{}';

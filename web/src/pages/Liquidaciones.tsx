@@ -209,10 +209,23 @@ export default function Liquidaciones() {
   // directo a una semana puntual. estadoOriginal viaja junto: si se retoma una liquidación que
   // ya estaba "Pagada", NO queremos que el autoguardado la pise y la vuelva a marcar "Pendiente"
   // -- se puede mirar/ajustar sin que cambie su estado (pedido de Leo, 24/09/2026).
-  const retomarRef = useRef<{ weekStart: string; nombreGrupo: string; estadoOriginal: string } | null>(null);
+  const retomarRef = useRef<{ weekStart: string; nombreGrupo: string; estadoOriginal: string; id: string } | null>(null);
   // true mientras lo que está cargado en pantalla vino de "Retomar" una liquidación ya PAGADA --
   // pausa el autoguardado por completo hasta que se vuelva a elegir agentes desde cero.
   const [soloRevision, setSoloRevision] = useState(false);
+  // Id de la liquidación que se está revisando (soloRevision=true) -- hace falta después para
+  // poder llamar a "Liberar cruces de esta liquidación" (ver más abajo).
+  const [revisandoId, setRevisandoId] = useState<string | null>(null);
+  // Se llena SOLO cuando se liberan los cruces de una liquidación Pagada para rehacerla: al
+  // guardar de nuevo, en vez de crear una fila nueva en el historial, pisa ésta (pedido de Leo:
+  // "que el estado quede pagada en este caso" + rehacer sin duplicar el historial).
+  const [reemplazarId, setReemplazarId] = useState<string | null>(null);
+  // Acumula TODOS los movementId de cruces (adelantos/cargas) aplicados en esta liquidación
+  // durante la sesión actual -- a diferencia de ultimoCruceAdelantos/ultimoCruceCargas (que solo
+  // guardan la última tanda, para "Deshacer último cruce"), esto se manda entero al guardar en
+  // el historial para poder liberarlos todos juntos después desde "Revisar".
+  const [movIdsAdelantosSesion, setMovIdsAdelantosSesion] = useState<string[]>([]);
+  const [movIdsCargasSesion, setMovIdsCargasSesion] = useState<string[]>([]);
 
   useEffect(() => {
     setSemanas([]);
@@ -221,6 +234,10 @@ export default function Liquidaciones() {
     retomarRef.current = null;
     setWeekStart(retomar?.weekStart ?? "");
     setSoloRevision(retomar?.estadoOriginal === "PAGADA");
+    setRevisandoId(retomar?.estadoOriginal === "PAGADA" ? retomar.id : null);
+    setReemplazarId(null);
+    setMovIdsAdelantosSesion([]);
+    setMovIdsCargasSesion([]);
     if (seleccionados.length === 0) return;
     api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
     if (retomar) {
@@ -237,7 +254,7 @@ export default function Liquidaciones() {
   // "Pendiente de pago", para terminar de definir cómo pagar; para las "Pagada", solo para
   // volver a verla o ajustarla sin que eso la marque como pendiente de nuevo.
   function retomarLiquidacionPendiente(h: any) {
-    retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo, estadoOriginal: h.estado };
+    retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo, estadoOriginal: h.estado, id: h.id };
     setSeleccionados(h.agent_ids);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -321,6 +338,8 @@ export default function Liquidaciones() {
           cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
           totalAPagar,
           nota,
+          adelantoMovIds: movIdsAdelantosSesion,
+          cargaMovIds: movIdsCargasSesion,
         })
         .then(() => refrescarHistorial())
         .catch(() => {}); // best-effort -- nunca bloquea ni avisa nada al usuario
@@ -329,7 +348,7 @@ export default function Liquidaciones() {
       if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga]);
+  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga, movIdsAdelantosSesion, movIdsCargasSesion]);
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
@@ -541,6 +560,7 @@ export default function Liquidaciones() {
       }
       setAplicado((prev) => prev + totalCruzado);
       setUltimoCruceAdelantos({ movIds, monto: totalCruzado });
+      setMovIdsAdelantosSesion((prev) => [...prev, ...movIds]);
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
@@ -568,6 +588,7 @@ export default function Liquidaciones() {
       }
       setAplicadoCarga((prev) => prev + totalCruzadoCarga);
       setUltimoCruceCargas({ movIds, monto: totalCruzadoCarga });
+      setMovIdsCargasSesion((prev) => [...prev, ...movIds]);
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
@@ -604,12 +625,61 @@ export default function Liquidaciones() {
       }
       if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.monto));
       if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.monto));
+      if (ultimoCruceAdelantos) {
+        const idsDeshechos = new Set(ultimoCruceAdelantos.movIds);
+        setMovIdsAdelantosSesion((prev) => prev.filter((id) => !idsDeshechos.has(id)));
+      }
+      if (ultimoCruceCargas) {
+        const idsDeshechos = new Set(ultimoCruceCargas.movIds);
+        setMovIdsCargasSesion((prev) => prev.filter((id) => !idsDeshechos.has(id)));
+      }
       setUltimoCruceAdelantos(null);
       setUltimoCruceCargas(null);
       refrescarLiquidacion(true);
       if (errores.length > 0) await alertDialog(errores.join(" · "));
     } finally {
       setDeshaciendoCruce(false);
+    }
+  }
+
+  // "Liberar cruces de esta liquidación" (23/09/2026 cont., pedido de Leo: poder rehacer una
+  // liquidación ya Pagada y reusar el monto descontado): a diferencia de "Deshacer último
+  // cruce" (que solo conoce la última tanda aplicada EN ESTA SESIÓN), esto le pide al backend
+  // que deshaga TODOS los cruces que quedaron guardados junto a esta liquidación puntual (ver
+  // adelanto_movement_ids/carga_movement_ids), sean de esta sesión o de una anterior. Solo
+  // aparece revisando una liquidación ya "Pagada" (revisandoId). Después de liberar, la
+  // liquidación queda como recién calculada -- se puede recruzar distinto -- y al guardarla de
+  // nuevo pisa esta misma fila del historial en vez de duplicarla (reemplazarId).
+  const [liberandoCruces, setLiberandoCruces] = useState(false);
+  async function liberarCrucesLiquidacion() {
+    if (!revisandoId) return;
+    if (
+      !(await confirmDialog(
+        "Esto libera los adelantos/cargas que quedaron descontados por esta liquidación, para poder recalcularla y volver a cruzarlos distinto. Al guardar de nuevo, va a reemplazar esta misma fila del historial (sigue quedando como "Pagada"). ¿Confirmás?"
+      ))
+    )
+      return;
+    setLiberandoCruces(true);
+    try {
+      const r = await api.liberarCrucesLiquidacion(revisandoId);
+      setReemplazarId(revisandoId);
+      // soloRevision se queda en true a propósito -- sigue sin autoguardar solo (no queremos que
+      // el recálculo cree un borrador PENDIENTE aparte): solo se confirma con "Guardar en
+      // historial", que ahora va a pisar esta misma fila (reemplazarId).
+      setAplicado(0);
+      setAplicadoCarga(0);
+      setUltimoCruceAdelantos(null);
+      setUltimoCruceCargas(null);
+      setMovIdsAdelantosSesion([]);
+      setMovIdsCargasSesion([]);
+      refrescarLiquidacion(false);
+      if (r?.errores?.length > 0) {
+        await alertDialog(`Se liberaron ${r.liberados} movimiento(s), pero hubo errores con algunos: ${r.errores.join(" · ")}`);
+      }
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudieron liberar los cruces de esta liquidación.");
+    } finally {
+      setLiberandoCruces(false);
     }
   }
 
@@ -722,8 +792,18 @@ export default function Liquidaciones() {
               <span className="muted" style={{ marginLeft: 10, fontSize: 13 }}>
                 Cierre {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
               </span>
+              {soloRevision && (
+                <span className="badge pos" style={{ marginLeft: 10 }} title="Esto ya está Pagada -- se puede mirar/ajustar, pero no se autoguarda nada hasta que apretés Guardar">
+                  Revisando · Pagada
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {soloRevision && revisandoId && (
+                <button className="btn secondary small" disabled={liberandoCruces} onClick={liberarCrucesLiquidacion} title="Deshace los adelantos/cargas que quedaron descontados por esta liquidación puntual, para poder recalcularla y cruzarlos distinto">
+                  {liberandoCruces ? "Liberando..." : "Liberar cruces de esta liquidación"}
+                </button>
+              )}
               <button
                 className="btn secondary small"
                 disabled={guardando}
@@ -742,8 +822,12 @@ export default function Liquidaciones() {
                       cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
                       totalAPagar,
                       nota,
+                      adelantoMovIds: movIdsAdelantosSesion,
+                      cargaMovIds: movIdsCargasSesion,
+                      reemplazarId: reemplazarId ?? undefined,
                     });
                     setGuardado(true);
+                    setReemplazarId(null);
                     refrescarHistorial();
                   } catch (err: any) {
                     await alertDialog(err.message || "No se pudo guardar la liquidación.");

@@ -29,6 +29,7 @@ import {
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarMovimientoCarga } from "../repo/cargaCruces.js";
+import { eliminarMovimientoAdelanto } from "../repo/advances.js";
 import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -383,6 +384,16 @@ const guardarLiquidacionSchema = z.object({
   cargasAplicadas: z.number().default(0),
   totalAPagar: z.number(),
   nota: z.string().nullable().optional(),
+  // IDs de rakeback_advance_movements/carga_cruce_movements (tipo CONSUMO) generados por los
+  // cruces aplicados en ESTA liquidación puntual -- se guardan para poder liberarlos después
+  // desde "Revisar" (ver POST /liquidacion/liberar-cruces más abajo). Vienen de la sesión del
+  // navegador (Liquidaciones.tsx acumula los movIds de cada aplicarCruces/aplicarCrucesCarga).
+  adelantoMovIds: z.array(z.string()).default([]),
+  cargaMovIds: z.array(z.string()).default([]),
+  // Si viene, en vez de insertar una fila nueva en el historial se pisa la fila existente con
+  // este id -- "rehacer" una liquidación ya Pagada reemplaza el registro original en vez de
+  // duplicarlo (pedido de Leo).
+  reemplazarId: z.string().optional(),
 });
 
 // grupo_key: mismo grupo de agentes sin importar el orden en que se tildaron -- para poder
@@ -395,10 +406,44 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
   const parsed = guardarLiquidacionSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const d = parsed.data;
+
+  if (d.reemplazarId) {
+    // Rehaciendo una liquidación ya Pagada (ver /liquidacion/liberar-cruces): pisa la fila
+    // original en vez de duplicarla en el historial.
+    const r = await pool.query(
+      `UPDATE liquidaciones_guardadas SET
+         nombre_grupo = $1, agent_ids = $2, week_start = $3, week_end = $4, filas = $5, total = $6,
+         adelantos_aplicados = $7, adelantos_manual = $8, cargas_aplicadas = $9, total_a_pagar = $10,
+         nota = $11, created_by = $12, grupo_key = $13, estado = 'PAGADA',
+         adelanto_movement_ids = $14, carga_movement_ids = $15, created_at = now()
+       WHERE id = $16 RETURNING *`,
+      [
+        d.nombreGrupo,
+        d.agentIds,
+        d.weekStart,
+        d.weekEnd,
+        JSON.stringify(d.filas),
+        d.total,
+        d.adelantosAplicados,
+        d.adelantosManual,
+        d.cargasAplicadas,
+        d.totalAPagar,
+        d.nota ?? null,
+        req.user?.email ?? null,
+        grupoKey(d.agentIds),
+        d.adelantoMovIds,
+        d.cargaMovIds,
+        d.reemplazarId,
+      ]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: "No se encontró la liquidación a reemplazar." });
+    return res.status(200).json(r.rows[0]);
+  }
+
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA') RETURNING *`,
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA',$15,$16) RETURNING *`,
     [
       newId("liq"),
       d.nombreGrupo,
@@ -414,6 +459,8 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
       d.nota ?? null,
       req.user?.email ?? null,
       grupoKey(d.agentIds),
+      d.adelantoMovIds,
+      d.cargaMovIds,
     ]
   );
   res.status(201).json(r.rows[0]);
@@ -432,14 +479,15 @@ catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async 
   const key = grupoKey(d.agentIds);
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDIENTE')
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDIENTE',$15,$16)
      ON CONFLICT (grupo_key, week_start) WHERE estado = 'PENDIENTE'
      DO UPDATE SET nombre_grupo = EXCLUDED.nombre_grupo, agent_ids = EXCLUDED.agent_ids,
        week_end = EXCLUDED.week_end, filas = EXCLUDED.filas, total = EXCLUDED.total,
        adelantos_aplicados = EXCLUDED.adelantos_aplicados, adelantos_manual = EXCLUDED.adelantos_manual,
        cargas_aplicadas = EXCLUDED.cargas_aplicadas, total_a_pagar = EXCLUDED.total_a_pagar,
-       nota = EXCLUDED.nota, created_by = EXCLUDED.created_by, created_at = now()
+       nota = EXCLUDED.nota, created_by = EXCLUDED.created_by, created_at = now(),
+       adelanto_movement_ids = EXCLUDED.adelanto_movement_ids, carga_movement_ids = EXCLUDED.carga_movement_ids
      RETURNING *`,
     [
       newId("liq"),
@@ -456,6 +504,8 @@ catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async 
       d.nota ?? null,
       req.user?.email ?? null,
       key,
+      d.adelantoMovIds,
+      d.cargaMovIds,
     ]
   );
   res.status(201).json(r.rows[0]);
@@ -478,6 +528,50 @@ catalogRouter.post("/liquidacion/resolver", requireAuth, requireAdmin, async (re
     [grupoKey(parsed.data.agentIds), parsed.data.weekStart]
   );
   res.json({ ok: true, resueltas: r.rowCount ?? 0 });
+});
+
+// "Liberar cruces" de una liquidación ya guardada (23/09/2026 cont., pedido de Leo: poder
+// rehacer una liquidación Pagada y reusar el monto descontado). Deshace, uno por uno, los
+// movimientos de consumo (rakeback_advances/carga_pendientes_cruce) que quedaron asociados a
+// esta liquidación puntual -- mismo mecanismo que "Deshacer último cruce" en Liquidaciones.tsx
+// (eliminarMovimientoAdelanto/eliminarMovimientoCarga), con la misma limitación real: si ese
+// adelanto/carga tuvo otro ajuste MÁS NUEVO encima (desde la pantalla de Adelantos, por
+// ejemplo), el backend rechaza deshacer ese movimiento puntual porque ya no es el más reciente
+// -- se informa como error individual, no rompe el resto. Al final, vacía los ids en esta fila
+// (se hayan podido deshacer o no) para no reintentar sobre movimientos que ya no existen.
+const liberarCrucesSchema = z.object({ id: z.string().min(1) });
+catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = liberarCrucesSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const liqRes = await pool.query(`SELECT id, adelanto_movement_ids, carga_movement_ids FROM liquidaciones_guardadas WHERE id = $1`, [parsed.data.id]);
+  const liq = liqRes.rows[0];
+  if (!liq) return res.status(404).json({ error: "No se encontró la liquidación." });
+
+  const errores: string[] = [];
+  let liberados = 0;
+  for (const movId of liq.adelanto_movement_ids ?? []) {
+    try {
+      await eliminarMovimientoAdelanto(movId);
+      liberados++;
+    } catch (err: any) {
+      errores.push(`Adelanto: ${err.message || "no se pudo deshacer"}`);
+    }
+  }
+  for (const movId of liq.carga_movement_ids ?? []) {
+    try {
+      await eliminarMovimientoCarga(movId);
+      liberados++;
+    } catch (err: any) {
+      errores.push(`Carga: ${err.message || "no se pudo deshacer"}`);
+    }
+  }
+
+  await pool.query(
+    `UPDATE liquidaciones_guardadas SET adelanto_movement_ids = '{}', carga_movement_ids = '{}' WHERE id = $1`,
+    [liq.id]
+  );
+
+  res.json({ ok: true, liberados, errores });
 });
 
 // Historial de liquidaciones guardadas — más reciente primero.

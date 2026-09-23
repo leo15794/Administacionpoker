@@ -97,6 +97,11 @@ export const api = {
     cargasAplicadas: number;
     totalAPagar: number;
     nota?: string | null;
+    adelantoMovIds?: string[];
+    cargaMovIds?: string[];
+    // Si viene, pisa esa fila del historial en vez de crear una nueva -- se usa al rehacer una
+    // liquidación ya Pagada después de "Liberar cruces de esta liquidación".
+    reemplazarId?: string;
   }) => request("/catalog/liquidacion/guardar", { method: "POST", body: JSON.stringify(data) }),
   // Autoguardado (24/09/2026): mismo payload que guardarLiquidacion, pero pisa el borrador
   // PENDIENTE de este grupo+semana en vez de crear una fila nueva cada vez -- se llama solo,
@@ -113,11 +118,17 @@ export const api = {
     cargasAplicadas: number;
     totalAPagar: number;
     nota?: string | null;
+    adelantoMovIds?: string[];
+    cargaMovIds?: string[];
   }) => request("/catalog/liquidacion/autoguardar", { method: "POST", body: JSON.stringify(data) }),
   // Marca como resuelto el autoguardado pendiente de este grupo+semana (si había uno) -- se
   // llama apenas se registra un pago o cobro real para estos mismos agentes.
   resolverLiquidacionPendiente: (agentIds: string[], weekStart: string) =>
     request("/catalog/liquidacion/resolver", { method: "POST", body: JSON.stringify({ agentIds, weekStart }) }),
+  // "Revisar" una liquidación ya Pagada -> "Liberar cruces de esta liquidación": deshace los
+  // consumos de adelantos/cargas que le quedaron asociados, para poder recalcular y reasignar.
+  liberarCrucesLiquidacion: (id: string) =>
+    request("/catalog/liquidacion/liberar-cruces", { method: "POST", body: JSON.stringify({ id }) }),
   historialLiquidaciones: () => request("/catalog/liquidacion/historial"),
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 
