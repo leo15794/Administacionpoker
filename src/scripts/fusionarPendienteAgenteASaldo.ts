@@ -26,6 +26,11 @@ function fmt(n: number) {
 }
 
 async function main() {
+  // BUG encontrado el 24/09/2026 (Leo lo detectó en tb prodigio25): esta consulta NO filtraba
+  // por wc.system -- corrió una vez sin ese filtro y pagó en fichas también el rakeback
+  // pendiente de agentes PREPAGO, justo lo contrario de la regla nueva para PREPAGO (ver
+  // repo/closings.ts). Se agrega el filtro system='WIN_LOSE' acá para que esto no se repita. El
+  // daño ya hecho se corrige con revertirFusionErroneaPrepago.ts.
   const r = await pool.query(
     `SELECT rp.id, rp.amount, rp.consumed, a.name as agent_name, c.name as club_name,
             wc.week_start, wc.week_end
@@ -33,7 +38,7 @@ async function main() {
      JOIN agents a ON a.id = rp.agent_id
      JOIN clubs c ON c.id = rp.club_id
      JOIN weekly_closings wc ON wc.id = rp.weekly_closing_id
-     WHERE rp.active = true AND rp.role = 'AGENTE' AND rp.amount > rp.consumed
+     WHERE rp.active = true AND rp.role = 'AGENTE' AND rp.amount > rp.consumed AND wc.system = 'WIN_LOSE'
      ORDER BY a.name, c.name, wc.week_start`
   );
 

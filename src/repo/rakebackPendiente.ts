@@ -51,6 +51,20 @@ export async function pagarPendiente(input: PagarPendienteInput) {
     throw new Error("Un pago en efectivo requiere custodio físico (regla BIT-051/052).");
   }
 
+  // PREPAGO (24/09/2026, pedido de Leo): un agente PREPAGO solo tiene fichas por lo que paga
+  // por adelantado -- si le pagamos su rakeback pendiente en plata real (USDT/EFECTIVO/ZELLE),
+  // eso tiene que RESTARLE fichas (puede quedar en negativo -- "puede quedar negativo porque
+  // como le damos adelanto nos puede deber", cita textual de Leo). Para AGENTE de sistema
+  // WIN_LOSE y para SUPERVISOR (rebate centralizado) sigue como siempre: pagar en USDT/EFECTIVO/
+  // ZELLE NO toca el balance -- ver el bug de 22/09/2026 más abajo, que sigue vigente para esos
+  // dos casos.
+  let systemDelPendiente: string | null = null;
+  if (actual.role === "AGENTE" && actual.weekly_closing_id) {
+    const wcRes = await pool.query(`SELECT system FROM weekly_closings WHERE id = $1`, [actual.weekly_closing_id]);
+    systemDelPendiente = wcRes.rows[0]?.system ?? null;
+  }
+  const restaFichasPrepago = input.medio !== "FICHAS" && actual.role === "AGENTE" && systemDelPendiente === "PREPAGO";
+
   const reg = await registrarMovimiento({
     idempotencyKey: `pago_rakeback:${input.pendienteId}:${newId("x")}`,
     // FICHAS = CARGA real (mueve el stock físico). USDT/EFECTIVO/ZELLE = "PAGO_RAKEBACK", un
@@ -58,7 +72,9 @@ export async function pagarPendiente(input: PagarPendienteInput) {
     // agente (a diferencia de "PAGO", que siempre resta del balance -- ver deltaParaBalance en
     // repo/ledger.ts). Bug encontrado el 22/09/2026 en el test end-to-end: con "PAGO" común,
     // pagar rakeback en USDT restaba del balance de fichas, mezclando de nuevo lo que este
-    // cambio entero busca separar.
+    // cambio entero busca separar. Esto sigue así para WIN_LOSE/SUPERVISOR -- para AGENTE
+    // PREPAGO, el ajuste de balance se hace aparte más abajo (restaFichasPrepago), con un
+    // movimiento DESCARGA propio en vez de mezclarlo acá.
     type: input.medio === "FICHAS" ? "CARGA" : "PAGO_RAKEBACK",
     clubId: actual.club_id,
     agentId: actual.agent_id,
@@ -77,6 +93,26 @@ export async function pagarPendiente(input: PagarPendienteInput) {
     // pendiente en Liquidaciones (Leo, 22/09/2026).
     sinNotaDeCredito: input.medio === "FICHAS",
   });
+
+  if (restaFichasPrepago) {
+    await registrarMovimiento({
+      idempotencyKey: `pago_rakeback_descarga:${input.pendienteId}:${newId("x")}`,
+      // DESCARGA de fichas por el mismo monto -- sin esto, un agente PREPAGO quedaría con el
+      // rakeback pendiente pagado en plata real pero sin que le baje nada de su saldo de
+      // fichas (que para PREPAGO tiene que reflejar solo lo real: cargas, adelantos y ahora
+      // este descuento). SIN_TESORERIA porque la entrada de caja/wallet ya la generó el
+      // movimiento PAGO_RAKEBACK de arriba -- esto es puramente el ajuste de stock.
+      type: "DESCARGA",
+      clubId: actual.club_id,
+      agentId: actual.agent_id,
+      amount: input.amount,
+      paymentMethod: "SIN_TESORERIA",
+      occurredAt: new Date(),
+      observation: `Descuento de fichas por pago de rakeback pendiente en ${input.medio} (agente PREPAGO).`,
+      createdBy: input.createdBy ?? null,
+      sinNotaDeCredito: true,
+    });
+  }
 
   const nuevoConsumed = Number(actual.consumed) + input.amount;
   const r = await pool.query(

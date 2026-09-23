@@ -24,6 +24,8 @@
     "corregir:pendiente-agente:apply": "tsx src/scripts/fusionarPendienteAgenteASaldo.ts --apply",
     "corregir:prepago-pendiente": "tsx src/scripts/separarPendientePrepago.ts",
     "corregir:prepago-pendiente:apply": "tsx src/scripts/separarPendientePrepago.ts --apply",
+    "corregir:fusion-erronea-prepago": "tsx src/scripts/revertirFusionErroneaPrepago.ts",
+    "corregir:fusion-erronea-prepago:apply": "tsx src/scripts/revertirFusionErroneaPrepago.ts --apply",
     "cierres:reconstruir:apply": "tsx src/scripts/reconstruirCierresSeptiembre.ts --apply",
     "alta:adelanto-prodigio": "tsx src/scripts/altaAdelantoProdigio.ts",
     "import:wallet": "tsx src/scripts/importWalletHistorial.ts",
