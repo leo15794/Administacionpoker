@@ -145,22 +145,40 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
   // players.subagente_name/subagente_rakeback_pct, así que si Leo edita el % después de aplicar
   // el cierre, el PDF sale con el % nuevo. Las columnas subagente_* de weekly_closing_player_details
   // quedan igual en la base (por las dudas / auditoría) pero este reporte ya no las lee.
-  const playerIds = [...new Set(detalleRes.rows.map((d: any) => d.player_id).filter(Boolean))];
+  //
+  // Se hace match por (club_id, external_id) -- la MISMA clave que se usa en TODO el resto del
+  // sistema para identificar un jugador (ver repo/imports.ts, repo/closings.ts) -- en vez de por
+  // player_id de weekly_closing_player_details. Es más robusto: esa columna puede haber quedado
+  // NULL en algún cierre viejo (el jugador no se llegó a resolver en ese momento), y si se
+  // matcheara solo por ahí, ningún cambio de % futuro se vería nunca reflejado.
+  const closingIdToClubId = new Map<string, string>(closingsRes.rows.map((wc: any) => [wc.id, wc.club_id]));
+  const paresClubExterno = [
+    ...new Map(
+      detalleRes.rows.map((d: any) => {
+        const clubId = closingIdToClubId.get(d.closing_id) ?? "";
+        return [`${clubId}__${d.player_external_id}`, { clubId, externalId: d.player_external_id }];
+      })
+    ).values(),
+  ];
   const liveSubagenteMap = new Map<string, { name: string | null; pct: number | null }>();
-  if (playerIds.length > 0) {
+  if (paresClubExterno.length > 0) {
     const liveRes = await pool.query(
-      `SELECT id, subagente_name, subagente_rakeback_pct FROM players WHERE id = ANY($1::text[])`,
-      [playerIds]
+      `SELECT p.club_id, p.external_id, p.subagente_name, p.subagente_rakeback_pct
+       FROM players p
+       JOIN (SELECT unnest($1::text[]) AS club_id, unnest($2::text[]) AS external_id) k
+         ON p.club_id = k.club_id AND p.external_id = k.external_id`,
+      [paresClubExterno.map((p) => p.clubId), paresClubExterno.map((p) => p.externalId)]
     );
     for (const p of liveRes.rows) {
-      liveSubagenteMap.set(p.id, {
+      liveSubagenteMap.set(`${p.club_id}__${p.external_id}`, {
         name: p.subagente_name ?? null,
         pct: p.subagente_rakeback_pct != null ? Number(p.subagente_rakeback_pct) : null,
       });
     }
   }
   for (const d of detalleRes.rows) {
-    const live = d.player_id ? liveSubagenteMap.get(d.player_id) : undefined;
+    const clubId = closingIdToClubId.get(d.closing_id) ?? "";
+    const live = liveSubagenteMap.get(`${clubId}__${d.player_external_id}`);
     const subagenteName: string | null = live?.name ?? null;
     const subagentePct: number | null = live && live.name ? live.pct : null;
     d.subagente_name = subagenteName;
