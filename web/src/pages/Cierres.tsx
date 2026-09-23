@@ -1473,6 +1473,22 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <div className="muted" style={{ marginBottom: 8 }}>
             El archivo trae {hojasDetectadas.length === 1 ? "1 grupo de datos" : `${hojasDetectadas.length} grupos de datos`} — elegí a qué club corresponde cada uno (o tildá "Ignorar" para no procesarlo esta semana).
           </div>
+          {hojasDetectadas.length > 1 && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <button
+                className="btn secondary small"
+                onClick={() => setHojaIgnorada(Object.fromEntries(hojasDetectadas.map((h) => [h.sheetName, true])))}
+              >
+                Ignorar todas
+              </button>
+              <button
+                className="btn secondary small"
+                onClick={() => setHojaIgnorada(Object.fromEntries(hojasDetectadas.map((h) => [h.sheetName, false])))}
+              >
+                Incluir todas
+              </button>
+            </div>
+          )}
           <table>
             <thead><tr><th>{hojasDetectadas.length > 1 ? "Grupo" : ""}</th><th>Club</th><th>Ignorar</th></tr></thead>
             <tbody>
@@ -1699,6 +1715,12 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h4 style={{ margin: 0 }}>Cierres a aplicar ({incluidas.length} de {filas.length})</h4>
             <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn secondary small" onClick={() => setFilas((fs) => fs.map((f) => ({ ...f, included: true })))}>
+                Seleccionar todos
+              </button>
+              <button className="btn secondary small" onClick={() => setFilas((fs) => fs.map((f) => ({ ...f, included: false })))}>
+                Deseleccionar todos
+              </button>
               <button className="btn secondary small" onClick={() => setConfirmado(false)}>Cambiar clubes</button>
               <button className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
                 {previsualizandoTodo ? "Calculando..." : "Calcular vista previa de todos"}

@@ -1375,6 +1375,22 @@ function LiquidacionProveedorForm({
       {lineas && lineas.length > 0 && (
         <div className="field">
           <label>Líneas a incluir en el reporte</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+            <button
+              type="button"
+              className="btn secondary small"
+              onClick={() => setSeleccion(Object.fromEntries(lineas.map((l) => [l.id, true])))}
+            >
+              Seleccionar todos
+            </button>
+            <button
+              type="button"
+              className="btn secondary small"
+              onClick={() => setSeleccion(Object.fromEntries(lineas.map((l) => [l.id, false])))}
+            >
+              Deseleccionar todos
+            </button>
+          </div>
           {lineas.map((l) => (
             <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13 }}>
               <input

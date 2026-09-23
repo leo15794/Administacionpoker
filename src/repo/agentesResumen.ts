@@ -139,6 +139,42 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
     `SELECT * FROM weekly_closing_player_details WHERE closing_id = ANY($1::text[]) ORDER BY player_name`,
     [closingIds]
   );
+
+  // Subagente EN VIVO (23/09/2026, corrección pedida por Leo): el nombre/% de subagente NO se
+  // usa "congelado" del momento del cierre -- siempre se lee lo que está cargado HOY en
+  // players.subagente_name/subagente_rakeback_pct, así que si Leo edita el % después de aplicar
+  // el cierre, el PDF sale con el % nuevo. Las columnas subagente_* de weekly_closing_player_details
+  // quedan igual en la base (por las dudas / auditoría) pero este reporte ya no las lee.
+  const playerIds = [...new Set(detalleRes.rows.map((d: any) => d.player_id).filter(Boolean))];
+  const liveSubagenteMap = new Map<string, { name: string | null; pct: number | null }>();
+  if (playerIds.length > 0) {
+    const liveRes = await pool.query(
+      `SELECT id, subagente_name, subagente_rakeback_pct FROM players WHERE id = ANY($1::text[])`,
+      [playerIds]
+    );
+    for (const p of liveRes.rows) {
+      liveSubagenteMap.set(p.id, {
+        name: p.subagente_name ?? null,
+        pct: p.subagente_rakeback_pct != null ? Number(p.subagente_rakeback_pct) : null,
+      });
+    }
+  }
+  for (const d of detalleRes.rows) {
+    const live = d.player_id ? liveSubagenteMap.get(d.player_id) : undefined;
+    const subagenteName: string | null = live?.name ?? null;
+    const subagentePct: number | null = live && live.name ? live.pct : null;
+    d.subagente_name = subagenteName;
+    d.subagente_rakeback_pct = subagentePct;
+    if (subagenteName && subagentePct !== null) {
+      const rbSubBruto = Number(d.rake) * subagentePct;
+      d.subagente_rakeback = rbSubBruto + Number(d.rebate);
+      d.subagente_cierre = Number(d.resultado) + Number(d.subagente_rakeback);
+    } else {
+      d.subagente_rakeback = null;
+      d.subagente_cierre = null;
+    }
+  }
+
   const detallePorClosing = new Map<string, any[]>();
   for (const d of detalleRes.rows) {
     const arr = detallePorClosing.get(d.closing_id) ?? [];

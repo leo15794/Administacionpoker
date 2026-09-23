@@ -265,10 +265,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     // Detalle por jugador (23/09/2026, "Resumen por agente"): mismo % de rebate/rakeback que
     // se usó arriba para el agregado del agente (input.rebatePct/calc.rakebackPct) -- fórmula
     // genérica idéntica a engine/cierre.ts, aplicada jugador por jugador en vez de al total
-    // (confirmado contra la planilla real de Leo, 23/09/2026: cierra exacto). Si el jugador
-    // tiene subagente configurado AHORA MISMO, se guarda además su propia liquidación (mismo
-    // resultado/rake, al % del subagente) -- snapshot al momento de este cierre, no cambia
-    // retroactivamente si el % del subagente se edita después.
+    // (confirmado contra la planilla real de Leo, 23/09/2026: cierra exacto). Las columnas
+    // subagente_* de acá quedan como snapshot informativo/auditoría nomás -- el PDF de
+    // "Resumen por agente" (repo/agentesResumen.ts) NO las lee: siempre usa el % de subagente
+    // que esté cargado HOY en players, para que un cambio de % se refleje al toque en cierres
+    // ya aplicados (corrección pedida por Leo, 23/09/2026).
     if (input.jugadoresDetalle?.length) {
       for (const j of input.jugadoresDetalle) {
         const pRes = await client.query(

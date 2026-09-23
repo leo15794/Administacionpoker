@@ -598,6 +598,16 @@ export default function Liquidaciones() {
             })}
           </div>
         )}
+        {agentesFiltrados.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => [...new Set([...s, ...agentesFiltrados.map((a) => a.id)])])}>
+              Seleccionar todos
+            </button>
+            <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => s.filter((id) => !agentesFiltrados.some((a) => a.id === id)))}>
+              Deseleccionar todos
+            </button>
+          </div>
+        )}
         <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
           {agentesFiltrados.map((a) => (
             <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
@@ -798,6 +808,28 @@ export default function Liquidaciones() {
               <div className="muted">Sin adelantos activos para estos agentes.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => {
+                      setGuardado(false);
+                      setCruces(Object.fromEntries(data.adelantos.map((a: any) => [a.id, Math.min(a.pendiente, disponibleParaCruzar)])));
+                    }}
+                  >
+                    Seleccionar todos
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={() => {
+                      setGuardado(false);
+                      setCruces({});
+                    }}
+                  >
+                    Deseleccionar todos
+                  </button>
+                </div>
                 {data.adelantos.map((a: any) => (
                   <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <input
@@ -860,6 +892,28 @@ export default function Liquidaciones() {
                 <div className="muted">Sin cargas de tesorería pendientes para estos agentes/clubes.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                    <button
+                      type="button"
+                      className="btn secondary small"
+                      onClick={() => {
+                        setGuardado(false);
+                        setCrucesCarga(Object.fromEntries(data.cargas.map((cg: any) => [cg.id, cg.pendiente])));
+                      }}
+                    >
+                      Seleccionar todas
+                    </button>
+                    <button
+                      type="button"
+                      className="btn secondary small"
+                      onClick={() => {
+                        setGuardado(false);
+                        setCrucesCarga({});
+                      }}
+                    >
+                      Deseleccionar todas
+                    </button>
+                  </div>
                   {data.cargas.map((cg: any) => (
                     <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>

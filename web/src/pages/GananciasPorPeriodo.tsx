@@ -333,6 +333,15 @@ function NuevoPeriodoForm({ onDone }: { onDone: () => void }) {
         ) : semanas.length === 0 ? (
           <div className="muted">No hay semanas con cierres cargados todavía.</div>
         ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              <button type="button" className="btn secondary small" onClick={() => setSeleccionadas(semanas.map((s) => s.week_start))}>
+                Seleccionar todas
+              </button>
+              <button type="button" className="btn secondary small" onClick={() => setSeleccionadas([])}>
+                Deseleccionar todas
+              </button>
+            </div>
           <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, padding: 8 }}>
             {semanas.map((s) => (
               <label key={s.week_start} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
@@ -341,6 +350,7 @@ function NuevoPeriodoForm({ onDone }: { onDone: () => void }) {
               </label>
             ))}
           </div>
+          </>
         )}
       </div>
 

@@ -40,6 +40,22 @@ function SelectorAgentes({
         placeholder="Buscar agente..."
         style={{ width: "100%", marginBottom: 8 }}
       />
+      <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={() => onChange([...new Set([...seleccionados, ...filtrados.map((a) => a.id)])])}
+        >
+          Seleccionar todos
+        </button>
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={() => onChange(seleccionados.filter((id) => !filtrados.some((a) => a.id === id)))}
+        >
+          Deseleccionar todos
+        </button>
+      </div>
       <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
         {filtrados.map((a) => (
           <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>

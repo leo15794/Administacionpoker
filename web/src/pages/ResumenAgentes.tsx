@@ -96,15 +96,27 @@ export default function ResumenAgentes() {
         {!agentes ? (
           <div className="muted" style={{ marginTop: 10 }}>Cargando...</div>
         ) : (
-          <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-            {filtrados.map((a: any) => (
-              <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                <input type="checkbox" checked={seleccionados.has(a.id)} onChange={() => toggle(a.id)} />
-                {a.name}
-              </label>
-            ))}
-            {filtrados.length === 0 && <div className="muted">Sin resultados.</div>}
-          </div>
+          <>
+            {filtrados.length > 0 && (
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn secondary small" onClick={() => setSeleccionados((s) => new Set([...s, ...filtrados.map((a: any) => a.id)]))}>
+                  Seleccionar todos
+                </button>
+                <button className="btn secondary small" onClick={() => setSeleccionados((s) => new Set([...s].filter((id) => !filtrados.some((a: any) => a.id === id))))}>
+                  Deseleccionar todos
+                </button>
+              </div>
+            )}
+            <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+              {filtrados.map((a: any) => (
+                <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <input type="checkbox" checked={seleccionados.has(a.id)} onChange={() => toggle(a.id)} />
+                  {a.name}
+                </label>
+              ))}
+              {filtrados.length === 0 && <div className="muted">Sin resultados.</div>}
+            </div>
+          </>
         )}
 
         {error && <div className="error" style={{ marginTop: 12 }}>{error}</div>}
