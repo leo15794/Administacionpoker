@@ -60,3 +60,61 @@ export async function restaurarMemoriaRodeoTx(agentId: string, clubId: string, m
     [memoriaAnterior, agentId, clubId]
   );
 }
+
+// Resumen por agente+club: memoria vigente + acumulado histórico de rodeo pagado, para poder
+// ver de un vistazo si la memoria se está comportando bien (mismo criterio que
+// listResumenBancados en repo/bancados.ts). Incluye combinaciones que tienen memoria guardada
+// en rodeo_agent_memory (vienen de importación con rodeoJugadores) Y combinaciones que solo
+// tuvieron rodeo cargado a mano (rodeoManual, que nunca toca la memoria -- ver
+// repo/closings.ts) para no dejarlas afuera del resumen.
+export interface ResumenRodeoAgente {
+  agentId: string;
+  agentName: string;
+  clubId: string;
+  clubName: string;
+  memoriaActual: number;
+  semanasConRodeo: number;
+  rodeoPagadoAgenteTotal: number;
+  rodeoClubTotal: number;
+  ultimaSemana: string | null;
+}
+
+export async function listResumenRodeo(): Promise<ResumenRodeoAgente[]> {
+  const r = await pool.query(
+    `WITH claves AS (
+       SELECT agent_id, club_id FROM rodeo_agent_memory
+       UNION
+       SELECT agent_id, club_id FROM weekly_closings
+       WHERE rodeo <> 0 OR rodeo_club_share <> 0 OR rodeo_detalle IS NOT NULL
+     )
+     SELECT
+       k.agent_id, a.name AS agent_name,
+       k.club_id, c.name AS club_name,
+       COALESCE(rm.memory, 0) AS memoria_actual,
+       COUNT(wc.id) FILTER (WHERE wc.rodeo_detalle IS NOT NULL AND wc.status <> 'REVERTIDO') AS semanas_con_rodeo,
+       COALESCE(SUM(wc.rodeo) FILTER (WHERE wc.status <> 'REVERTIDO'), 0) AS rodeo_pagado_agente_total,
+       COALESCE(SUM(wc.rodeo_club_share) FILTER (WHERE wc.status <> 'REVERTIDO'), 0) AS rodeo_club_total,
+       MAX(wc.week_end) FILTER (
+         WHERE wc.status <> 'REVERTIDO' AND (wc.rodeo <> 0 OR wc.rodeo_club_share <> 0 OR wc.rodeo_detalle IS NOT NULL)
+       ) AS ultima_semana
+     FROM claves k
+     JOIN agents a ON a.id = k.agent_id
+     JOIN clubs c ON c.id = k.club_id
+     LEFT JOIN rodeo_agent_memory rm ON rm.agent_id = k.agent_id AND rm.club_id = k.club_id
+     LEFT JOIN weekly_closings wc ON wc.agent_id = k.agent_id AND wc.club_id = k.club_id
+     GROUP BY k.agent_id, a.name, k.club_id, c.name, rm.memory
+     ORDER BY a.name, c.name`
+  );
+  return r.rows.map((row) => ({
+    agentId: row.agent_id,
+    agentName: row.agent_name,
+    clubId: row.club_id,
+    clubName: row.club_name,
+    memoriaActual: Number(row.memoria_actual),
+    semanasConRodeo: Number(row.semanas_con_rodeo),
+    rodeoPagadoAgenteTotal: Number(row.rodeo_pagado_agente_total),
+    rodeoClubTotal: Number(row.rodeo_club_total),
+    ultimaSemana: row.ultima_semana ? String(row.ultima_semana).slice(0, 10) : null,
+  }));
+}
+

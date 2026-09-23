@@ -488,6 +488,7 @@ export const api = {
   pagarCierreBancado: (id: string) =>
     request(`/bancados/historial/${id}/pagar`, { method: "POST" }),
   resumenBancados: () => request(`/bancados/resumen`),
+  resumenRodeo: () => request(`/rodeo/resumen`),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

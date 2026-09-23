@@ -16,6 +16,7 @@ import { accountStockRouter } from "./routes/accountStock.js";
 import { bancadosRouter } from "./routes/bancados.js";
 import { profitPeriodsRouter } from "./routes/profitPeriods.js";
 import { rakebackPendienteRouter } from "./routes/rakebackPendiente.js";
+import { rodeoRouter } from "./routes/rodeo.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
 // modo servidor local (server.ts, con app.listen) como en modo función serverless
@@ -41,6 +42,7 @@ app.use("/account-stock", accountStockRouter);
 app.use("/bancados", bancadosRouter);
 app.use("/profit-periods", profitPeriodsRouter);
 app.use("/rakeback-pendiente", rakebackPendienteRouter);
+app.use("/rodeo", rodeoRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
