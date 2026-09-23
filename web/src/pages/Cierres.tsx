@@ -811,6 +811,9 @@ type FilaImport = {
   // "Rodeo" (solo SupremaPoker): lista cruda por jugador — el monto real que le toca al
   // agente sale recién del preview/apply (procesarRodeoAgenteTx aplica la memoria por jugador).
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
+  // Detalle por jugador (23/09/2026, "Resumen por agente" en PDF) — se reenvía tal cual al
+  // aplicar, para que el backend persista el desglose (repo/closings.ts).
+  jugadoresDetalle: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
   // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD cargado a mano fila
   // por fila en esta misma grilla — se suma/resta directo al cierre final del agente (ver
   // engine/cierre.ts). ajusteManualNota es obligatoria si el monto no es 0.
@@ -1007,6 +1010,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct: a.rebatePct,
             configSource: a.configSource,
             rodeoJugadores: a.rodeoJugadores ?? [],
+            jugadoresDetalle: a.jugadoresDetalle ?? [],
             ajusteManual: "0",
             ajusteManualNota: "",
             // CAMBIO (18/09/2026): ya no existe el % default de club — si no hay deal cargado
@@ -1157,6 +1161,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             rebatePct,
             observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
             rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+            jugadoresDetalle: f.jugadoresDetalle.length > 0 ? f.jugadoresDetalle : undefined,
             rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
             jugadores: f.jugadores,
             ringGame: f.ringGame,
@@ -1223,6 +1228,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           rebatePct: f.rebatePct,
           observation: `Importado de archivo (${weekStart} al ${weekEnd}).`,
           rodeoJugadores: f.rodeoJugadores.length > 0 ? f.rodeoJugadores : undefined,
+          jugadoresDetalle: f.jugadoresDetalle.length > 0 ? f.jugadoresDetalle : undefined,
           rateSnapshot: plataforma === "TINY" ? Number(tinyRate) || undefined : undefined,
           jugadores: f.jugadores,
           ringGame: f.ringGame,

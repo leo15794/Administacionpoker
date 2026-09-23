@@ -60,6 +60,13 @@ export interface AplicarCierreInput {
   /** Solo Tiny GG (18/09/2026): "BBJ Contribution" del reporte, ya sumado por agente en la
    * previa de importacion -- informativo, nunca entra en ningun calculo de plata. */
   bbjContribution?: number;
+  /** Detalle por jugador (23/09/2026, "Resumen por agente" en PDF): resultado/rake crudos por
+   * jugador de este cierre -- se persiste en weekly_closing_player_details DENTRO de esta misma
+   * transacción (rollback si preview, igual que rodeo/bancados). Vacío/undefined para
+   * cualquier cierre cargado a mano sin desglose (el club/import no lo tiene, o es un cierre
+   * viejo re-tipeado) -- no rompe nada, ese cierre simplemente no va a tener detalle de
+   * jugadores en el resumen por agente. */
+  jugadoresDetalle?: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
   /** @deprecated Ya no se usa: la regla especial se resuelve sola desde rule_versions (motor
    * de reglas configurable). Se mantiene el campo solo para no romper llamadas viejas. */
   specialRule?: SpecialRule | null;
@@ -254,6 +261,64 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.bbjContribution ?? 0,
       ]
     );
+
+    // Detalle por jugador (23/09/2026, "Resumen por agente"): mismo % de rebate/rakeback que
+    // se usó arriba para el agregado del agente (input.rebatePct/calc.rakebackPct) -- fórmula
+    // genérica idéntica a engine/cierre.ts, aplicada jugador por jugador en vez de al total
+    // (confirmado contra la planilla real de Leo, 23/09/2026: cierra exacto). Si el jugador
+    // tiene subagente configurado AHORA MISMO, se guarda además su propia liquidación (mismo
+    // resultado/rake, al % del subagente) -- snapshot al momento de este cierre, no cambia
+    // retroactivamente si el % del subagente se edita después.
+    if (input.jugadoresDetalle?.length) {
+      for (const j of input.jugadoresDetalle) {
+        const pRes = await client.query(
+          `SELECT id, subagente_name, subagente_rakeback_pct FROM players WHERE club_id = $1 AND external_id = $2`,
+          [input.clubId, j.playerExternalId]
+        );
+        const p = pRes.rows[0];
+        const rebateJugador = (j.resultado + j.rake) * input.rebatePct;
+        const resultadoAjustado = j.resultado + rebateJugador;
+        const rakebackBruto = j.rake * calc.rakebackPct;
+        const cierreJugador = resultadoAjustado + rakebackBruto;
+
+        let subagenteRakeback: number | null = null;
+        let subagenteCierre: number | null = null;
+        const subagenteName: string | null = p?.subagente_name ?? null;
+        const subagentePct: number | null = p?.subagente_rakeback_pct != null ? Number(p.subagente_rakeback_pct) : null;
+        if (subagenteName && subagentePct !== null) {
+          const rbSubBruto = j.rake * subagentePct;
+          subagenteRakeback = rbSubBruto + rebateJugador;
+          subagenteCierre = j.resultado + subagenteRakeback;
+        }
+
+        await client.query(
+          `INSERT INTO weekly_closing_player_details
+            (id, closing_id, player_id, player_external_id, player_name, resultado, rake,
+             rebate_pct, rebate, resultado_ajustado, rakeback_pct, rakeback, cierre_jugador,
+             subagente_name, subagente_rakeback_pct, subagente_rakeback, subagente_cierre)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+          [
+            newId("wcpd"),
+            id,
+            p?.id ?? null,
+            j.playerExternalId,
+            j.playerName,
+            j.resultado,
+            j.rake,
+            input.rebatePct,
+            rebateJugador,
+            resultadoAjustado,
+            calc.rakebackPct,
+            rakebackBruto,
+            cierreJugador,
+            subagenteName,
+            subagentePct,
+            subagenteRakeback,
+            subagenteCierre,
+          ]
+        );
+      }
+    }
 
     // Rakeback pendiente (22/09/2026): el stock físico/balance del agente SOLO se mueve
     // automáticamente por el resultado de mesas (Win/Lose) -- rakeback, rebate, Rodeo y ajuste
@@ -855,6 +920,9 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
       await client.query(`DELETE FROM treasury_entries WHERE movement_id = ANY($1::text[])`, [ids]);
       await client.query(`DELETE FROM ledger_movements WHERE id = ANY($1::text[])`, [ids]);
     }
+
+    // Detalle por jugador (23/09/2026): sin ON DELETE CASCADE (FK plana) -- se borra a mano acá.
+    await client.query(`DELETE FROM weekly_closing_player_details WHERE closing_id = $1`, [closingId]);
 
     await client.query(`DELETE FROM weekly_closings WHERE id = $1`, [closingId]);
 

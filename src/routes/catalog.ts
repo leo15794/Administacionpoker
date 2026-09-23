@@ -25,6 +25,7 @@ import {
   listJugadoresBancados,
   buscarJugadores,
   setJugadorBancado,
+  setSubagenteJugador,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarMovimientoCarga } from "../repo/cargaCruces.js";
@@ -487,6 +488,23 @@ catalogRouter.patch("/players/:id/bancado", requireAuth, requireAdmin, async (re
   const parsed = jugadorBancadoSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const r = await setJugadorBancado(req.params.id, parsed.data.bancado);
+  if (!r) return res.status(404).json({ error: "Jugador no encontrado" });
+  res.json(r);
+});
+
+// Subagente de un jugador puntual (% de rakeback propio, distinto al de su agente) — ver
+// schema.sql (columnas players.subagente_name/subagente_rakeback_pct) y repo/catalog.ts.
+// subagenteName null limpia la config; si viene, rakebackPct es obligatorio (0..1).
+const subagenteSchema = z.object({
+  subagenteName: z.string().trim().min(1).max(80).nullable(),
+  rakebackPct: z.number().min(0).max(1).nullable(),
+}).refine((v) => v.subagenteName === null || v.rakebackPct !== null, {
+  message: "Si se asigna un nombre de subagente, el % de rakeback propio es obligatorio.",
+});
+catalogRouter.patch("/players/:id/subagente", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = subagenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const r = await setSubagenteJugador(req.params.id, parsed.data.subagenteName, parsed.data.rakebackPct);
   if (!r) return res.status(404).json({ error: "Jugador no encontrado" });
   res.json(r);
 });

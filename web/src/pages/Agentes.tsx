@@ -841,10 +841,12 @@ function NuevaReglaGlobal({ agentes, clubes, onCreated }: { agentes: any[]; club
   );
 }
 
-// Árbol Club -> Agentes -> Jugadores. Los jugadores no tienen % propio (cobran siempre vía su
-// agente) así que solo el agente es editable acá — mismo upsertDeal de siempre (versiona, nunca
-// pisa en el lugar). Los jugadores se piden on-demand al expandir cada agente, para no traer de
-// una una lista gigante que capaz nadie abre.
+// Árbol Club -> Agentes -> Jugadores. El agente es editable acá — mismo upsertDeal de siempre
+// (versiona, nunca pisa en el lugar). Los jugadores, además de poder borrarse, pueden tener un
+// "subagente" propio (23/09/2026): un % de rakeback distinto al del agente, agrupado por nombre
+// (ver schema.sql players.subagente_name/subagente_rakeback_pct) — se usa en el "Resumen por
+// agente" para liquidar ese jugador aparte. Se piden on-demand al expandir cada agente, para no
+// traer de una una lista gigante que capaz nadie abre.
 // Mismas claves/labels que la pestaña de plataforma del importador (Cierres.tsx) — un club
 // puede aparecer bajo más de una si ya se importó desde más de una plataforma.
 const PLATFORM_LABELS: Record<string, string> = { SUPREMA: "SupremaPoker", GG: "GG Poker", XPOKER: "X-Poker" };
@@ -860,6 +862,13 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [cargandoJugadores, setCargandoJugadores] = useState<string | null>(null);
   const [editando, setEditando] = useState<{ clubId: string; agentId: string; agentName: string } | null>(null);
   const [eliminandoJugador, setEliminandoJugador] = useState<string | null>(null);
+  // Edición de subagente (23/09/2026): % de rakeback propio de un jugador puntual, distinto al
+  // de su agente — ver schema.sql (players.subagente_name/subagente_rakeback_pct).
+  const [editandoSubagente, setEditandoSubagente] = useState<string | null>(null); // playerId
+  const [subagenteNombre, setSubagenteNombre] = useState("");
+  const [subagentePct, setSubagentePct] = useState("");
+  const [guardandoSubagente, setGuardandoSubagente] = useState(false);
+  const [errorSubagente, setErrorSubagente] = useState("");
   const [cambiandoPlataforma, setCambiandoPlataforma] = useState<string | null>(null);
   const [moviendoAgente, setMoviendoAgente] = useState<string | null>(null);
 
@@ -883,6 +892,36 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       } finally {
         setCargandoJugadores(null);
       }
+    }
+  }
+
+  function abrirEdicionSubagente(j: any) {
+    setEditandoSubagente(j.id);
+    setSubagenteNombre(j.subagente_name ?? "");
+    setSubagentePct(j.subagente_rakeback_pct != null ? String(Number(j.subagente_rakeback_pct) * 100) : "");
+    setErrorSubagente("");
+  }
+
+  async function guardarSubagente(clave: string, playerId: string) {
+    const nombre = subagenteNombre.trim();
+    const pctNum = subagentePct.trim() ? Number(subagentePct) / 100 : null;
+    if (nombre && (pctNum === null || !(pctNum >= 0 && pctNum <= 1))) {
+      setErrorSubagente("El % de rakeback propio es obligatorio (0 a 100) si se pone un nombre de subagente.");
+      return;
+    }
+    setGuardandoSubagente(true);
+    setErrorSubagente("");
+    try {
+      const r = await api.setSubagenteJugador(playerId, nombre || null, nombre ? pctNum : null);
+      setJugadoresPorAgente((s) => ({
+        ...s,
+        [clave]: (s[clave] ?? []).map((j: any) => (j.id === playerId ? { ...j, subagente_name: r.subagente_name, subagente_rakeback_pct: r.subagente_rakeback_pct } : j)),
+      }));
+      setEditandoSubagente(null);
+    } catch (err: any) {
+      setErrorSubagente(err.message || "No se pudo guardar.");
+    } finally {
+      setGuardandoSubagente(false);
     }
   }
 
@@ -945,8 +984,8 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       <div className="muted" style={{ marginBottom: 14 }}>
         Primero por plataforma (Suprema / GG Poker / X-Poker) y adentro los clubes activos con los agentes que ya tienen
         jugadores cargados ahí (por import o carga manual) y su % vigente. El % es editable por acá mismo — versiona el
-        deal anterior, igual que en "Ver deals". Los jugadores son de solo lectura: no tienen % propio, siempre cobran a
-        través de su agente. "Sin plataforma asignada" son clubes que todavía no se cargaron desde ningún importador.
+        deal anterior, igual que en "Ver deals". Cada jugador puede tener además su propio "subagente" (% de rakeback
+        propio, para liquidarlo aparte) — "Sin plataforma asignada" son clubes que todavía no se cargaron desde ningún importador.
       </div>
 
       {editando && editandoAgente && (
@@ -1040,10 +1079,45 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                                   {cargandoJugadores === clave ? (
                                     <span className="muted">Cargando jugadores...</span>
                                   ) : (
-                                    <div className="muted" style={{ fontSize: 12.5, display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                       {(jugadoresPorAgente[clave] ?? []).map((j: any) => (
-                                        <span key={j.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                          {j.display_name ?? j.external_id}
+                                        <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                          <span className="muted" style={{ fontSize: 12.5 }}>{j.display_name ?? j.external_id}</span>
+                                          {editandoSubagente === j.id ? (
+                                            <>
+                                              <input
+                                                value={subagenteNombre}
+                                                onChange={(e) => setSubagenteNombre(e.target.value)}
+                                                placeholder="Sin subagente"
+                                                style={{ fontSize: 11.5, width: 120 }}
+                                              />
+                                              <input
+                                                value={subagentePct}
+                                                onChange={(e) => setSubagentePct(e.target.value)}
+                                                placeholder="% RB propio"
+                                                type="number"
+                                                step="0.01"
+                                                style={{ fontSize: 11.5, width: 90 }}
+                                              />
+                                              <button className="btn small" disabled={guardandoSubagente} onClick={() => guardarSubagente(clave, j.id)}>
+                                                {guardandoSubagente ? "..." : "Guardar"}
+                                              </button>
+                                              <button className="btn secondary small" onClick={() => setEditandoSubagente(null)}>Cancelar</button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              {j.subagente_name ? (
+                                                <span className="badge" style={{ fontSize: 11 }}>
+                                                  Subagente "{j.subagente_name}" · {pct(Number(j.subagente_rakeback_pct))}
+                                                </span>
+                                              ) : (
+                                                <span className="muted" style={{ fontSize: 11 }}>Sin subagente</span>
+                                              )}
+                                              <button className="btn secondary small" style={{ fontSize: 11 }} onClick={() => abrirEdicionSubagente(j)}>
+                                                Editar subagente
+                                              </button>
+                                            </>
+                                          )}
                                           <button
                                             className="btn secondary small"
                                             style={{ padding: "0 6px", fontSize: 11 }}
@@ -1053,8 +1127,9 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
                                           >
                                             {eliminandoJugador === j.id ? "..." : "✕"}
                                           </button>
-                                        </span>
+                                        </div>
                                       ))}
+                                      {editandoSubagente && errorSubagente && <div className="error" style={{ fontSize: 11.5 }}>{errorSubagente}</div>}
                                     </div>
                                   )}
                                 </td>

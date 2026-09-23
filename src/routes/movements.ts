@@ -78,6 +78,10 @@ const closingSchema = z.object({
   // Solo Tiny GG (18/09/2026): "BBJ Contribution" del reporte, ya sumado por agente en la previa
   // de importacion -- informativo, no afecta ningun calculo (ver repo/closings.ts).
   bbjContribution: z.number().optional(),
+  // Detalle por jugador (23/09/2026, "Resumen por agente" en PDF) -- ver repo/closings.ts.
+  jugadoresDetalle: z
+    .array(z.object({ playerExternalId: z.string().min(1), playerName: z.string(), resultado: z.number(), rake: z.number() }))
+    .optional(),
 });
 
 movementsRouter.post("/cierre-semanal", requireAuth, requireAdmin, async (req, res) => {

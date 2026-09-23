@@ -34,6 +34,11 @@ export interface AgenteAgregado {
    * acá en esta previa de solo lectura. Este array es lo que el frontend debe reenviar tal cual
    * como `rodeoJugadores` al pedir la previa o aplicar el cierre de este agente. */
   rodeoJugadores: { playerExternalId: string; baseRodeo: number }[];
+  /** Detalle por jugador (23/09/2026, "Resumen por agente" en PDF): resultado/rake crudos de
+   * cada jugador de este agente esta semana -- se reenvía tal cual (mismo patrón que
+   * rodeoJugadores de arriba) al aplicar el cierre, para que repo/closings.ts persista el
+   * desglose en weekly_closing_player_details. */
+  jugadoresDetalle: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
   system: "PREPAGO" | "WIN_LOSE";
   rakebackPct: number;
   rebatePct: number;
@@ -372,6 +377,7 @@ export async function analizarImportacionSuprema(
         acc.mtt = (acc.mtt ?? 0) + (row.mtt ?? 0);
         acc.sngOtros = (acc.sngOtros ?? 0) + (row.sngOtros ?? 0);
         if (row.rodeo !== 0) acc.rodeoJugadores.push({ playerExternalId: row.playerId, baseRodeo: row.rodeo });
+        acc.jugadoresDetalle.push({ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake });
       } else {
         agentesMap.set(resolucion.agentId, {
           agentId: resolucion.agentId,
@@ -383,6 +389,7 @@ export async function analizarImportacionSuprema(
           mtt: row.mtt,
           sngOtros: row.sngOtros,
           rodeoJugadores: row.rodeo !== 0 ? [{ playerExternalId: row.playerId, baseRodeo: row.rodeo }] : [],
+          jugadoresDetalle: [{ playerExternalId: row.playerId, playerName: row.playerName, resultado: row.resultado, rake: row.rake }],
           system: "WIN_LOSE",
           rakebackPct: 0,
           rebatePct: 0,

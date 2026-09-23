@@ -1208,3 +1208,51 @@ CREATE TABLE IF NOT EXISTS proveedor_garantia_movements (
   created_by          TEXT,
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- "Subagentes" (23/09/2026, pedido de Leo): un jugador puntual de un agente puede tener su
+-- propio % de rakeback (distinto al % general del agente), agrupado bajo un nombre propio
+-- (ej. "SG" agrupa a los jugadores "SG DeSueldo" + "Tony The Kid") -- sirve para liquidarle a
+-- ese subgrupo de jugadores aparte, con un % menor, y que la diferencia quede de margen para
+-- el agente principal (ver "Resumen por agente" / PDF de estado de cuenta). Config fija y
+-- persistida por jugador (no se elige a mano en cada reporte) -- se edita desde el árbol de
+-- Club->Agentes->Jugadores en Agentes.tsx. NULL = jugador normal, sin subagente (la gran
+-- mayoría). subagente_rakeback_pct es obligatorio si subagente_name no es NULL (se valida del
+-- lado de la app, no acá, mismo criterio que el resto de los % del sistema).
+ALTER TABLE players ADD COLUMN IF NOT EXISTS subagente_name TEXT;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS subagente_rakeback_pct NUMERIC(6,4);
+
+-- Detalle por jugador de cada cierre semanal (23/09/2026, pedido de Leo: "Resumen por agente"
+-- en PDF, réplica de una planilla que ya usa a mano). Antes de esto el sistema solo guardaba el
+-- agregado por agente+club en weekly_closings -- el desglose jugador por jugador se usaba una
+-- vez al importar y se descartaba. Desde ahora se persiste automáticamente, DENTRO de la misma
+-- transacción que aplicarCierreSemanal (mismo criterio que rodeo_detalle/bancado_historial):
+-- si el cierre es preview (rollback), esto nunca llega a existir de verdad. Solo tiene datos
+-- para cierres aplicados DESPUÉS de esta migración -- los históricos no se pueden reconstruir
+-- (la info de origen no se guardaba en ningún lado).
+-- rebate/rakeback/cierre = calculados con el % VIGENTE DEL AGENTE al momento del cierre (igual
+-- que hoy). Si el jugador tiene subagente_name configurado en ese momento, ADEMÁS se guarda su
+-- propia liquidación (mismo resultado/rake, pero al % del subagente) -- ver columnas *_subagente.
+CREATE TABLE IF NOT EXISTS weekly_closing_player_details (
+  id                        TEXT PRIMARY KEY,
+  closing_id                TEXT NOT NULL REFERENCES weekly_closings(id),
+  player_id                 TEXT REFERENCES players(id),
+  player_external_id        TEXT NOT NULL,
+  player_name               TEXT NOT NULL,
+  resultado                 NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rake                      NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rebate_pct                NUMERIC(6,4) NOT NULL DEFAULT 0,
+  rebate                    NUMERIC(18,4) NOT NULL DEFAULT 0,
+  resultado_ajustado        NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rakeback_pct              NUMERIC(6,4) NOT NULL DEFAULT 0,
+  rakeback                  NUMERIC(18,4) NOT NULL DEFAULT 0,
+  cierre_jugador             NUMERIC(18,4) NOT NULL DEFAULT 0,
+  -- Snapshot del subagente vigente al momento de este cierre (nombre + %) -- puede cambiar
+  -- después sin afectar cierres ya aplicados, igual que el resto de los snapshots del sistema.
+  subagente_name            TEXT,
+  subagente_rakeback_pct    NUMERIC(6,4),
+  subagente_rakeback        NUMERIC(18,4),
+  subagente_cierre          NUMERIC(18,4),
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_wcpd_closing ON weekly_closing_player_details(closing_id);
+CREATE INDEX IF NOT EXISTS idx_wcpd_player ON weekly_closing_player_details(player_id);

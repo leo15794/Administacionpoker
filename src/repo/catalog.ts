@@ -224,10 +224,25 @@ export async function getArbolClubes() {
 
 export async function getJugadoresDeAgenteEnClub(clubId: string, agentId: string) {
   const r = await pool.query(
-    `SELECT id, external_id, display_name FROM players WHERE club_id = $1 AND agent_id = $2 ORDER BY display_name`,
+    `SELECT id, external_id, display_name, subagente_name, subagente_rakeback_pct
+     FROM players WHERE club_id = $1 AND agent_id = $2 ORDER BY display_name`,
     [clubId, agentId]
   );
   return r.rows;
+}
+
+// "Subagente" (23/09/2026): % de rakeback propio de un jugador puntual, distinto al % general
+// de su agente -- ver nota completa en schema.sql (columnas players.subagente_name /
+// subagente_rakeback_pct) y "Resumen por agente" en PDF. subagenteName null limpia la
+// configuración (jugador vuelve a ser "normal", cobra 100% vía su agente). pct es obligatorio
+// si subagenteName no es null -- se valida en la ruta (routes/catalog.ts), no acá.
+export async function setSubagenteJugador(playerId: string, subagenteName: string | null, rakebackPct: number | null) {
+  const r = await pool.query(
+    `UPDATE players SET subagente_name = $1, subagente_rakeback_pct = $2 WHERE id = $3
+     RETURNING id, subagente_name, subagente_rakeback_pct`,
+    [subagenteName, subagenteName ? rakebackPct : null, playerId]
+  );
+  return r.rows[0] ?? null;
 }
 
 // Todos los jugadores de un agente, en CUALQUIER club (a diferencia de getJugadoresDeAgenteEnClub,

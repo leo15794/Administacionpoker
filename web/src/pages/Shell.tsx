@@ -40,6 +40,11 @@ const icon = {
       <circle cx="12" cy="12" r="9" /><path d="M12 3v3" /><path d="M12 18v3" /><path d="M3 12h3" /><path d="M18 12h3" />
     </svg>
   ),
+  resumenAgentes: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" /><path d="M9 13h6" /><path d="M9 17h6" />
+    </svg>
+  ),
   usuarios: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
@@ -176,6 +181,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "operacion" },
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
   { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "operacion" },
+  { key: "resumenAgentes", to: "/dashboard/resumen-agentes", icon: "resumenAgentes", label: "Resumen por agente", group: "plata" },
   { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "plata" },
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "plata" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "plata" },

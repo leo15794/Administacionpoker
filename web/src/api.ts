@@ -433,6 +433,8 @@ export const api = {
   // Borra una fila de jugador mal asignada a un club (ej. por el bug viejo del import_source),
   // para poder recargarla a mano en el club correcto. No toca cierres ni ledger.
   eliminarJugador: (playerId: string) => request(`/catalog/players/${playerId}`, { method: "DELETE" }),
+  setSubagenteJugador: (playerId: string, subagenteName: string | null, rakebackPct: number | null) =>
+    request(`/catalog/players/${playerId}/subagente`, { method: "PATCH", body: JSON.stringify({ subagenteName, rakebackPct }) }),
   // "Jugadores bancados": jugadores puntuales que se excluyen del cierre agregado de su agente
   // (se contabilizan aparte). Ver players.bancado en schema.sql y repo/imports.ts.
   jugadoresBancados: () => request(`/catalog/jugadores-bancados`),
@@ -489,6 +491,9 @@ export const api = {
     request(`/bancados/historial/${id}/pagar`, { method: "POST" }),
   resumenBancados: () => request(`/bancados/resumen`),
   resumenRodeo: () => request(`/rodeo/resumen`),
+  // "Resumen por agente" en PDF (23/09/2026) -- ver repo/agentesResumen.ts.
+  semanasConResumenAgente: () => request(`/agentes-resumen/semanas`),
+  resumenAgentePDF: (agentId: string, weekStart: string) => request(`/agentes-resumen/${agentId}/${weekStart}`),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),
@@ -548,6 +553,8 @@ export const api = {
     // backend aplica la memoria por jugador de forma transaccional (repo/rodeo.ts) y recién ahí
     // sale el monto real que se le suma al cierre del agente.
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    // Detalle por jugador (23/09/2026, "Resumen por agente" en PDF) -- ver repo/closings.ts.
+    jugadoresDetalle?: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
     // Clubes en fichas (hoy: X-Poker): valor de la ficha en USD usado para convertir result/
     // rakeTotal ANTES de mandarlos (esos dos campos siempre viajan ya en USD) — se guarda solo
     // como registro histórico de qué tasa estaba vigente ese cierre, el motor no la usa para
@@ -581,6 +588,7 @@ export const api = {
     rebatePct?: number;
     observation?: string;
     rodeoJugadores?: { playerExternalId: string; baseRodeo: number }[];
+    jugadoresDetalle?: { playerExternalId: string; playerName: string; resultado: number; rake: number }[];
     rateSnapshot?: number;
     jugadores?: number;
     ringGame?: number;
