@@ -852,8 +852,14 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   <tr><td>Makeup anterior</td><td>{usd(previa.makeupAnterior)}</td></tr>
                   <tr><td>Pérdida que agrega makeup</td><td>{usd(previa.perdidaAgregaMakeup)}</td></tr>
                   <tr><td>RB aplicado a makeup</td><td>{usd(previa.rakebackAMakeup)}</td></tr>
+                  {Number(previa.gananciaMesasJugadorBruta) !== 0 && (
+                    <tr><td className="muted">Ganancia jugador por mesas (bruta, % jugador antes de makeup)</td><td className="muted">{usd(previa.gananciaMesasJugadorBruta)}</td></tr>
+                  )}
+                  {Number(previa.gananciaMesasAMakeup) !== 0 && (
+                    <tr><td>Ganancia de mesas aplicada a makeup</td><td>{usd(previa.gananciaMesasAMakeup)}</td></tr>
+                  )}
                   <tr><td>Makeup nuevo</td><td>{usd(previa.makeupNuevo)}</td></tr>
-                  <tr><td>Pago jugador por mesas</td><td>{usd(previa.pagoJugadorMesas)}</td></tr>
+                  <tr><td>Pago jugador por mesas (neto, ya descontado el makeup)</td><td>{usd(previa.pagoJugadorMesas)}</td></tr>
                   <tr><td>RB excedente para jugador</td><td>{usd(previa.rakebackExcedenteJugador)}</td></tr>
                   <tr><td><strong>Pago total jugador</strong></td><td><strong>{usd(previa.pagoJugadorTotal)}</strong></td></tr>
                   <tr><td>Rakeback Banca</td><td>{usd(previa.rakebackBancaTotal)}</td></tr>

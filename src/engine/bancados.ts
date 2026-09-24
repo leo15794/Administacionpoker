@@ -5,12 +5,22 @@
 // para cerrar de verdad (misma cuenta, cero margen para que la previa muestre un número
 // distinto del que después se aplica).
 //
-// Reglas (idénticas al script original):
-//  - Resultado de mesas positivo: se reparte según % jugador / % banca.
+// Reglas:
 //  - Resultado de mesas negativo: la pérdida completa aumenta el makeup.
-//  - El makeup NO se recupera con ganancias de mesas, solo con rakeback.
-//  - El rakeback primero cancela el makeup pendiente; el excedente (una vez makeup=0) es 100%
-//    del jugador.
+//  - Resultado de mesas positivo (24/09/2026, cambio pedido por Leo -- antes las ganancias de
+//    mesas NUNCA tocaban el makeup, ahora sí): la parte de la banca (% banca) es siempre suya,
+//    intacta, nunca va al makeup. La parte del jugador (% jugador) SÍ se usa primero para
+//    cancelar el makeup pendiente -- Leo, con ejemplos numéricos: "las ganancias de mesas
+//    cancelan solo el 50% de la ganancia, el otro 50% es de la banca" (con % jugador/% banca
+//    en 50/50, que es el default) / si el makeup ya se cubre con menos de esa parte, "en este
+//    caso queda todo para el jugador porque la banca ya se llevó el 50% de la ganancia de la
+//    mesa" -- el sobrante de la parte del jugador, una vez saldado el makeup, es 100% suyo.
+//  - El rakeback también cancela el makeup pendiente primero (sin cambios); el excedente (una
+//    vez makeup=0) es 100% del jugador. Orden de aplicación cuando hay ambos en la misma
+//    semana (rakeback Y ganancia de mesas con makeup pendiente): primero se aplica el
+//    rakeback, después la parte del jugador de la ganancia de mesas -- no cambia el total que
+//    termina cobrando el jugador (ambos excedentes son igual de suyos), solo cómo se desglosa
+//    en la memoria de dónde salió cada parte.
 export interface BancadoConfig {
   pctJugador: number; // 0..1
   pctBanca: number; // 0..1
@@ -51,6 +61,13 @@ export interface BancadoCierreCalculado {
   perdidaAgregaMakeup: number;
   rakebackAMakeup: number;
   rakebackExcedenteJugador: number;
+  // Desglose de la parte del jugador en la ganancia de mesas (24/09/2026): gananciaMesasJugadorBruta
+  // es lo que le tocaría al jugador por % jugador ANTES de descontar makeup; gananciaMesasAMakeup
+  // es cuánto de eso se usó para cancelar makeup pendiente (después de aplicar el rakeback, ver
+  // reglas arriba). pagoJugadorMesas queda como el NETO ya cobrable (gananciaMesasJugadorBruta -
+  // gananciaMesasAMakeup) -- mismo nombre de siempre, mismo significado de cara al pago final.
+  gananciaMesasJugadorBruta: number;
+  gananciaMesasAMakeup: number;
   makeupNuevo: number;
   pagoJugadorMesas: number;
   pagoJugadorTotal: number;
@@ -90,11 +107,16 @@ export function calcularCierreBancado(
 
   const rakebackAMakeup = Math.min(rakebackTotal, makeupAntesRB);
   const rakebackExcedenteJugador = Math.max(0, rakebackTotal - rakebackAMakeup);
-  const makeupNuevo = Math.max(0, makeupAntesRB - rakebackAMakeup);
+  const makeupDespuesRakeback = Math.max(0, makeupAntesRB - rakebackAMakeup);
 
-  // Las ganancias de mesas NUNCA cancelan makeup.
+  // Ganancias de mesas (24/09/2026): la parte del jugador (% jugador) cancela primero lo que
+  // haya quedado de makeup después del rakeback -- la parte de la banca (% banca, ver
+  // gananciaBancaMesasPuras más abajo) nunca se toca, es siempre suya.
   const gananciaMesasPositiva = Math.max(0, resultado);
-  const pagoJugadorMesas = gananciaMesasPositiva * cfg.pctJugador;
+  const gananciaMesasJugadorBruta = gananciaMesasPositiva * cfg.pctJugador;
+  const gananciaMesasAMakeup = Math.min(gananciaMesasJugadorBruta, makeupDespuesRakeback);
+  const makeupNuevo = Math.max(0, makeupDespuesRakeback - gananciaMesasAMakeup);
+  const pagoJugadorMesas = gananciaMesasJugadorBruta - gananciaMesasAMakeup;
   const pagoJugadorTotal = pagoJugadorMesas + rakebackExcedenteJugador;
 
   // En una pérdida, la banca absorbe el 100% (no se reparte por %banca).
@@ -128,6 +150,8 @@ export function calcularCierreBancado(
     perdidaAgregaMakeup: redondear(perdidaAgregaMakeup),
     rakebackAMakeup: redondear(rakebackAMakeup),
     rakebackExcedenteJugador: redondear(rakebackExcedenteJugador),
+    gananciaMesasJugadorBruta: redondear(gananciaMesasJugadorBruta),
+    gananciaMesasAMakeup: redondear(gananciaMesasAMakeup),
     makeupNuevo: redondear(makeupNuevo),
     pagoJugadorMesas: redondear(pagoJugadorMesas),
     pagoJugadorTotal: redondear(pagoJugadorTotal),
