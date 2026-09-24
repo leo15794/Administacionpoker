@@ -328,19 +328,15 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     //   o nos pagan a nosotros" -- el Saldo tiene que ser el cierre económico COMPLETO) y pidió
     //   revertirlo: acá montoStock = montoAgente (el cierre final completo), como antes del
     //   22/09.
-    // - PREPAGO: regla nueva (pedido de Leo el mismo día): un agente prepago solo tiene fichas
-    //   si las paga por adelantado (carga manual a cambio de USDT) o si le cargamos un adelanto
-    //   de rakeback -- el cierre semanal NUNCA le mueve el balance de fichas directo, ni
-    //   siquiera el resultado de mesas ("+ el resultado de las mesas si gana o pierde", cita
-    //   textual de Leo). Todo el cierre completo (montoAgente: resultado + rakeback + rebate +
-    //   rodeo + ajuste) queda como rakeback_pendiente (role='AGENTE') a favor del agente, y se
-    //   cobra recién cuando se le paga/carga de verdad (Adelantos/Liquidaciones) -- acá
-    //   montoStock = 0, así el bloque de abajo ("Alta del rakeback pendiente del agente") se
-    //   dispara con el monto completo.
+    // - PREPAGO: un agente prepago solo tiene fichas si las paga por adelantado (carga manual a
+    //   cambio de USDT) o si le cargamos un adelanto de rakeback -- el cierre semanal NUNCA le
+    //   mueve el balance de fichas directo -- acá montoStock = 0, el resultado de mesas nunca
+    //   pasa por acá.
     // Las filas rakeback_pendiente con role='AGENTE' que ya existan de cierres viejos no se
     // tocan acá -- ver script de corrección histórica (fusionarPendienteAgenteASaldo.ts para
-    // WIN_LOSE, separarPendientePrepago.ts para PREPAGO). El rebate desviado a un SUPERVISOR
-    // (rebateDestino='RAKEBACK_SUPERVISOR', más abajo) es un mecanismo distinto y no se toca.
+    // WIN_LOSE, separarPendientePrepago.ts / excluirMesaDePendientePrepago.ts para PREPAGO). El
+    // rebate desviado a un SUPERVISOR (rebateDestino='RAKEBACK_SUPERVISOR', más abajo) es un
+    // mecanismo distinto y no se toca.
     const montoStock = input.system === "PREPAGO" ? 0 : montoAgente;
     await client.query(
       `INSERT INTO ledger_movements
@@ -356,7 +352,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
           (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
           (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback pendiente de supervisor.` : "") +
-          (input.system === "PREPAGO" ? ` — PREPAGO: no mueve balance, monto completo (${montoAgente}) a rakeback pendiente.` : ""),
+          (input.system === "PREPAGO" ? ` — PREPAGO: no mueve balance. Resultado de mesas (${calc.result}) queda solo de referencia, rakeback+rebate+rodeo+ajuste (${montoAgente - calc.result}) a rakeback pendiente.` : ""),
       ]
     );
 
@@ -369,9 +365,13 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     );
 
     // montoPendienteAgente: 0 para WIN_LOSE (montoStock ya es montoAgente completo). Para
-    // PREPAGO es el montoAgente completo (montoStock=0 acá arriba) -- ese es el monto que pasa
-    // a rakeback_pendiente role='AGENTE' en el bloque de abajo, en vez de ir al balance.
-    const montoPendienteAgente = montoAgente - montoStock;
+    // PREPAGO (corregido 24/09/2026, aclaración de Leo: "en pendiente de rakeback debería ser
+    // el mismo que rakeback neto") YA NO incluye el resultado de mesas -- ese resultado queda
+    // solo como referencia (columna "Fichas ganadas en mesas" en Resumen, ver
+    // repo/ledger.ts listAllBalances), nunca genera un pendiente de pago ni mueve el balance.
+    // Lo que SÍ pasa a rakeback_pendiente sigue siendo todo lo demás del cierre (rakeback +
+    // rebate + rodeo + ajuste manual, lo mismo que antes menos calc.result).
+    const montoPendienteAgente = input.system === "PREPAGO" ? montoAgente - montoStock - calc.result : montoAgente - montoStock;
     if (Math.abs(montoPendienteAgente) > 0.004) {
       const pendienteAgenteId = newId("rp");
       await client.query(

@@ -36,7 +36,9 @@
     "limpiar:test-qa-rakeback": "tsx src/scripts/limpiarTestQARakeback.ts",
     "diagnostico:cajerouy": "tsx src/scripts/diagnosticoCajerouyRevertido.ts",
     "reset:fabrica": "tsx src/scripts/resetDeFabrica.ts",
-    "reset:fabrica:apply": "tsx src/scripts/resetDeFabrica.ts --apply"
+    "reset:fabrica:apply": "tsx src/scripts/resetDeFabrica.ts --apply",
+    "corregir:mesa-pendiente-prepago": "tsx src/scripts/excluirMesaDePendientePrepago.ts",
+    "corregir:mesa-pendiente-prepago:apply": "tsx src/scripts/excluirMesaDePendientePrepago.ts --apply"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
