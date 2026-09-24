@@ -34,7 +34,9 @@
     "test:rakeback-flujo": "tsx src/scripts/testRakebackPendienteFlujo.ts",
     "test:rakeback-flujo:run": "tsx src/scripts/testRakebackPendienteFlujo.ts --run",
     "limpiar:test-qa-rakeback": "tsx src/scripts/limpiarTestQARakeback.ts",
-    "diagnostico:cajerouy": "tsx src/scripts/diagnosticoCajerouyRevertido.ts"
+    "diagnostico:cajerouy": "tsx src/scripts/diagnosticoCajerouyRevertido.ts",
+    "reset:fabrica": "tsx src/scripts/resetDeFabrica.ts",
+    "reset:fabrica:apply": "tsx src/scripts/resetDeFabrica.ts --apply"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
