@@ -299,6 +299,8 @@ export default function Resumen() {
                     club: b.club_name,
                     sistema: b.system,
                     cierre_ultima_semana: b.system === "WIN_LOSE" ? b.ultimo_cierre_monto : "",
+                    cargado: b.system === "PREPAGO" ? b.total_cargado : "",
+                    descargado: b.system === "PREPAGO" ? b.total_descargado : "",
                     saldo: b.amount,
                   }))
                 )
@@ -337,7 +339,7 @@ export default function Resumen() {
         </div>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Saldo</th></tr>
+            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Cargado</th><th>Descargado</th><th>Saldo</th></tr>
           </thead>
           <tbody>
             {balancesFiltrados.map((b: any) => (
@@ -365,6 +367,18 @@ export default function Resumen() {
                   ) : (
                     <span className="muted">—</span>
                   )}
+                </td>
+                <td>
+                  {/* Cargado/Descargado (24/09/2026, pedido de Leo: "3 columnas... la suma y la
+                      resta de eso") -- solo tiene sentido para PREPAGO: ahí CARGA y DESCARGA son
+                      los ÚNICOS movimientos que tocan el balance (ver repo/closings.ts y
+                      repo/rakebackPendiente.ts), así que Cargado - Descargado = Saldo siempre.
+                      Para WIN_LOSE el balance también incluye el cierre semanal -- mostrar estas
+                      columnas ahí confundiría más de lo que aclara, así que se dejan vacías. */}
+                  {b.system === "PREPAGO" ? <span className="badge pos">{usd(b.total_cargado)}</span> : <span className="muted">—</span>}
+                </td>
+                <td>
+                  {b.system === "PREPAGO" ? <span className="badge neg">{usd(-Math.abs(Number(b.total_descargado)))}</span> : <span className="muted">—</span>}
                 </td>
                 <td>
                   <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>

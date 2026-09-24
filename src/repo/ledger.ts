@@ -229,7 +229,9 @@ export async function listAllBalances() {
             ) as system,
             ultimo_cierre.final_closing as ultimo_cierre_monto,
             ultimo_cierre.week_start as ultimo_cierre_week_start,
-            ultimo_cierre.week_end as ultimo_cierre_week_end
+            ultimo_cierre.week_end as ultimo_cierre_week_end,
+            COALESCE(cargas_descargas.total_cargado, 0) as total_cargado,
+            COALESCE(cargas_descargas.total_descargado, 0) as total_descargado
      FROM balances b
      JOIN agents a ON a.id = b.agent_id
      JOIN clubs c ON c.id = b.club_id
@@ -239,6 +241,20 @@ export async function listAllBalances() {
        WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
        ORDER BY wc.week_end DESC LIMIT 1
      ) ultimo_cierre ON true
+     -- Cargado/Descargado (24/09/2026, pedido de Leo: 3 columnas para PREPAGO -- cargas,
+     -- descargas y el saldo, que tiene que dar la resta de las dos). Para un agente PREPAGO,
+     -- CARGA y DESCARGA son los ÚNICOS tipos que mueven el balance (ver repo/closings.ts y
+     -- repo/rakebackPendiente.ts) -- por eso total_cargado - total_descargado siempre coincide
+     -- con balances.amount para ellos. Se calcula igual para todos (no solo PREPAGO) porque es
+     -- más simple y no afecta nada -- el frontend decide para qué sistema mostrar las columnas.
+     LEFT JOIN LATERAL (
+       SELECT
+         COALESCE(SUM(ABS(m.amount)) FILTER (WHERE m.type = 'CARGA'), 0) as total_cargado,
+         COALESCE(SUM(ABS(m.amount)) FILTER (WHERE m.type = 'DESCARGA'), 0) as total_descargado
+       FROM ledger_movements m
+       WHERE m.agent_id = b.agent_id AND m.club_id = b.club_id AND m.status <> 'REVERTIDO'
+         AND m.type IN ('CARGA', 'DESCARGA')
+     ) cargas_descargas ON true
      ORDER BY a.name, c.name`
   );
   return r.rows;
