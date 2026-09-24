@@ -21,6 +21,17 @@ function pasaFiltroSigno(amount: number, signo: FiltroSigno) {
   return true;
 }
 
+// "Fichas" que se ve para un balance PREPAGO (24/09/2026, aclaración de Leo: el número de
+// Fichas mostrado tiene que SER la fórmula, no solo tenerla al lado como referencia) --
+// balances.amount (lo único que hoy mueven Cargado/Descargado/ajustes manuales) + Fichas
+// ganadas en mesas (b.total_fichas_ganadas_mesas, el resultado de mesas de los cierres PREPAGO,
+// que nunca tocó el balance real -- ver repo/closings.ts). Para Win/Lose no cambia nada, sigue
+// siendo el balance tal cual.
+function fichasTotal(b: any): number {
+  if (b.system === "PREPAGO") return Number(b.amount) + Number(b.total_fichas_ganadas_mesas || 0);
+  return Number(b.amount);
+}
+
 export default function Resumen() {
   const nav = useNavigate();
   const [data, setData] = useState<any>(null);
@@ -48,7 +59,7 @@ export default function Resumen() {
 
   function empezarEdicionFichas(b: any) {
     setEditandoFichasId(b.id);
-    setEditandoFichasValor(String(Number(b.amount).toFixed(2)));
+    setEditandoFichasValor(String(fichasTotal(b).toFixed(2)));
   }
 
   async function guardarFichas(b: any) {
@@ -57,7 +68,11 @@ export default function Resumen() {
       alert("Valor inválido.");
       return;
     }
-    const delta = nuevoValor - Number(b.amount);
+    // El delta se aplica sobre balances.amount (lo único editable) -- "Fichas ganadas en mesas"
+    // es histórico, no se puede tocar a mano, así que el ajuste absorbe toda la diferencia entre
+    // el total mostrado (fichasTotal) y el nuevo valor que se quiere ver.
+    const totalActual = fichasTotal(b);
+    const delta = nuevoValor - totalActual;
     setEditandoFichasId(null);
     if (Math.abs(delta) < 0.005) return;
     setGuardandoFichas(true);
@@ -68,7 +83,7 @@ export default function Resumen() {
         agentId: b.agent_id,
         amount: delta,
         occurredAt: new Date().toISOString(),
-        observation: `Ajuste manual de fichas (PREPAGO, editado a mano en Resumen): ${usd(b.amount)} → ${usd(nuevoValor)}.`,
+        observation: `Ajuste manual de fichas (PREPAGO, editado a mano en Resumen): ${usd(totalActual)} → ${usd(nuevoValor)}.`,
       });
       await cargar();
     } catch (e: any) {
@@ -91,23 +106,27 @@ export default function Resumen() {
   }
 
   const balancesFiltrados = data.balances
-    .filter((b: any) => Number(b.amount) !== 0)
-    .filter((b: any) => pasaFiltroSigno(Number(b.amount), filtroSigno))
+    .filter((b: any) => fichasTotal(b) !== 0)
+    .filter((b: any) => pasaFiltroSigno(fichasTotal(b), filtroSigno))
     .filter((b: any) => filtroSistema === "todos" || b.system === filtroSistema)
     .filter((b: any) => {
       const q = filtro.trim().toLowerCase();
       if (!q) return true;
       return b.agent_name.toLowerCase().includes(q) || b.club_name.toLowerCase().includes(q);
     })
-    .sort((a: any, b: any) => Number(b.amount) - Number(a.amount));
+    .sort((a: any, b: any) => fichasTotal(b) - fichasTotal(a));
 
   // Win/Lose vs Prepago para los KPIs "Agentes nos deben"/"Debemos a agentes" (24/09/2026,
   // pedido de Leo) -- se calcula acá mismo desde data.balances (ya trae `system`, ver
-  // repo/ledger.ts listAllBalances) en vez de pedirle otro campo al backend.
-  const nosDebenWinLose = data.balances.filter((b: any) => Number(b.amount) < 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s - Number(b.amount), 0);
-  const nosDebenPrepago = data.balances.filter((b: any) => Number(b.amount) < 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s - Number(b.amount), 0);
-  const debemosWinLose = data.balances.filter((b: any) => Number(b.amount) > 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s + Number(b.amount), 0);
-  const debemosPrepago = data.balances.filter((b: any) => Number(b.amount) > 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0);
+  // repo/ledger.ts listAllBalances) en vez de pedirle otro campo al backend. Para PREPAGO usa
+  // fichasTotal (balance + fichas ganadas en mesas) -- para WIN_LOSE es lo mismo que antes.
+  // OJO: esto es solo el desglose Win/Lose vs Prepago que se muestra abajo de la KPI -- el total
+  // grande de arriba (data.kpis.agentesNosDeben/debemosAAgentes) sigue viniendo del backend sin
+  // este ajuste, puede no coincidir con la suma de estos dos mientras eso no se actualice.
+  const nosDebenWinLose = data.balances.filter((b: any) => fichasTotal(b) < 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s - fichasTotal(b), 0);
+  const nosDebenPrepago = data.balances.filter((b: any) => fichasTotal(b) < 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s - fichasTotal(b), 0);
+  const debemosWinLose = data.balances.filter((b: any) => fichasTotal(b) > 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s + fichasTotal(b), 0);
+  const debemosPrepago = data.balances.filter((b: any) => fichasTotal(b) > 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0);
 
   return (
     <div>
@@ -345,7 +364,7 @@ export default function Resumen() {
                     cargado: b.system === "PREPAGO" ? b.total_cargado : "",
                     descargado: b.system === "PREPAGO" ? b.total_descargado : "",
                     fichas_ganadas_mesas: b.system === "PREPAGO" ? b.total_fichas_ganadas_mesas : "",
-                    fichas: b.amount,
+                    fichas: fichasTotal(b),
                   }))
                 )
               }
@@ -377,9 +396,9 @@ export default function Resumen() {
           </button>
         </div>
         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-          Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + Number(b.amount), 0))}
+          Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
           {" · "}
-          Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0))}
+          Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
         </div>
         <table>
           <thead>
@@ -437,9 +456,12 @@ export default function Resumen() {
                   )}
                 </td>
                 <td onClick={(e) => e.stopPropagation()}>
-                  {/* Fichas 100% editable a mano SOLO para PREPAGO (pedido de Leo: "por temas
-                      internos") -- guarda un AJUSTE por la diferencia, nunca pisa el número
-                      directo, así queda auditado (ver guardarFichas() arriba). */}
+                  {/* Fichas = balance + fichas ganadas en mesas para PREPAGO (24/09/2026,
+                      aclaración de Leo: el número mostrado TIENE que ser la suma de las 3
+                      columnas, no solo tenerla al lado de referencia -- ver fichasTotal() arriba).
+                      100% editable a mano SOLO para PREPAGO (pedido de Leo: "por temas internos")
+                      -- guarda un AJUSTE por la diferencia sobre el balance real, nunca pisa el
+                      número directo, así queda auditado (ver guardarFichas() arriba). */}
                   {b.system === "PREPAGO" && editandoFichasId === b.id ? (
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <input
@@ -459,7 +481,7 @@ export default function Resumen() {
                     </div>
                   ) : (
                     <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>
+                      <span className={`badge ${fichasTotal(b) > 0 ? "pos" : "neg"}`}>{usd(fichasTotal(b))}</span>
                       {b.system === "PREPAGO" && (
                         <button
                           className="btn secondary small"
