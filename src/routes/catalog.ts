@@ -294,6 +294,12 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       rakebackNeto: Number(c.rakeback) + Number(c.rebate),
       rakebackPendienteId: pendiente ? pendiente.id : null,
       rakebackPendienteDisponible: pendiente ? Number(pendiente.amount) - Number(pendiente.consumed) : null,
+      // system (24/09/2026, pedido de Leo): el frontend lo necesita para NO ofrecer/tildar
+      // "FICHAS" por defecto al pagar el rakeback pendiente de un agente PREPAGO -- un PREPAGO
+      // solo tiene fichas por lo que paga por adelantado, pagarle el pendiente en fichas rompe
+      // esa regla (ver repo/rakebackPendiente.ts, que ahora también lo bloquea del lado del
+      // servidor).
+      system: c.system,
     };
   });
   const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);

@@ -63,6 +63,17 @@ export async function pagarPendiente(input: PagarPendienteInput) {
     const wcRes = await pool.query(`SELECT system FROM weekly_closings WHERE id = $1`, [actual.weekly_closing_id]);
     systemDelPendiente = wcRes.rows[0]?.system ?? null;
   }
+  // Bloqueo (24/09/2026, pedido de Leo, encontrado por un caso real en Liquidaciones -- tb
+  // prodigio25 y yAtt0r0 quedaron con fichas de más porque el formulario tildaba "FICHAS" por
+  // defecto sin distinguir el sistema): un agente PREPAGO SOLO tiene fichas por lo que paga por
+  // adelantado -- pagarle acá el rakeback pendiente en fichas le estaría regalando stock sin que
+  // haya pagado nada, exactamente lo que esta regla prohíbe. Se corta acá, del lado del
+  // servidor, para no depender de que el frontend elija bien el medio.
+  if (input.medio === "FICHAS" && actual.role === "AGENTE" && systemDelPendiente === "PREPAGO") {
+    throw new Error(
+      "Un agente PREPAGO no puede cobrar su rakeback pendiente en fichas -- solo tiene fichas por lo que paga por adelantado. Pagalo en USDT, efectivo o Zelle."
+    );
+  }
   const restaFichasPrepago = input.medio !== "FICHAS" && actual.role === "AGENTE" && systemDelPendiente === "PREPAGO";
 
   const reg = await registrarMovimiento({

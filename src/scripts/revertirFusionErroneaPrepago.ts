@@ -1,13 +1,16 @@
-// Corrección de un bug mío (24/09/2026): fusionarPendienteAgenteASaldo.ts (el script de
-// corrección histórica para agentes WIN_LOSE) no filtraba por wc.system -- si se corrió, pagó
-// en fichas (medio FICHAS) también el rakeback pendiente de agentes PREPAGO, justo lo contrario
-// de la regla nueva para PREPAGO (ver repo/closings.ts: un PREPAGO solo tiene fichas por cargas
-// manuales/adelantos, nunca por el cierre ni por pagar su rakeback pendiente). Leo lo detectó en
-// tb prodigio25.
+// Corrección de dos bugs distintos que terminaron en lo mismo (24/09/2026): un agente PREPAGO
+// SOLO tiene que tener fichas por lo que paga por adelantado (ver repo/closings.ts) -- pagarle
+// su rakeback pendiente EN FICHAS (medio=FICHAS) rompe esa regla, y sin embargo pasó por dos
+// caminos distintos: (1) fusionarPendienteAgenteASaldo.ts (el script de corrección Win/Lose) no
+// filtraba por wc.system, y (2) el formulario de "Pago" en Liquidaciones arrancaba tildado en
+// "FICHAS" para CUALQUIER agente con rakeback pendiente, sin distinguir el sistema. Leo lo
+// detectó en tb prodigio25 (US$1.343,69) y yAtt0r0 (US$413,00). Los dos caminos ya están
+// tapados (fusionarPendienteAgenteASaldo.ts filtra WIN_LOSE, Liquidaciones ya no ofrece/tilda
+// FICHAS para PREPAGO, y pagarPendiente lo rechaza del lado del servidor si igual se intenta).
 //
-// Este script busca esos pagos erróneos (rakeback_pendiente_movements tipo PAGO_FICHAS, con la
-// nota de texto que generó fusionarPendienteAgenteASaldo.ts, para pendientes de un weekly_closing
-// system='PREPAGO') y los deshace:
+// Este script busca CUALQUIER pago en fichas (rakeback_pendiente_movements tipo PAGO_FICHAS)
+// hecho sobre el rakeback pendiente de un agente de un weekly_closing system='PREPAGO' -- no
+// importa por qué camino se hizo -- y los deshace:
 //   1. Revierte el movimiento de ledger (CARGA) que se había generado -- resta esas fichas del
 //      balance (mismo mecanismo de "Revertir" de todo el ledger, deja rastro, no borra nada).
 //   2. Le resta ese monto a rakeback_pendiente.consumed -- vuelve a quedar pendiente de pago de
@@ -20,7 +23,6 @@ import { pool, newId } from "../db/pool.js";
 import { revertirMovimiento } from "../repo/ledger.js";
 
 const APPLY = process.argv.includes("--apply");
-const NOTA_BUGGEADA = "se revierte la separación balance/rakeback pendiente para agentes Win/Lose";
 
 function fmt(n: number) {
   return (n < 0 ? "-US$ " : "US$ ") + Math.abs(n).toFixed(2);
@@ -37,13 +39,12 @@ async function main() {
      JOIN agents a ON a.id = rp.agent_id
      JOIN clubs c ON c.id = rp.club_id
      LEFT JOIN ledger_movements m ON m.id = rpm.movement_id
-     WHERE rpm.type = 'PAGO_FICHAS' AND rpm.notes LIKE '%' || $1 || '%' AND wc.system = 'PREPAGO'
-     ORDER BY a.name, c.name, wc.week_start`,
-    [NOTA_BUGGEADA]
+     WHERE rpm.type = 'PAGO_FICHAS' AND wc.system = 'PREPAGO'
+     ORDER BY a.name, c.name, wc.week_start`
   );
 
   if (r.rows.length === 0) {
-    console.log("No se encontraron pagos erróneos de rakeback pendiente PREPAGO por el bug del 24/09/2026 -- nada para corregir.");
+    console.log("No se encontraron pagos en fichas sobre rakeback pendiente de agentes PREPAGO -- nada para corregir.");
     await pool.end();
     return;
   }
@@ -69,7 +70,7 @@ async function main() {
     if (row.movement_id && !yaRevertido) {
       await revertirMovimiento(
         row.movement_id,
-        "Corrección 24/09/2026: pago erróneo de rakeback pendiente en fichas para agente PREPAGO (bug de fusionarPendienteAgenteASaldo.ts sin filtro de sistema)."
+        "Corrección 24/09/2026: pago erróneo de rakeback pendiente en fichas para agente PREPAGO -- un PREPAGO solo tiene fichas por lo que paga por adelantado."
       );
     }
 
@@ -88,7 +89,7 @@ async function main() {
           row.pendiente_id,
           monto,
           nuevoConsumed,
-          "Corrección 24/09/2026: se deshace el pago erróneo en fichas (bug del script de corrección Win/Lose) -- vuelve a quedar pendiente de pago real.",
+          "Corrección 24/09/2026: se deshace el pago erróneo en fichas -- vuelve a quedar pendiente de pago real (USDT/efectivo/Zelle).",
         ]
       );
 

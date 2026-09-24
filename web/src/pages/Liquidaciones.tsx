@@ -403,7 +403,11 @@ export default function Liquidaciones() {
         filas[filaKey(f)] = {
           checked: Number(monto) > 0,
           monto,
-          medio: f.rakebackPendienteId ? "FICHAS" : "SIN_TESORERIA",
+          // PREPAGO (24/09/2026, pedido de Leo -- caso real: tb prodigio25 y yAtt0r0 quedaron
+          // con fichas de más porque esto arrancaba en "FICHAS" para cualquier agente): un
+          // agente PREPAGO solo tiene fichas por lo que paga por adelantado, así que el default acá
+          // NUNCA puede ser "FICHAS" para PREPAGO (el servidor además lo rechaza si se fuerza).
+          medio: f.rakebackPendienteId ? (f.system === "PREPAGO" ? "USDT" : "FICHAS") : "SIN_TESORERIA",
         };
       });
       setMovFilas(filas);
@@ -1259,7 +1263,8 @@ export default function Liquidaciones() {
                             <select value={v.medio} disabled={!v.checked} onChange={(e) => actualizarMovFila(key, { medio: e.target.value })}>
                               {f.rakebackPendienteId ? (
                                 <>
-                                  <option value="FICHAS">Fichas (mueve el stock)</option>
+                                  {/* PREPAGO nunca puede pagarse en fichas -- ver nota en abrirMov() */}
+                                  {f.system !== "PREPAGO" && <option value="FICHAS">Fichas (mueve el stock)</option>}
                                   <option value="USDT">USDT</option>
                                   <option value="EFECTIVO">Efectivo</option>
                                   <option value="ZELLE">Zelle</option>
