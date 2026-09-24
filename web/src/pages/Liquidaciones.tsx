@@ -165,7 +165,10 @@ export default function Liquidaciones() {
   // usuario es una sola acción: si alguna fila falla, se avisa cuál sin frenar el resto. Keyed
   // por filaKey(f). "Recibir" (COBRO) sigue con movAgenteClub de abajo -- ahí nunca hubo
   // concepto de "por fila", el monto siempre fue el total de la liquidación.
-  const [movFilas, setMovFilas] = useState<Record<string, { checked: boolean; monto: string; medio: string }>>({});
+  // Splits (24/09/2026, pedido de Leo: "enviar 1000 usdt y 541.64 en fichas" -- un mismo
+  // pendiente pagado en más de un medio/importe a la vez): cada fila puede tener varios
+  // splits, cada uno con su propio importe y medio, todos contra el mismo pendiente/agente+club.
+  const [movFilas, setMovFilas] = useState<Record<string, { checked: boolean; splits: { monto: string; medio: string }[] }>>({});
   const [movCustodio, setMovCustodio] = useState("");
   const [movObservacion, setMovObservacion] = useState("");
   const [registrandoMov, setRegistrandoMov] = useState(false);
@@ -397,17 +400,23 @@ export default function Liquidaciones() {
       // Arranca con todas las filas que tienen algo pendiente tildadas (importe/medio sugerido
       // por fila) -- Leo destilda las que no quiere pagar ahora, o ajusta importe/medio de
       // cualquiera antes de confirmar.
-      const filas: Record<string, { checked: boolean; monto: string; medio: string }> = {};
+      const filas: Record<string, { checked: boolean; splits: { monto: string; medio: string }[] }> = {};
       (data?.filas ?? []).forEach((f: any) => {
         const monto = montoSugeridoParaFila(f);
         filas[filaKey(f)] = {
           checked: Number(monto) > 0,
-          monto,
-          // PREPAGO (24/09/2026, pedido de Leo -- caso real: tb prodigio25 y yAtt0r0 quedaron
-          // con fichas de más porque esto arrancaba en "FICHAS" para cualquier agente): un
-          // agente PREPAGO solo tiene fichas por lo que paga por adelantado, así que el default acá
-          // NUNCA puede ser "FICHAS" para PREPAGO (el servidor además lo rechaza si se fuerza).
-          medio: f.rakebackPendienteId ? (f.system === "PREPAGO" ? "USDT" : "FICHAS") : "SIN_TESORERIA",
+          // Arranca con un solo split (mismo comportamiento de siempre) -- el botón "+" de la
+          // tabla de abajo permite desdoblar el pago de esta fila en varios splits.
+          splits: [
+            {
+              monto,
+              // PREPAGO (24/09/2026, pedido de Leo -- caso real: tb prodigio25 y yAtt0r0 quedaron
+              // con fichas de más porque esto arrancaba en "FICHAS" para cualquier agente): un
+              // agente PREPAGO solo tiene fichas por lo que paga por adelantado, así que el default acá
+              // NUNCA puede ser "FICHAS" para PREPAGO (el servidor además lo rechaza si se fuerza).
+              medio: f.rakebackPendienteId ? (f.system === "PREPAGO" ? "USDT" : "FICHAS") : "SIN_TESORERIA",
+            },
+          ],
         };
       });
       setMovFilas(filas);
@@ -421,8 +430,36 @@ export default function Liquidaciones() {
     }
   }
 
-  function actualizarMovFila(key: string, patch: Partial<{ checked: boolean; monto: string; medio: string }>) {
-    setMovFilas((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  function actualizarMovFilaChecked(key: string, checked: boolean) {
+    setMovFilas((prev) => ({ ...prev, [key]: { ...prev[key], checked } }));
+  }
+
+  // Desdoblar el pago de una fila en varios "splits" -- cada uno con su propio importe y medio,
+  // todos contra el MISMO pendiente/agente+club de esa fila (24/09/2026, pedido de Leo: poder
+  // enviar por ejemplo 1000 en USDT y el resto en fichas en el mismo click).
+  function actualizarSplit(key: string, idx: number, patch: Partial<{ monto: string; medio: string }>) {
+    setMovFilas((prev) => {
+      const fila = prev[key];
+      if (!fila) return prev;
+      const splits = fila.splits.map((s, i) => (i === idx ? { ...s, ...patch } : s));
+      return { ...prev, [key]: { ...fila, splits } };
+    });
+  }
+
+  function agregarSplit(key: string, medioDefault: string) {
+    setMovFilas((prev) => {
+      const fila = prev[key];
+      if (!fila) return prev;
+      return { ...prev, [key]: { ...fila, splits: [...fila.splits, { monto: "", medio: medioDefault }] } };
+    });
+  }
+
+  function quitarSplit(key: string, idx: number) {
+    setMovFilas((prev) => {
+      const fila = prev[key];
+      if (!fila || fila.splits.length <= 1) return prev;
+      return { ...prev, [key]: { ...fila, splits: fila.splits.filter((_, i) => i !== idx) } };
+    });
   }
 
   function cambiarFilaMov(valor: string) {
@@ -485,9 +522,11 @@ export default function Liquidaciones() {
     const entradas = Object.entries(movFilas).filter(([, v]) => v.checked);
     if (entradas.length === 0) return setMovMsg({ ok: false, text: "Marcá al menos un agente." });
     for (const [, v] of entradas) {
-      if (!(Number(v.monto) > 0)) return setMovMsg({ ok: false, text: "Todos los importes tildados tienen que ser mayores a 0." });
+      if (v.splits.length === 0 || v.splits.some((s) => !(Number(s.monto) > 0))) {
+        return setMovMsg({ ok: false, text: "Todos los importes tildados tienen que ser mayores a 0." });
+      }
     }
-    const necesitaCustodio = entradas.some(([, v]) => v.medio === "EFECTIVO");
+    const necesitaCustodio = entradas.some(([, v]) => v.splits.some((s) => s.medio === "EFECTIVO"));
     if (necesitaCustodio && !movCustodio.trim()) {
       return setMovMsg({ ok: false, text: "Un pago en efectivo requiere custodio (BIT-051/052)." });
     }
@@ -499,30 +538,35 @@ export default function Liquidaciones() {
     for (const [key, v] of entradas) {
       const fila = data?.filas.find((f: any) => filaKey(f) === key);
       if (!fila) continue;
-      try {
-        if (fila.rakebackPendienteId) {
-          await api.pagarRakebackPendiente({
-            pendienteId: fila.rakebackPendienteId,
-            amount: Number(v.monto),
-            medio: v.medio as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
-            custodian: v.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
-            notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
-          });
-        } else {
-          await api.crearMovimiento({
-            type: "PAGO",
-            agentId: fila.agentId,
-            clubId: fila.clubId,
-            amount: Number(v.monto),
-            paymentMethod: v.medio,
-            custodian: v.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
-            occurredAt: new Date().toISOString(),
-            observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
-          });
+      // Cada split de esta fila se manda como su propio movimiento -- así un mismo pendiente se
+      // puede pagar en varios medios/importes a la vez (24/09/2026, pedido de Leo).
+      for (const [idx, split] of v.splits.entries()) {
+        try {
+          if (fila.rakebackPendienteId) {
+            await api.pagarRakebackPendiente({
+              pendienteId: fila.rakebackPendienteId,
+              amount: Number(split.monto),
+              medio: split.medio as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
+              custodian: split.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
+              notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+            });
+          } else {
+            await api.crearMovimiento({
+              type: "PAGO",
+              agentId: fila.agentId,
+              clubId: fila.clubId,
+              amount: Number(split.monto),
+              paymentMethod: split.medio,
+              custodian: split.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
+              occurredAt: new Date().toISOString(),
+              observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+            });
+          }
+          exitos++;
+        } catch (err: any) {
+          const etiqueta = v.splits.length > 1 ? `${fila.agentName} (${fila.clubName}) — parte ${idx + 1}` : `${fila.agentName} (${fila.clubName})`;
+          errores.push(`${etiqueta}: ${err.message || "error"}`);
         }
-        exitos++;
-      } catch (err: any) {
-        errores.push(`${fila.agentName} (${fila.clubName}): ${err.message || "error"}`);
       }
     }
     setMovMsg(
@@ -1231,57 +1275,98 @@ export default function Liquidaciones() {
                   <tbody>
                     {data.filas.map((f: any) => {
                       const key = filaKey(f);
-                      const v = movFilas[key] ?? { checked: false, monto: "0", medio: "SIN_TESORERIA" };
-                      return (
-                        <tr key={key}>
+                      const v = movFilas[key] ?? { checked: false, splits: [{ monto: "0", medio: "SIN_TESORERIA" }] };
+                      const medioDefault = f.rakebackPendienteId ? (f.system === "PREPAGO" ? "USDT" : "FICHAS") : "SIN_TESORERIA";
+                      const opcionesMedio = f.rakebackPendienteId ? (
+                        <>
+                          {/* PREPAGO nunca puede pagarse en fichas -- ver nota en abrirMov() */}
+                          {f.system !== "PREPAGO" && <option value="FICHAS">Fichas (mueve el stock)</option>}
+                          <option value="USDT">USDT</option>
+                          <option value="EFECTIVO">Efectivo</option>
+                          <option value="ZELLE">Zelle</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="SIN_TESORERIA">Sin tesorería</option>
+                          <option value="USDT">USDT</option>
+                          <option value="EFECTIVO">Efectivo</option>
+                          <option value="ZELLE">Zelle</option>
+                          <option value="OTRO">Otro</option>
+                        </>
+                      );
+                      // Desdoblar en varios pagos/medios (24/09/2026, pedido de Leo -- ej. "enviar
+                      // 1000 usdt y 541.64 en fichas"): un renglón por split, todos contra el
+                      // mismo agente+club/pendiente -- el checkbox y el nombre solo se muestran
+                      // en el primer renglón de la fila, "+" agrega otro split y "×" saca uno de
+                      // más (nunca el único que queda).
+                      return v.splits.map((split, idx) => (
+                        <tr key={`${key}:${idx}`}>
                           <td>
-                            <input
-                              type="checkbox"
-                              checked={v.checked}
-                              onChange={(e) => actualizarMovFila(key, { checked: e.target.checked })}
-                            />
+                            {idx === 0 && (
+                              <input
+                                type="checkbox"
+                                checked={v.checked}
+                                onChange={(e) => actualizarMovFilaChecked(key, e.target.checked)}
+                              />
+                            )}
                           </td>
                           <td>
-                            {f.agentName} — {f.clubName}
-                            {f.rakebackPendienteId && (
-                              <div className="muted" style={{ fontSize: 11 }}>
-                                Pendiente: {usd(f.rakebackPendienteDisponible)}
-                              </div>
+                            {idx === 0 && (
+                              <>
+                                {f.agentName} — {f.clubName}
+                                {f.rakebackPendienteId && (
+                                  <div className="muted" style={{ fontSize: 11 }}>
+                                    Pendiente: {usd(f.rakebackPendienteDisponible)}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </td>
                           <td>
                             <input
                               type="number"
                               step="0.01"
-                              value={v.monto}
+                              value={split.monto}
                               disabled={!v.checked}
-                              onChange={(e) => actualizarMovFila(key, { monto: e.target.value })}
+                              onChange={(e) => actualizarSplit(key, idx, { monto: e.target.value })}
                               style={{ width: 110 }}
                             />
                           </td>
                           <td>
-                            <select value={v.medio} disabled={!v.checked} onChange={(e) => actualizarMovFila(key, { medio: e.target.value })}>
-                              {f.rakebackPendienteId ? (
-                                <>
-                                  {/* PREPAGO nunca puede pagarse en fichas -- ver nota en abrirMov() */}
-                                  {f.system !== "PREPAGO" && <option value="FICHAS">Fichas (mueve el stock)</option>}
-                                  <option value="USDT">USDT</option>
-                                  <option value="EFECTIVO">Efectivo</option>
-                                  <option value="ZELLE">Zelle</option>
-                                </>
-                              ) : (
-                                <>
-                                  <option value="SIN_TESORERIA">Sin tesorería</option>
-                                  <option value="USDT">USDT</option>
-                                  <option value="EFECTIVO">Efectivo</option>
-                                  <option value="ZELLE">Zelle</option>
-                                  <option value="OTRO">Otro</option>
-                                </>
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <select
+                                value={split.medio}
+                                disabled={!v.checked}
+                                onChange={(e) => actualizarSplit(key, idx, { medio: e.target.value })}
+                              >
+                                {opcionesMedio}
+                              </select>
+                              {idx === v.splits.length - 1 && (
+                                <button
+                                  type="button"
+                                  className="btn secondary small"
+                                  title="Desdoblar este pago en otro medio/importe"
+                                  disabled={!v.checked}
+                                  onClick={() => agregarSplit(key, medioDefault)}
+                                >
+                                  +
+                                </button>
                               )}
-                            </select>
+                              {v.splits.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn secondary small"
+                                  title="Sacar este renglón"
+                                  disabled={!v.checked}
+                                  onClick={() => quitarSplit(key, idx)}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      );
+                      ));
                     })}
                   </tbody>
                   <tfoot>
@@ -1290,13 +1375,18 @@ export default function Liquidaciones() {
                       <td><strong>Total tildado</strong></td>
                       <td colSpan={2}>
                         <strong>
-                          {usd(Object.values(movFilas).reduce((s, v) => s + (v.checked ? Number(v.monto) || 0 : 0), 0))}
+                          {usd(
+                            Object.values(movFilas).reduce(
+                              (s, v) => s + (v.checked ? v.splits.reduce((s2, sp) => s2 + (Number(sp.monto) || 0), 0) : 0),
+                              0
+                            )
+                          )}
                         </strong>
                       </td>
                     </tr>
                   </tfoot>
                 </table>
-                {Object.values(movFilas).some((v) => v.checked && v.medio === "EFECTIVO") && (
+                {Object.values(movFilas).some((v) => v.checked && v.splits.some((s) => s.medio === "EFECTIVO")) && (
                   <div className="field" style={{ marginTop: 10 }}>
                     <label>Custodio del efectivo (aplica a todas las filas en efectivo)</label>
                     <input value={movCustodio} onChange={(e) => setMovCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
