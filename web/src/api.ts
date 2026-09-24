@@ -6,6 +6,21 @@ function getToken() {
   return localStorage.getItem("dp_token");
 }
 
+// (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- después de
+// CUALQUIER request que modifica datos (POST/PUT/PATCH/DELETE) que termina bien, se avisa al
+// resto de la app con un evento del navegador -- Shell.tsx lo escucha y refresca la pantalla
+// actual sola (ver ahí el porqué). GET nunca dispara esto -- no modifica nada, no hay nada que
+// avisar.
+function avisarQueCambiaronDatos(method?: string) {
+  const m = (method || "GET").toUpperCase();
+  if (m === "GET" || m === "HEAD") return;
+  try {
+    window.dispatchEvent(new Event("dp:datos-cambiaron"));
+  } catch {
+    /* fuera de un navegador (tests, etc.) -- no pasa nada */
+  }
+}
+
 async function request(path: string, opts: RequestInit = {}) {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -20,6 +35,7 @@ async function request(path: string, opts: RequestInit = {}) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
+  avisarQueCambiaronDatos(opts.method);
   return res.json();
 }
 
@@ -37,6 +53,7 @@ async function requestForm(path: string, form: FormData) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
+  avisarQueCambiaronDatos("POST");
   return res.json();
 }
 

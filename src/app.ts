@@ -26,6 +26,17 @@ export const app = express();
 app.use(cors());
 app.use(express.json());
 
+// (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- por las
+// dudas de que el navegador, un proxy intermedio o el CDN de Vercel decida cachear una respuesta
+// GET (esta API es 100% dinámica, nunca corresponde servir una respuesta vieja), se fuerza
+// no-store en TODAS las respuestas. No afecta rendimiento de forma perceptible -- estas rutas ya
+// pegan contra la base en cada request, no había cache real ganando nada acá, solo el riesgo de
+// una respuesta vieja quedando pegada en el medio.
+app.use((_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/auth", authRouter);

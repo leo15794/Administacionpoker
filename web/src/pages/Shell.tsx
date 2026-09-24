@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 
 const icon = {
@@ -221,11 +221,45 @@ function getInitialNavOrder(): string[] {
 
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" }) {
   const nav = useNavigate();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
   const dragKey = useRef<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  // (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- en vez de
+  // wirear un refresh manual en cada una de las ~25 pantallas, se refresca la pantalla actual
+  // sola cuando: (1) volvés a esta pestaña después de estar en otra (focus/visibilitychange), o
+  // (2) se acaba de guardar algo en cualquier lado (evento "dp:datos-cambiaron", disparado desde
+  // api.ts después de cualquier POST/PUT/PATCH/DELETE que salió bien). El mecanismo es
+  // cambiarle la key a <Outlet/> más abajo: React desmonta y vuelve a montar la pantalla activa,
+  // lo que dispara el mismo fetch inicial que cada pantalla ya tiene al cargar -- no hace falta
+  // tocar ninguna pantalla puntual. OJO: esto resetea cualquier cosa que no esté guardada en esa
+  // pantalla (un formulario a medio llenar, un filtro, una fila en edición) -- si en la práctica
+  // molesta más de lo que ayuda (ej. te corta mientras estás escribiendo algo), avisá y se puede
+  // sacar el disparador de foco/pestaña y dejar solo el de "se guardó algo".
+  const [refreshKey, setRefreshKey] = useState(0);
+  const ultimoRefresh = useRef(0);
+  useEffect(() => {
+    function refrescar() {
+      const ahora = Date.now();
+      if (ahora - ultimoRefresh.current < 3000) return; // throttle: no más de 1 cada 3s
+      ultimoRefresh.current = ahora;
+      setRefreshKey((k) => k + 1);
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") refrescar();
+    }
+    window.addEventListener("focus", refrescar);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("dp:datos-cambiaron", refrescar);
+    return () => {
+      window.removeEventListener("focus", refrescar);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("dp:datos-cambiaron", refrescar);
+    };
+  }, []);
 
   function moverNav(destinoKey: string) {
     const origenKey = dragKey.current;
@@ -394,7 +428,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </div>
       <div className="main">
-        <Outlet />
+        <Outlet key={`${location.pathname}:${refreshKey}`} />
       </div>
     </div>
   );
