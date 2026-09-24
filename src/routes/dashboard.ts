@@ -13,11 +13,22 @@ import { getResumenFinanciero } from "../repo/resumenFinanciero.js";
 
 export const dashboardRouter = Router();
 
+// "Fichas" real de un balance para PREPAGO = balances.amount + fichas ganadas en mesas
+// (24/09/2026, pedido de Leo: los KPIs de arriba -- "Agentes nos deben"/"Debemos a agentes" --
+// tenían que mostrar 392.33 en vez de 2011.71 para un caso PREPAGO, porque sumaban
+// b.amount crudo en vez de la fórmula completa que ya se usa en el desglose de abajo y en
+// la tabla de Resumen (ver web/src/pages/Resumen.tsx fichasTotal). Mismo criterio acá, para que
+// el total grande siempre coincida con la suma del desglose Win/Lose + Prepago.
+function fichasTotal(b: any): number {
+  if (b.system === "PREPAGO") return Number(b.amount) + Number(b.total_fichas_ganadas_mesas || 0);
+  return Number(b.amount);
+}
+
 dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => {
   const balances = await listAllBalances();
 
-  const totalAFavorAgentes = balances.filter((b) => Number(b.amount) > 0).reduce((s, b) => s + Number(b.amount), 0);
-  const totalAFavorNuestro = balances.filter((b) => Number(b.amount) < 0).reduce((s, b) => s + Number(b.amount), 0);
+  const totalAFavorAgentes = balances.filter((b) => fichasTotal(b) > 0).reduce((s, b) => s + fichasTotal(b), 0);
+  const totalAFavorNuestro = balances.filter((b) => fichasTotal(b) < 0).reduce((s, b) => s + fichasTotal(b), 0);
 
   const porClub = await pool.query(
     `SELECT c.id as club_id, c.name as club, COUNT(DISTINCT b.agent_id) as agentes, COALESCE(SUM(b.amount),0) as saldo_neto
