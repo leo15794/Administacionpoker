@@ -1,7 +1,23 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 
-const SECRET = process.env.JWT_SECRET || "dev-secret";
+// (24/09/2026, encontrado en análisis de seguridad) -- ANTES esto caía a un secreto hardcodeado
+// ("dev-secret") si faltaba la variable de entorno JWT_SECRET. Eso es gravísimo en producción:
+// como el código es visible (repo propio, no público, pero igual), cualquiera que supiera ese
+// fallback podría firmar un token con role: "ADMIN" para el agentId/email que quisiera y
+// entrar como admin sin contraseña. Ahora, si falta la variable, el proceso ni arranca -- mejor
+// que se rompa fuerte al desplegar (avisando en los logs) a que quede corriendo "seguro a
+// medias" sin que nadie se entere. En Vercel: Project Settings → Environment Variables →
+// JWT_SECRET (un valor largo y random, no el de local). En local: .env (ver .env.example).
+const SECRET = (() => {
+  const v = process.env.JWT_SECRET;
+  if (!v) {
+    throw new Error(
+      "Falta la variable de entorno JWT_SECRET -- sin esto la app no puede firmar/verificar sesiones de forma segura. Configurala (Vercel: Project Settings → Environment Variables; local: .env) y volvé a desplegar/reiniciar."
+    );
+  }
+  return v;
+})();
 
 export interface JwtPayload {
   userId: string;

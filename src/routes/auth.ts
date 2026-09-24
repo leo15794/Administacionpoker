@@ -1,9 +1,24 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import { pool, newId } from "../db/pool.js";
 import { signToken, requireAuth, requireAdmin } from "../lib/auth.js";
 
 export const authRouter = Router();
+
+// (24/09/2026, encontrado en análisis de seguridad) -- /login no tenía ningún límite de
+// intentos: alguien podía probar contraseñas sin parar contra un email real (fuerza bruta). 20
+// intentos cada 15 minutos por IP alcanza de sobra para un login normal (incluso con typos) y
+// frena un ataque automatizado. No cuenta los intentos que salen bien (skipSuccessfulRequests),
+// así que un usuario legítimo que ya entró no gasta cupo.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar." },
+});
 
 // Crea (o resetea la contraseña de) un usuario de portal para un agente existente.
 // Protegido: solo un ADMIN ya logueado puede crear otros usuarios.
@@ -28,7 +43,7 @@ authRouter.post("/bootstrap-user", requireAuth, requireAdmin, async (req, res) =
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: "email y contraseña son requeridos" });
@@ -49,7 +64,11 @@ authRouter.post("/login", async (req, res) => {
     const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
     res.json({ token, agentName: user.agent_name, role: user.role });
   } catch (err: any) {
+    // (24/09/2026, encontrado en análisis de seguridad) -- antes esto devolvía el mensaje crudo
+    // del error (podía ser un error de Postgres con nombres de tabla/columna) al cliente. El
+    // detalle real solo queda en los logs del servidor -- al que hace login nunca le hace falta
+    // saber POR QUÉ falló técnicamente, y no corresponde exponerlo.
     console.error("Error en /auth/login:", err);
-    res.status(500).json({ error: "Error interno en login", detail: String(err?.message ?? err) });
+    res.status(500).json({ error: "Error interno en login" });
   }
 });
