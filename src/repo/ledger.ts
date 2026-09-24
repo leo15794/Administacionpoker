@@ -231,7 +231,8 @@ export async function listAllBalances() {
             ultimo_cierre.week_start as ultimo_cierre_week_start,
             ultimo_cierre.week_end as ultimo_cierre_week_end,
             COALESCE(cargas_descargas.total_cargado, 0) as total_cargado,
-            COALESCE(cargas_descargas.total_descargado, 0) as total_descargado
+            COALESCE(cargas_descargas.total_descargado, 0) as total_descargado,
+            COALESCE(mesas.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas
      FROM balances b
      JOIN agents a ON a.id = b.agent_id
      JOIN clubs c ON c.id = b.club_id
@@ -255,6 +256,18 @@ export async function listAllBalances() {
        WHERE m.agent_id = b.agent_id AND m.club_id = b.club_id AND m.status <> 'REVERTIDO'
          AND m.type IN ('CARGA', 'DESCARGA')
      ) cargas_descargas ON true
+     -- Fichas ganadas en mesas (24/09/2026, pedido de Leo: nueva columna para PREPAGO, "Cargado
+     -- - Descargado + Fichas ganadas en las mesas = Fichas") -- el resultado crudo de mesas
+     -- (wc.result) de todos los cierres PREPAGO de este agente+club, sumado histórico. Es
+     -- puramente informativo/de referencia -- el campo "Fichas" real sigue siendo
+     -- balances.amount, que en la UI ahora se puede editar a mano (ver POST /movements tipo
+     -- AJUSTE) solo para PREPAGO.
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO'
+     ) mesas ON true
      ORDER BY a.name, c.name`
   );
   return r.rows;

@@ -30,10 +30,53 @@ export default function Resumen() {
   const [filtroSistema, setFiltroSistema] = useState<FiltroSistema>("todos");
   const [detalle, setDetalle] = useState<{ title: string; agentId?: string; clubId?: string } | null>(null);
   const tablaSaldosRef = useRef<HTMLDivElement>(null);
+  // Edición manual de Fichas (24/09/2026, pedido de Leo, SOLO PREPAGO): "por temas internos" el
+  // número de Fichas tiene que poder pisarse a mano. Se implementa como un AJUSTE de ledger por
+  // la diferencia (nunca se pisa balances.amount directo) -- así queda auditado como cualquier
+  // otro movimiento, ver POST /movements.
+  const [editandoFichasId, setEditandoFichasId] = useState<string | null>(null);
+  const [editandoFichasValor, setEditandoFichasValor] = useState("");
+  const [guardandoFichas, setGuardandoFichas] = useState(false);
+
+  function cargar() {
+    return api.resumen().then(setData).catch((e) => setError(e.message));
+  }
 
   useEffect(() => {
-    api.resumen().then(setData).catch((e) => setError(e.message));
+    cargar();
   }, []);
+
+  function empezarEdicionFichas(b: any) {
+    setEditandoFichasId(b.id);
+    setEditandoFichasValor(String(Number(b.amount).toFixed(2)));
+  }
+
+  async function guardarFichas(b: any) {
+    const nuevoValor = Number(editandoFichasValor);
+    if (!Number.isFinite(nuevoValor)) {
+      alert("Valor inválido.");
+      return;
+    }
+    const delta = nuevoValor - Number(b.amount);
+    setEditandoFichasId(null);
+    if (Math.abs(delta) < 0.005) return;
+    setGuardandoFichas(true);
+    try {
+      await api.crearMovimiento({
+        type: "AJUSTE",
+        clubId: b.club_id,
+        agentId: b.agent_id,
+        amount: delta,
+        occurredAt: new Date().toISOString(),
+        observation: `Ajuste manual de fichas (PREPAGO, editado a mano en Resumen): ${usd(b.amount)} → ${usd(nuevoValor)}.`,
+      });
+      await cargar();
+    } catch (e: any) {
+      alert(e.message || "No se pudo guardar el ajuste.");
+    } finally {
+      setGuardandoFichas(false);
+    }
+  }
 
   if (error) return <div className="error">No se pudo cargar el resumen: {error}</div>;
   if (!data) return <div className="muted">Cargando...</div>;
@@ -301,7 +344,8 @@ export default function Resumen() {
                     cierre_ultima_semana: b.system === "WIN_LOSE" ? b.ultimo_cierre_monto : "",
                     cargado: b.system === "PREPAGO" ? b.total_cargado : "",
                     descargado: b.system === "PREPAGO" ? b.total_descargado : "",
-                    saldo: b.amount,
+                    fichas_ganadas_mesas: b.system === "PREPAGO" ? b.total_fichas_ganadas_mesas : "",
+                    fichas: b.amount,
                   }))
                 )
               }
@@ -335,11 +379,11 @@ export default function Resumen() {
         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + Number(b.amount), 0))}
           {" · "}
-          Saldo Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0))}
+          Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + Number(b.amount), 0))}
         </div>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Cargado</th><th>Descargado</th><th>Saldo</th></tr>
+            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Cargado</th><th>Descargado</th><th>Fichas ganadas en mesas</th><th>Fichas</th></tr>
           </thead>
           <tbody>
             {balancesFiltrados.map((b: any) => (
@@ -381,7 +425,52 @@ export default function Resumen() {
                   {b.system === "PREPAGO" ? <span className="badge neg">{usd(-Math.abs(Number(b.total_descargado)))}</span> : <span className="muted">—</span>}
                 </td>
                 <td>
-                  <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>
+                  {/* Fichas ganadas en mesas (24/09/2026, pedido de Leo): "Cargado - Descargado +
+                      Fichas ganadas en las mesas = Fichas". Solo informativo -- referencia para
+                      saber qué compone el número de Fichas, que abajo se puede editar a mano. */}
+                  {b.system === "PREPAGO" ? (
+                    <span className={`badge ${Number(b.total_fichas_ganadas_mesas) >= 0 ? "pos" : "neg"}`}>
+                      {usd(b.total_fichas_ganadas_mesas)}
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  {/* Fichas 100% editable a mano SOLO para PREPAGO (pedido de Leo: "por temas
+                      internos") -- guarda un AJUSTE por la diferencia, nunca pisa el número
+                      directo, así queda auditado (ver guardarFichas() arriba). */}
+                  {b.system === "PREPAGO" && editandoFichasId === b.id ? (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        autoFocus
+                        value={editandoFichasValor}
+                        onChange={(e) => setEditandoFichasValor(e.target.value)}
+                        style={{ width: 100 }}
+                      />
+                      <button className="btn small" disabled={guardandoFichas} onClick={() => guardarFichas(b)}>
+                        Guardar
+                      </button>
+                      <button className="btn secondary small" disabled={guardandoFichas} onClick={() => setEditandoFichasId(null)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span className={`badge ${Number(b.amount) > 0 ? "pos" : "neg"}`}>{usd(b.amount)}</span>
+                      {b.system === "PREPAGO" && (
+                        <button
+                          className="btn secondary small"
+                          title="Editar fichas a mano"
+                          onClick={() => empezarEdicionFichas(b)}
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
