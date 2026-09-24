@@ -1279,8 +1279,15 @@ export default function Liquidaciones() {
                       const medioDefault = f.rakebackPendienteId ? (f.system === "PREPAGO" ? "USDT" : "FICHAS") : "SIN_TESORERIA";
                       const opcionesMedio = f.rakebackPendienteId ? (
                         <>
-                          {/* PREPAGO nunca puede pagarse en fichas -- ver nota en abrirMov() */}
-                          {f.system !== "PREPAGO" && <option value="FICHAS">Fichas (mueve el stock)</option>}
+                          {/* Fichas SÍ está disponible para PREPAGO (24/09/2026, pedido de Leo:
+                              "falto poder cargar fichas" -- pagar el pendiente en fichas es un
+                              adelanto válido, igual que un Adelanto de rakeback). Lo único que
+                              nunca hace es venir tildado por defecto para PREPAGO -- ver
+                              abrirMov() más arriba -- así no se repite el bug del 22/09/2026
+                              (tb prodigio25/yAtt0r0 con fichas de más por un default sin elegir). */}
+                          <option value="FICHAS">
+                            {f.system === "PREPAGO" ? "Fichas (adelanto -- suma stock)" : "Fichas (mueve el stock)"}
+                          </option>
                           <option value="USDT">USDT</option>
                           <option value="EFECTIVO">Efectivo</option>
                           <option value="ZELLE">Zelle</option>
