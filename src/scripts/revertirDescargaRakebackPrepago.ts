@@ -33,7 +33,7 @@ async function main() {
      JOIN clubs c ON c.id = lm.club_id
      WHERE lm.type = 'DESCARGA'
        AND lm.status = 'APLICADO'
-       AND lm.observation ~ '^Descuento de fichas por pago de rakeback pendiente en (USDT|EFECTIVO|ZELLE) \(agente PREPAGO\)\.$'
+       AND lm.observation ~ '^Descuento de fichas por pago de rakeback pendiente en (USDT|EFECTIVO|ZELLE) \\(agente PREPAGO\\)\\.$'
      ORDER BY lm.occurred_at`
   );
 
