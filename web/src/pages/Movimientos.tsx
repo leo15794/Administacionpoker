@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd } from "../fmt";
 import MovimientosHistorial from "../components/MovimientosHistorial";
 
 const TIPOS = [
@@ -28,11 +27,12 @@ export default function Movimientos() {
   const [clubId, setClubId] = useState("");
   const [clubDestinoId, setClubDestinoId] = useState("");
   const [amount, setAmount] = useState("");
-  // (25/09/2026, pedido de Leo: "cuando liquidamos en cierres semanales hacemos una conversion
-  // de fichas a USD, necesito esto tambien aca") -- mismo mecanismo que ya usa Cierres.tsx: un
-  // club con unit === "FICHAS" (hoy: Tiny y X-Poker, ver Configuración → Clubes) reporta en
-  // fichas, no en USD, y el valor de la ficha es un parámetro editable, no una constante -- por
-  // eso se pide acá, precargado con clubes.current_rate pero siempre se puede pisar.
+  // (25/09/2026, pedido de Leo: "el importe que mueve el saldo tiene que ser SIEMPRE USD, en
+  // cargas y en descargas -- abajo que muestre las fichas equivalentes, informativo nada mas")
+  // -- a diferencia de Cierres.tsx (que convierte fichas -> USD), acá es al revés: el operador
+  // ya sabe cuántos USD está cargando/descargando, y lo que quiere ver es a cuántas fichas
+  // equivale eso al valor de hoy. El campo de tasa sigue precargado con clubes.current_rate
+  // (editable) para calcular esa equivalencia, pero nunca toca el importe que se manda al ledger.
   const [valorFicha, setValorFicha] = useState("1");
   const [paymentMethod, setPaymentMethod] = useState("SIN_TESORERIA");
   const [custodian, setCustodian] = useState("");
@@ -68,17 +68,18 @@ export default function Movimientos() {
 
     setLoading(true);
     try {
-      // Clubes en fichas (Tiny, X-Poker): el importe cargado arriba son fichas crudas -- el
-      // ledger siempre guarda USD, así que se convierte acá, una sola vez, con la tasa de este
-      // envío puntual. Para cualquier otro club, tasa = 1 y no cambia nada.
-      const tasa = esFichas ? Number(valorFicha) || 1 : 1;
+      // El importe SIEMPRE es USD y se manda tal cual -- es lo único que mueve el saldo. Para
+      // clubes en fichas, se calculan las fichas equivalentes (importe × tasa) solo para
+      // dejarlas guardadas como referencia (originalAmount/originalUnit), nunca se usan para
+      // el monto real del movimiento.
+      const fichasEquivalentes = esFichas ? (Number(amount) || 0) * (Number(valorFicha) || 0) : 0;
       await api.crearMovimiento({
         type,
         agentId,
         clubId,
         clubDestinoId: type === "TRANSFERENCIA_ENTRE_CLUBES" ? clubDestinoId : undefined,
-        amount: (Number(amount) || 0) * tasa,
-        originalAmount: esFichas ? Number(amount) || 0 : undefined,
+        amount: Number(amount) || 0,
+        originalAmount: esFichas ? fichasEquivalentes : undefined,
         originalUnit: esFichas ? "FICHAS" : undefined,
         paymentMethod,
         custodian: paymentMethod === "EFECTIVO" ? custodian.trim() : undefined,
@@ -138,7 +139,7 @@ export default function Movimientos() {
               </div>
             )}
             <div className="field">
-              <label>{esFichas ? "Importe (fichas)" : "Importe (USD)"}</label>
+              <label>Importe (USD)</label>
               <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" placeholder="0.00" />
             </div>
             {esFichas && (
@@ -146,7 +147,7 @@ export default function Movimientos() {
                 <label>Valor de la ficha (USD)</label>
                 <input value={valorFicha} onChange={(e) => setValorFicha(e.target.value)} type="number" step="0.01" />
                 <span className="muted" style={{ fontSize: 12 }}>
-                  = {usd((Number(amount) || 0) * (Number(valorFicha) || 0))}
+                  = {((Number(amount) || 0) * (Number(valorFicha) || 0)).toLocaleString("es-AR", { maximumFractionDigits: 2 })} fichas
                 </span>
               </div>
             )}
