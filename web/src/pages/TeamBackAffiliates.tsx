@@ -683,58 +683,99 @@ function JugadoresTab() {
     cargar();
   }, []);
 
+  // (25/09/2026, pedido de Leo: "separar el jugador del jugador referido") -- antes era una
+  // sola tabla con todos mezclados (columna "Referido por" en "—" para la mayoría). Ahora son
+  // dos tablas separadas: jugadores directos (llegaron solos) y jugadores referidos (entraron
+  // por el link/código de otro jugador). Mismos datos, mismas acciones, solo se separan las
+  // filas -- no cambia nada de cómo se cargan, editan o liquidan.
+  const directos = jugadores.filter((j) => !j.referido_por_id);
+  const referidos = jugadores.filter((j) => j.referido_por_id);
+
+  function filaJugador(j: any) {
+    return (
+      <tr key={j.id} style={j.active ? undefined : { opacity: 0.55 }}>
+        <td>{j.name}</td>
+        <td className="muted">{j.suprema_player_id}</td>
+        <td>{dateShort(j.fecha_alta)}</td>
+        <td className="muted">{j.referido_por_name ?? "—"}</td>
+        <td>{j.referidos_count}</td>
+        <td>
+          {j.tiene_config ? (
+            <span className="badge pos">Configurado</span>
+          ) : (
+            <span className="badge neg" title="Sin % propio cargado -- no se liquida hasta que se configure.">Sin % configurar</span>
+          )}
+        </td>
+        <td>{j.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
+        <td style={{ display: "flex", gap: 6 }}>
+          <button className="btn secondary small" onClick={() => setNuevo(j)}>
+            Editar
+          </button>
+          <button className="btn secondary small" onClick={() => setConfigurando(j)}>
+            % Configurar
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
   return (
-    <div className="panel">
-      <div className="topbar" style={{ marginBottom: 10 }}>
-        <h3 style={{ margin: 0 }}>Jugadores</h3>
-        <button className="btn small" onClick={() => setNuevo({})}>+ Nuevo jugador</button>
+    <>
+      <div className="panel">
+        <div className="topbar" style={{ marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Jugadores</h3>
+          <button className="btn small" onClick={() => setNuevo({})}>+ Nuevo jugador</button>
+        </div>
+        <div className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
+          Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general
+          para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el
+          suyo (botón "% Configurar").
+        </div>
       </div>
-      <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-        Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general
-        para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el
-        suyo (botón "% Configurar").
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>ID Suprema</th>
-            <th>Fecha de alta</th>
-            <th>Referido por</th>
-            <th># Referidos</th>
-            <th>%</th>
-            <th>Estado</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {jugadores.map((j) => (
-            <tr key={j.id} style={j.active ? undefined : { opacity: 0.55 }}>
-              <td>{j.name}</td>
-              <td className="muted">{j.suprema_player_id}</td>
-              <td>{dateShort(j.fecha_alta)}</td>
-              <td className="muted">{j.referido_por_name ?? "—"}</td>
-              <td>{j.referidos_count}</td>
-              <td>
-                {j.tiene_config ? (
-                  <span className="badge pos">Configurado</span>
-                ) : (
-                  <span className="badge neg" title="Sin % propio cargado -- no se liquida hasta que se configure.">Sin % configurar</span>
-                )}
-              </td>
-              <td>{j.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
-              <td style={{ display: "flex", gap: 6 }}>
-                <button className="btn secondary small" onClick={() => setNuevo(j)}>
-                  Editar
-                </button>
-                <button className="btn secondary small" onClick={() => setConfigurando(j)}>
-                  % Configurar
-                </button>
-              </td>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ margin: "0 0 10px" }}>Jugadores directos ({directos.length})</h3>
+        <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+          Llegaron solos, sin que nadie los haya referido.
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>ID Suprema</th>
+              <th>Fecha de alta</th>
+              <th>Referido por</th>
+              <th># Referidos</th>
+              <th>%</th>
+              <th>Estado</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>{directos.map(filaJugador)}</tbody>
+        </table>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ margin: "0 0 10px" }}>Jugadores referidos ({referidos.length})</h3>
+        <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+          Entraron referidos por otro jugador (columna "Referido por").
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>ID Suprema</th>
+              <th>Fecha de alta</th>
+              <th>Referido por</th>
+              <th># Referidos</th>
+              <th>%</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>{referidos.map(filaJugador)}</tbody>
+        </table>
+      </div>
 
       {nuevo && (
         <Modal title={nuevo.id ? `Editar — ${nuevo.name}` : "Nuevo jugador"} onClose={() => setNuevo(null)}>
@@ -746,7 +787,7 @@ function JugadoresTab() {
           <FormConfigJugador jugador={configurando} onSaved={() => { setConfigurando(null); cargar(); }} />
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 
