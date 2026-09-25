@@ -425,6 +425,26 @@ export async function eliminarSemana(weekStart: string) {
 // se pagó (tb_weekly_payments) y cuándo.
 // ---------------------------------------------------------------------------------------------
 
+// (25/09/2026, arreglo: "ya hay semanas liquidadas, podes arreglarlo asi tomas las que ya estan
+// realizadas") -- la tabla tb_weekly_payments no llegó a crearse en producción (el `npm run
+// migrate` de Leo no tomó, probablemente corrió contra otra base) y no tengo forma de correr la
+// migración yo mismo desde acá. En vez de depender de que la migración se corra a mano, esta
+// función la crea sola la primera vez que hace falta (CREATE TABLE IF NOT EXISTS es 100% seguro
+// de repetir -- no borra ni pisa nada si ya existe). Así "Ganancia por semana" funciona ya mismo
+// con las semanas que ya están liquidadas, sin esperar ningún paso manual más.
+let tbWeeklyPaymentsListo = false;
+async function asegurarTablaPagos() {
+  if (tbWeeklyPaymentsListo) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS tb_weekly_payments (
+       week_start  DATE PRIMARY KEY,
+       week_end    DATE NOT NULL,
+       paid_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`
+  );
+  tbWeeklyPaymentsListo = true;
+}
+
 export interface GananciaSemana {
   week_start: string;
   week_end: string;
@@ -437,6 +457,7 @@ export interface GananciaSemana {
 }
 
 export async function getGananciaPorSemana(): Promise<GananciaSemana[]> {
+  await asegurarTablaPagos();
   const r = await pool.query(
     `SELECT l.week_start,
             MAX(l.week_end) as week_end,
@@ -466,6 +487,7 @@ export async function getGananciaPorSemana(): Promise<GananciaSemana[]> {
 }
 
 export async function marcarSemanaPagada(weekStart: string, weekEnd: string) {
+  await asegurarTablaPagos();
   const r = await pool.query(
     `INSERT INTO tb_weekly_payments (week_start, week_end)
      VALUES ($1::date, $2::date)
@@ -477,6 +499,7 @@ export async function marcarSemanaPagada(weekStart: string, weekEnd: string) {
 }
 
 export async function desmarcarSemanaPagada(weekStart: string) {
+  await asegurarTablaPagos();
   await pool.query(`DELETE FROM tb_weekly_payments WHERE week_start = $1::date`, [weekStart]);
 }
 
