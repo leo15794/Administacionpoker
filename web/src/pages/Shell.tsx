@@ -173,36 +173,51 @@ function getInitialCollapsed() {
 // Ítems del menú de ADMIN, en su orden por default — se puede reordenar arrastrando (ver
 // navOrder más abajo), y ese orden queda guardado por navegador (localStorage), no es una
 // preferencia del usuario en la base — cada uno arma el menú a su gusto en su propia máquina.
-const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string; group: "operacion" | "plata" | "administracion" }[] = [
+// (25/09/2026, pedido de Leo: reorganizar el menú en OPERACIÓN / FINANZAS / REPORTES) —
+// mismos ítems, mismas rutas, mismos labels; lo único que cambia es a qué sección pertenece
+// cada uno. OPERACIÓN = pantallas de uso diario/operativo (cargar cosas, administrar). FINANZAS
+// = todo lo que mueve o refleja plata (wallet, garantías, adelantos, etc). REPORTES = pantallas
+// de solo-lectura que resumen/analizan datos (los "resumen de..." y "ganancias por...").
+const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string; group: "operacion" | "finanzas" | "reportes" }[] = [
   { key: "resumen", to: "/dashboard", end: true, icon: "resumen", label: "Resumen", group: "operacion" },
-  { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración", group: "administracion" },
+  { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración", group: "operacion" },
   { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento", group: "operacion" },
   { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales", group: "operacion" },
-  { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "operacion" },
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
-  { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "operacion" },
-  { key: "resumenAgentes", to: "/dashboard/resumen-agentes", icon: "resumenAgentes", label: "Resumen por agente", group: "plata" },
-  { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "plata" },
-  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "plata" },
-  { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "plata" },
-  { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "plata" },
-  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "plata" },
-  { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "plata" },
-  { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "plata" },
-  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período", group: "plata" },
-  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "plata" },
-  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas", group: "plata" },
-  { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "administracion" },
-  { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "plata" },
-  { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "plata" },
+  { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "operacion" },
+  { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "finanzas" },
+  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "finanzas" },
+  { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "finanzas" },
+  { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
+  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "finanzas" },
+  { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "finanzas" },
+  { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
+  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },
+  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas", group: "finanzas" },
+  { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "finanzas" },
+  { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "reportes" },
+  { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "reportes" },
+  { key: "resumenAgentes", to: "/dashboard/resumen-agentes", icon: "resumenAgentes", label: "Resumen por agente", group: "reportes" },
+  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período", group: "reportes" },
+  { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "reportes" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
 
-const NAV_GROUPS: { key: "operacion" | "plata" | "administracion"; label: string }[] = [
+const NAV_GROUPS: { key: "operacion" | "finanzas" | "reportes"; label: string }[] = [
   { key: "operacion", label: "Operación" },
-  { key: "plata", label: "Plata" },
-  { key: "administracion", label: "Administración" },
+  { key: "finanzas", label: "Finanzas" },
+  { key: "reportes", label: "Reportes" },
 ];
+
+function getInitialGroupsCollapsed(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem("dp_nav_groups_collapsed");
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
 
 function getInitialNavOrder(): string[] {
   try {
@@ -225,6 +240,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
+  const [groupsCollapsed, setGroupsCollapsed] = useState<Record<string, boolean>>(getInitialGroupsCollapsed);
   const dragKey = useRef<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -336,6 +352,23 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     });
   }
 
+  // Grupo del ítem activo (según la ruta actual) — se muestra siempre expandido aunque el
+  // usuario lo haya contraído, para no esconder "dónde estoy parado" dentro del menú.
+  const activeItem = NAV_ITEMS.find((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)));
+  const activeGroupKey = activeItem?.group;
+
+  function toggleGroup(key: string) {
+    setGroupsCollapsed((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem("dp_nav_groups_collapsed", JSON.stringify(next));
+      } catch {
+        /* localStorage no disponible, no pasa nada */
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="app-shell">
       <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
@@ -365,10 +398,21 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               {NAV_GROUPS.map((grupo) => {
                 const keysDelGrupo = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
                 if (keysDelGrupo.length === 0) return null;
+                const contraido = !!groupsCollapsed[grupo.key] && grupo.key !== activeGroupKey;
                 return (
                   <div key={grupo.key} className="nav-section">
-                    {!collapsed && <div className="nav-section-label">{grupo.label}</div>}
-                    {keysDelGrupo.map((key) => {
+                    {!collapsed && (
+                      <button
+                        type="button"
+                        className="nav-section-label"
+                        onClick={() => toggleGroup(grupo.key)}
+                        title={contraido ? `Mostrar ${grupo.label}` : `Ocultar ${grupo.label}`}
+                      >
+                        <span>{grupo.label}</span>
+                        <span className={`nav-section-chevron ${contraido ? "collapsed" : ""}`}>▾</span>
+                      </button>
+                    )}
+                    {(!contraido || collapsed) && keysDelGrupo.map((key) => {
                       const item = NAV_ITEMS.find((i) => i.key === key);
                       if (!item) return null;
                       return (

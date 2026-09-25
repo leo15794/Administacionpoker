@@ -209,13 +209,29 @@ a { color: inherit; }
    se sigue pudiendo arrastrar igual que antes, pero no se puede mezclar entre secciones. */
 .nav-section + .nav-section { margin-top: 10px; }
 .nav-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.45;
   padding: 10px 10px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
 }
+.nav-section-label:hover { opacity: 0.8; }
+.nav-section-chevron {
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+.nav-section-chevron.collapsed { transform: rotate(-90deg); }
 
 .sidebar-footer {
   margin-top: auto;
@@ -826,4 +842,237 @@ button.nav-link {
   cursor: pointer;
   font: inherit;
   text-align: left;
+}
+
+/* ============================================================================================
+   Resumen ejecutivo — rediseño (25/09/2026, pedido de Leo: "mejorar visualmente y a nivel UX
+   el dashboard administrativo... sin tocar las funciones que tiene"). Todo lo de acá abajo es
+   PURAMENTE PRESENTACIÓN — ningún cálculo, endpoint ni dato cambia, solo cómo se muestran.
+   Reutiliza las variables de siempre (--panel, --border, --accent-grad, --green, --red, etc.)
+   para que ande igual de bien en modo día y modo noche, sin inventar una paleta nueva.
+   ============================================================================================ */
+
+/* Header del dashboard: título + subtítulo a la izquierda, "última actualización" + selector de
+   período a la derecha. */
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dash-updated-at {
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.dash-updated-at strong { display: block; color: var(--text); font-size: 13px; font-weight: 650; }
+
+.period-select {
+  padding: 9px 13px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22); }
+
+/* Títulos de sección ("Resumen financiero", "Operación", "Pendientes financieros"...) — separan
+   claramente cada bloque sin meter otro panel/borde, para no recargar. */
+.dash-section { margin-top: 34px; margin-bottom: 14px; }
+.dash-section:first-of-type { margin-top: 0; }
+.dash-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+}
+.dash-section-subtitle { font-size: 12.5px; color: var(--text-dim); }
+
+/* ---------- KPI hero (Resumen financiero — las 5 tarjetas principales) ---------- */
+.kpi-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+@media (max-width: 1180px) {
+  .kpi-hero-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .kpi-hero-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.kpi-hero-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  overflow: hidden;
+}
+.kpi-hero-card.row-click:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+  border-color: var(--border-strong);
+}
+.kpi-hero-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--accent-grad);
+  opacity: 0.55;
+}
+.kpi-hero-label {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.kpi-hero-amount {
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.kpi-hero-amount.pos { color: var(--green); }
+.kpi-hero-amount.neg { color: var(--red); }
+.kpi-hero-amount.neutral { color: var(--text); }
+.kpi-hero-sub {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 16px;
+}
+.kpi-trend { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 12.5px; }
+.kpi-trend.up { color: var(--green); }
+.kpi-trend.down { color: var(--red); }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+  font-size: 12.5px;
+}
+.status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.status-pill.pos { color: var(--green); }
+.status-pill.neg { color: var(--red); }
+.status-pill.neutral { color: var(--text-dim); }
+
+/* ---------- Operación (tarjetas chicas, menos peso visual) ---------- */
+.kpi-sub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  max-width: 520px;
+}
+.kpi-sub-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.kpi-sub-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.kpi-sub-value { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------- Pendientes financieros (desglose secundario, compacto) ---------- */
+.pending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.pending-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.pending-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+.pending-value { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.pending-value.pos { color: var(--green); }
+.pending-value.neg { color: var(--red); }
+.pending-hint { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
+
+/* ---------- Info "cómo se calculan estos números" (botón chico → modal) ---------- */
+.info-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+  font-family: inherit;
+}
+.info-trigger:hover { color: var(--accent-2); }
+
+/* ---------- Gráfico de evolución ---------- */
+.chart-toolbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.chart-legend { display: flex; gap: 16px; margin-top: 4px; }
+.chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.chart-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---------- Saldo por club: fila con barra horizontal proporcional ---------- */
+.club-balance-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) 100px minmax(160px, 1.6fr);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+.club-balance-row:hover { background: var(--row-hover); }
+.club-balance-row:last-child { border-bottom: none; }
+.club-balance-name { font-size: 13.5px; font-weight: 600; }
+.club-balance-agentes { font-size: 12.5px; color: var(--text-dim); }
+.club-balance-bar-wrap { display: flex; align-items: center; gap: 10px; }
+.club-balance-bar-track { flex: 1; height: 9px; border-radius: 5px; background: var(--panel-2); overflow: hidden; min-width: 40px; }
+.club-balance-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
+.club-balance-bar-fill.pos { background: linear-gradient(90deg, rgba(34,197,94,0.55), var(--green)); }
+.club-balance-bar-fill.neg { background: linear-gradient(90deg, rgba(244,63,94,0.55), var(--red)); }
+.club-balance-bar-fill.neutral { background: var(--text-faint); }
+.club-balance-amount { font-size: 13.5px; font-weight: 700; white-space: nowrap; text-align: right; }
+@media (max-width: 640px) {
+  .club-balance-row { grid-template-columns: 1fr; gap: 6px; }
+  .club-balance-amount { text-align: left; }
 }
