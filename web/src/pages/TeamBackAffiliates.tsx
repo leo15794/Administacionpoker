@@ -1038,6 +1038,13 @@ function ImportTab() {
   // la lista y quien lo refirio") -- lista de jugadores ya dados de alta, para el select de
   // "Referido por" al dar de alta uno nuevo sin salir de esta pantalla.
   const [jugadores, setJugadores] = useState<any[]>([]);
+  // (25/09/2026, pedido de Leo: "cuando hagamos el cierre en importar semana tiene que haber un
+  // lugar donde hagamos click y se liquide") -- semana recién importada (queda acá para poder
+  // calcular la liquidación sin tener que ir a la pestaña Resumen y volver a tipear las fechas.
+  // Al calcularla se guarda en tb_weekly_liquidations, así que ya aparece sola en Resumen.
+  const [semanaImportada, setSemanaImportada] = useState<{ weekStart: string; weekEnd: string } | null>(null);
+  const [calculando, setCalculando] = useState(false);
+  const [resultadoLiquidacion, setResultadoLiquidacion] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     api.teamback.listPlayers(true).then(setJugadores);
@@ -1087,12 +1094,29 @@ function ImportTab() {
         .map((c: any) => ({ supremaPlayerId: c.player.suprema_player_id, supremaPlayerName: c.player.name, rake: c.rake }));
       const r = await api.teamback.aplicarImport({ weekStart, weekEnd, rows, importSource: file?.name });
       setMsg({ ok: true, text: `Importado -- ${r.importados} jugador(es) cargado(s).` });
+      setSemanaImportada({ weekStart, weekEnd });
+      setResultadoLiquidacion(null);
       setPreview(null);
       setFile(null);
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo importar." });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function calcularLiquidacionDeSemanaImportada() {
+    if (!semanaImportada) return;
+    setCalculando(true);
+    setResultadoLiquidacion(null);
+    try {
+      const r = await api.teamback.calcularLiquidaciones(semanaImportada.weekStart, semanaImportada.weekEnd);
+      const avisoSinConfigurar = r.sinConfigurar?.length > 0 ? ` (${r.sinConfigurar.length} jugador(es) salteado(s) por no tener % configurado -- cargalo en "Jugadores / árbol" y volvé a calcular)` : "";
+      setResultadoLiquidacion({ ok: true, text: `Liquidado -- ${r.resultados.length} jugador(es) con liquidación esta semana.${avisoSinConfigurar} Ya la podés ver en la pestaña Resumen.` });
+    } catch (err: any) {
+      setResultadoLiquidacion({ ok: false, text: err.message || "No se pudo calcular la liquidación." });
+    } finally {
+      setCalculando(false);
     }
   }
 
@@ -1135,6 +1159,20 @@ function ImportTab() {
         </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+      {semanaImportada && !preview && (
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <div className="topbar" style={{ marginBottom: resultadoLiquidacion ? 10 : 0 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Semana del {dateShort(semanaImportada.weekStart)} al {dateShort(semanaImportada.weekEnd)} importada. Ahora podés calcular (o recalcular) la liquidación de esa semana:
+            </div>
+            <button className="btn" disabled={calculando} onClick={calcularLiquidacionDeSemanaImportada}>
+              {calculando ? "Calculando..." : "Calcular liquidación de esta semana"}
+            </button>
+          </div>
+          {resultadoLiquidacion && <div className={resultadoLiquidacion.ok ? "success" : "error"}>{resultadoLiquidacion.text}</div>}
+        </div>
+      )}
 
       {preview && (
         <>

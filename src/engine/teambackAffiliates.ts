@@ -55,14 +55,15 @@ export function calcularEscalonRakeback(
   return { pct: mejor, alcanzadoPor };
 }
 
-/** Cartera de afiliados: el REFERENTE (no el referido) tiene que haber tenido actividad propia
- * (rake propio > 0) en al menos 1 de las últimas N semanas (ventanaActividadSemanas) para seguir
- * cobrando el 3%. `rakePropioUltimasSemanas` = rake propio del referente en cada una de las
- * últimas N semanas ANTERIORES a la que se está liquidando (sin incluir la actual -- la actual
- * se evalúa aparte, ver calcularLiquidacionSemanal). */
-export function estaActivoEnVentana(rakePropioSemanaActual: number, rakePropioUltimasSemanas: number[]): boolean {
-  if (rakePropioSemanaActual > 0) return true;
-  return rakePropioUltimasSemanas.some((r) => r > 0);
+/** (25/09/2026, pedido de Leo: "cambiar la regla de la inactividad de los referidos" -- sacar
+ * el requisito por completo, ejemplo real: mininok tenía 2 referidos activos generando rake pero
+ * su comisión quedaba en $0 "pausada" porque ÉL no había jugado. Ahora la comisión de afiliado
+ * se cobra siempre que el referido genere rake, sin importar si el referente jugó o no esa
+ * semana ni en semanas anteriores. Esta función queda pero siempre devuelve true -- se deja el
+ * parámetro rakePropioUltimasSemanas por compatibilidad (repo/teamback.ts todavía lo calcula y
+ * se lo pasa) por si en el futuro se quiere volver a exigir algún tipo de actividad. */
+export function estaActivoEnVentana(_rakePropioSemanaActual: number, _rakePropioUltimasSemanas: number[]): boolean {
+  return true;
 }
 
 export interface OrigenLiquidacionSemanal {
