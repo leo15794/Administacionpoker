@@ -903,6 +903,7 @@ export const api = {
       requestTb("/teamback/liquidaciones/calcular", { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
     liquidacionesSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`),
     semanasDisponibles: () => requestTb("/teamback/liquidaciones/semanas"),
+    eliminarSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`, { method: "DELETE" }),
     historialJugador: (playerId: string) => requestTb(`/teamback/liquidaciones/jugador/${playerId}`),
     liquidacionIndividual: (playerId: string, weekStart: string) => requestTb(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),
 

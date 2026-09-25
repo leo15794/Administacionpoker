@@ -27,6 +27,7 @@ import {
   calcularYGuardarLiquidacionSemana,
   getLiquidacionesSemana,
   getSemanasDisponibles,
+  eliminarSemana,
   getHistorialJugador,
   getHistorialJugadorConNombre,
   getLiquidacionIndividual,
@@ -198,6 +199,18 @@ teambackRouter.get("/liquidaciones/semana/:weekStart", requireTbAuth, requireTbA
 
 teambackRouter.get("/liquidaciones/semanas", requireTbAuth, requireTbAdmin, async (_req, res) => {
   res.json(await getSemanasDisponibles());
+});
+
+// (25/09/2026, pedido de Leo: "botones para eliminar cierres de la semana ya que ahora estamos
+// haciendo pruebas") -- borra la liquidación calculada Y el rake importado en crudo de esa
+// semana, así se puede reimportar/recalcular desde cero. No es soft-delete: es DELETE real
+// sobre tb_weekly_liquidations y tb_weekly_stats, scopeado a esa semana nada más.
+teambackRouter.delete("/liquidaciones/semana/:weekStart", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    res.json(await eliminarSemana(req.params.weekStart));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo eliminar la semana." });
+  }
 });
 
 teambackRouter.get("/liquidaciones/jugador/:playerId", requireTbAuth, requireTbAdmin, async (req, res) => {

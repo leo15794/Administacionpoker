@@ -459,6 +459,7 @@ function LiquidacionesTab() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [individual, setIndividual] = useState<any | null>(null);
   const [sinConfigurar, setSinConfigurar] = useState<{ playerId: string; playerName: string; supremaPlayerId: string }[]>([]);
+  const [eliminando, setEliminando] = useState(false);
 
   async function cargarSemanas() {
     const r = await api.teamback.semanasDisponibles();
@@ -493,6 +494,34 @@ function LiquidacionesTab() {
       setMsg({ ok: false, text: err.message || "No se pudo calcular." });
     } finally {
       setCalculando(false);
+    }
+  }
+
+  // (25/09/2026, pedido de Leo: "botones para eliminar cierres de la semana ya que ahora
+  // estamos haciendo pruebas") -- borra la liquidación Y el rake importado de esa semana, para
+  // poder reimportar/recalcular desde cero sin arrastrar nada de la prueba anterior.
+  async function eliminarSemanaActual() {
+    if (!weekStart) return;
+    const etiqueta = semanas.find((s) => String(s.week_start).slice(0, 10) === weekStart);
+    const confirmado = window.confirm(
+      `¿Eliminar el cierre de la semana del ${dateShort(weekStart)}${etiqueta ? ` al ${dateShort(etiqueta.week_end)}` : ""}?
+
+Esto borra la liquidación calculada Y el rake importado de esa semana. No se puede deshacer.`
+    );
+    if (!confirmado) return;
+    setEliminando(true);
+    setMsg(null);
+    try {
+      const r = await api.teamback.eliminarSemana(weekStart);
+      setMsg({ ok: true, text: `Semana eliminada -- ${r.liquidacionesEliminadas} liquidación(es) y ${r.importsEliminados} import(s) borrados.` });
+      setFilas([]);
+      setWeekStart("");
+      setWeekEnd("");
+      cargarSemanas();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo eliminar la semana." });
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -531,6 +560,13 @@ function LiquidacionesTab() {
             {calculando ? "Calculando..." : "Calcular / recalcular"}
           </button>
         </div>
+        {weekStart && filas.length > 0 && (
+          <div className="field" style={{ alignSelf: "flex-end" }}>
+            <button className="btn secondary" disabled={eliminando} onClick={eliminarSemanaActual} title="Borra la liquidación y el rake importado de esta semana -- para pruebas">
+              {eliminando ? "Eliminando..." : "🗑 Eliminar esta semana"}
+            </button>
+          </div>
+        )}
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
 
@@ -699,6 +735,7 @@ function JugadoresTab() {
         <td>{dateShort(j.fecha_alta)}</td>
         <td className="muted">{j.referido_por_name ?? "—"}</td>
         <td>{j.referidos_count}</td>
+        <td>{usd(j.comision_total)}</td>
         <td>
           {j.tiene_config ? (
             <span className="badge pos">Configurado</span>
@@ -746,6 +783,7 @@ function JugadoresTab() {
               <th>Fecha de alta</th>
               <th>Referido por</th>
               <th># Referidos</th>
+              <th>Comisión acumulada</th>
               <th>%</th>
               <th>Estado</th>
               <th></th>
@@ -768,6 +806,7 @@ function JugadoresTab() {
               <th>Fecha de alta</th>
               <th>Referido por</th>
               <th># Referidos</th>
+              <th>Comisión acumulada</th>
               <th>%</th>
               <th>Estado</th>
               <th></th>
@@ -990,13 +1029,28 @@ function ImportTab() {
   const [preview, setPreview] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // (25/09/2026, pedido de Leo: "el seleccionador tiene que contar con seleccionar varios todos
+  // o destildar todos") -- de los "conocidos" del archivo, cuáles se importan realmente. Por
+  // default entran todos tildados (mismo comportamiento de antes), pero ahora se puede destildar
+  // alguno puntual o todos de una.
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  // (25/09/2026, pedido de Leo: "que ahi mismo podamos elegir a jugadores si todavia no estan en
+  // la lista y quien lo refirio") -- lista de jugadores ya dados de alta, para el select de
+  // "Referido por" al dar de alta uno nuevo sin salir de esta pantalla.
+  const [jugadores, setJugadores] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.teamback.listPlayers(true).then(setJugadores);
+  }, []);
 
   async function analizar() {
     if (!file) return setMsg({ ok: false, text: "Elegí un archivo." });
     setLoading(true);
     setMsg(null);
     try {
-      setPreview(await api.teamback.previsualizarImport(file));
+      const r = await api.teamback.previsualizarImport(file);
+      setPreview(r);
+      setSeleccionados(new Set(r.conocidos.map((c: any) => c.player.id)));
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo leer el archivo." });
     } finally {
@@ -1004,18 +1058,64 @@ function ImportTab() {
     }
   }
 
+  function toggleSeleccionado(id: string) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function seleccionarTodos() {
+    if (!preview) return;
+    setSeleccionados(new Set(preview.conocidos.map((c: any) => c.player.id)));
+  }
+
+  function destildarTodos() {
+    setSeleccionados(new Set());
+  }
+
   async function aplicar() {
     if (!preview || !weekStart || !weekEnd) return setMsg({ ok: false, text: "Elegí fecha de inicio y fin de semana." });
+    if (seleccionados.size === 0) return setMsg({ ok: false, text: "No seleccionaste ningún jugador para importar." });
     setLoading(true);
     setMsg(null);
     try {
-      const rows = preview.conocidos.map((c: any) => ({ supremaPlayerId: c.player.suprema_player_id, supremaPlayerName: c.player.name, rake: c.rake }));
+      const rows = preview.conocidos
+        .filter((c: any) => seleccionados.has(c.player.id))
+        .map((c: any) => ({ supremaPlayerId: c.player.suprema_player_id, supremaPlayerName: c.player.name, rake: c.rake }));
       const r = await api.teamback.aplicarImport({ weekStart, weekEnd, rows, importSource: file?.name });
       setMsg({ ok: true, text: `Importado -- ${r.importados} jugador(es) cargado(s).` });
       setPreview(null);
       setFile(null);
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo importar." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Da de alta un jugador desconocido del archivo sin salir de esta pantalla, y vuelve a
+  // analizar el mismo archivo para que pase de "desconocidos" a "conocidos" (con su rake ya
+  // calculado) automáticamente.
+  async function darDeAltaDesconocido(d: any, referidoPorId: string) {
+    setLoading(true);
+    setMsg(null);
+    try {
+      await api.teamback.crearPlayer({
+        supremaPlayerId: d.supremaPlayerId,
+        name: d.supremaPlayerName,
+        referidoPorId: referidoPorId || null,
+      });
+      setJugadores(await api.teamback.listPlayers(true));
+      if (file) {
+        const r = await api.teamback.previsualizarImport(file);
+        setPreview(r);
+        setSeleccionados((prev) => new Set([...prev, ...r.conocidos.map((c: any) => c.player.id)]));
+      }
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo dar de alta el jugador." });
     } finally {
       setLoading(false);
     }
@@ -1048,28 +1148,47 @@ function ImportTab() {
               <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} max={hoyISO()} />
             </div>
             <div className="field" style={{ alignSelf: "flex-end" }}>
-              <button className="btn" disabled={loading || preview.conocidos.length === 0} onClick={aplicar}>
-                Importar {preview.conocidos.length} jugador(es) conocido(s)
+              <button className="btn" disabled={loading || seleccionados.size === 0} onClick={aplicar}>
+                Importar {seleccionados.size} jugador(es) seleccionado(s)
               </button>
             </div>
           </div>
 
           {preview.desconocidos.length > 0 && (
-            <div className="error" style={{ marginBottom: 12 }}>
-              {preview.desconocidos.length} jugador(es) del archivo NO están dados de alta todavía (no se van a importar) -- dalos de alta en "Jugadores / árbol" primero, con el mismo ID de Suprema, y volvé a analizar el archivo:
-              <ul>
-                {preview.desconocidos.map((d: any) => (
-                  <li key={d.supremaPlayerId}>
-                    {d.supremaPlayerName} ({d.supremaPlayerId}) -- {usd(d.rake)} de rake
-                  </li>
-                ))}
-              </ul>
+            <div className="panel" style={{ marginBottom: 12, background: "var(--panel-2, transparent)" }}>
+              <div className="error" style={{ marginBottom: 10 }}>
+                {preview.desconocidos.length} jugador(es) del archivo NO están dados de alta todavía -- dalos de alta acá mismo (con quién lo refirió, si corresponde) para que se sumen a la importación:
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Jugador (del archivo)</th>
+                    <th>ID Suprema</th>
+                    <th>Rake esta semana</th>
+                    <th>Referido por</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.desconocidos.map((d: any) => (
+                    <FilaDesconocido key={d.supremaPlayerId} d={d} jugadores={jugadores} loading={loading} onAlta={darDeAltaDesconocido} />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
           <table>
             <thead>
               <tr>
+                <th style={{ width: 30 }}>
+                  <input
+                    type="checkbox"
+                    checked={preview.conocidos.length > 0 && seleccionados.size === preview.conocidos.length}
+                    onChange={(e) => (e.target.checked ? seleccionarTodos() : destildarTodos())}
+                    title="Seleccionar/destildar todos"
+                  />
+                </th>
                 <th>Jugador</th>
                 <th>ID Suprema</th>
                 <th>Rake esta semana</th>
@@ -1078,6 +1197,9 @@ function ImportTab() {
             <tbody>
               {preview.conocidos.map((c: any) => (
                 <tr key={c.player.id}>
+                  <td>
+                    <input type="checkbox" checked={seleccionados.has(c.player.id)} onChange={() => toggleSeleccionado(c.player.id)} />
+                  </td>
                   <td>{c.player.name}</td>
                   <td className="muted">{c.player.suprema_player_id}</td>
                   <td>{usd(c.rake)}</td>
@@ -1085,9 +1207,51 @@ function ImportTab() {
               ))}
             </tbody>
           </table>
+          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            <button className="btn secondary small" onClick={seleccionarTodos} style={{ marginRight: 6 }}>Seleccionar todos</button>
+            <button className="btn secondary small" onClick={destildarTodos}>Destildar todos</button>
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+// Fila del importador para un jugador que el archivo trae pero todavía no está dado de alta --
+// permite cargarlo (con su "referido por") sin salir de la pantalla de importación.
+function FilaDesconocido({
+  d,
+  jugadores,
+  loading,
+  onAlta,
+}: {
+  d: any;
+  jugadores: any[];
+  loading: boolean;
+  onAlta: (d: any, referidoPorId: string) => void;
+}) {
+  const [referidoPorId, setReferidoPorId] = useState("");
+  return (
+    <tr>
+      <td>{d.supremaPlayerName}</td>
+      <td className="muted">{d.supremaPlayerId}</td>
+      <td>{usd(d.rake)}</td>
+      <td>
+        <select value={referidoPorId} onChange={(e) => setReferidoPorId(e.target.value)}>
+          <option value="">Nadie (llegó directo)</option>
+          {jugadores.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.name} ({j.suprema_player_id})
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <button className="btn secondary small" disabled={loading} onClick={() => onAlta(d, referidoPorId)}>
+          + Dar de alta
+        </button>
+      </td>
+    </tr>
   );
 }
 

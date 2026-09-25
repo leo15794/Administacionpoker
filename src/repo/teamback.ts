@@ -145,7 +145,11 @@ export async function listTbPlayers(includeInactive = true) {
             (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id) as referidos_count,
             -- (25/09/2026) para que la lista pueda avisar qué jugadores todavía no tienen su %
             -- propio cargado, sin tener que pedir la config de cada uno por separado.
-            EXISTS (SELECT 1 FROM tb_player_config c WHERE c.player_id = p.id) as tiene_config
+            EXISTS (SELECT 1 FROM tb_player_config c WHERE c.player_id = p.id) as tiene_config,
+            -- (25/09/2026, pedido de Leo: "nos falta saber sus comisiones") -- comisión de
+            -- afiliado acumulada de TODAS las semanas liquidadas hasta ahora, para verla de un
+            -- vistazo en la lista sin tener que ir semana por semana a "Resumen".
+            (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id) as comision_total
      FROM tb_players p
      LEFT JOIN tb_players ref ON ref.id = p.referido_por_id
      WHERE $1 OR p.active = true
@@ -401,6 +405,16 @@ export async function getLiquidacionesSemana(weekStart: string) {
 export async function getSemanasDisponibles() {
   const r = await pool.query(`SELECT DISTINCT week_start, week_end FROM tb_weekly_liquidations ORDER BY week_start DESC`);
   return r.rows;
+}
+
+/** (25/09/2026, pedido de Leo: "botones para eliminar cierres de la semana ya que ahora estamos
+ * haciendo pruebas") -- borra TANTO la liquidación calculada como el rake importado en crudo de
+ * esa semana, para poder volver a importar/calcular desde cero sin arrastrar nada viejo. No
+ * toca otras semanas ni ninguna otra tabla. */
+export async function eliminarSemana(weekStart: string) {
+  const liq = await pool.query(`DELETE FROM tb_weekly_liquidations WHERE week_start = $1::date`, [weekStart]);
+  const stats = await pool.query(`DELETE FROM tb_weekly_stats WHERE week_start = $1::date`, [weekStart]);
+  return { liquidacionesEliminadas: liq.rowCount ?? 0, importsEliminados: stats.rowCount ?? 0 };
 }
 
 export async function getHistorialJugador(playerId: string) {
