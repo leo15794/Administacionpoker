@@ -8,6 +8,7 @@ import Cierres from "./pages/Cierres";
 import Usuarios from "./pages/Usuarios";
 import ComisionesReferidos from "./pages/ComisionesReferidos";
 import ResumenFinanciero from "./pages/ResumenFinanciero";
+import TeamBackAffiliates from "./pages/TeamBackAffiliates";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Proveedores from "./pages/Proveedores";
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="comisiones-referidos" element={<ComisionesReferidos />} />
           <Route path="resumen-financiero" element={<ResumenFinanciero />} />
+          <Route path="teamback-affiliates" element={<TeamBackAffiliates />} />
         </Route>
 
         <Route

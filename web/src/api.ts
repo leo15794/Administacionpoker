@@ -764,4 +764,53 @@ export const api = {
   setToken: (t: string) => localStorage.setItem("dp_token", t),
   clearToken: () => localStorage.removeItem("dp_token"),
   getToken,
+
+  // ===================== TeamBack Affiliates V1 (25/09/2026) =====================
+  // Sección TOTALMENTE APARTE del resto de la API -- ver src/routes/teamback.ts. Nada de esto
+  // toca los endpoints de agentes/clubes/liquidaciones de arriba.
+  teamback: {
+    getConfig: () => request("/teamback/config"),
+    updateConfig: (data: {
+      pctBase: number;
+      pctTier2: number;
+      pctTier3: number;
+      umbralVolumenTier2Usd: number;
+      umbralVolumenTier3Usd: number;
+      umbralReferidosTier2: number;
+      umbralReferidosTier3: number;
+      umbralReferidoActivoUsd: number;
+      pctComisionReferido: number;
+      aplicarUmbralAComision: boolean;
+      ventanaActividadSemanas: number;
+    }) => request("/teamback/config", { method: "PUT", body: JSON.stringify(data) }),
+
+    listPlayers: (includeInactive = true) => request(`/teamback/players?includeInactive=${includeInactive}`),
+    getPlayer: (id: string) => request(`/teamback/players/${id}`),
+    crearPlayer: (data: { supremaPlayerId: string; name: string; fechaAlta?: string; referidoPorId?: string | null; notes?: string | null }) =>
+      request("/teamback/players", { method: "POST", body: JSON.stringify(data) }),
+    actualizarPlayer: (
+      id: string,
+      data: Partial<{ supremaPlayerId: string; name: string; fechaAlta: string; referidoPorId: string | null; notes: string | null; active: boolean }>
+    ) => request(`/teamback/players/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    arbol: () => request("/teamback/arbol"),
+
+    previsualizarImport: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return requestForm("/teamback/import/preview", form);
+    },
+    aplicarImport: (data: {
+      weekStart: string;
+      weekEnd: string;
+      rows: { supremaPlayerId: string; supremaPlayerName: string; rake: number }[];
+      importSource?: string;
+    }) => request("/teamback/import/aplicar", { method: "POST", body: JSON.stringify(data) }),
+
+    calcularLiquidaciones: (weekStart: string, weekEnd: string) =>
+      request("/teamback/liquidaciones/calcular", { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
+    liquidacionesSemana: (weekStart: string) => request(`/teamback/liquidaciones/semana/${weekStart}`),
+    semanasDisponibles: () => request("/teamback/liquidaciones/semanas"),
+    historialJugador: (playerId: string) => request(`/teamback/liquidaciones/jugador/${playerId}`),
+    liquidacionIndividual: (playerId: string, weekStart: string) => request(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),
+  },
 };

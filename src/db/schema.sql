@@ -1286,3 +1286,105 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidaciones_pendiente_unica
 -- los deshace (mismo mecanismo que "Deshacer último cruce" en Liquidaciones.tsx) y los vacía acá.
 ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS adelanto_movement_ids TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS carga_movement_ids TEXT[] NOT NULL DEFAULT '{}';
+
+-- ===================== TeamBack Affiliates V1 (25/09/2026, pedido de Leo) =====================
+-- Sección TOTALMENTE APARTE del resto del sistema: agents/clubs/balances son el negocio de
+-- "backing" de agentes que manejan mesas (DigiPlayers) -- esto es un programa de rakeback +
+-- referidos DIRECTO AL JUGADOR, sobre Suprema Poker únicamente en V1. Tablas con prefijo tb_ a
+-- propósito, para que nunca se mezclen ni por accidente con las tablas de agentes.
+--
+-- Reglas (bajada textual de Leo, 25/09/2026):
+--  - Todo jugador arranca con 60% de rakeback semanal.
+--  - Puede subir a 63%/65% por DOS caminos que NO son acumulables -- cada semana se toma el
+--    mejor escalón alcanzado ESA semana (se recalcula todas las semanas, no es permanente):
+--      * Volumen propio: >= USD 500 rake semanal -> 63%; >= USD 1.000 -> 65%.
+--      * Referidos activos esa semana (>= USD 20 de rake bruto para contar como activo):
+--        3 referidos activos -> 63%; 5 referidos activos -> 65%.
+--  - Comisión de afiliado: 3% del rake bruto de cada referido DIRECTO (un solo nivel en V1,
+--    aunque el árbol completo se guarda desde el día uno para poder pagar más niveles después
+--    sin reconstruir historial). El umbral de USD 20 es configurable si también aplica a esta
+--    comisión (tb_config.aplicar_umbral_a_comision) -- default FALSE: la comisión no tiene piso,
+--    se paga sobre lo que haya rakeado cada referido esa semana, sea lo que sea.
+--  - Cartera de afiliados: para seguir cobrando el 3%, el REFERENTE (no el referido) tiene que
+--    haber tenido actividad propia en al menos 1 de las últimas 4 semanas (ventana móvil,
+--    configurable). Si no, no pierde a sus referidos, pero la comisión de esa semana queda en
+--    $0 (comision_3pct_pausada=true) -- no se paga retroactivo cuando vuelve a estar activo.
+
+CREATE TABLE IF NOT EXISTS tb_config (
+  id                          TEXT PRIMARY KEY DEFAULT 'default',
+  pct_base                    NUMERIC(6,4) NOT NULL DEFAULT 0.60,
+  pct_tier2                   NUMERIC(6,4) NOT NULL DEFAULT 0.63,
+  pct_tier3                   NUMERIC(6,4) NOT NULL DEFAULT 0.65,
+  umbral_volumen_tier2_usd    NUMERIC(18,4) NOT NULL DEFAULT 500,
+  umbral_volumen_tier3_usd    NUMERIC(18,4) NOT NULL DEFAULT 1000,
+  umbral_referidos_tier2      INTEGER NOT NULL DEFAULT 3,
+  umbral_referidos_tier3      INTEGER NOT NULL DEFAULT 5,
+  umbral_referido_activo_usd  NUMERIC(18,4) NOT NULL DEFAULT 20,
+  pct_comision_referido       NUMERIC(6,4) NOT NULL DEFAULT 0.03,
+  -- (pedido de Leo, 25/09/2026: "estaria bueno que eso se pueda configurar") -- si TRUE, un
+  -- referido que no llegó a umbral_referido_activo_usd esa semana tampoco genera comisión para
+  -- el referente esa semana (mismo umbral que para contar "referido activo" del escalón).
+  aplicar_umbral_a_comision   BOOLEAN NOT NULL DEFAULT FALSE,
+  ventana_actividad_semanas   INTEGER NOT NULL DEFAULT 4,
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO tb_config (id) VALUES ('default') ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS tb_players (
+  id                 TEXT PRIMARY KEY,
+  suprema_player_id  TEXT NOT NULL UNIQUE, -- nickname/ID de Suprema, como viene en el archivo
+  name               TEXT NOT NULL,
+  fecha_alta         DATE NOT NULL DEFAULT CURRENT_DATE,
+  -- Árbol de referidos: quién lo presentó. Self-referencing -- un solo padre por jugador, nunca
+  -- se reasigna solo (cambiarlo es una acción explícita, ver repo/teamback.ts).
+  referido_por_id    TEXT REFERENCES tb_players(id),
+  active             BOOLEAN NOT NULL DEFAULT TRUE,
+  notes              TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tb_players_referido_por ON tb_players(referido_por_id);
+CREATE INDEX IF NOT EXISTS idx_tb_players_suprema_id ON tb_players(suprema_player_id);
+
+-- Una fila por jugador+semana, cargada desde el import semanal de Suprema (mismo parser crudo
+-- que ya usa DigiPlayers, engine/importSuprema.ts -- incluso si estos jugadores no tienen nada
+-- que ver con los agentes de DigiPlayers). Es el dato CRUDO (solo rake) -- todo lo demás
+-- (escalón, comisión, etc.) se calcula a partir de esto y se guarda aparte en
+-- tb_weekly_liquidations, nunca mezclado acá.
+CREATE TABLE IF NOT EXISTS tb_weekly_stats (
+  id            TEXT PRIMARY KEY,
+  player_id     TEXT NOT NULL REFERENCES tb_players(id),
+  week_start    DATE NOT NULL,
+  week_end      DATE NOT NULL,
+  rake_bruto    NUMERIC(18,4) NOT NULL DEFAULT 0,
+  import_source TEXT, -- nombre del archivo importado, para trazabilidad
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(player_id, week_start)
+);
+CREATE INDEX IF NOT EXISTS idx_tb_weekly_stats_week ON tb_weekly_stats(week_start);
+
+-- La liquidación semanal YA CALCULADA de cada jugador -- persistida para que el histórico nunca
+-- cambie si después se edita tb_config (cada fila guarda su propio config_snapshot con los %s y
+-- umbrales vigentes al momento del cálculo, mismo criterio que otros "snapshot" del sistema).
+CREATE TABLE IF NOT EXISTS tb_weekly_liquidations (
+  id                        TEXT PRIMARY KEY,
+  player_id                 TEXT NOT NULL REFERENCES tb_players(id),
+  week_start                DATE NOT NULL,
+  week_end                  DATE NOT NULL,
+  rake_propio                NUMERIC(18,4) NOT NULL,
+  referidos_activos_count    INTEGER NOT NULL,
+  tier_alcanzado_por         TEXT NOT NULL, -- 'VOLUMEN' | 'REFERIDOS' | 'BASE'
+  rakeback_pct               NUMERIC(6,4) NOT NULL,
+  rakeback_generado          NUMERIC(18,4) NOT NULL,
+  rake_referidos_directos    NUMERIC(18,4) NOT NULL,
+  comision_3pct_bruta        NUMERIC(18,4) NOT NULL, -- lo que daría el 3% sin considerar pausa
+  comision_3pct_pausada      BOOLEAN NOT NULL DEFAULT FALSE,
+  comision_3pct_acreditada   NUMERIC(18,4) NOT NULL, -- 0 si está pausada, si no = bruta
+  total_acreditado           NUMERIC(18,4) NOT NULL, -- rakeback_generado + comision_3pct_acreditada
+  activo_en_ventana          BOOLEAN NOT NULL,
+  config_snapshot            JSONB NOT NULL,
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(player_id, week_start)
+);
+CREATE INDEX IF NOT EXISTS idx_tb_liq_week ON tb_weekly_liquidations(week_start);
+CREATE INDEX IF NOT EXISTS idx_tb_liq_player ON tb_weekly_liquidations(player_id);

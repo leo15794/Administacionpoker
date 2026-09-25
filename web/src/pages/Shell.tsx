@@ -195,6 +195,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "administracion" },
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "plata" },
   { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "plata" },
+  { key: "teambackAffiliates", to: "/dashboard/teamback-affiliates", icon: "comisionesReferidos", label: "TeamBack Affiliates", group: "administracion" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
 
