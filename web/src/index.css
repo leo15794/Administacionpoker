@@ -806,3 +806,24 @@ select option {
 .club-picker-item:hover { background: var(--panel-hover); }
 .club-picker-item.active { background: rgba(99, 102, 241, 0.16); color: var(--accent-2); font-weight: 600; }
 .club-picker-empty { padding: 10px 11px; font-size: 13px; color: var(--text-dim); }
+
+/* ---------- TeamBack Affiliates (sección aparte, fuera del Shell -- sin esto ".page" no
+   tenía NINGÚN estilo: sin padding ni ancho máximo, todo pegado al borde) ---------- */
+.page {
+  padding: 30px 36px 60px;
+  max-width: 1280px;
+  margin: 0 auto;
+  min-width: 0;
+}
+
+/* Botones que actúan como nav-link (TeamBack Affiliates: la navegación es por tab de estado,
+   no por ruta, así que no puede usar <NavLink>) -- resetea el chrome nativo de <button> y deja
+   que .nav-link / .nav-link:hover / .nav-link.active (ya definidos arriba) hagan el resto,
+   igual que los botones de "Modo día/noche" y "Cerrar sesión" del sidebar principal. */
+button.nav-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}

@@ -111,22 +111,21 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
   }
 
   return (
-    <div className="page" style={{ maxWidth: 380, margin: "60px auto" }}>
-      <div className="panel">
-        <h2 style={{ marginTop: 0 }}>TeamBack Affiliates</h2>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-          Login propio de esta sección -- no es tu usuario del resto de DigiPlayers.
-        </div>
+    <div className="login-shell">
+      <div className="login-box">
+        <div className="login-mark">T</div>
+        <h1>TeamBack Affiliates</h1>
+        <div className="sub">Login propio de esta sección -- no es tu usuario del resto de DigiPlayers.</div>
         <form onSubmit={onSubmit}>
-          <div className="field" style={{ marginBottom: 10 }}>
+          <div className="field">
             <label>Usuario</label>
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
           </div>
-          <div className="field" style={{ marginBottom: 10 }}>
+          <div className="field">
             <label>Contraseña</label>
             <CampoContrasena value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
-          {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
+          {error && <div className="error">{error}</div>}
           <button className="btn" disabled={loading} style={{ width: "100%" }}>
             {loading ? "Entrando..." : "Entrar"}
           </button>
@@ -140,35 +139,116 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
 // Vista ADMIN (control total de la sección)
 // ===================================================================================
 
+// Iconos del sidebar de esta sección -- mismo estilo (16x16, stroke currentColor) que los de
+// Shell.tsx, pero locales acá porque esta sección es TOTALMENTE APARTE del resto (ver comentario
+// arriba del import de TeamBackAffiliates en App.tsx) y Shell.tsx no exporta los suyos.
+const tbIcon = {
+  liquidaciones: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
+      <path d="M9 15l2 2 4-4" />
+    </svg>
+  ),
+  jugadores: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  import: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" />
+    </svg>
+  ),
+  config: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+  usuarios: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+    </svg>
+  ),
+  logout: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
+    </svg>
+  ),
+};
+
+const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
+  { key: "resumen", label: "Liquidaciones", icon: "liquidaciones" },
+  { key: "jugadores", label: "Jugadores / árbol", icon: "jugadores" },
+  { key: "import", label: "Importar semana", icon: "import" },
+  { key: "config", label: "Configuración (plantilla)", icon: "config" },
+  { key: "usuarios", label: "Usuarios", icon: "usuarios" },
+];
+
+// (25/09/2026, pedido de Leo: "hagamos el menu como la administracion de poker") -- mismo
+// esquema visual que Shell.tsx (.app-shell / .sidebar / .nav-link), pero acá la navegación es
+// por tab de estado (no por ruta react-router): esta sección sigue siendo una sola ruta
+// (/teamback) con su propio login aparte, así que los ítems del menú son <button> con la clase
+// "nav-link" en vez de <NavLink>, ver ".nav-link" reseteado para <button> en index.css.
 function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("resumen");
+  const tabActual = TB_NAV.find((i) => i.key === tab);
 
   return (
-    <div className="page">
-      <div className="topbar">
-        <h2>TeamBack Affiliates</h2>
-        <div className="muted" style={{ fontSize: 13 }}>
-          Programa de rakeback + referidos directo al jugador — Suprema Poker. Sección aparte, no toca nada del resto del sistema.
+    <div className="app-shell">
+      <div className="sidebar">
+        <div className="brand">
+          <div className="brand-mark">T</div>
+          <div>
+            <h1>TeamBack</h1>
+            <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="muted" style={{ fontSize: 13 }}>{session.name}</span>
-          <button className="btn secondary small" onClick={onLogout}>Cerrar sesión</button>
+
+        <nav>
+          <div className="nav-section">
+            {TB_NAV.map((item) => (
+              <button
+                key={item.key}
+                className={`nav-link ${tab === item.key ? "active" : ""}`}
+                onClick={() => setTab(item.key)}
+                title={item.label}
+              >
+                {tbIcon[item.icon]} {item.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8, paddingLeft: 4 }}>{session.name}</div>
+          <button
+            className="btn secondary"
+            onClick={onLogout}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            {tbIcon.logout} Cerrar sesión
+          </button>
         </div>
       </div>
 
-      <div className="tabs" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button className={`btn small ${tab === "resumen" ? "" : "secondary"}`} onClick={() => setTab("resumen")}>Liquidaciones</button>
-        <button className={`btn small ${tab === "jugadores" ? "" : "secondary"}`} onClick={() => setTab("jugadores")}>Jugadores / árbol</button>
-        <button className={`btn small ${tab === "import" ? "" : "secondary"}`} onClick={() => setTab("import")}>Importar semana</button>
-        <button className={`btn small ${tab === "config" ? "" : "secondary"}`} onClick={() => setTab("config")}>Configuración (plantilla)</button>
-        <button className={`btn small ${tab === "usuarios" ? "" : "secondary"}`} onClick={() => setTab("usuarios")}>Usuarios</button>
-      </div>
+      <div className="main">
+        <div className="topbar">
+          <div>
+            <h2>{tabActual?.label}</h2>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Programa de rakeback + referidos directo al jugador — Suprema Poker. Sección aparte, no toca nada del resto del sistema.
+            </div>
+          </div>
+        </div>
 
-      {tab === "resumen" && <LiquidacionesTab />}
-      {tab === "jugadores" && <JugadoresTab />}
-      {tab === "import" && <ImportTab />}
-      {tab === "config" && <ConfigTab />}
-      {tab === "usuarios" && <UsuariosTab />}
+        {tab === "resumen" && <LiquidacionesTab />}
+        {tab === "jugadores" && <JugadoresTab />}
+        {tab === "import" && <ImportTab />}
+        {tab === "config" && <ConfigTab />}
+        {tab === "usuarios" && <UsuariosTab />}
+      </div>
     </div>
   );
 }
