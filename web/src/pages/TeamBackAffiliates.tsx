@@ -1,14 +1,116 @@
 // TeamBack Affiliates V1 (25/09/2026, pedido de Leo) -- pantalla TOTALMENTE APARTE del resto
 // del sistema (nada de agentes/clubes/liquidaciones de DigiPlayers). Programa de rakeback +
 // referidos directo al jugador, sobre Suprema Poker.
+// (25/09/2026, pedido de Leo: "necesito que hagamos usuarios y contraseña para esta seccion")
+// -- esta pantalla tiene su PROPIO login (ver lib/tbAuth.ts y routes/teambackAuth.ts en el
+// backend), totalmente aparte del login del resto del sistema -- aunque ya estés adentro de
+// DigiPlayers como admin, para entrar acá hace falta un usuario/contraseña propio de esta
+// sección. Dos roles: ADMIN (todo el control, las pestañas de siempre) y PLAYER (portal de
+// autoservicio, ve solo su propia liquidación semana a semana).
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 
-type Tab = "resumen" | "jugadores" | "import" | "config";
+type Tab = "resumen" | "jugadores" | "import" | "config" | "usuarios";
+
+const TB_SESSION_KEY = "tb_session";
+
+interface TbSession {
+  token: string;
+  role: "ADMIN" | "PLAYER";
+  name: string;
+  playerId: string | null;
+}
+
+function leerTbSession(): TbSession | null {
+  try {
+    const raw = localStorage.getItem(TB_SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s?.token || !s?.role) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function guardarTbSession(s: TbSession) {
+  localStorage.setItem(TB_SESSION_KEY, JSON.stringify(s));
+  localStorage.setItem("tb_token", s.token); // lo que lee requestTb()/requestFormTb() en api.ts
+}
+
+function cerrarTbSession() {
+  localStorage.removeItem(TB_SESSION_KEY);
+  localStorage.removeItem("tb_token");
+}
 
 export default function TeamBackAffiliates() {
+  const [session, setSession] = useState<TbSession | null>(() => leerTbSession());
+
+  if (!session) return <TbLogin onLoggedIn={setSession} />;
+  if (session.role === "PLAYER") return <TeamBackPortalJugador session={session} onLogout={() => { cerrarTbSession(); setSession(null); }} />;
+  return <TeamBackAdmin session={session} onLogout={() => { cerrarTbSession(); setSession(null); }} />;
+}
+
+// ===================================================================================
+// Login propio de la sección
+// ===================================================================================
+
+function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!email.trim() || !password) return setError("Completá email y contraseña.");
+    setLoading(true);
+    try {
+      const r = await api.teambackAuth.login(email.trim(), password);
+      const s: TbSession = { token: r.token, role: r.role, name: r.name, playerId: r.playerId ?? null };
+      guardarTbSession(s);
+      onLoggedIn(s);
+    } catch (err: any) {
+      setError(err.message || "No se pudo iniciar sesión.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="page" style={{ maxWidth: 380, margin: "60px auto" }}>
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>TeamBack Affiliates</h2>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+          Login propio de esta sección -- no es tu usuario del resto de DigiPlayers.
+        </div>
+        <form onSubmit={onSubmit}>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+          </div>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>Contraseña</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
+          <button className="btn" disabled={loading} style={{ width: "100%" }}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================================
+// Vista ADMIN (control total de la sección)
+// ===================================================================================
+
+function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("resumen");
 
   return (
@@ -18,6 +120,10 @@ export default function TeamBackAffiliates() {
         <div className="muted" style={{ fontSize: 13 }}>
           Programa de rakeback + referidos directo al jugador — Suprema Poker. Sección aparte, no toca nada del resto del sistema.
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="muted" style={{ fontSize: 13 }}>{session.name}</span>
+          <button className="btn secondary small" onClick={onLogout}>Cerrar sesión</button>
+        </div>
       </div>
 
       <div className="tabs" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -25,12 +131,99 @@ export default function TeamBackAffiliates() {
         <button className={`btn small ${tab === "jugadores" ? "" : "secondary"}`} onClick={() => setTab("jugadores")}>Jugadores / árbol</button>
         <button className={`btn small ${tab === "import" ? "" : "secondary"}`} onClick={() => setTab("import")}>Importar semana</button>
         <button className={`btn small ${tab === "config" ? "" : "secondary"}`} onClick={() => setTab("config")}>Configuración (plantilla)</button>
+        <button className={`btn small ${tab === "usuarios" ? "" : "secondary"}`} onClick={() => setTab("usuarios")}>Usuarios</button>
       </div>
 
       {tab === "resumen" && <LiquidacionesTab />}
       {tab === "jugadores" && <JugadoresTab />}
       {tab === "import" && <ImportTab />}
       {tab === "config" && <ConfigTab />}
+      {tab === "usuarios" && <UsuariosTab />}
+    </div>
+  );
+}
+
+// ===================================================================================
+// Portal del jugador (autoservicio, solo lectura de su propia liquidación)
+// ===================================================================================
+
+function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
+  const [cuenta, setCuenta] = useState<any | null>(null);
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [seleccion, setSeleccion] = useState<any | null>(null);
+
+  useEffect(() => {
+    api.teamback.portal.miCuenta().then(setCuenta);
+    api.teamback.portal.historial().then(setHistorial);
+  }, []);
+
+  return (
+    <div className="page">
+      <div className="topbar">
+        <h2>Mi liquidación — TeamBack Affiliates</h2>
+        <div className="muted" style={{ fontSize: 13 }}>
+          {cuenta ? `${cuenta.name} (${cuenta.suprema_player_id})` : session.name}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button className="btn secondary small" onClick={onLogout}>Cerrar sesión</button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Semana</th>
+              <th>Rake propio</th>
+              <th>Referidos activos</th>
+              <th>Escalón</th>
+              <th>Rakeback</th>
+              <th>Comisión 3%</th>
+              <th>Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {historial.map((l) => (
+              <tr key={l.id}>
+                <td>{dateShort(l.week_start)} al {dateShort(l.week_end)}</td>
+                <td>{usd(l.rake_propio)}</td>
+                <td>{l.referidos_activos_count}</td>
+                <td>
+                  {pct(l.rakeback_pct)}{" "}
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    ({l.tier_alcanzado_por === "BASE" ? "base" : l.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
+                  </span>
+                </td>
+                <td>{usd(l.rakeback_generado)}</td>
+                <td>
+                  {usd(l.comision_3pct_acreditada)}
+                  {l.comision_3pct_pausada && (
+                    <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
+                      pausada
+                    </span>
+                  )}
+                </td>
+                <td><strong>{usd(l.total_acreditado)}</strong></td>
+                <td>
+                  <button className="btn secondary small" onClick={() => setSeleccion(l)}>Ver</button>
+                </td>
+              </tr>
+            ))}
+            {historial.length === 0 && (
+              <tr>
+                <td colSpan={8} className="muted">Todavía no tenés ninguna liquidación calculada.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {seleccion && (
+        <Modal title={`Semana del ${dateShort(seleccion.week_start)}`} onClose={() => setSeleccion(null)}>
+          <BloqueLiquidacionCopiable liquidacion={seleccion} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -218,15 +411,11 @@ function LiquidacionesTab() {
   );
 }
 
-function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; weekStart: string }) {
-  const [data, setData] = useState<any | null>(null);
-  useEffect(() => {
-    api.teamback.liquidacionIndividual(playerId, weekStart).then(setData);
-  }, [playerId, weekStart]);
-
-  if (!data) return <div className="muted">Cargando...</div>;
-  const l = data.liquidacion;
-  const texto = [
+// Formato de liquidación lista para copiar/mandarle al jugador -- compartido entre la vista de
+// admin (LiquidacionIndividual, pide el dato por playerId+weekStart) y el portal del propio
+// jugador (que ya tiene la fila entera de antes, no necesita pedir nada más).
+function textoLiquidacion(l: any): string {
+  return [
     `Rake propio: ${usd(l.rake_propio)}`,
     `Referidos activos: ${l.referidos_activos_count}`,
     `Rakeback aplicado: ${pct(l.rakeback_pct)}`,
@@ -235,7 +424,10 @@ function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; week
     `Comisión de afiliado 3%: ${usd(l.comision_3pct_acreditada)}${l.comision_3pct_pausada ? " (pausada esta semana)" : ""}`,
     `Total acreditado: ${usd(l.total_acreditado)}`,
   ].join("\n");
+}
 
+function BloqueLiquidacionCopiable({ liquidacion }: { liquidacion: any }) {
+  const texto = textoLiquidacion(liquidacion);
   return (
     <div>
       <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, lineHeight: 1.7 }}>{texto}</pre>
@@ -249,6 +441,16 @@ function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; week
       </button>
     </div>
   );
+}
+
+function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; weekStart: string }) {
+  const [data, setData] = useState<any | null>(null);
+  useEffect(() => {
+    api.teamback.liquidacionIndividual(playerId, weekStart).then(setData);
+  }, [playerId, weekStart]);
+
+  if (!data) return <div className="muted">Cargando...</div>;
+  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} />;
 }
 
 // ===================================================================================
@@ -730,6 +932,194 @@ function ConfigTab() {
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading} onClick={guardar}>
         {loading ? "Guardando..." : "Guardar configuración"}
+      </button>
+    </div>
+  );
+}
+
+// ===================================================================================
+// Usuarios de la sección (25/09/2026, pedido de Leo: "necesito que hagamos usuarios y
+// contraseña para esta seccion") -- crear/administrar logins ADMIN (control total) y PLAYER
+// (portal de autoservicio, uno por jugador). Todo admin-only.
+// ===================================================================================
+
+function UsuariosTab() {
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [jugadores, setJugadores] = useState<any[]>([]);
+  const [nuevo, setNuevo] = useState(false);
+  const [editando, setEditando] = useState<any | null>(null);
+
+  async function cargar() {
+    setUsuarios(await api.teamback.listUsuarios());
+    setJugadores(await api.teamback.listPlayers(true));
+  }
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  return (
+    <div className="panel">
+      <div className="topbar" style={{ marginBottom: 10 }}>
+        <h3 style={{ margin: 0 }}>Usuarios de TeamBack Affiliates</h3>
+        <button className="btn small" onClick={() => setNuevo(true)}>+ Nuevo usuario</button>
+      </div>
+      <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+        Login propio de esta sección -- no tiene nada que ver con "Usuarios y permisos" del resto del sistema. Un ADMIN controla todo; un PLAYER solo ve su propia liquidación (un jugador puede tener a lo sumo un login).
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Rol</th>
+            <th>Jugador</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {usuarios.map((u) => (
+            <tr key={u.id} style={u.active ? undefined : { opacity: 0.55 }}>
+              <td>{u.name}</td>
+              <td className="muted">{u.email}</td>
+              <td>{u.role === "ADMIN" ? <span className="badge pos">Admin</span> : <span className="badge">Jugador</span>}</td>
+              <td className="muted">{u.player_name ? `${u.player_name} (${u.suprema_player_id})` : "—"}</td>
+              <td>{u.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
+              <td>
+                <button className="btn secondary small" onClick={() => setEditando(u)}>Editar</button>
+              </td>
+            </tr>
+          ))}
+          {usuarios.length === 0 && (
+            <tr>
+              <td colSpan={6} className="muted">Sin usuarios todavía.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {nuevo && (
+        <Modal title="Nuevo usuario" onClose={() => setNuevo(false)}>
+          <FormUsuario jugadores={jugadores} onSaved={() => { setNuevo(false); cargar(); }} />
+        </Modal>
+      )}
+      {editando && (
+        <Modal title={`Editar — ${editando.name}`} onClose={() => setEditando(null)}>
+          <FormEditarUsuario usuario={editando} onSaved={() => { setEditando(null); cargar(); }} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => void }) {
+  const [role, setRole] = useState<"ADMIN" | "PLAYER">("ADMIN");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [playerId, setPlayerId] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Jugadores que todavía no tienen login -- no tiene sentido ofrecer uno que ya tiene.
+  const jugadoresSinLogin = jugadores; // el backend igual rechaza un duplicado; simple por ahora.
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!name.trim() || !email.trim() || !password) return setMsg({ ok: false, text: "Nombre, email y contraseña son obligatorios." });
+    if (role === "PLAYER" && !playerId) return setMsg({ ok: false, text: "Elegí a qué jugador corresponde este login." });
+    setLoading(true);
+    try {
+      await api.teamback.crearUsuario({ role, name: name.trim(), email: email.trim(), password, playerId: role === "PLAYER" ? playerId : null });
+      onSaved();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo crear." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Rol</label>
+          <select value={role} onChange={(e) => setRole(e.target.value as any)}>
+            <option value="ADMIN">Admin (control total de la sección)</option>
+            <option value="PLAYER">Jugador (portal, solo su propia liquidación)</option>
+          </select>
+        </div>
+        {role === "PLAYER" && (
+          <div className="field">
+            <label>Jugador</label>
+            <select value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
+              <option value="">Elegir...</option>
+              {jugadoresSinLogin.map((j) => (
+                <option key={j.id} value={j.id}>{j.name} ({j.suprema_player_id})</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="field">
+          <label>Nombre</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Contraseña</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>
+        {loading ? "Creando..." : "Crear usuario"}
+      </button>
+    </form>
+  );
+}
+
+function FormEditarUsuario({ usuario, onSaved }: { usuario: any; onSaved: () => void }) {
+  const [active, setActive] = useState(usuario.active);
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function guardar() {
+    setMsg(null);
+    if (password && password.length < 6) return setMsg({ ok: false, text: "La contraseña tiene que tener al menos 6 caracteres." });
+    setLoading(true);
+    try {
+      await api.teamback.actualizarUsuario(usuario.id, { active, ...(password ? { password } : {}) });
+      onSaved();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Estado</label>
+          <select value={active ? "1" : "0"} onChange={(e) => setActive(e.target.value === "1")}>
+            <option value="1">Activo</option>
+            <option value="0">Inactivo</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Resetear contraseña (opcional)</label>
+          <input type="password" placeholder="Dejar vacío para no cambiarla" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading} onClick={guardar}>
+        {loading ? "Guardando..." : "Guardar"}
       </button>
     </div>
   );

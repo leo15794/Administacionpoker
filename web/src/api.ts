@@ -65,6 +65,49 @@ function idempotencyKey() {
   return `web_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// (25/09/2026, pedido de Leo: "necesito que hagamos usuarios y contraseña para esta seccion")
+// -- TeamBack Affiliates tiene su PROPIO login, totalmente aparte del resto de la app (ver
+// lib/tbAuth.ts en el backend) -- token guardado bajo otra clave de localStorage (nunca se
+// manda el token del sistema principal a /teamback/*, ni viceversa).
+function getTbToken() {
+  return localStorage.getItem("tb_token");
+}
+
+async function requestTb(path: string, opts: RequestInit = {}) {
+  const token = getTbToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err: any = new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+async function requestFormTb(path: string, form: FormData) {
+  const token = getTbToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err: any = new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
@@ -772,8 +815,25 @@ export const api = {
   // ===================== TeamBack Affiliates V1 (25/09/2026) =====================
   // Sección TOTALMENTE APARTE del resto de la API -- ver src/routes/teamback.ts. Nada de esto
   // toca los endpoints de agentes/clubes/liquidaciones de arriba.
+  teambackAuth: {
+    // (25/09/2026) Login propio de la sección -- separado de api.login(). No hay token todavía
+    // en este llamado (es el que lo consigue), por eso usa fetch directo y no requestTb.
+    login: async (email: string, password: string) => {
+      const res = await fetch(`${API_URL}/teamback/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
+      }
+      return res.json();
+    },
+  },
+
   teamback: {
-    getConfig: () => request("/teamback/config"),
+    getConfig: () => requestTb("/teamback/config"),
     updateConfig: (data: {
       pctBase: number;
       pctTier2: number;
@@ -786,13 +846,13 @@ export const api = {
       pctComisionReferido: number;
       aplicarUmbralAComision: boolean;
       ventanaActividadSemanas: number;
-    }) => request("/teamback/config", { method: "PUT", body: JSON.stringify(data) }),
+    }) => requestTb("/teamback/config", { method: "PUT", body: JSON.stringify(data) }),
 
-    listPlayers: (includeInactive = true) => request(`/teamback/players?includeInactive=${includeInactive}`),
-    getPlayer: (id: string) => request(`/teamback/players/${id}`),
+    listPlayers: (includeInactive = true) => requestTb(`/teamback/players?includeInactive=${includeInactive}`),
+    getPlayer: (id: string) => requestTb(`/teamback/players/${id}`),
     // Config POR JUGADOR (25/09/2026) -- getPlayerConfig devuelve null si todavía no tiene la
     // suya propia cargada (usar getConfig como plantilla para prellenar el formulario en ese caso).
-    getPlayerConfig: (id: string) => request(`/teamback/players/${id}/config`),
+    getPlayerConfig: (id: string) => requestTb(`/teamback/players/${id}/config`),
     updatePlayerConfig: (
       id: string,
       data: {
@@ -808,32 +868,45 @@ export const api = {
         aplicarUmbralAComision: boolean;
         ventanaActividadSemanas: number;
       }
-    ) => request(`/teamback/players/${id}/config`, { method: "PUT", body: JSON.stringify(data) }),
+    ) => requestTb(`/teamback/players/${id}/config`, { method: "PUT", body: JSON.stringify(data) }),
     crearPlayer: (data: { supremaPlayerId: string; name: string; fechaAlta?: string; referidoPorId?: string | null; notes?: string | null }) =>
-      request("/teamback/players", { method: "POST", body: JSON.stringify(data) }),
+      requestTb("/teamback/players", { method: "POST", body: JSON.stringify(data) }),
     actualizarPlayer: (
       id: string,
       data: Partial<{ supremaPlayerId: string; name: string; fechaAlta: string; referidoPorId: string | null; notes: string | null; active: boolean }>
-    ) => request(`/teamback/players/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    arbol: () => request("/teamback/arbol"),
+    ) => requestTb(`/teamback/players/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    arbol: () => requestTb("/teamback/arbol"),
 
     previsualizarImport: (file: File) => {
       const form = new FormData();
       form.append("file", file);
-      return requestForm("/teamback/import/preview", form);
+      return requestFormTb("/teamback/import/preview", form);
     },
     aplicarImport: (data: {
       weekStart: string;
       weekEnd: string;
       rows: { supremaPlayerId: string; supremaPlayerName: string; rake: number }[];
       importSource?: string;
-    }) => request("/teamback/import/aplicar", { method: "POST", body: JSON.stringify(data) }),
+    }) => requestTb("/teamback/import/aplicar", { method: "POST", body: JSON.stringify(data) }),
 
     calcularLiquidaciones: (weekStart: string, weekEnd: string) =>
-      request("/teamback/liquidaciones/calcular", { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
-    liquidacionesSemana: (weekStart: string) => request(`/teamback/liquidaciones/semana/${weekStart}`),
-    semanasDisponibles: () => request("/teamback/liquidaciones/semanas"),
-    historialJugador: (playerId: string) => request(`/teamback/liquidaciones/jugador/${playerId}`),
-    liquidacionIndividual: (playerId: string, weekStart: string) => request(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),
+      requestTb("/teamback/liquidaciones/calcular", { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
+    liquidacionesSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`),
+    semanasDisponibles: () => requestTb("/teamback/liquidaciones/semanas"),
+    historialJugador: (playerId: string) => requestTb(`/teamback/liquidaciones/jugador/${playerId}`),
+    liquidacionIndividual: (playerId: string, weekStart: string) => requestTb(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),
+
+    // Usuarios de la sección (25/09/2026) -- admin-only, ver routes/teamback.ts.
+    listUsuarios: () => requestTb("/teamback/usuarios"),
+    crearUsuario: (data: { role: "ADMIN" | "PLAYER"; email: string; password: string; name: string; playerId?: string | null }) =>
+      requestTb("/teamback/usuarios", { method: "POST", body: JSON.stringify(data) }),
+    actualizarUsuario: (id: string, data: Partial<{ name: string; active: boolean; password: string }>) =>
+      requestTb(`/teamback/usuarios/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+    // Portal del jugador (25/09/2026) -- autoservicio, requiere login de rol PLAYER.
+    portal: {
+      miCuenta: () => requestTb("/teamback/portal/mi-cuenta"),
+      historial: () => requestTb("/teamback/portal/historial"),
+    },
   },
 };

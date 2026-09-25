@@ -1416,3 +1416,27 @@ CREATE TABLE IF NOT EXISTS tb_player_config (
   ventana_actividad_semanas   INTEGER NOT NULL,
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- (25/09/2026, pedido de Leo: "ahora necesito que hagamos usuarios y contraseña para esta
+-- seccion" -- confirmado: dos tipos de login, admin de la sección y jugador viendo su propia
+-- liquidación, "nada que ver" con los usuarios del sistema principal) -- tabla de logins PROPIA
+-- de TeamBack Affiliates, totalmente separada de `agent_users` (el login del resto de
+-- DigiPlayers). Se firma/verifica con su PROPIO secreto (TB_JWT_SECRET, ver lib/tbAuth.ts) --
+-- un token de acá nunca es válido para el resto de la app, y viceversa.
+--   - role = 'ADMIN': administra toda la sección (jugadores, %, importar, liquidaciones).
+--     player_id queda NULL.
+--   - role = 'PLAYER': portal de autoservicio -- entra a ver SOLO su propia liquidación.
+--     player_id obligatorio, uno a uno con tb_players (un jugador tiene como mucho un login).
+CREATE TABLE IF NOT EXISTS tb_users (
+  id            TEXT PRIMARY KEY,
+  role          TEXT NOT NULL CHECK (role IN ('ADMIN', 'PLAYER')),
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  player_id     TEXT REFERENCES tb_players(id) UNIQUE,
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT tb_users_player_solo_si_role_player CHECK (
+    (role = 'PLAYER' AND player_id IS NOT NULL) OR (role = 'ADMIN' AND player_id IS NULL)
+  )
+);

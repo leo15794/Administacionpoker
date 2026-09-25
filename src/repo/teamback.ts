@@ -423,3 +423,83 @@ export async function getLiquidacionIndividual(playerId: string, weekStart: stri
   if (!liq) throw new Error("No hay liquidación calculada para ese jugador en esa semana.");
   return { player, liquidacion: liq };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Usuarios de la sección (login propio, ver schema.sql tb_users y lib/tbAuth.ts)
+// ---------------------------------------------------------------------------------------------
+
+export async function getTbUserByEmail(email: string) {
+  const r = await pool.query(`SELECT * FROM tb_users WHERE email = $1`, [email]);
+  return r.rows[0] ?? null;
+}
+
+export async function listTbUsers() {
+  const r = await pool.query(
+    `SELECT u.id, u.role, u.email, u.name, u.player_id, u.active, u.created_at,
+            p.name as player_name, p.suprema_player_id
+     FROM tb_users u
+     LEFT JOIN tb_players p ON p.id = u.player_id
+     ORDER BY u.role, u.name`
+  );
+  return r.rows;
+}
+
+export interface TbUserInput {
+  role: "ADMIN" | "PLAYER";
+  email: string;
+  password: string;
+  name: string;
+  playerId?: string | null;
+}
+
+export async function crearTbUser(input: TbUserInput, hashFn: (pw: string) => Promise<string>) {
+  if (input.role === "PLAYER") {
+    if (!input.playerId) throw new Error("Un login de jugador necesita elegir a qué jugador corresponde.");
+    const jugador = await getTbPlayer(input.playerId);
+    if (!jugador) throw new Error("No se encontró ese jugador.");
+  }
+  const passwordHash = await hashFn(input.password);
+  const id = newId("tbu");
+  try {
+    const r = await pool.query(
+      `INSERT INTO tb_users (id, role, email, password_hash, name, player_id)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, email, name, player_id, active, created_at`,
+      [id, input.role, input.email.trim().toLowerCase(), passwordHash, input.name.trim(), input.role === "PLAYER" ? input.playerId : null]
+    );
+    return r.rows[0];
+  } catch (err: any) {
+    if (err.code === "23505") throw new Error(`Ya existe un usuario con el email "${input.email}", o ese jugador ya tiene login.`);
+    throw err;
+  }
+}
+
+export async function actualizarTbUser(
+  id: string,
+  input: Partial<{ name: string; active: boolean; password: string }>,
+  hashFn: (pw: string) => Promise<string>
+) {
+  const sets: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name.trim()); }
+  if (input.active !== undefined) { sets.push(`active = $${i++}`); values.push(input.active); }
+  if (input.password) { sets.push(`password_hash = $${i++}`); values.push(await hashFn(input.password)); }
+  if (sets.length === 0) return;
+  values.push(id);
+  const r = await pool.query(
+    `UPDATE tb_users SET ${sets.join(", ")} WHERE id = $${i} RETURNING id, role, email, name, player_id, active, created_at`,
+    values
+  );
+  if (r.rows.length === 0) throw new Error("No se encontró ese usuario.");
+  return r.rows[0];
+}
+
+export async function getHistorialJugadorConNombre(playerId: string) {
+  const r = await pool.query(
+    `SELECT l.*, p.name as player_name, p.suprema_player_id
+     FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
+     WHERE l.player_id = $1 ORDER BY l.week_start DESC`,
+    [playerId]
+  );
+  return r.rows;
+}

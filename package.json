@@ -10,6 +10,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/seed.ts",
     "set-password": "tsx src/scripts/set-password.ts",
+    "crear-admin-teamback": "tsx src/scripts/crearAdminTeamback.ts",
     "import:historial": "tsx src/scripts/importHistorialAutomatizacion.ts",
     "sync:saldos": "tsx src/scripts/syncSaldosPlanilla.ts",
     "reset:financiero": "tsx src/scripts/resetDatosFinancieros.ts",

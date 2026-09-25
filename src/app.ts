@@ -19,6 +19,7 @@ import { rakebackPendienteRouter } from "./routes/rakebackPendiente.js";
 import { rodeoRouter } from "./routes/rodeo.js";
 import { agentesResumenRouter } from "./routes/agentesResumen.js";
 import { teambackRouter } from "./routes/teamback.js";
+import { teambackAuthRouter } from "./routes/teambackAuth.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
 // modo servidor local (server.ts, con app.listen) como en modo función serverless
@@ -58,6 +59,9 @@ app.use("/rakeback-pendiente", rakebackPendienteRouter);
 app.use("/rodeo", rodeoRouter);
 app.use("/agentes-resumen", agentesResumenRouter);
 // TeamBack Affiliates V1 (25/09/2026) -- sección totalmente aparte, ver src/routes/teamback.ts.
+// /teamback/auth NO requiere estar logueado (es el propio login de la sección) -- se monta
+// aparte, antes, para que quede claro que es la excepción.
+app.use("/teamback/auth", teambackAuthRouter);
 app.use("/teamback", teambackRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
