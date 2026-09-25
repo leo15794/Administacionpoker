@@ -414,17 +414,32 @@ function FormJugador({ jugador, jugadores, onSaved }: { jugador: any; jugadores:
 // no tiene nada cargado, se prellena con la plantilla global (Configuración) como punto de
 // partida -- pero hay que guardar explícitamente para que quede activo, no se aplica solo.
 const CAMPOS_CONFIG: { key: string; label: string; step: string; pct?: boolean }[] = [
-  { key: "pctBase", label: "% Rakeback base", step: "0.01", pct: true },
-  { key: "pctTier2", label: "% Rakeback escalón 2", step: "0.01", pct: true },
-  { key: "pctTier3", label: "% Rakeback escalón 3", step: "0.01", pct: true },
+  { key: "pctBase", label: "Rakeback base (%)", step: "0.1", pct: true },
+  { key: "pctTier2", label: "Rakeback escalón 2 (%)", step: "0.1", pct: true },
+  { key: "pctTier3", label: "Rakeback escalón 3 (%)", step: "0.1", pct: true },
   { key: "umbralVolumenTier2Usd", label: "Volumen propio para escalón 2 (USD/semana)", step: "1" },
   { key: "umbralVolumenTier3Usd", label: "Volumen propio para escalón 3 (USD/semana)", step: "1" },
   { key: "umbralReferidosTier2", label: "# Referidos activos para escalón 2", step: "1" },
   { key: "umbralReferidosTier3", label: "# Referidos activos para escalón 3", step: "1" },
   { key: "umbralReferidoActivoUsd", label: 'Mínimo de rake para que un referido cuente como "activo" (USD/semana)', step: "1" },
-  { key: "pctComisionReferido", label: "% Comisión de afiliado (sobre rake de referidos directos)", step: "0.01", pct: true },
+  { key: "pctComisionReferido", label: "Comisión de afiliado (%, sobre rake de referidos directos)", step: "0.1", pct: true },
   { key: "ventanaActividadSemanas", label: "Ventana de actividad para mantener la comisión (semanas)", step: "1" },
 ];
+
+// (25/09/2026, pedido de Leo: "estaria bueno que diga los %, no que diga el 0.6 asi eviamos
+// confusiones") -- en base de datos y en el motor de cálculo, un % se guarda como fracción
+// (0.60 = 60%, ver TbConfig en engine/teambackAffiliates.ts) -- eso no cambia. Lo que cambia es
+// SOLO cómo se muestra/edita en el input: acá se multiplica x100 para mostrar y se divide /100
+// al guardar, así el campo dice "60" en vez de "0,6".
+function campoPorcentaje(cfg: any, setCfg: (fn: (c: any) => any) => void, key: string) {
+  return {
+    value: cfg[key] === "" || cfg[key] == null ? "" : Number((Number(cfg[key]) * 100).toFixed(4)),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = e.target.value;
+      setCfg((c: any) => ({ ...c, [key]: v === "" ? "" : Number(v) / 100 }));
+    },
+  };
+}
 
 function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => void }) {
   const [cfg, setCfg] = useState<any | null>(null);
@@ -485,7 +500,7 @@ function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => 
         {CAMPOS_CONFIG.map((c) => (
           <div className="field" key={c.key}>
             <label>{c.label}</label>
-            <input type="number" step={c.step} {...num(c.key)} />
+            <input type="number" step={c.step} {...(c.pct ? campoPorcentaje(cfg, setCfg, c.key) : num(c.key))} />
           </div>
         ))}
         <div className="field">
@@ -661,20 +676,20 @@ function ConfigTab() {
         tiene el suyo propio (ver "Jugadores / árbol" → "% Configurar"). Esto es solo la
         PLANTILLA: los valores con los que arranca precargado el formulario cuando configurás a
         un jugador por primera vez, para no tener que tipear todo de cero cada vez. Los
-        porcentajes van de 0 a 1 (ej. 0.60 = 60%).
+        campos de % ya se muestran en formato porcentaje (60 = 60%).
       </div>
       <div className="form-grid">
         <div className="field">
-          <label>% Rakeback base</label>
-          <input type="number" step="0.01" {...num("pctBase")} />
+          <label>Rakeback base (%)</label>
+          <input type="number" step="0.1" {...campoPorcentaje(cfg, setCfg, "pctBase")} />
         </div>
         <div className="field">
-          <label>% Rakeback escalón 2</label>
-          <input type="number" step="0.01" {...num("pctTier2")} />
+          <label>Rakeback escalón 2 (%)</label>
+          <input type="number" step="0.1" {...campoPorcentaje(cfg, setCfg, "pctTier2")} />
         </div>
         <div className="field">
-          <label>% Rakeback escalón 3</label>
-          <input type="number" step="0.01" {...num("pctTier3")} />
+          <label>Rakeback escalón 3 (%)</label>
+          <input type="number" step="0.1" {...campoPorcentaje(cfg, setCfg, "pctTier3")} />
         </div>
         <div className="field">
           <label>Volumen propio para escalón 2 (USD/semana)</label>
@@ -697,8 +712,8 @@ function ConfigTab() {
           <input type="number" step="1" {...num("umbralReferidoActivoUsd")} />
         </div>
         <div className="field">
-          <label>% Comisión de afiliado (sobre rake de referidos directos)</label>
-          <input type="number" step="0.01" {...num("pctComisionReferido")} />
+          <label>Comisión de afiliado (%, sobre rake de referidos directos)</label>
+          <input type="number" step="0.1" {...campoPorcentaje(cfg, setCfg, "pctComisionReferido")} />
         </div>
         <div className="field">
           <label>Ventana de actividad para mantener la comisión (semanas)</label>
