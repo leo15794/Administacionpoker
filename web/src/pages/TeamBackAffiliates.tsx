@@ -1226,6 +1226,21 @@ function UsuariosTab() {
   );
 }
 
+// (25/09/2026, pedido de Leo: "los usuarios van a tener usuarios con su nombre no con su ID de
+// juego, asi evitamos confusiones") -- convierte el nombre del jugador en un usuario de login
+// legible (sin tildes, en minúsculas, separado por puntos): "Juan Pérez" -> "juan.perez". Se usa
+// como valor por defecto (obligatorio, se autocompleta solo) al elegir el jugador -- se puede
+// editar a mano después si ya está tomado por otro login.
+function nombreAUsuario(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+}
+
 function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => void }) {
   const [role, setRole] = useState<"ADMIN" | "PLAYER">("ADMIN");
   const [name, setName] = useState("");
@@ -1237,6 +1252,18 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
 
   // Jugadores que todavía no tienen login -- no tiene sentido ofrecer uno que ya tiene.
   const jugadoresSinLogin = jugadores; // el backend igual rechaza un duplicado; simple por ahora.
+
+  // Al elegir el jugador, se autocompletan Nombre y Usuario en base a SU nombre (no a su ID de
+  // Suprema) -- el usuario por defecto queda asignado sí o sí, y sigue siendo editable por si
+  // ya está tomado (ver "Tester" / "Tester_2" en la lista: mismo nombre, login distinto).
+  function elegirJugador(id: string) {
+    setPlayerId(id);
+    const j = jugadoresSinLogin.find((x) => x.id === id);
+    if (j) {
+      setName(j.name);
+      setUsername(nombreAUsuario(j.name));
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1267,7 +1294,7 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
         {role === "PLAYER" && (
           <div className="field">
             <label>Jugador</label>
-            <select value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
+            <select value={playerId} onChange={(e) => elegirJugador(e.target.value)}>
               <option value="">Elegir...</option>
               {jugadoresSinLogin.map((j) => (
                 <option key={j.id} value={j.id}>{j.name} ({j.suprema_player_id})</option>
@@ -1281,7 +1308,12 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
         </div>
         <div className="field">
           <label>Usuario</label>
-          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
+          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" name="tb-nuevo-usuario" />
+          {role === "PLAYER" && (
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+              Se arma solo a partir del nombre del jugador -- cambialo acá si ya está en uso.
+            </div>
+          )}
         </div>
         <div className="field">
           <label>Contraseña</label>
