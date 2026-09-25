@@ -231,21 +231,32 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
 
   // (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- en vez de
   // wirear un refresh manual en cada una de las ~25 pantallas, se refresca la pantalla actual
-  // sola cuando: (1) volvés a esta pestaña después de estar en otra (visibilitychange), o
-  // (2) se acaba de guardar algo en cualquier lado (evento "dp:datos-cambiaron", disparado desde
-  // api.ts después de cualquier POST/PUT/PATCH/DELETE que salió bien). El mecanismo es
-  // cambiarle la key a <Outlet/> más abajo: React desmonta y vuelve a montar la pantalla activa,
-  // lo que dispara el mismo fetch inicial que cada pantalla ya tiene al cargar -- no hace falta
-  // tocar ninguna pantalla puntual. OJO: esto resetea cualquier cosa que no esté guardada en esa
-  // pantalla (un formulario a medio llenar, un filtro, una fila en edición).
+  // sola cuando volvés a esta pestaña después de estar en otra (visibilitychange). El mecanismo
+  // es cambiarle la key a <Outlet/> más abajo: React desmonta y vuelve a montar la pantalla
+  // activa, lo que dispara el mismo fetch inicial que cada pantalla ya tiene al cargar -- no
+  // hace falta tocar ninguna pantalla puntual. OJO: esto resetea cualquier cosa que no esté
+  // guardada en esa pantalla (un formulario a medio llenar, un filtro, una fila en edición) --
+  // por eso el disparador tiene que ser algo que pase solo cuando REALMENTE tiene sentido asumir
+  // que no había nada a medio llenar (volviste de otra pestaña/ventana).
   // (25/09/2026, bug reportado por Leo: "cuando subís el archivo no se carga" en Jugadores
   // Bancados) -- originalmente esto también escuchaba window "focus", pero un <input
   // type="file"> abre un diálogo NATIVO del sistema operativo, que le saca el foco a la ventana
   // del navegador; al elegir el archivo y volver, ese diálogo se cierra y dispara "focus" en la
   // ventana IGUAL que si hubieras cambiado de pestaña -- eso desmontaba la pantalla (y con ella
-  // el archivo recién elegido) justo después de seleccionarlo. Se saca el disparador de foco y
-  // se deja solo visibilitychange (que no se dispara con un diálogo nativo, solo con un cambio
-  // real de pestaña/minimizado) + el de "se guardó algo".
+  // el archivo recién elegido) justo después de seleccionarlo. Se sacó el disparador de foco y
+  // quedó solo visibilitychange (que no se dispara con un diálogo nativo, solo con un cambio
+  // real de pestaña/minimizado).
+  // (25/09/2026, pedido de Leo: revisar si el auto-refresh "hacía lío" en otras pantallas) --
+  // también había un segundo disparador acá, un evento "dp:datos-cambiaron" que api.ts lanzaba
+  // después de CUALQUIER POST/PUT/PATCH/DELETE exitoso en cualquier parte de la app. Se sacó
+  // entero: como react-router solo tiene montada la pantalla activa, ese evento nunca podía
+  // ayudar a OTRA pantalla -- solo remontaba la que ya estabas mirando, y cada pantalla ya
+  // refresca sola su propia lista después de sus propias acciones (patrón refresh() que ya
+  // existía en toda la app, de antes de este cambio). El único efecto real que tenía era el
+  // riesgo: CUALQUIER acción en CUALQUIER parte de la pantalla activa (ej. pagar una fila de la
+  // lista) podía borrar de golpe un formulario a medio llenar en otra parte de esa misma
+  // pantalla (ya pasó dos veces: el archivo elegido en un input, y el resultado de "Analizar
+  // archivo" en Bancados/TeamBack). Ver api.ts para el detalle completo.
   const [refreshKey, setRefreshKey] = useState(0);
   const ultimoRefresh = useRef(0);
   useEffect(() => {
@@ -259,10 +270,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       if (document.visibilityState === "visible") refrescar();
     }
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("dp:datos-cambiaron", refrescar);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("dp:datos-cambiaron", refrescar);
     };
   }, []);
 

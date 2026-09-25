@@ -6,36 +6,26 @@ function getToken() {
   return localStorage.getItem("dp_token");
 }
 
-// (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- después de
-// CUALQUIER request que modifica datos (POST/PUT/PATCH/DELETE) que termina bien, se avisa al
-// resto de la app con un evento del navegador -- Shell.tsx lo escucha y refresca la pantalla
-// actual sola (ver ahí el porqué). GET nunca dispara esto -- no modifica nada, no hay nada que
-// avisar.
-// (25/09/2026, bug reportado por Leo: en Jugadores Bancados y en TeamBack Affiliates, "Analizar
-// archivo" no traía ninguna información) -- un preview/análisis (subir el archivo y ver qué
-// trae, antes de confirmar) se manda por POST porque sube un archivo, pero NO es una acción que
-// otras pantallas necesiten enterarse -- el resultado se usa YA MISMO, en la propia pantalla que
-// lo pidió. Si se lanza el evento "dp:datos-cambiaron" para esa llamada, el remount de <Outlet/>
-// en Shell.tsx desmonta esa misma pantalla justo después de recibir la respuesta, borrando el
-// resultado del análisis antes de que se llegue a mostrar -- eso se veía como "no trae la
-// información" sin ningún error. Por convención en todo el backend, un endpoint de solo-lectura
-// tipo "dry run" siempre tiene "preview" o "previsualizar" en la ruta (ver routes/imports.ts,
-// routes/bancados.ts, routes/teamback.ts, routes/movements.ts, etc.) -- se usa eso para NO
-// disparar el refresh en esos casos.
-function esRutaDeSoloPreview(path: string) {
-  return /preview|previsualizar/i.test(path);
-}
-
-function avisarQueCambiaronDatos(path: string, method?: string) {
-  const m = (method || "GET").toUpperCase();
-  if (m === "GET" || m === "HEAD") return;
-  if (esRutaDeSoloPreview(path)) return;
-  try {
-    window.dispatchEvent(new Event("dp:datos-cambiaron"));
-  } catch {
-    /* fuera de un navegador (tests, etc.) -- no pasa nada */
-  }
-}
+// (24/09/2026, pedido de Leo: "a veces hay que apretar F5 para que se actualice") -- se probó
+// primero avisar al resto de la app después de CUALQUIER request que modifica datos
+// (POST/PUT/PATCH/DELETE) vía un evento de navegador que Shell.tsx escuchaba para refrescar la
+// pantalla actual sola.
+// (25/09/2026, sacado -- Leo pidió revisar si el auto-refresh "hacía lío" en otras pantallas, y
+// sí: ese mecanismo resultó REDUNDANTE Y RIESGOSO. Redundante porque, como solo hay una pantalla
+// montada a la vez (react-router), ese evento nunca podía ayudar a OTRA pantalla -- solo forzaba
+// un remount de la pantalla en la que ya estabas, y cada pantalla de la app YA llama a su propio
+// refresh() local después de sus propias acciones (ver por ej. RakebackPendiente.tsx: pagar(),
+// darDeBaja(), eliminar() -- las tres llaman refresh() al final). Riesgoso porque el remount
+// (cambiarle la key a <Outlet/>) borra CUALQUIER cosa no guardada en la pantalla activa -- ya
+// rompió dos veces (el archivo elegido en un <input type="file">, y el resultado de "Analizar
+// archivo" en Bancados/TeamBack) y en cualquier pantalla con un formulario a medio llenar en
+// paralelo a otra acción (ej. "nuevo agente" abierto mientras se paga un rakeback pendiente de
+// otra fila) corre el mismo riesgo. Se saca este disparador -- queda solo el de
+// visibilitychange en Shell.tsx (volver a la pestaña), que sí cubre un caso real (otra pestaña,
+// otra sesión, u otro usuario cambió algo mientras esta pantalla estaba en segundo plano) sin
+// este problema, más los headers no-store (ya en app.ts) que garantizan que cualquier fetch
+// nuevo -- por navegación o por ese refresh de pestaña -- nunca trae una respuesta vieja
+// cacheada.
 
 async function request(path: string, opts: RequestInit = {}) {
   const token = getToken();
@@ -51,7 +41,6 @@ async function request(path: string, opts: RequestInit = {}) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
-  avisarQueCambiaronDatos(path, opts.method);
   return res.json();
 }
 
@@ -69,7 +58,6 @@ async function requestForm(path: string, form: FormData) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
-  avisarQueCambiaronDatos(path, "POST");
   return res.json();
 }
 
