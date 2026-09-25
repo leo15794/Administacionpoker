@@ -8,6 +8,11 @@ import Cierres from "./pages/Cierres";
 import Usuarios from "./pages/Usuarios";
 import ComisionesReferidos from "./pages/ComisionesReferidos";
 import ResumenFinanciero from "./pages/ResumenFinanciero";
+// (25/09/2026, pedido de Leo: "necesito un login por fuera para esta seccion... asi no me
+// sirve") -- TeamBack Affiliates se monta en una ruta TOTALMENTE APARTE más abajo (/teamback),
+// fuera del <RequireAuth> y del <Shell> del sistema principal -- no pasa por /login ni por
+// api.getToken() (el token del sistema principal). La propia página maneja su login (ver
+// TeamBackAffiliates.tsx: TbLogin, tb_token/tb_session en localStorage).
 import TeamBackAffiliates from "./pages/TeamBackAffiliates";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
@@ -69,7 +74,6 @@ export default function App() {
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="comisiones-referidos" element={<ComisionesReferidos />} />
           <Route path="resumen-financiero" element={<ResumenFinanciero />} />
-          <Route path="teamback-affiliates" element={<TeamBackAffiliates />} />
         </Route>
 
         <Route
@@ -93,6 +97,12 @@ export default function App() {
         >
           <Route index element={<MiSupervision />} />
         </Route>
+
+        {/* (25/09/2026) TeamBack Affiliates -- sección TOTALMENTE APARTE, con su propio login
+            (ver el comentario arriba del import). Fuera de RequireAuth a propósito: alguien con
+            SOLO un usuario de esta sección entra directo por /teamback, sin tocar /login ni el
+            resto de DigiPlayers. */}
+        <Route path="/teamback/*" element={<TeamBackAffiliates />} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

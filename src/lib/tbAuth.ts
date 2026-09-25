@@ -4,10 +4,21 @@
 // en lib/auth.ts del análisis de seguridad del 24/09), pero con su PROPIO secreto: un token
 // firmado acá nunca es válido contra lib/auth.ts, y viceversa -- son dos sistemas de login
 // completamente independientes, a propósito.
+//
+// (25/09/2026, bug reportado por Leo: "Failed to fetch" en TODA la app, incluido Resumen, que
+// no tiene nada que ver con TeamBack Affiliates) -- ANTES el chequeo de TB_JWT_SECRET corría en
+// un IIFE al nivel del módulo, apenas se importaba este archivo. Como app.ts importa
+// routes/teamback.ts (que importa este archivo) para TODOS los requests, si faltaba
+// TB_JWT_SECRET en el entorno el proceso entero tiraba una excepción al arrancar -- rompiendo
+// TAMBIÉN el resto de la app (Resumen, Agentes, todo), no solo esta sección. Justo lo contrario
+// de "sección totalmente aparte". Ahora el chequeo es PEREZOSO: solo se evalúa cuando alguien
+// de verdad intenta firmar o verificar un token de esta sección -- si falta la variable, se
+// rompe SOLO esa acción puntual (login o cualquier request a /teamback/*), el resto de
+// DigiPlayers sigue funcionando igual.
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 
-const SECRET = (() => {
+function getSecret(): string {
   const v = process.env.TB_JWT_SECRET;
   if (!v) {
     throw new Error(
@@ -15,7 +26,7 @@ const SECRET = (() => {
     );
   }
   return v;
-})();
+}
 
 export interface TbJwtPayload {
   userId: string;
@@ -28,11 +39,11 @@ export interface TbJwtPayload {
 }
 
 export function signTbToken(payload: TbJwtPayload) {
-  return jwt.sign(payload, SECRET, { expiresIn: "7d" });
+  return jwt.sign(payload, getSecret(), { expiresIn: "7d" });
 }
 
 export function verifyTbToken(token: string): TbJwtPayload {
-  return jwt.verify(token, SECRET) as TbJwtPayload;
+  return jwt.verify(token, getSecret()) as TbJwtPayload;
 }
 
 export interface TbAuthedRequest extends Request {
@@ -45,7 +56,13 @@ export function requireTbAuth(req: TbAuthedRequest, res: Response, next: NextFun
   try {
     req.tbUser = verifyTbToken(header.slice(7));
     next();
-  } catch {
+  } catch (err: any) {
+    // Si el problema es que falta TB_JWT_SECRET en el servidor, avisarlo distinto de "token
+    // vencido" -- si no, parece un problema del usuario cuando en realidad falta configurar algo.
+    if (String(err?.message).includes("TB_JWT_SECRET")) {
+      console.error(err.message);
+      return res.status(500).json({ error: "TeamBack Affiliates no está configurado del lado del servidor (falta TB_JWT_SECRET)." });
+    }
     return res.status(401).json({ error: "Token inválido o vencido" });
   }
 }
