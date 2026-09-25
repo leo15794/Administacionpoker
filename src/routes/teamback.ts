@@ -222,9 +222,11 @@ teambackRouter.get("/usuarios", requireTbAuth, requireTbAdmin, async (_req, res)
   res.json(await listTbUsers());
 });
 
+// (25/09/2026, pedido de Leo: "no sea obligacion el email, puede ser usuario y contraseña") --
+// username es cualquier texto (sin formato de email obligatorio), no un email.
 const userSchema = z.object({
   role: z.enum(["ADMIN", "PLAYER"]),
-  email: z.string().email(),
+  username: z.string().min(1),
   password: z.string().min(6, "La contraseña tiene que tener al menos 6 caracteres."),
   name: z.string().min(1),
   playerId: z.string().nullable().optional(),

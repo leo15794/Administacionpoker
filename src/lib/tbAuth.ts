@@ -20,7 +20,9 @@ const SECRET = (() => {
 export interface TbJwtPayload {
   userId: string;
   role: "ADMIN" | "PLAYER";
-  email: string;
+  // (25/09/2026, pedido de Leo: "no sea obligacion el email, puede ser usuario y contraseña")
+  // -- login por USUARIO, cualquier texto, no un email.
+  username: string;
   // Solo presente cuando role === "PLAYER" -- el jugador al que este login le pertenece.
   playerId: string | null;
 }

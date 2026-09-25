@@ -58,7 +58,7 @@ export default function TeamBackAffiliates() {
 // ===================================================================================
 
 function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -66,10 +66,10 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!email.trim() || !password) return setError("Completá email y contraseña.");
+    if (!username.trim() || !password) return setError("Completá usuario y contraseña.");
     setLoading(true);
     try {
-      const r = await api.teambackAuth.login(email.trim(), password);
+      const r = await api.teambackAuth.login(username.trim(), password);
       const s: TbSession = { token: r.token, role: r.role, name: r.name, playerId: r.playerId ?? null };
       guardarTbSession(s);
       onLoggedIn(s);
@@ -89,8 +89,8 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
         </div>
         <form onSubmit={onSubmit}>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+            <label>Usuario</label>
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
             <label>Contraseña</label>
@@ -970,7 +970,7 @@ function UsuariosTab() {
         <thead>
           <tr>
             <th>Nombre</th>
-            <th>Email</th>
+            <th>Usuario</th>
             <th>Rol</th>
             <th>Jugador</th>
             <th>Estado</th>
@@ -981,7 +981,7 @@ function UsuariosTab() {
           {usuarios.map((u) => (
             <tr key={u.id} style={u.active ? undefined : { opacity: 0.55 }}>
               <td>{u.name}</td>
-              <td className="muted">{u.email}</td>
+              <td className="muted">{u.username}</td>
               <td>{u.role === "ADMIN" ? <span className="badge pos">Admin</span> : <span className="badge">Jugador</span>}</td>
               <td className="muted">{u.player_name ? `${u.player_name} (${u.suprema_player_id})` : "—"}</td>
               <td>{u.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
@@ -1015,7 +1015,7 @@ function UsuariosTab() {
 function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => void }) {
   const [role, setRole] = useState<"ADMIN" | "PLAYER">("ADMIN");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -1027,11 +1027,11 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!name.trim() || !email.trim() || !password) return setMsg({ ok: false, text: "Nombre, email y contraseña son obligatorios." });
+    if (!name.trim() || !username.trim() || !password) return setMsg({ ok: false, text: "Nombre, usuario y contraseña son obligatorios." });
     if (role === "PLAYER" && !playerId) return setMsg({ ok: false, text: "Elegí a qué jugador corresponde este login." });
     setLoading(true);
     try {
-      await api.teamback.crearUsuario({ role, name: name.trim(), email: email.trim(), password, playerId: role === "PLAYER" ? playerId : null });
+      await api.teamback.crearUsuario({ role, name: name.trim(), username: username.trim(), password, playerId: role === "PLAYER" ? playerId : null });
       onSaved();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo crear." });
@@ -1066,8 +1066,8 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="field">
-          <label>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <label>Usuario</label>
+          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
         </div>
         <div className="field">
           <label>Contraseña</label>

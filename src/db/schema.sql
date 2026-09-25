@@ -1440,3 +1440,19 @@ CREATE TABLE IF NOT EXISTS tb_users (
     (role = 'PLAYER' AND player_id IS NOT NULL) OR (role = 'ADMIN' AND player_id IS NULL)
   )
 );
+-- (25/09/2026, pedido de Leo: "recorda que no sea obligacion el email, puede ser usuario y
+-- contraseña sin obligacion del email") -- la tabla ya se había migrado con la columna `email`
+-- (Leo ya corrió el migrate una vez), así que esto es un ALTER, no se reescribe el CREATE TABLE
+-- de arriba -- login por USUARIO (cualquier texto, sin formato de email obligatorio), no por
+-- email. Si ya había algún usuario cargado con `email`, se copia tal cual a `username`.
+ALTER TABLE tb_users ADD COLUMN IF NOT EXISTS username TEXT;
+UPDATE tb_users SET username = email WHERE username IS NULL;
+ALTER TABLE tb_users ALTER COLUMN username SET NOT NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tb_users_username_key') THEN
+    ALTER TABLE tb_users ADD CONSTRAINT tb_users_username_key UNIQUE (username);
+  END IF;
+END $$;
+ALTER TABLE tb_users DROP CONSTRAINT IF EXISTS tb_users_email_key;
+ALTER TABLE tb_users DROP COLUMN IF EXISTS email;

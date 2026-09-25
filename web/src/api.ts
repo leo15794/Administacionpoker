@@ -818,11 +818,13 @@ export const api = {
   teambackAuth: {
     // (25/09/2026) Login propio de la sección -- separado de api.login(). No hay token todavía
     // en este llamado (es el que lo consigue), por eso usa fetch directo y no requestTb.
-    login: async (email: string, password: string) => {
+    // (25/09/2026, pedido de Leo: "no sea obligacion el email, puede ser usuario y contraseña")
+    // -- login por USUARIO, no por email.
+    login: async (username: string, password: string) => {
       const res = await fetch(`${API_URL}/teamback/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -898,7 +900,7 @@ export const api = {
 
     // Usuarios de la sección (25/09/2026) -- admin-only, ver routes/teamback.ts.
     listUsuarios: () => requestTb("/teamback/usuarios"),
-    crearUsuario: (data: { role: "ADMIN" | "PLAYER"; email: string; password: string; name: string; playerId?: string | null }) =>
+    crearUsuario: (data: { role: "ADMIN" | "PLAYER"; username: string; password: string; name: string; playerId?: string | null }) =>
       requestTb("/teamback/usuarios", { method: "POST", body: JSON.stringify(data) }),
     actualizarUsuario: (id: string, data: Partial<{ name: string; active: boolean; password: string }>) =>
       requestTb(`/teamback/usuarios/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
