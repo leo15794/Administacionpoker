@@ -57,6 +57,77 @@ export async function updateTbConfig(input: TbConfigInput): Promise<TbConfig> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Config POR JUGADOR (25/09/2026, pedido de Leo: "deberiamos poder configurar a los jugadores y
+// sus % no en general como esta ahi") -- reemplaza a tb_config como fuente real para calcular
+// liquidaciones; tb_config (arriba) queda solo como plantilla para prellenar el formulario de un
+// jugador nuevo. Ver el comentario en schema.sql para el detalle completo.
+// ---------------------------------------------------------------------------------------------
+
+function filaAConfig(row: any): TbConfig {
+  return {
+    pctBase: Number(row.pct_base),
+    pctTier2: Number(row.pct_tier2),
+    pctTier3: Number(row.pct_tier3),
+    umbralVolumenTier2Usd: Number(row.umbral_volumen_tier2_usd),
+    umbralVolumenTier3Usd: Number(row.umbral_volumen_tier3_usd),
+    umbralReferidosTier2: Number(row.umbral_referidos_tier2),
+    umbralReferidosTier3: Number(row.umbral_referidos_tier3),
+    umbralReferidoActivoUsd: Number(row.umbral_referido_activo_usd),
+    pctComisionReferido: Number(row.pct_comision_referido),
+    aplicarUmbralAComision: Boolean(row.aplicar_umbral_a_comision),
+    ventanaActividadSemanas: Number(row.ventana_actividad_semanas),
+  };
+}
+
+/** null si el jugador todavía no tiene su propia config cargada -- NO cae al default global. */
+export async function getTbPlayerConfig(playerId: string): Promise<TbConfig | null> {
+  const r = await pool.query(`SELECT * FROM tb_player_config WHERE player_id = $1`, [playerId]);
+  if (r.rows.length === 0) return null;
+  return filaAConfig(r.rows[0]);
+}
+
+export async function upsertTbPlayerConfig(playerId: string, input: TbConfigInput): Promise<TbConfig> {
+  const jugador = await getTbPlayer(playerId);
+  if (!jugador) throw new Error("No se encontró ese jugador.");
+  const r = await pool.query(
+    `INSERT INTO tb_player_config
+       (player_id, pct_base, pct_tier2, pct_tier3, umbral_volumen_tier2_usd, umbral_volumen_tier3_usd,
+        umbral_referidos_tier2, umbral_referidos_tier3, umbral_referido_activo_usd, pct_comision_referido,
+        aplicar_umbral_a_comision, ventana_actividad_semanas)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (player_id) DO UPDATE SET
+       pct_base = EXCLUDED.pct_base, pct_tier2 = EXCLUDED.pct_tier2, pct_tier3 = EXCLUDED.pct_tier3,
+       umbral_volumen_tier2_usd = EXCLUDED.umbral_volumen_tier2_usd,
+       umbral_volumen_tier3_usd = EXCLUDED.umbral_volumen_tier3_usd,
+       umbral_referidos_tier2 = EXCLUDED.umbral_referidos_tier2,
+       umbral_referidos_tier3 = EXCLUDED.umbral_referidos_tier3,
+       umbral_referido_activo_usd = EXCLUDED.umbral_referido_activo_usd,
+       pct_comision_referido = EXCLUDED.pct_comision_referido,
+       aplicar_umbral_a_comision = EXCLUDED.aplicar_umbral_a_comision,
+       ventana_actividad_semanas = EXCLUDED.ventana_actividad_semanas,
+       updated_at = now()
+     RETURNING *`,
+    [
+      playerId, input.pctBase, input.pctTier2, input.pctTier3,
+      input.umbralVolumenTier2Usd, input.umbralVolumenTier3Usd,
+      input.umbralReferidosTier2, input.umbralReferidosTier3,
+      input.umbralReferidoActivoUsd, input.pctComisionReferido,
+      input.aplicarUmbralAComision, input.ventanaActividadSemanas,
+    ]
+  );
+  return filaAConfig(r.rows[0]);
+}
+
+/** Config de TODOS los jugadores que ya la tienen cargada, indexada por player_id -- para no
+ * pegarle a la base una vez por jugador al calcular la liquidación de toda la semana. */
+async function getTodasLasConfigsDeJugadores(): Promise<Map<string, TbConfig>> {
+  const r = await pool.query(`SELECT * FROM tb_player_config`);
+  const mapa = new Map<string, TbConfig>();
+  for (const row of r.rows) mapa.set(row.player_id, filaAConfig(row));
+  return mapa;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Jugadores / árbol de referidos
 // ---------------------------------------------------------------------------------------------
 
@@ -71,7 +142,10 @@ export interface TbPlayerInput {
 export async function listTbPlayers(includeInactive = true) {
   const r = await pool.query(
     `SELECT p.*, ref.name as referido_por_name, ref.suprema_player_id as referido_por_suprema_id,
-            (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id) as referidos_count
+            (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id) as referidos_count,
+            -- (25/09/2026) para que la lista pueda avisar qué jugadores todavía no tienen su %
+            -- propio cargado, sin tener que pedir la config de cada uno por separado.
+            EXISTS (SELECT 1 FROM tb_player_config c WHERE c.player_id = p.id) as tiene_config
      FROM tb_players p
      LEFT JOIN tb_players ref ON ref.id = p.referido_por_id
      WHERE $1 OR p.active = true
@@ -255,12 +329,17 @@ async function rakeDeReferidosDirectos(playerId: string, weekStart: string): Pro
 /** Calcula (y persiste) la liquidación de TODOS los jugadores activos que tengan algo para
  * liquidar esa semana (rake propio esa semana, o al menos un referido directo con rake esa
  * semana -- si no, no genera fila, para no ensuciar el histórico con ceros de jugadores
- * totalmente inactivos). Upsert por jugador+semana -- se puede recalcular sin duplicar. */
+ * totalmente inactivos). Upsert por jugador+semana -- se puede recalcular sin duplicar.
+ *
+ * (25/09/2026) Cada jugador usa SU PROPIA config (tb_player_config), no un default global -- si
+ * un jugador con algo para liquidar todavía no tiene la suya cargada, se lo salta (no se le
+ * inventa un % por defecto) y queda listado en `sinConfigurar` para que se sepa y se cargue. */
 export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekEnd: string) {
-  const cfg = await getTbConfig();
+  const configsPorJugador = await getTodasLasConfigsDeJugadores();
   const jugadores = await pool.query(`SELECT * FROM tb_players WHERE active = true`);
 
   const resultados: any[] = [];
+  const sinConfigurar: { playerId: string; playerName: string; supremaPlayerId: string }[] = [];
   for (const jugador of jugadores.rows) {
     const statsPropia = await pool.query(
       `SELECT rake_bruto FROM tb_weekly_stats WHERE player_id = $1 AND week_start = $2::date`,
@@ -270,6 +349,12 @@ export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekE
     const rakeReferidosDirectos = await rakeDeReferidosDirectos(jugador.id, weekStart);
 
     if (rakePropio === 0 && rakeReferidosDirectos.every((r) => r === 0)) continue; // nada que liquidar
+
+    const cfg = configsPorJugador.get(jugador.id);
+    if (!cfg) {
+      sinConfigurar.push({ playerId: jugador.id, playerName: jugador.name, supremaPlayerId: jugador.suprema_player_id });
+      continue;
+    }
 
     const rakePropioSemanasAnteriores = await rakePropioDeSemanasAnteriores(jugador.id, weekStart, cfg.ventanaActividadSemanas);
     const origen: OrigenLiquidacionSemanal = { rakePropio, rakeReferidosDirectos, rakePropioSemanasAnteriores };
@@ -300,7 +385,7 @@ export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekE
     );
     resultados.push({ ...r.rows[0], player_name: jugador.name, suprema_player_id: jugador.suprema_player_id });
   }
-  return resultados;
+  return { resultados, sinConfigurar };
 }
 
 export async function getLiquidacionesSemana(weekStart: string) {

@@ -24,7 +24,7 @@ export default function TeamBackAffiliates() {
         <button className={`btn small ${tab === "resumen" ? "" : "secondary"}`} onClick={() => setTab("resumen")}>Liquidaciones</button>
         <button className={`btn small ${tab === "jugadores" ? "" : "secondary"}`} onClick={() => setTab("jugadores")}>Jugadores / árbol</button>
         <button className={`btn small ${tab === "import" ? "" : "secondary"}`} onClick={() => setTab("import")}>Importar semana</button>
-        <button className={`btn small ${tab === "config" ? "" : "secondary"}`} onClick={() => setTab("config")}>Configuración</button>
+        <button className={`btn small ${tab === "config" ? "" : "secondary"}`} onClick={() => setTab("config")}>Configuración (plantilla)</button>
       </div>
 
       {tab === "resumen" && <LiquidacionesTab />}
@@ -51,6 +51,7 @@ function LiquidacionesTab() {
   const [calculando, setCalculando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [individual, setIndividual] = useState<any | null>(null);
+  const [sinConfigurar, setSinConfigurar] = useState<{ playerId: string; playerName: string; supremaPlayerId: string }[]>([]);
 
   async function cargarSemanas() {
     const r = await api.teamback.semanasDisponibles();
@@ -76,8 +77,10 @@ function LiquidacionesTab() {
     setMsg(null);
     try {
       const r = await api.teamback.calcularLiquidaciones(weekStart, weekEnd);
-      setFilas(r);
-      setMsg({ ok: true, text: `Calculado -- ${r.length} jugador(es) con liquidación esta semana.` });
+      setFilas(r.resultados);
+      setSinConfigurar(r.sinConfigurar ?? []);
+      const avisoSinConfigurar = r.sinConfigurar?.length > 0 ? ` (${r.sinConfigurar.length} jugador(es) salteado(s) por no tener % configurado todavía -- ver abajo)` : "";
+      setMsg({ ok: true, text: `Calculado -- ${r.resultados.length} jugador(es) con liquidación esta semana.${avisoSinConfigurar}` });
       cargarSemanas();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo calcular." });
@@ -123,6 +126,17 @@ function LiquidacionesTab() {
         </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+      {sinConfigurar.length > 0 && (
+        <div className="error" style={{ marginBottom: 12 }}>
+          {sinConfigurar.length} jugador(es) con rake esta semana pero SIN % configurado todavía -- no se les calculó liquidación. Andá a "Jugadores / árbol" y cargales su % primero, después volvé a calcular esta semana:
+          <ul>
+            {sinConfigurar.map((s) => (
+              <li key={s.playerId}>{s.playerName} ({s.supremaPlayerId})</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <table>
         <thead>
@@ -244,6 +258,7 @@ function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; week
 function JugadoresTab() {
   const [jugadores, setJugadores] = useState<any[]>([]);
   const [nuevo, setNuevo] = useState<any | null>(null);
+  const [configurando, setConfigurando] = useState<any | null>(null);
 
   async function cargar() {
     setJugadores(await api.teamback.listPlayers(true));
@@ -258,6 +273,11 @@ function JugadoresTab() {
         <h3 style={{ margin: 0 }}>Jugadores</h3>
         <button className="btn small" onClick={() => setNuevo({})}>+ Nuevo jugador</button>
       </div>
+      <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+        Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general
+        para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el
+        suyo (botón "% Configurar").
+      </div>
       <table>
         <thead>
           <tr>
@@ -266,6 +286,7 @@ function JugadoresTab() {
             <th>Fecha de alta</th>
             <th>Referido por</th>
             <th># Referidos</th>
+            <th>%</th>
             <th>Estado</th>
             <th></th>
           </tr>
@@ -278,10 +299,20 @@ function JugadoresTab() {
               <td>{dateShort(j.fecha_alta)}</td>
               <td className="muted">{j.referido_por_name ?? "—"}</td>
               <td>{j.referidos_count}</td>
-              <td>{j.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
               <td>
+                {j.tiene_config ? (
+                  <span className="badge pos">Configurado</span>
+                ) : (
+                  <span className="badge neg" title="Sin % propio cargado -- no se liquida hasta que se configure.">Sin % configurar</span>
+                )}
+              </td>
+              <td>{j.active ? <span className="badge pos">Activo</span> : <span className="badge neg">Inactivo</span>}</td>
+              <td style={{ display: "flex", gap: 6 }}>
                 <button className="btn secondary small" onClick={() => setNuevo(j)}>
                   Editar
+                </button>
+                <button className="btn secondary small" onClick={() => setConfigurando(j)}>
+                  % Configurar
                 </button>
               </td>
             </tr>
@@ -292,6 +323,11 @@ function JugadoresTab() {
       {nuevo && (
         <Modal title={nuevo.id ? `Editar — ${nuevo.name}` : "Nuevo jugador"} onClose={() => setNuevo(null)}>
           <FormJugador jugador={nuevo} jugadores={jugadores} onSaved={() => { setNuevo(null); cargar(); }} />
+        </Modal>
+      )}
+      {configurando && (
+        <Modal title={`% de ${configurando.name}`} onClose={() => setConfigurando(null)}>
+          <FormConfigJugador jugador={configurando} onSaved={() => { setConfigurando(null); cargar(); }} />
         </Modal>
       )}
     </div>
@@ -370,6 +406,104 @@ function FormJugador({ jugador, jugadores, onSaved }: { jugador: any; jugadores:
         {loading ? "Guardando..." : "Guardar"}
       </button>
     </form>
+  );
+}
+
+// (25/09/2026, pedido de Leo: "deberiamos poder configurar a los jugadores y sus % no en
+// general como esta ahi") -- % de rakeback/escalones/comisión de UN jugador puntual. Si todavía
+// no tiene nada cargado, se prellena con la plantilla global (Configuración) como punto de
+// partida -- pero hay que guardar explícitamente para que quede activo, no se aplica solo.
+const CAMPOS_CONFIG: { key: string; label: string; step: string; pct?: boolean }[] = [
+  { key: "pctBase", label: "% Rakeback base", step: "0.01", pct: true },
+  { key: "pctTier2", label: "% Rakeback escalón 2", step: "0.01", pct: true },
+  { key: "pctTier3", label: "% Rakeback escalón 3", step: "0.01", pct: true },
+  { key: "umbralVolumenTier2Usd", label: "Volumen propio para escalón 2 (USD/semana)", step: "1" },
+  { key: "umbralVolumenTier3Usd", label: "Volumen propio para escalón 3 (USD/semana)", step: "1" },
+  { key: "umbralReferidosTier2", label: "# Referidos activos para escalón 2", step: "1" },
+  { key: "umbralReferidosTier3", label: "# Referidos activos para escalón 3", step: "1" },
+  { key: "umbralReferidoActivoUsd", label: 'Mínimo de rake para que un referido cuente como "activo" (USD/semana)', step: "1" },
+  { key: "pctComisionReferido", label: "% Comisión de afiliado (sobre rake de referidos directos)", step: "0.01", pct: true },
+  { key: "ventanaActividadSemanas", label: "Ventana de actividad para mantener la comisión (semanas)", step: "1" },
+];
+
+function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => void }) {
+  const [cfg, setCfg] = useState<any | null>(null);
+  const [yaTeniaConfig, setYaTeniaConfig] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const propia = await api.teamback.getPlayerConfig(jugador.id);
+      if (propia) {
+        setCfg(propia);
+        setYaTeniaConfig(true);
+      } else {
+        // Sin config propia todavía -- se prellena con la plantilla global como punto de
+        // partida, pero aplicarUmbralAComision no viene en CAMPOS_CONFIG (checkbox aparte).
+        setCfg(await api.teamback.getConfig());
+        setYaTeniaConfig(false);
+      }
+    })();
+  }, [jugador.id]);
+
+  if (!cfg) return <div className="muted">Cargando...</div>;
+
+  function num(key: string) {
+    return {
+      value: cfg[key],
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCfg((c: any) => ({ ...c, [key]: Number(e.target.value) })),
+    };
+  }
+
+  async function guardar() {
+    setLoading(true);
+    setMsg(null);
+    try {
+      await api.teamback.updatePlayerConfig(jugador.id, cfg);
+      onSaved();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      {!yaTeniaConfig && (
+        <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+          {jugador.name} todavía no tiene su propio % cargado -- estos valores son los de la
+          plantilla general (pestaña Configuración), como punto de partida. Ajustalos si
+          corresponde y guardá para que queden activos para este jugador.
+        </div>
+      )}
+      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Los porcentajes van de 0 a 1 (ej. 0.60 = 60%). Cambiar esto NO recalcula liquidaciones ya guardadas -- cada una queda con el % vigente al momento en que se calculó.
+      </div>
+      <div className="form-grid">
+        {CAMPOS_CONFIG.map((c) => (
+          <div className="field" key={c.key}>
+            <label>{c.label}</label>
+            <input type="number" step={c.step} {...num(c.key)} />
+          </div>
+        ))}
+        <div className="field">
+          <label>¿El umbral de "referido activo" también aplica a la comisión?</label>
+          <select
+            value={cfg.aplicarUmbralAComision ? "1" : "0"}
+            onChange={(e) => setCfg((c: any) => ({ ...c, aplicarUmbralAComision: e.target.value === "1" }))}
+          >
+            <option value="0">No -- comisión sobre cualquier rake de referido, sin piso</option>
+            <option value="1">Sí -- solo si el referido llegó al umbral esa semana</option>
+          </select>
+        </div>
+      </div>
+      {msg && <div className="error">{msg.text}</div>}
+      <button className="btn" disabled={loading} onClick={guardar}>
+        {loading ? "Guardando..." : "Guardar"}
+      </button>
+    </div>
   );
 }
 
@@ -523,7 +657,11 @@ function ConfigTab() {
   return (
     <div className="panel">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
-        Los porcentajes van de 0 a 1 (ej. 0.60 = 60%). Cambiar esto NO recalcula liquidaciones ya guardadas -- cada una queda con el % vigente al momento en que se calculó.
+        (25/09/2026) Esto YA NO es el % que se le aplica a todos los jugadores -- cada jugador
+        tiene el suyo propio (ver "Jugadores / árbol" → "% Configurar"). Esto es solo la
+        PLANTILLA: los valores con los que arranca precargado el formulario cuando configurás a
+        un jugador por primera vez, para no tener que tipear todo de cero cada vez. Los
+        porcentajes van de 0 a 1 (ej. 0.60 = 60%).
       </div>
       <div className="form-grid">
         <div className="field">

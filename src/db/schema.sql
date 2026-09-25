@@ -1388,3 +1388,31 @@ CREATE TABLE IF NOT EXISTS tb_weekly_liquidations (
 );
 CREATE INDEX IF NOT EXISTS idx_tb_liq_week ON tb_weekly_liquidations(week_start);
 CREATE INDEX IF NOT EXISTS idx_tb_liq_player ON tb_weekly_liquidations(player_id);
+
+-- (25/09/2026, pedido de Leo: "deberiamos poder configurar a los jugadores y sus % no en
+-- general como esta ahi") -- tb_config (arriba) empezó siendo la config que se le aplicaba a
+-- TODOS los jugadores por igual. Leo pidió que cada jugador tenga su propio % base, sus propios
+-- umbrales de escalón (63%/65%, por volumen o por referidos) y su propio % de comisión -- así
+-- que ahora es esto (tb_player_config, una fila por jugador) lo que usa el motor de cálculo, NO
+-- tb_config. tb_config queda solo como PLANTILLA -- valores para prellenar el formulario cuando
+-- se configura un jugador nuevo por primera vez, nada más; el motor nunca la lee directamente.
+--
+-- Un jugador SIN fila acá no se puede liquidar (pedido explícito de Leo: "tiene que
+-- configurarse sí o sí antes de calcular su liquidación", para evitar liquidar a alguien con un
+-- % que nadie eligió a propósito) -- calcularYGuardarLiquidacionSemana() en repo/teamback.ts lo
+-- salta y lo reporta aparte en vez de inventarle un % por defecto.
+CREATE TABLE IF NOT EXISTS tb_player_config (
+  player_id                   TEXT PRIMARY KEY REFERENCES tb_players(id),
+  pct_base                    NUMERIC(6,4) NOT NULL,
+  pct_tier2                   NUMERIC(6,4) NOT NULL,
+  pct_tier3                   NUMERIC(6,4) NOT NULL,
+  umbral_volumen_tier2_usd    NUMERIC(18,4) NOT NULL,
+  umbral_volumen_tier3_usd    NUMERIC(18,4) NOT NULL,
+  umbral_referidos_tier2      INTEGER NOT NULL,
+  umbral_referidos_tier3      INTEGER NOT NULL,
+  umbral_referido_activo_usd  NUMERIC(18,4) NOT NULL,
+  pct_comision_referido       NUMERIC(6,4) NOT NULL,
+  aplicar_umbral_a_comision   BOOLEAN NOT NULL DEFAULT FALSE,
+  ventana_actividad_semanas   INTEGER NOT NULL,
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

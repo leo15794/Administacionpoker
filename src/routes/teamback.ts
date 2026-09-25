@@ -8,6 +8,8 @@ import { parseSupremaWorkbook } from "../engine/importSuprema.js";
 import {
   getTbConfig,
   updateTbConfig,
+  getTbPlayerConfig,
+  upsertTbPlayerConfig,
   listTbPlayers,
   getTbPlayer,
   crearTbPlayer,
@@ -57,6 +59,25 @@ teambackRouter.put("/config", requireAuth, requireAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------------------------
 // Jugadores / árbol
 // ---------------------------------------------------------------------------------------------
+
+// Config POR JUGADOR (25/09/2026) -- lo que realmente usa el motor de liquidación, ver
+// repo/teamback.ts. GET devuelve null si el jugador todavía no tiene la suya cargada (la UI usa
+// /config de arriba como plantilla para prellenar el formulario en ese caso).
+teambackRouter.get("/players/:id/config", requireAuth, requireAdmin, async (req, res) => {
+  const player = await getTbPlayer(req.params.id);
+  if (!player) return res.status(404).json({ error: "No se encontró ese jugador." });
+  res.json(await getTbPlayerConfig(req.params.id));
+});
+
+teambackRouter.put("/players/:id/config", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = configSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await upsertTbPlayerConfig(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 teambackRouter.get("/players", requireAuth, requireAdmin, async (req, res) => {
   const includeInactive = req.query.includeInactive !== "false";

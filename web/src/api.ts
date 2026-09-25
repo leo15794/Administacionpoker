@@ -790,6 +790,25 @@ export const api = {
 
     listPlayers: (includeInactive = true) => request(`/teamback/players?includeInactive=${includeInactive}`),
     getPlayer: (id: string) => request(`/teamback/players/${id}`),
+    // Config POR JUGADOR (25/09/2026) -- getPlayerConfig devuelve null si todavía no tiene la
+    // suya propia cargada (usar getConfig como plantilla para prellenar el formulario en ese caso).
+    getPlayerConfig: (id: string) => request(`/teamback/players/${id}/config`),
+    updatePlayerConfig: (
+      id: string,
+      data: {
+        pctBase: number;
+        pctTier2: number;
+        pctTier3: number;
+        umbralVolumenTier2Usd: number;
+        umbralVolumenTier3Usd: number;
+        umbralReferidosTier2: number;
+        umbralReferidosTier3: number;
+        umbralReferidoActivoUsd: number;
+        pctComisionReferido: number;
+        aplicarUmbralAComision: boolean;
+        ventanaActividadSemanas: number;
+      }
+    ) => request(`/teamback/players/${id}/config`, { method: "PUT", body: JSON.stringify(data) }),
     crearPlayer: (data: { supremaPlayerId: string; name: string; fechaAlta?: string; referidoPorId?: string | null; notes?: string | null }) =>
       request("/teamback/players", { method: "POST", body: JSON.stringify(data) }),
     actualizarPlayer: (
