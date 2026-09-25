@@ -1389,18 +1389,14 @@ CREATE TABLE IF NOT EXISTS tb_weekly_liquidations (
 CREATE INDEX IF NOT EXISTS idx_tb_liq_week ON tb_weekly_liquidations(week_start);
 CREATE INDEX IF NOT EXISTS idx_tb_liq_player ON tb_weekly_liquidations(player_id);
 
--- (25/09/2026, pedido de Leo: "ganancia por semana" + "un boton que pagar dejar asentado que se
--- pago la liquidacion") -- la ganancia de la casa NO se guarda acá, se calcula al vuelo desde
--- tb_weekly_liquidations (rake propio total al 80% menos el total acreditado a los jugadores esa
--- semana, ver repo/teamback.ts getGananciaPorSemana). Esta tabla es SOLO el registro de "esta
--- semana ya se pagó" -- una fila = pagada; sin fila = pendiente. No guarda montos (si se
--- recalcula la semana después de pagada, el monto pagado real puede no coincidir más con lo que
--- muestra la pantalla -- es una limitación conocida, ver nota en repo/teamback.ts).
-CREATE TABLE IF NOT EXISTS tb_weekly_payments (
-  week_start  DATE PRIMARY KEY,
-  week_end    DATE NOT NULL,
-  paid_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de PAGAR y despues Pagado" +
+-- "Comisiones Pagadas -- al momento de pagar en Liquidaciones deberia sumarse ahi") -- el pago se
+-- marca por JUGADOR+SEMANA (una fila de acá), no por semana entera, para que "Comisiones
+-- pagadas" de cada jugador (tb_players) pueda sumar exactamente lo que se le pagó a ÉL.
+-- (Reemplaza un primer intento con una tabla aparte tb_weekly_payments por semana completa --
+-- esa tabla quedó sin uso, no se borró porque no molesta.)
+ALTER TABLE tb_weekly_liquidations ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tb_weekly_liquidations ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
 
 -- (25/09/2026, pedido de Leo: "deberiamos poder configurar a los jugadores y sus % no en
 -- general como esta ahi") -- tb_config (arriba) empezó siendo la config que se le aplicaba a

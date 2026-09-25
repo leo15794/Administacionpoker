@@ -29,8 +29,8 @@ import {
   getSemanasDisponibles,
   eliminarSemana,
   getGananciaPorSemana,
-  marcarSemanaPagada,
-  desmarcarSemanaPagada,
+  marcarLiquidacionPagada,
+  marcarLiquidacionNoPagada,
   getHistorialJugador,
   getHistorialJugadorConNombre,
   getLiquidacionIndividual,
@@ -233,21 +233,19 @@ teambackRouter.get("/ganancia-semanal", requireTbAuth, requireTbAdmin, async (_r
   }
 });
 
-const pagarSchema = z.object({ weekEnd: z.string() });
-teambackRouter.post("/ganancia-semanal/:weekStart/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
-  const parsed = pagarSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+// (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de PAGAR y despues Pagado")
+// -- el pago se marca por liquidación individual (jugador+semana), no por semana entera.
+teambackRouter.post("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
   try {
-    res.json(await marcarSemanaPagada(req.params.weekStart, parsed.data.weekEnd));
+    res.json(await marcarLiquidacionPagada(req.params.id));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo marcar como pagada." });
   }
 });
 
-teambackRouter.delete("/ganancia-semanal/:weekStart/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
+teambackRouter.delete("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
   try {
-    await desmarcarSemanaPagada(req.params.weekStart);
-    res.json({ ok: true });
+    res.json(await marcarLiquidacionNoPagada(req.params.id));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo deshacer el pago." });
   }

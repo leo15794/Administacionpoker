@@ -467,6 +467,7 @@ function LiquidacionesTab() {
   const [individual, setIndividual] = useState<any | null>(null);
   const [sinConfigurar, setSinConfigurar] = useState<{ playerId: string; playerName: string; supremaPlayerId: string }[]>([]);
   const [eliminando, setEliminando] = useState(false);
+  const [pagandoId, setPagandoId] = useState<string | null>(null);
 
   async function cargarSemanas() {
     const r = await api.teamback.semanasDisponibles();
@@ -529,6 +530,37 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
       setMsg({ ok: false, text: err.message || "No se pudo eliminar la semana." });
     } finally {
       setEliminando(false);
+    }
+  }
+
+  // (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de PAGAR y despues
+  // Pagado") -- se paga liquidación por liquidación (jugador+semana), no la semana entera de
+  // una. Al pagar se suma solo a "Comisiones pagadas" DE ESE jugador (Jugadores/árbol).
+  async function pagar(f: any) {
+    const confirmado = window.confirm(`¿Marcar como pagada la liquidación de ${f.player_name} (${usd(f.total_acreditado)})?`);
+    if (!confirmado) return;
+    setPagandoId(f.id);
+    try {
+      await api.teamback.marcarLiquidacionPagada(f.id);
+      await cargarFilas(weekStart);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
+    } finally {
+      setPagandoId(null);
+    }
+  }
+
+  async function deshacerPago(f: any) {
+    const confirmado = window.confirm(`¿Deshacer el pago de ${f.player_name}?`);
+    if (!confirmado) return;
+    setPagandoId(f.id);
+    try {
+      await api.teamback.marcarLiquidacionNoPagada(f.id);
+      await cargarFilas(weekStart);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo deshacer el pago." });
+    } finally {
+      setPagandoId(null);
     }
   }
 
@@ -600,6 +632,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
             <th>Rake referidos</th>
             <th>Comisión 3%</th>
             <th>Total</th>
+            <th>Pago</th>
             <th></th>
           </tr>
         </thead>
@@ -630,6 +663,20 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
                 <strong>{usd(f.total_acreditado)}</strong>
               </td>
               <td>
+                {f.pagado ? (
+                  <>
+                    <span className="badge pos" style={{ marginRight: 6 }} title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>Pagado</span>
+                    <button className="btn secondary small" disabled={pagandoId === f.id} onClick={() => deshacerPago(f)}>
+                      Deshacer
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn small" disabled={pagandoId === f.id} onClick={() => pagar(f)}>
+                    {pagandoId === f.id ? "..." : "Pagar"}
+                  </button>
+                )}
+              </td>
+              <td>
                 <button className="btn secondary small" onClick={() => setIndividual({ player_name: f.player_name, weekStart: String(f.week_start).slice(0, 10), playerId: f.player_id })}>
                   Ver liquidación
                 </button>
@@ -638,7 +685,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
           ))}
           {filas.length === 0 && (
             <tr>
-              <td colSpan={10} className="muted">
+              <td colSpan={11} className="muted">
                 Sin datos para esta semana todavía.
               </td>
             </tr>
@@ -653,6 +700,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
               <td>
                 <strong>{usd(totalGeneral)}</strong>
               </td>
+              <td></td>
               <td></td>
             </tr>
           </tfoot>
@@ -677,15 +725,18 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
 // ===================================================================================
 
 function GananciaSemanalTab() {
-  const [filas, setFilas] = useState<any[]>([]);
+  // (25/09/2026, pedido de Leo: "en ganancia por semana eliminar el boton pagar y estado. ya lo
+  // vamos a hacer en el otro lugar" + "necesitariamos hacer la suma de la ganancia y que quede y
+  // se vaya acumulando") -- esta pantalla dejó de manejar pagos (eso ahora vive en Liquidaciones,
+  // ver LiquidacionesTab) y pasó a ser de solo lectura, con el acumulado de todas las semanas.
+  const [datos, setDatos] = useState<{ semanas: any[]; acumulado: any } | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [pagando, setPagando] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function cargar() {
     setCargando(true);
     try {
-      setFilas(await api.teamback.gananciaSemanal());
+      setDatos(await api.teamback.gananciaSemanal());
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo cargar." });
     } finally {
@@ -697,48 +748,39 @@ function GananciaSemanalTab() {
     cargar();
   }, []);
 
-  async function pagar(f: any) {
-    const confirmado = window.confirm(
-      `¿Marcar como pagada la liquidación de la semana del ${dateShort(f.week_start)} al ${dateShort(f.week_end)} (${usd(f.total_liquidado)})?`
-    );
-    if (!confirmado) return;
-    setPagando(f.week_start);
-    setMsg(null);
-    try {
-      await api.teamback.marcarSemanaPagada(f.week_start, f.week_end);
-      await cargar();
-    } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
-    } finally {
-      setPagando(null);
-    }
-  }
-
-  async function deshacerPago(f: any) {
-    const confirmado = window.confirm(`¿Deshacer el pago de la semana del ${dateShort(f.week_start)}?`);
-    if (!confirmado) return;
-    setPagando(f.week_start);
-    setMsg(null);
-    try {
-      await api.teamback.deshacerSemanaPagada(f.week_start);
-      await cargar();
-    } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo deshacer el pago." });
-    } finally {
-      setPagando(null);
-    }
-  }
-
   if (cargando) return <div className="panel muted">Cargando...</div>;
+
+  const filas = datos?.semanas ?? [];
+  const acumulado = datos?.acumulado;
 
   return (
     <div className="panel">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
         Ganancia = (rake propio total de la semana × 80%) − total liquidado a los jugadores esa
         semana (rakeback + comisiones). Solo aparecen semanas que ya tienen liquidación calculada
-        (pestaña Liquidaciones o el botón de Importar semana).
+        (pestaña Liquidaciones o el botón de Importar semana). El pago se marca desde Liquidaciones.
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+      {acumulado && (
+        <div className="kpi-sub-grid" style={{ marginBottom: 16 }}>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Rake propio acumulado</div>
+            <div className="kpi-sub-value">{usd(acumulado.rake_propio_total)}</div>
+          </div>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Total liquidado acumulado</div>
+            <div className="kpi-sub-value">{usd(acumulado.total_liquidado)}</div>
+          </div>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Ganancia acumulada</div>
+            <div className="kpi-sub-value" style={{ color: acumulado.ganancia >= 0 ? "var(--green)" : "var(--red)" }}>
+              {usd(acumulado.ganancia)}
+            </div>
+          </div>
+        </div>
+      )}
+
       <table>
         <thead>
           <tr>
@@ -747,8 +789,6 @@ function GananciaSemanalTab() {
             <th>Rake al 80%</th>
             <th>Total liquidado</th>
             <th>Ganancia</th>
-            <th>Estado</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -761,32 +801,25 @@ function GananciaSemanalTab() {
               <td>
                 <strong className={f.ganancia >= 0 ? "pos" : "neg"}>{usd(f.ganancia)}</strong>
               </td>
-              <td>
-                {f.pagada ? (
-                  <span className="badge pos" title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>Pagada</span>
-                ) : (
-                  <span className="badge neg">Pendiente</span>
-                )}
-              </td>
-              <td>
-                {f.pagada ? (
-                  <button className="btn secondary small" disabled={pagando === f.week_start} onClick={() => deshacerPago(f)}>
-                    Deshacer pago
-                  </button>
-                ) : (
-                  <button className="btn small" disabled={pagando === f.week_start} onClick={() => pagar(f)}>
-                    {pagando === f.week_start ? "..." : "Pagar"}
-                  </button>
-                )}
-              </td>
             </tr>
           ))}
           {filas.length === 0 && (
             <tr>
-              <td colSpan={7} className="muted">Todavía no hay ninguna semana liquidada.</td>
+              <td colSpan={5} className="muted">Todavía no hay ninguna semana liquidada.</td>
             </tr>
           )}
         </tbody>
+        {filas.length > 0 && acumulado && (
+          <tfoot>
+            <tr>
+              <td><strong>Acumulado</strong></td>
+              <td><strong>{usd(acumulado.rake_propio_total)}</strong></td>
+              <td><strong>{usd(acumulado.rake_al_80_pct)}</strong></td>
+              <td><strong>{usd(acumulado.total_liquidado)}</strong></td>
+              <td><strong className={acumulado.ganancia >= 0 ? "pos" : "neg"}>{usd(acumulado.ganancia)}</strong></td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
@@ -867,6 +900,7 @@ function JugadoresTab() {
         <td className="muted">{j.referido_por_name ?? "—"}</td>
         <td>{j.referidos_count}</td>
         <td>{usd(j.comision_total)}</td>
+        <td>{usd(j.comision_pagada)}</td>
         <td>
           {j.tiene_config ? (
             <span className="badge pos">Configurado</span>
@@ -915,6 +949,7 @@ function JugadoresTab() {
               <th>Referido por</th>
               <th># Referidos</th>
               <th>Comisión acumulada</th>
+              <th>Comisiones pagadas</th>
               <th>%</th>
               <th>Estado</th>
               <th></th>
@@ -938,6 +973,7 @@ function JugadoresTab() {
               <th>Referido por</th>
               <th># Referidos</th>
               <th>Comisión acumulada</th>
+              <th>Comisiones pagadas</th>
               <th>%</th>
               <th>Estado</th>
               <th></th>
@@ -1291,20 +1327,6 @@ function ImportTab() {
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
 
-      {semanaImportada && !preview && (
-        <div className="panel" style={{ marginBottom: 12 }}>
-          <div className="topbar" style={{ marginBottom: resultadoLiquidacion ? 10 : 0 }}>
-            <div className="muted" style={{ fontSize: 13 }}>
-              Semana del {dateShort(semanaImportada.weekStart)} al {dateShort(semanaImportada.weekEnd)} importada. Ahora podés calcular (o recalcular) la liquidación de esa semana:
-            </div>
-            <button className="btn" disabled={calculando} onClick={calcularLiquidacionDeSemanaImportada}>
-              {calculando ? "Calculando..." : "Calcular liquidación de esta semana"}
-            </button>
-          </div>
-          {resultadoLiquidacion && <div className={resultadoLiquidacion.ok ? "success" : "error"}>{resultadoLiquidacion.text}</div>}
-        </div>
-      )}
-
       {preview && (
         <>
           <div className="form-grid" style={{ marginBottom: 12 }}>
@@ -1381,6 +1403,23 @@ function ImportTab() {
             <button className="btn secondary small" onClick={destildarTodos}>Destildar todos</button>
           </div>
         </>
+      )}
+
+      {/* (25/09/2026, pedido de Leo: "estaria bueno que el boton de liquidar este abajo") --
+          va al final del panel, no arriba, para que el flujo se lea de arriba a abajo: elegir
+          archivo -> revisar/seleccionar jugadores -> importar -> liquidar. */}
+      {semanaImportada && !preview && (
+        <div className="panel" style={{ marginTop: 12 }}>
+          <div className="topbar" style={{ marginBottom: resultadoLiquidacion ? 10 : 0 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Semana del {dateShort(semanaImportada.weekStart)} al {dateShort(semanaImportada.weekEnd)} importada. Ahora podés calcular (o recalcular) la liquidación de esa semana:
+            </div>
+            <button className="btn" disabled={calculando} onClick={calcularLiquidacionDeSemanaImportada}>
+              {calculando ? "Calculando..." : "Calcular liquidación de esta semana"}
+            </button>
+          </div>
+          {resultadoLiquidacion && <div className={resultadoLiquidacion.ok ? "success" : "error"}>{resultadoLiquidacion.text}</div>}
+        </div>
       )}
     </div>
   );

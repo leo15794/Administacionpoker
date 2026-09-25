@@ -140,6 +140,7 @@ export interface TbPlayerInput {
 }
 
 export async function listTbPlayers(includeInactive = true) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT p.*, ref.name as referido_por_name, ref.suprema_player_id as referido_por_suprema_id,
             (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id) as referidos_count,
@@ -149,7 +150,11 @@ export async function listTbPlayers(includeInactive = true) {
             -- (25/09/2026, pedido de Leo: "nos falta saber sus comisiones") -- comisión de
             -- afiliado acumulada de TODAS las semanas liquidadas hasta ahora, para verla de un
             -- vistazo en la lista sin tener que ir semana por semana a "Resumen".
-            (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id) as comision_total
+            (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id) as comision_total,
+            -- (25/09/2026, pedido de Leo: "Comisiones Pagadas - al momento de pagar en
+            -- Liquidaciones deberia sumarse ahi") -- solo cuenta las semanas de ESTE jugador que
+            -- ya se marcaron como pagadas en Liquidaciones (columna pagado de cada fila).
+            (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id AND l.pagado = true) as comision_pagada
      FROM tb_players p
      LEFT JOIN tb_players ref ON ref.id = p.referido_por_id
      WHERE $1 OR p.active = true
@@ -393,6 +398,7 @@ export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekE
 }
 
 export async function getLiquidacionesSemana(weekStart: string) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT l.*, p.name as player_name, p.suprema_player_id
      FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
@@ -418,32 +424,58 @@ export async function eliminarSemana(weekStart: string) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Pago de liquidaciones (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de
+// PAGAR y despues Pagado") -- el pago se marca por JUGADOR+SEMANA (una fila de
+// tb_weekly_liquidations), no por semana entera -- así "Comisiones pagadas" de cada jugador
+// (Jugadores/árbol) puede sumar exactamente lo que se le pagó a ÉL, no a todos.
+//
+// (Reemplaza el intento anterior con una tabla aparte tb_weekly_payments por semana completa --
+// esa tabla queda sin uso, no hace falta borrarla.)
+//
+// Mismo patrón que asegurarTablaPagos antes: agrega las columnas solo la primera vez que hacen
+// falta (ADD COLUMN IF NOT EXISTS es 100% seguro de repetir), para no depender de correr
+// `npm run migrate` a mano contra la base correcta.
+// ---------------------------------------------------------------------------------------------
+
+let columnasPagoListas = false;
+async function asegurarColumnasPago() {
+  if (columnasPagoListas) return;
+  await pool.query(
+    `ALTER TABLE tb_weekly_liquidations
+       ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE,
+       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`
+  );
+  columnasPagoListas = true;
+}
+
+export async function marcarLiquidacionPagada(id: string) {
+  await asegurarColumnasPago();
+  const r = await pool.query(
+    `UPDATE tb_weekly_liquidations SET pagado = true, paid_at = now() WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  if (!r.rows[0]) throw new Error("No se encontró esa liquidación.");
+  return r.rows[0];
+}
+
+export async function marcarLiquidacionNoPagada(id: string) {
+  await asegurarColumnasPago();
+  const r = await pool.query(
+    `UPDATE tb_weekly_liquidations SET pagado = false, paid_at = NULL WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  if (!r.rows[0]) throw new Error("No se encontró esa liquidación.");
+  return r.rows[0];
+}
+
+// ---------------------------------------------------------------------------------------------
 // Ganancia por semana (25/09/2026, pedido de Leo) -- "el rake total al 80% menos el total (de
 // liquidaciones) esa diferencia es nuestra ganancia". Se calcula al vuelo a partir de
 // tb_weekly_liquidations (nunca se guarda un monto de ganancia aparte, así si se recalcula una
-// semana esto siempre refleja lo último calculado). Lo único que se persiste es SI esa semana ya
-// se pagó (tb_weekly_payments) y cuándo.
+// semana esto siempre refleja lo último calculado). El pago se dejó de marcar acá (pasó a
+// Liquidaciones, ver arriba) -- esta pantalla ahora es de solo lectura, con el acumulado de
+// todas las semanas.
 // ---------------------------------------------------------------------------------------------
-
-// (25/09/2026, arreglo: "ya hay semanas liquidadas, podes arreglarlo asi tomas las que ya estan
-// realizadas") -- la tabla tb_weekly_payments no llegó a crearse en producción (el `npm run
-// migrate` de Leo no tomó, probablemente corrió contra otra base) y no tengo forma de correr la
-// migración yo mismo desde acá. En vez de depender de que la migración se corra a mano, esta
-// función la crea sola la primera vez que hace falta (CREATE TABLE IF NOT EXISTS es 100% seguro
-// de repetir -- no borra ni pisa nada si ya existe). Así "Ganancia por semana" funciona ya mismo
-// con las semanas que ya están liquidadas, sin esperar ningún paso manual más.
-let tbWeeklyPaymentsListo = false;
-async function asegurarTablaPagos() {
-  if (tbWeeklyPaymentsListo) return;
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS tb_weekly_payments (
-       week_start  DATE PRIMARY KEY,
-       week_end    DATE NOT NULL,
-       paid_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-     )`
-  );
-  tbWeeklyPaymentsListo = true;
-}
 
 export interface GananciaSemana {
   week_start: string;
@@ -452,24 +484,29 @@ export interface GananciaSemana {
   rake_al_80_pct: number;
   total_liquidado: number;
   ganancia: number;
-  pagada: boolean;
-  paid_at: string | null;
 }
 
-export async function getGananciaPorSemana(): Promise<GananciaSemana[]> {
-  await asegurarTablaPagos();
+export interface GananciaPorSemanaResultado {
+  semanas: GananciaSemana[];
+  acumulado: {
+    rake_propio_total: number;
+    rake_al_80_pct: number;
+    total_liquidado: number;
+    ganancia: number;
+  };
+}
+
+export async function getGananciaPorSemana(): Promise<GananciaPorSemanaResultado> {
   const r = await pool.query(
     `SELECT l.week_start,
             MAX(l.week_end) as week_end,
             SUM(l.rake_propio) as rake_propio_total,
-            SUM(l.total_acreditado) as total_liquidado,
-            p.paid_at
+            SUM(l.total_acreditado) as total_liquidado
      FROM tb_weekly_liquidations l
-     LEFT JOIN tb_weekly_payments p ON p.week_start = l.week_start
-     GROUP BY l.week_start, p.paid_at
+     GROUP BY l.week_start
      ORDER BY l.week_start DESC`
   );
-  return r.rows.map((row) => {
+  const semanas: GananciaSemana[] = r.rows.map((row) => {
     const rakePropioTotal = Number(row.rake_propio_total);
     const rakeAl80 = rakePropioTotal * 0.8;
     const totalLiquidado = Number(row.total_liquidado);
@@ -480,27 +517,18 @@ export async function getGananciaPorSemana(): Promise<GananciaSemana[]> {
       rake_al_80_pct: rakeAl80,
       total_liquidado: totalLiquidado,
       ganancia: rakeAl80 - totalLiquidado,
-      pagada: !!row.paid_at,
-      paid_at: row.paid_at,
     };
   });
-}
-
-export async function marcarSemanaPagada(weekStart: string, weekEnd: string) {
-  await asegurarTablaPagos();
-  const r = await pool.query(
-    `INSERT INTO tb_weekly_payments (week_start, week_end)
-     VALUES ($1::date, $2::date)
-     ON CONFLICT (week_start) DO UPDATE SET week_end = EXCLUDED.week_end
-     RETURNING *`,
-    [weekStart, weekEnd]
+  const acumulado = semanas.reduce(
+    (acc, s) => ({
+      rake_propio_total: acc.rake_propio_total + s.rake_propio_total,
+      rake_al_80_pct: acc.rake_al_80_pct + s.rake_al_80_pct,
+      total_liquidado: acc.total_liquidado + s.total_liquidado,
+      ganancia: acc.ganancia + s.ganancia,
+    }),
+    { rake_propio_total: 0, rake_al_80_pct: 0, total_liquidado: 0, ganancia: 0 }
   );
-  return r.rows[0];
-}
-
-export async function desmarcarSemanaPagada(weekStart: string) {
-  await asegurarTablaPagos();
-  await pool.query(`DELETE FROM tb_weekly_payments WHERE week_start = $1::date`, [weekStart]);
+  return { semanas, acumulado };
 }
 
 export async function getHistorialJugador(playerId: string) {
