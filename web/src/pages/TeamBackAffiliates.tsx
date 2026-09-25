@@ -45,6 +45,27 @@ function cerrarTbSession() {
   localStorage.removeItem("tb_token");
 }
 
+// Modo dia/noche -- misma key de localStorage ("dp_theme") y mismo mecanismo (atributo
+// data-theme en <html>) que Shell.tsx: es UN SOLO tema para todo el sistema, no uno por
+// seccion. Se aplica ya en el componente raiz (mas abajo) para que Login y el portal del
+// jugador tambien respeten el tema elegido, aunque el control para cambiarlo solo este en el
+// sidebar de la vista ADMIN.
+type TbTheme = "dark" | "light";
+
+function leerTemaInicial(): TbTheme {
+  try {
+    const saved = localStorage.getItem("dp_theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    /* localStorage no disponible, sigue con el default */
+  }
+  return "dark";
+}
+
+function aplicarTema(theme: TbTheme) {
+  document.documentElement.setAttribute("data-theme", theme);
+}
+
 // (25/09/2026, pedido de Leo: "de paso pone el ojo para ver las contraseñas") -- toggle
 // mostrar/ocultar, mismo campo en todos los formularios de contraseña de esta sección.
 function CampoContrasena(props: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -77,6 +98,10 @@ function CampoContrasena(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export default function TeamBackAffiliates() {
   const [session, setSession] = useState<TbSession | null>(() => leerTbSession());
+
+  useEffect(() => {
+    aplicarTema(leerTemaInicial());
+  }, []);
 
   if (!session) return <TbLogin onLoggedIn={setSession} />;
   if (session.role === "PLAYER") return <TeamBackPortalJugador session={session} onLogout={() => { cerrarTbSession(); setSession(null); }} />;
@@ -176,6 +201,28 @@ const tbIcon = {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
     </svg>
   ),
+  sun: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+    </svg>
+  ),
+  moon: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+    </svg>
+  ),
+  collapse: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m14 9-2 3 2 3" />
+    </svg>
+  ),
+  expand: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m12 9 2 3-2 3" />
+    </svg>
+  ),
 };
 
 const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
@@ -191,19 +238,67 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
 // por tab de estado (no por ruta react-router): esta sección sigue siendo una sola ruta
 // (/teamback) con su propio login aparte, así que los ítems del menú son <button> con la clase
 // "nav-link" en vez de <NavLink>, ver ".nav-link" reseteado para <button> en index.css.
+function getInitialTbCollapsed() {
+  try {
+    return localStorage.getItem("dp_sidebar_collapsed") === "1";
+  } catch {
+    return false;
+  }
+}
+
 function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("resumen");
+  const [collapsed, setCollapsed] = useState(getInitialTbCollapsed);
+  const [theme, setTheme] = useState<TbTheme>(leerTemaInicial);
   const tabActual = TB_NAV.find((i) => i.key === tab);
+
+  useEffect(() => {
+    aplicarTema(theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((v) => {
+      const next: TbTheme = v === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("dp_theme", next);
+      } catch {
+        /* localStorage no disponible, el toggle igual funciona en esta sesion */
+      }
+      return next;
+    });
+  }
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("dp_sidebar_collapsed", next ? "1" : "0");
+      } catch {
+        /* localStorage no disponible */
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="app-shell">
-      <div className="sidebar">
+      <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+        <button
+          className="sidebar-toggle"
+          onClick={toggleCollapsed}
+          title={collapsed ? "Expandir menú" : "Contraer menú"}
+        >
+          {collapsed ? tbIcon.expand : tbIcon.collapse}
+        </button>
+
         <div className="brand">
           <div className="brand-mark">T</div>
-          <div>
-            <h1>TeamBack</h1>
-            <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
-          </div>
+          {!collapsed && (
+            <div>
+              <h1>TeamBack</h1>
+              <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
+            </div>
+          )}
         </div>
 
         <nav>
@@ -215,20 +310,29 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
                 onClick={() => setTab(item.key)}
                 title={item.label}
               >
-                {tbIcon[item.icon]} {item.label}
+                {tbIcon[item.icon]} {!collapsed && item.label}
               </button>
             ))}
           </div>
+          <button
+            className="nav-link"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Modo día" : "Modo noche"}
+            style={{ borderTop: "1px solid var(--border)", borderLeft: "none", borderRight: "none", borderBottom: "none", marginTop: 8, paddingTop: 14 }}
+          >
+            {theme === "dark" ? tbIcon.sun : tbIcon.moon} {!collapsed && (theme === "dark" ? "Modo día" : "Modo noche")}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
-          <div className="muted" style={{ fontSize: 12, marginBottom: 8, paddingLeft: 4 }}>{session.name}</div>
+          {!collapsed && <div className="muted" style={{ fontSize: 12, marginBottom: 8, paddingLeft: 4 }}>{session.name}</div>}
           <button
             className="btn secondary"
             onClick={onLogout}
+            title="Cerrar sesión"
             style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
-            {tbIcon.logout} Cerrar sesión
+            {tbIcon.logout} {!collapsed && "Cerrar sesión"}
           </button>
         </div>
       </div>
