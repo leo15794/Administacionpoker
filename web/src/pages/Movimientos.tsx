@@ -42,6 +42,12 @@ export default function Movimientos() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // (25/09/2026, pedido de Leo: "conectar el valor de donde tomamos la conversion y que se
+  // actualice en tiempo real") -- PRUEBA, solo para Tiny: en vez de cargar el valor de la ficha
+  // a mano, lo trae en vivo de MAX (USDT/TWD, ver routes/marketRates.ts) con un boton. Sigue
+  // siendo editable despues -- esto solo prellena.
+  const [cotizando, setCotizando] = useState(false);
+  const [cotizacionMsg, setCotizacionMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     api.agentes().then(setAgentes);
@@ -53,10 +59,29 @@ export default function Movimientos() {
 
   function elegirClub(id: string) {
     setClubId(id);
+    setCotizacionMsg(null);
     const club = clubes.find((c) => c.id === id);
     // Precarga la tasa del club (ej. 1,20 para X-Poker) pero queda editable -- si esta carga
     // puntual cambió, se pisa acá sin tener que ir a Configuración → Clubes primero.
     if (club?.unit === "FICHAS") setValorFicha(String(club.current_rate ?? 1));
+  }
+
+  // PRUEBA solo para Tiny (nombre real hoy: "Tiny GG") -- todavía no hay una fuente en vivo
+  // conectada para X-Poker.
+  const esTiny = /tiny/i.test(clubSeleccionado?.name ?? "");
+
+  async function traerCotizacionEnVivo() {
+    setCotizando(true);
+    setCotizacionMsg(null);
+    try {
+      const r = await api.cotizacionUsdtTwd();
+      setValorFicha(String(r.rate));
+      setCotizacionMsg({ ok: true, text: `USDT/TWD ${r.rate} (MAX, recién actualizado) -- lo podés pisar si hace falta.` });
+    } catch (err: any) {
+      setCotizacionMsg({ ok: false, text: err.message || "No se pudo traer la cotización en vivo." });
+    } finally {
+      setCotizando(false);
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -145,10 +170,28 @@ export default function Movimientos() {
             {esFichas && (
               <div className="field">
                 <label>Valor de la ficha (USD)</label>
-                <input value={valorFicha} onChange={(e) => setValorFicha(e.target.value)} type="number" step="0.01" />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={valorFicha} onChange={(e) => setValorFicha(e.target.value)} type="number" step="0.01" style={{ flex: 1 }} />
+                  {esTiny && (
+                    <button
+                      type="button"
+                      className="btn secondary small"
+                      disabled={cotizando}
+                      onClick={traerCotizacionEnVivo}
+                      title="Traer la cotización USDT/TWD en vivo de MAX (max.maicoin.com)"
+                    >
+                      {cotizando ? "..." : "🔄 En vivo"}
+                    </button>
+                  )}
+                </div>
                 <span className="muted" style={{ fontSize: 12 }}>
                   = {((Number(amount) || 0) * (Number(valorFicha) || 0)).toLocaleString("es-AR", { maximumFractionDigits: 2 })} fichas
                 </span>
+                {cotizacionMsg && (
+                  <div className={cotizacionMsg.ok ? "success" : "error"} style={{ marginTop: 6, fontSize: 12, padding: "6px 9px" }}>
+                    {cotizacionMsg.text}
+                  </div>
+                )}
               </div>
             )}
             <div className="field">

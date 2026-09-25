@@ -243,6 +243,9 @@ export const api = {
 
   // Catálogo (alta/edición)
   clubes: () => request("/catalog/clubs"),
+  // (25/09/2026, pedido de Leo: PRUEBA para Tiny) -- cotizacion en vivo de USDT/TWD via MAX
+  // (max.maicoin.com), para no tener que cargar el valor de la ficha a mano cada vez.
+  cotizacionUsdtTwd: () => request("/market-rates/usdttwd"),
   crearClub: (data: { name: string; unit?: string; currentRate?: number }) =>
     request("/catalog/clubs", { method: "POST", body: JSON.stringify(data) }),
   configurarClub: (

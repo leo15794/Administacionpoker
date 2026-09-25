@@ -20,6 +20,7 @@ import { rodeoRouter } from "./routes/rodeo.js";
 import { agentesResumenRouter } from "./routes/agentesResumen.js";
 import { teambackRouter } from "./routes/teamback.js";
 import { teambackAuthRouter } from "./routes/teambackAuth.js";
+import { marketRatesRouter } from "./routes/marketRates.js";
 
 // La app se define acá, separada de server.ts, para poder reutilizarla tanto en
 // modo servidor local (server.ts, con app.listen) como en modo función serverless
@@ -62,6 +63,7 @@ app.use("/agentes-resumen", agentesResumenRouter);
 // /teamback/auth NO requiere estar logueado (es el propio login de la sección) -- se monta
 // aparte, antes, para que quede claro que es la excepción.
 app.use("/teamback/auth", teambackAuthRouter);
+app.use("/market-rates", marketRatesRouter);
 app.use("/teamback", teambackRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
