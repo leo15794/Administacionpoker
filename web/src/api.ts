@@ -11,9 +11,25 @@ function getToken() {
 // resto de la app con un evento del navegador -- Shell.tsx lo escucha y refresca la pantalla
 // actual sola (ver ahí el porqué). GET nunca dispara esto -- no modifica nada, no hay nada que
 // avisar.
-function avisarQueCambiaronDatos(method?: string) {
+// (25/09/2026, bug reportado por Leo: en Jugadores Bancados y en TeamBack Affiliates, "Analizar
+// archivo" no traía ninguna información) -- un preview/análisis (subir el archivo y ver qué
+// trae, antes de confirmar) se manda por POST porque sube un archivo, pero NO es una acción que
+// otras pantallas necesiten enterarse -- el resultado se usa YA MISMO, en la propia pantalla que
+// lo pidió. Si se lanza el evento "dp:datos-cambiaron" para esa llamada, el remount de <Outlet/>
+// en Shell.tsx desmonta esa misma pantalla justo después de recibir la respuesta, borrando el
+// resultado del análisis antes de que se llegue a mostrar -- eso se veía como "no trae la
+// información" sin ningún error. Por convención en todo el backend, un endpoint de solo-lectura
+// tipo "dry run" siempre tiene "preview" o "previsualizar" en la ruta (ver routes/imports.ts,
+// routes/bancados.ts, routes/teamback.ts, routes/movements.ts, etc.) -- se usa eso para NO
+// disparar el refresh en esos casos.
+function esRutaDeSoloPreview(path: string) {
+  return /preview|previsualizar/i.test(path);
+}
+
+function avisarQueCambiaronDatos(path: string, method?: string) {
   const m = (method || "GET").toUpperCase();
   if (m === "GET" || m === "HEAD") return;
+  if (esRutaDeSoloPreview(path)) return;
   try {
     window.dispatchEvent(new Event("dp:datos-cambiaron"));
   } catch {
@@ -35,7 +51,7 @@ async function request(path: string, opts: RequestInit = {}) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
-  avisarQueCambiaronDatos(opts.method);
+  avisarQueCambiaronDatos(path, opts.method);
   return res.json();
 }
 
@@ -53,7 +69,7 @@ async function requestForm(path: string, form: FormData) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
-  avisarQueCambiaronDatos("POST");
+  avisarQueCambiaronDatos(path, "POST");
   return res.json();
 }
 
