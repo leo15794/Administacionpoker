@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { usd } from "../fmt";
 import MovimientosHistorial from "../components/MovimientosHistorial";
 
 const TIPOS = [
@@ -27,6 +28,12 @@ export default function Movimientos() {
   const [clubId, setClubId] = useState("");
   const [clubDestinoId, setClubDestinoId] = useState("");
   const [amount, setAmount] = useState("");
+  // (25/09/2026, pedido de Leo: "cuando liquidamos en cierres semanales hacemos una conversion
+  // de fichas a USD, necesito esto tambien aca") -- mismo mecanismo que ya usa Cierres.tsx: un
+  // club con unit === "FICHAS" (hoy: Tiny y X-Poker, ver Configuración → Clubes) reporta en
+  // fichas, no en USD, y el valor de la ficha es un parámetro editable, no una constante -- por
+  // eso se pide acá, precargado con clubes.current_rate pero siempre se puede pisar.
+  const [valorFicha, setValorFicha] = useState("1");
   const [paymentMethod, setPaymentMethod] = useState("SIN_TESORERIA");
   const [custodian, setCustodian] = useState("");
   const [occurredAt, setOccurredAt] = useState(todayLocal());
@@ -41,6 +48,17 @@ export default function Movimientos() {
     api.clubes().then(setClubes);
   }, []);
 
+  const clubSeleccionado = clubes.find((c) => c.id === clubId);
+  const esFichas = clubSeleccionado?.unit === "FICHAS";
+
+  function elegirClub(id: string) {
+    setClubId(id);
+    const club = clubes.find((c) => c.id === id);
+    // Precarga la tasa del club (ej. 1,20 para X-Poker) pero queda editable -- si esta carga
+    // puntual cambió, se pisa acá sin tener que ir a Configuración → Clubes primero.
+    if (club?.unit === "FICHAS") setValorFicha(String(club.current_rate ?? 1));
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
@@ -50,12 +68,18 @@ export default function Movimientos() {
 
     setLoading(true);
     try {
+      // Clubes en fichas (Tiny, X-Poker): el importe cargado arriba son fichas crudas -- el
+      // ledger siempre guarda USD, así que se convierte acá, una sola vez, con la tasa de este
+      // envío puntual. Para cualquier otro club, tasa = 1 y no cambia nada.
+      const tasa = esFichas ? Number(valorFicha) || 1 : 1;
       await api.crearMovimiento({
         type,
         agentId,
         clubId,
         clubDestinoId: type === "TRANSFERENCIA_ENTRE_CLUBES" ? clubDestinoId : undefined,
-        amount: Number(amount),
+        amount: (Number(amount) || 0) * tasa,
+        originalAmount: esFichas ? Number(amount) || 0 : undefined,
+        originalUnit: esFichas ? "FICHAS" : undefined,
         paymentMethod,
         custodian: paymentMethod === "EFECTIVO" ? custodian.trim() : undefined,
         occurredAt: new Date(occurredAt).toISOString(),
@@ -99,7 +123,7 @@ export default function Movimientos() {
             </div>
             <div className="field">
               <label>Club {type === "TRANSFERENCIA_ENTRE_CLUBES" ? "(origen)" : ""}</label>
-              <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+              <select value={clubId} onChange={(e) => elegirClub(e.target.value)}>
                 <option value="">Elegir...</option>
                 {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -114,9 +138,18 @@ export default function Movimientos() {
               </div>
             )}
             <div className="field">
-              <label>Importe (USD)</label>
+              <label>{esFichas ? "Importe (fichas)" : "Importe (USD)"}</label>
               <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" placeholder="0.00" />
             </div>
+            {esFichas && (
+              <div className="field">
+                <label>Valor de la ficha (USD)</label>
+                <input value={valorFicha} onChange={(e) => setValorFicha(e.target.value)} type="number" step="0.01" />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  = {usd((Number(amount) || 0) * (Number(valorFicha) || 0))}
+                </span>
+              </div>
+            )}
             <div className="field">
               <label>Medio de pago</label>
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>

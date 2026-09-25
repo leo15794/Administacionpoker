@@ -607,6 +607,11 @@ export const api = {
     clubDestinoId?: string;
     agentId: string;
     amount: number;
+    // (25/09/2026) Cuando el club carga en fichas (Tiny, X-Poker) -- el importe original antes
+    // de convertir a USD, solo para registro/auditoría (ver ledger_movements.original_amount /
+    // original_unit, ya soportados por el backend).
+    originalAmount?: number;
+    originalUnit?: string;
     paymentMethod?: string;
     occurredAt: string;
     observation?: string;
