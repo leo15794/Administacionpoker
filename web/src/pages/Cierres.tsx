@@ -464,6 +464,11 @@ function NuevoCierre({
   // pide acá, editable, en vez de hardcodearlo. Arranca con la tasa cargada en el club (current_rate)
   // pero SIEMPRE se puede pisar para esta carga puntual si cambió.
   const [valorFicha, setValorFicha] = useState("1");
+  // (25/09/2026, pedido de Leo: mismo boton "En vivo" que ya se agrego en Cargar movimiento)
+  // -- PRUEBA solo para Tiny: cotizacion USDT/TWD en vivo de MAX en vez de cargar el valor a
+  // mano (ver routes/marketRates.ts). Sigue siendo editable despues, esto solo prellena.
+  const [cotizando, setCotizando] = useState(false);
+  const [cotizacionMsg, setCotizacionMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // La vista previa siempre viene del servidor (mismo motor, misma transacción con ROLLBACK)
   // para que nunca pueda mostrar un número distinto del que después se aplica de verdad.
@@ -500,10 +505,30 @@ function NuevoCierre({
   function elegirClub(id: string) {
     setClubId(id);
     invalidarPreview();
+    setCotizacionMsg(null);
     const club = clubes.find((c) => c.id === id);
     // Precarga la tasa del club (ej. 1,20 para X-Poker) pero queda editable — si esta semana
     // cambió, se pisa acá sin tener que ir a Configuración → Clubes primero.
     if (club?.unit === "FICHAS") setValorFicha(String(club.current_rate ?? 1));
+  }
+
+  // PRUEBA solo para Tiny (nombre real hoy: "Tiny GG") -- todavía no hay una fuente en vivo
+  // conectada para X-Poker.
+  const esTiny = /tiny/i.test(clubSeleccionado?.name ?? "");
+
+  async function traerCotizacionEnVivo() {
+    setCotizando(true);
+    setCotizacionMsg(null);
+    try {
+      const r = await api.cotizacionUsdtTwd();
+      setValorFicha(String(r.rate));
+      invalidarPreview();
+      setCotizacionMsg({ ok: true, text: `USDT/TWD ${r.rate} (MAX, recién actualizado) -- lo podés pisar si hace falta.` });
+    } catch (err: any) {
+      setCotizacionMsg({ ok: false, text: err.message || "No se pudo traer la cotización en vivo." });
+    } finally {
+      setCotizando(false);
+    }
   }
 
   // Se llama en cada cambio de campo: solo invalida la CLAVE de la vista previa (deja de estar
@@ -705,10 +730,28 @@ function NuevoCierre({
           {esFichas && (
             <div className="field">
               <label>Valor de la ficha (USD)</label>
-              <input value={valorFicha} onChange={(e) => { setValorFicha(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+              <div style={{ display: "flex", gap: 6 }}>
+                <input value={valorFicha} onChange={(e) => { setValorFicha(e.target.value); invalidarPreview(); }} type="number" step="0.01" style={{ flex: 1 }} />
+                {esTiny && (
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    disabled={cotizando}
+                    onClick={traerCotizacionEnVivo}
+                    title="Traer la cotización USDT/TWD en vivo de MAX (max.maicoin.com)"
+                  >
+                    {cotizando ? "..." : "🔄 En vivo"}
+                  </button>
+                )}
+              </div>
               <span className="muted" style={{ fontSize: 12 }}>
                 {usd((Number(result) || 0) * (Number(valorFicha) || 0))} win/lose · {usd((Number(rakeTotal) || 0) * (Number(valorFicha) || 0))} rake
               </span>
+              {cotizacionMsg && (
+                <div className={cotizacionMsg.ok ? "success" : "error"} style={{ marginTop: 6, fontSize: 12, padding: "6px 9px" }}>
+                  {cotizacionMsg.text}
+                </div>
+              )}
             </div>
           )}
           <div className="field">
