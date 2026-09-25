@@ -12,7 +12,7 @@ import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 
-type Tab = "resumen" | "jugadores" | "import" | "config" | "usuarios";
+type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios";
 
 const TB_SESSION_KEY = "tb_session";
 
@@ -185,6 +185,11 @@ const tbIcon = {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" />
     </svg>
   ),
+  ganancia: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" />
+    </svg>
+  ),
   config: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
@@ -229,6 +234,7 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "resumen", label: "Liquidaciones", icon: "liquidaciones" },
   { key: "jugadores", label: "Jugadores / árbol", icon: "jugadores" },
   { key: "import", label: "Importar semana", icon: "import" },
+  { key: "ganancia", label: "Ganancia por semana", icon: "ganancia" },
   { key: "config", label: "Configuración (plantilla)", icon: "config" },
   { key: "usuarios", label: "Usuarios", icon: "usuarios" },
 ];
@@ -350,6 +356,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         {tab === "resumen" && <LiquidacionesTab />}
         {tab === "jugadores" && <JugadoresTab />}
         {tab === "import" && <ImportTab />}
+        {tab === "ganancia" && <GananciaSemanalTab />}
         {tab === "config" && <ConfigTab />}
         {tab === "usuarios" && <UsuariosTab />}
       </div>
@@ -657,6 +664,130 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
           <LiquidacionIndividual playerId={individual.playerId} weekStart={individual.weekStart} />
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ===================================================================================
+// Ganancia por semana (25/09/2026, pedido de Leo: "el rake total al 80% menos el total (de
+// liquidaciones), esa diferencia es nuestra ganancia" + "un boton que pagar dejar asentado que
+// se pago la liquidacion") -- ganancia de la CASA, no de los jugadores. Se calcula al vuelo en
+// el backend a partir de las liquidaciones ya calculadas de cada semana (ver
+// repo/teamback.ts getGananciaPorSemana) -- si recalculás una semana, esto se actualiza solo.
+// ===================================================================================
+
+function GananciaSemanalTab() {
+  const [filas, setFilas] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [pagando, setPagando] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function cargar() {
+    setCargando(true);
+    try {
+      setFilas(await api.teamback.gananciaSemanal());
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo cargar." });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  async function pagar(f: any) {
+    const confirmado = window.confirm(
+      `¿Marcar como pagada la liquidación de la semana del ${dateShort(f.week_start)} al ${dateShort(f.week_end)} (${usd(f.total_liquidado)})?`
+    );
+    if (!confirmado) return;
+    setPagando(f.week_start);
+    setMsg(null);
+    try {
+      await api.teamback.marcarSemanaPagada(f.week_start, f.week_end);
+      await cargar();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
+    } finally {
+      setPagando(null);
+    }
+  }
+
+  async function deshacerPago(f: any) {
+    const confirmado = window.confirm(`¿Deshacer el pago de la semana del ${dateShort(f.week_start)}?`);
+    if (!confirmado) return;
+    setPagando(f.week_start);
+    setMsg(null);
+    try {
+      await api.teamback.deshacerSemanaPagada(f.week_start);
+      await cargar();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo deshacer el pago." });
+    } finally {
+      setPagando(null);
+    }
+  }
+
+  if (cargando) return <div className="panel muted">Cargando...</div>;
+
+  return (
+    <div className="panel">
+      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Ganancia = (rake propio total de la semana × 80%) − total liquidado a los jugadores esa
+        semana (rakeback + comisiones). Solo aparecen semanas que ya tienen liquidación calculada
+        (pestaña Liquidaciones o el botón de Importar semana).
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <table>
+        <thead>
+          <tr>
+            <th>Semana</th>
+            <th>Rake propio total</th>
+            <th>Rake al 80%</th>
+            <th>Total liquidado</th>
+            <th>Ganancia</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.week_start}>
+              <td>{dateShort(f.week_start)} al {dateShort(f.week_end)}</td>
+              <td>{usd(f.rake_propio_total)}</td>
+              <td>{usd(f.rake_al_80_pct)}</td>
+              <td>{usd(f.total_liquidado)}</td>
+              <td>
+                <strong className={f.ganancia >= 0 ? "pos" : "neg"}>{usd(f.ganancia)}</strong>
+              </td>
+              <td>
+                {f.pagada ? (
+                  <span className="badge pos" title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>Pagada</span>
+                ) : (
+                  <span className="badge neg">Pendiente</span>
+                )}
+              </td>
+              <td>
+                {f.pagada ? (
+                  <button className="btn secondary small" disabled={pagando === f.week_start} onClick={() => deshacerPago(f)}>
+                    Deshacer pago
+                  </button>
+                ) : (
+                  <button className="btn small" disabled={pagando === f.week_start} onClick={() => pagar(f)}>
+                    {pagando === f.week_start ? "..." : "Pagar"}
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+          {filas.length === 0 && (
+            <tr>
+              <td colSpan={7} className="muted">Todavía no hay ninguna semana liquidada.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

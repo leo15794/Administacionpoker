@@ -904,6 +904,13 @@ export const api = {
     liquidacionesSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`),
     semanasDisponibles: () => requestTb("/teamback/liquidaciones/semanas"),
     eliminarSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`, { method: "DELETE" }),
+
+    // Ganancia por semana (25/09/2026, pedido de Leo).
+    gananciaSemanal: () => requestTb("/teamback/ganancia-semanal"),
+    marcarSemanaPagada: (weekStart: string, weekEnd: string) =>
+      requestTb(`/teamback/ganancia-semanal/${weekStart}/pagar`, { method: "POST", body: JSON.stringify({ weekEnd }) }),
+    deshacerSemanaPagada: (weekStart: string) =>
+      requestTb(`/teamback/ganancia-semanal/${weekStart}/pagar`, { method: "DELETE" }),
     historialJugador: (playerId: string) => requestTb(`/teamback/liquidaciones/jugador/${playerId}`),
     liquidacionIndividual: (playerId: string, weekStart: string) => requestTb(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),
 

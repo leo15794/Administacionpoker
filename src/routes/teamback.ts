@@ -28,6 +28,9 @@ import {
   getLiquidacionesSemana,
   getSemanasDisponibles,
   eliminarSemana,
+  getGananciaPorSemana,
+  marcarSemanaPagada,
+  desmarcarSemanaPagada,
   getHistorialJugador,
   getHistorialJugadorConNombre,
   getLiquidacionIndividual,
@@ -210,6 +213,34 @@ teambackRouter.delete("/liquidaciones/semana/:weekStart", requireTbAuth, require
     res.json(await eliminarSemana(req.params.weekStart));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo eliminar la semana." });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Ganancia por semana (25/09/2026, pedido de Leo) -- ver repo/teamback.ts getGananciaPorSemana.
+// ---------------------------------------------------------------------------------------------
+
+teambackRouter.get("/ganancia-semanal", requireTbAuth, requireTbAdmin, async (_req, res) => {
+  res.json(await getGananciaPorSemana());
+});
+
+const pagarSchema = z.object({ weekEnd: z.string() });
+teambackRouter.post("/ganancia-semanal/:weekStart/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
+  const parsed = pagarSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await marcarSemanaPagada(req.params.weekStart, parsed.data.weekEnd));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo marcar como pagada." });
+  }
+});
+
+teambackRouter.delete("/ganancia-semanal/:weekStart/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    await desmarcarSemanaPagada(req.params.weekStart);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo deshacer el pago." });
   }
 });
 

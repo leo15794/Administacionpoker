@@ -417,6 +417,69 @@ export async function eliminarSemana(weekStart: string) {
   return { liquidacionesEliminadas: liq.rowCount ?? 0, importsEliminados: stats.rowCount ?? 0 };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Ganancia por semana (25/09/2026, pedido de Leo) -- "el rake total al 80% menos el total (de
+// liquidaciones) esa diferencia es nuestra ganancia". Se calcula al vuelo a partir de
+// tb_weekly_liquidations (nunca se guarda un monto de ganancia aparte, así si se recalcula una
+// semana esto siempre refleja lo último calculado). Lo único que se persiste es SI esa semana ya
+// se pagó (tb_weekly_payments) y cuándo.
+// ---------------------------------------------------------------------------------------------
+
+export interface GananciaSemana {
+  week_start: string;
+  week_end: string;
+  rake_propio_total: number;
+  rake_al_80_pct: number;
+  total_liquidado: number;
+  ganancia: number;
+  pagada: boolean;
+  paid_at: string | null;
+}
+
+export async function getGananciaPorSemana(): Promise<GananciaSemana[]> {
+  const r = await pool.query(
+    `SELECT l.week_start,
+            MAX(l.week_end) as week_end,
+            SUM(l.rake_propio) as rake_propio_total,
+            SUM(l.total_acreditado) as total_liquidado,
+            p.paid_at
+     FROM tb_weekly_liquidations l
+     LEFT JOIN tb_weekly_payments p ON p.week_start = l.week_start
+     GROUP BY l.week_start, p.paid_at
+     ORDER BY l.week_start DESC`
+  );
+  return r.rows.map((row) => {
+    const rakePropioTotal = Number(row.rake_propio_total);
+    const rakeAl80 = rakePropioTotal * 0.8;
+    const totalLiquidado = Number(row.total_liquidado);
+    return {
+      week_start: row.week_start,
+      week_end: row.week_end,
+      rake_propio_total: rakePropioTotal,
+      rake_al_80_pct: rakeAl80,
+      total_liquidado: totalLiquidado,
+      ganancia: rakeAl80 - totalLiquidado,
+      pagada: !!row.paid_at,
+      paid_at: row.paid_at,
+    };
+  });
+}
+
+export async function marcarSemanaPagada(weekStart: string, weekEnd: string) {
+  const r = await pool.query(
+    `INSERT INTO tb_weekly_payments (week_start, week_end)
+     VALUES ($1::date, $2::date)
+     ON CONFLICT (week_start) DO UPDATE SET week_end = EXCLUDED.week_end
+     RETURNING *`,
+    [weekStart, weekEnd]
+  );
+  return r.rows[0];
+}
+
+export async function desmarcarSemanaPagada(weekStart: string) {
+  await pool.query(`DELETE FROM tb_weekly_payments WHERE week_start = $1::date`, [weekStart]);
+}
+
 export async function getHistorialJugador(playerId: string) {
   const r = await pool.query(
     `SELECT * FROM tb_weekly_liquidations WHERE player_id = $1 ORDER BY week_start DESC`,

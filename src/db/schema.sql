@@ -1389,6 +1389,19 @@ CREATE TABLE IF NOT EXISTS tb_weekly_liquidations (
 CREATE INDEX IF NOT EXISTS idx_tb_liq_week ON tb_weekly_liquidations(week_start);
 CREATE INDEX IF NOT EXISTS idx_tb_liq_player ON tb_weekly_liquidations(player_id);
 
+-- (25/09/2026, pedido de Leo: "ganancia por semana" + "un boton que pagar dejar asentado que se
+-- pago la liquidacion") -- la ganancia de la casa NO se guarda acá, se calcula al vuelo desde
+-- tb_weekly_liquidations (rake propio total al 80% menos el total acreditado a los jugadores esa
+-- semana, ver repo/teamback.ts getGananciaPorSemana). Esta tabla es SOLO el registro de "esta
+-- semana ya se pagó" -- una fila = pagada; sin fila = pendiente. No guarda montos (si se
+-- recalcula la semana después de pagada, el monto pagado real puede no coincidir más con lo que
+-- muestra la pantalla -- es una limitación conocida, ver nota en repo/teamback.ts).
+CREATE TABLE IF NOT EXISTS tb_weekly_payments (
+  week_start  DATE PRIMARY KEY,
+  week_end    DATE NOT NULL,
+  paid_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- (25/09/2026, pedido de Leo: "deberiamos poder configurar a los jugadores y sus % no en
 -- general como esta ahi") -- tb_config (arriba) empezó siendo la config que se le aplicaba a
 -- TODOS los jugadores por igual. Leo pidió que cada jugador tenga su propio % base, sus propios
