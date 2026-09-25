@@ -45,6 +45,36 @@ function cerrarTbSession() {
   localStorage.removeItem("tb_token");
 }
 
+// (25/09/2026, pedido de Leo: "de paso pone el ojo para ver las contraseñas") -- toggle
+// mostrar/ocultar, mismo campo en todos los formularios de contraseña de esta sección.
+function CampoContrasena(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input {...props} type={visible ? "text" : "password"} style={{ paddingRight: 36, width: "100%", boxSizing: "border-box" }} />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        title={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+        style={{
+          position: "absolute",
+          right: 6,
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 4,
+          fontSize: 15,
+          lineHeight: 1,
+        }}
+      >
+        {visible ? "🙈" : "👁"}
+      </button>
+    </div>
+  );
+}
+
 export default function TeamBackAffiliates() {
   const [session, setSession] = useState<TbSession | null>(() => leerTbSession());
 
@@ -94,7 +124,7 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
             <label>Contraseña</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <CampoContrasena value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
           <button className="btn" disabled={loading} style={{ width: "100%" }}>
@@ -1071,7 +1101,7 @@ function FormUsuario({ jugadores, onSaved }: { jugadores: any[]; onSaved: () => 
         </div>
         <div className="field">
           <label>Contraseña</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <CampoContrasena value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
@@ -1114,7 +1144,7 @@ function FormEditarUsuario({ usuario, onSaved }: { usuario: any; onSaved: () => 
         </div>
         <div className="field">
           <label>Resetear contraseña (opcional)</label>
-          <input type="password" placeholder="Dejar vacío para no cambiarla" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <CampoContrasena placeholder="Dejar vacío para no cambiarla" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}

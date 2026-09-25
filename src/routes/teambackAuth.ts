@@ -38,6 +38,12 @@ teambackAuthRouter.post("/login", tbLoginLimiter, async (req, res) => {
     res.json({ token, role: user.role, name: user.name, playerId: user.player_id ?? null });
   } catch (err: any) {
     console.error("Error en /teamback/auth/login:", err);
+    // Si lo que falló fue firmar el token porque falta TB_JWT_SECRET en el servidor, avisarlo
+    // distinto de un error interno genérico -- si no, parece "probá de nuevo" cuando en
+    // realidad hace falta cargar esa variable de entorno en Vercel (ver lib/tbAuth.ts).
+    if (String(err?.message).includes("TB_JWT_SECRET")) {
+      return res.status(500).json({ error: "TeamBack Affiliates no está configurado del lado del servidor (falta TB_JWT_SECRET en las variables de entorno)." });
+    }
     res.status(500).json({ error: "Error interno en login" });
   }
 });
