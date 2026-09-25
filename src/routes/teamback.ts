@@ -220,8 +220,17 @@ teambackRouter.delete("/liquidaciones/semana/:weekStart", requireTbAuth, require
 // Ganancia por semana (25/09/2026, pedido de Leo) -- ver repo/teamback.ts getGananciaPorSemana.
 // ---------------------------------------------------------------------------------------------
 
+// (25/09/2026, arreglo: esta ruta se había quedado sin try/catch -- si la consulta fallaba, por
+// ejemplo por una tabla que todavía no existía en producción, la promesa quedaba rechazada sin
+// manejar y Express NUNCA contestaba la request (Express 4 no atrapa solo un throw async), así
+// que el navegador terminaba mostrando "Failed to fetch" en vez de un error claro. Con el
+// try/catch, cualquier error futuro se ve como mensaje legible en vez de quedar colgado.)
 teambackRouter.get("/ganancia-semanal", requireTbAuth, requireTbAdmin, async (_req, res) => {
-  res.json(await getGananciaPorSemana());
+  try {
+    res.json(await getGananciaPorSemana());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "No se pudo calcular la ganancia por semana." });
+  }
 });
 
 const pagarSchema = z.object({ weekEnd: z.string() });
