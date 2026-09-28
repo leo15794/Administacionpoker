@@ -399,6 +399,28 @@ export default function Liquidaciones() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seleccionados.join(","), weekStart]);
 
+  // Confirmar antes de arrancar la liquidación (28/09/2026, pedido de Leo: "antes de que se
+  // guarden solas quiero que al momento de seleccionar los agentes a combinar te aparezca para
+  // comenzar la liquidación y cuando le das ok que se guarde") -- hasta acá, apenas se elegía la
+  // semana ya arrancaba solo el cálculo y, 1s después, el autoguardado (ver más abajo), sin que
+  // nadie confirmara nada. Elegir la semana es el momento real en que "arranca" la liquidación
+  // (antes de eso no hay nada que calcular ni guardar) -- por eso el gate va acá: recién si se
+  // confirma se fija weekStart, que es lo que dispara el cálculo + autoguardado de arriba. Si se
+  // cancela, el <select> vuelve solo a mostrar el valor anterior (no cambió el estado).
+  function elegirSemana(value: string) {
+    if (!value) {
+      setWeekStart("");
+      return;
+    }
+    const semana = semanas.find((s) => s.week_start === value);
+    const rango = semana ? `${dateShort(semana.week_start)} - ${dateShort(semana.week_end)}` : value;
+    confirmDialog(
+      `¿Comenzar la liquidación de "${nombreGrupo || "estos agentes"}" — semana ${rango}? Se va a calcular y guardar como borrador ("Pendiente de pago") hasta que se registre un pago de verdad.`
+    ).then((ok) => {
+      if (ok) setWeekStart(value);
+    });
+  }
+
   const totalCruzado = Object.values(cruces).reduce((s, v) => s + (Number(v) || 0), 0);
   const totalCruzadoCarga = Object.values(crucesCarga).reduce((s, v) => s + (Number(v) || 0), 0);
   // Lo que ya se descuenta de verdad: lo aplicado en rondas anteriores de esta misma
@@ -921,7 +943,7 @@ export default function Liquidaciones() {
             </div>
             <div>
               <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Semana</label>
-              <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} disabled={semanas.length === 0}>
+              <select value={weekStart} onChange={(e) => elegirSemana(e.target.value)} disabled={semanas.length === 0}>
                 <option value="">{semanas.length === 0 ? "Sin cierres para estos agentes" : "Elegir semana..."}</option>
                 {semanas.map((s) => (
                   <option key={s.week_start} value={s.week_start}>
