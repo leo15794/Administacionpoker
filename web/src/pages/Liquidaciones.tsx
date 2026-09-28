@@ -965,6 +965,12 @@ export default function Liquidaciones() {
   // Devuelve true si se guardó bien (para que el que llama sepa si seguir con el paso siguiente).
   async function cerrarLiquidacion(confirmar: boolean): Promise<boolean> {
     if (!data) return false;
+    // Cancela cualquier autoguardado ya programado ANTES de guardar/cerrar (30/09/2026, mismo
+    // bug de fondo que "desaparece el cruce" -- el efecto de autoguardado recién cancela el
+    // timer pendiente en el siguiente render, después de que soloRevision cambie; acá se corta
+    // al toque, sin esperar ese render, para no dejar ni un instante de ventana donde ambos
+    // pedidos -- este guardado y un autoguardado tardío -- puedan pisarse entre sí.
+    if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     if (
       confirmar &&
       !(await confirmDialog(

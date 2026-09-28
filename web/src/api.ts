@@ -27,16 +27,37 @@ function getToken() {
 // nuevo -- por navegación o por ese refresh de pestaña -- nunca trae una respuesta vieja
 // cacheada.
 
+// Timeout defensivo (30/09/2026, pedido de Leo: "queda en guardando" -- un botón se quedaba
+// disabled para siempre esperando una respuesta que nunca llegaba, sin ningún error visible).
+// Sin esto, un fetch colgado (servidor que no responde, conexión que se corta sin avisar) deja
+// esperando el await para siempre -- acá abajo, a los 25s se aborta solo y tira un error real,
+// así el botón se destraba y el usuario sabe que algo falló en vez de quedarse mirando
+// "Guardando..." sin saber si reintentar o esperar.
+const REQUEST_TIMEOUT_MS = 25000;
+
 async function request(path: string, opts: RequestInit = {}) {
   const token = getToken();
-  const res = await fetch(`${API_URL}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error("El servidor tardó demasiado en responder (más de 25s). Revisá tu conexión y probá de nuevo.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
