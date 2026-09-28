@@ -496,6 +496,28 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const d = parsed.data;
 
+  // 29/09/2026, bug real que encontró Leo ("hay mucho lío en las liquidaciones... si un cierre
+  // o una liquidación está realizada, por qué desaparece"): sin esto, "Guardar en historial"
+  // SIEMPRE insertaba una fila nueva salvo que reemplazarId viniera seteado a mano (solo pasa
+  // al usar "Liberar cruces" sobre una ya Pagada) -- pero el autoguardado (más abajo) YA había
+  // creado antes una fila PENDIENTE para este mismo grupo+semana, y encima el pago real la
+  // vuelve PAGADA sola (ver /liquidacion/resolver) sin actualizar su created_at. Resultado:
+  // terminaban quedando DOS filas para la misma liquidación real -- una (la del autoguardado,
+  // resuelta a PAGADA con fecha vieja) y otra nueva (la de este Guardar). Con el historial
+  // ordenado por created_at DESC y LIMIT 200, la más vieja de las dos terminaba tapada por
+  // drafts más nuevos de otros grupos -- "desaparecía" aunque la liquidación estuviera pagada
+  // de verdad. Ahora, si no vino reemplazarId a mano, se busca si ya existe ALGUNA fila (de
+  // cualquier estado) para este mismo grupo+semana y se pisa esa en vez de crear una nueva.
+  if (!d.reemplazarId) {
+    const existente = await pool.query(
+      `SELECT id FROM liquidaciones_guardadas WHERE grupo_key = $1 AND week_start = $2 ORDER BY created_at DESC LIMIT 1`,
+      [grupoKey(d.agentIds), d.weekStart]
+    );
+    if (existente.rows[0]) {
+      d.reemplazarId = existente.rows[0].id;
+    }
+  }
+
   if (d.reemplazarId) {
     // Rehaciendo una liquidación ya Pagada (ver /liquidacion/liberar-cruces): pisa la fila
     // original en vez de duplicarla en el historial.
@@ -618,8 +640,12 @@ const resolverLiquidacionSchema = z.object({
 catalogRouter.post("/liquidacion/resolver", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = resolverLiquidacionSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  // created_at = now() (29/09/2026, mismo bug de arriba): sin esto, una liquidación que se
+  // resuelve sola (autoguardado -> primer pago real) se queda con la fecha vieja de cuando era
+  // todavía un borrador recién calculado -- en el historial (created_at DESC, LIMIT 200) eso la
+  // hacía "hundirse" y desaparecer de la vista aunque ya estuviera pagada de verdad.
   const r = await pool.query(
-    `UPDATE liquidaciones_guardadas SET estado = 'PAGADA'
+    `UPDATE liquidaciones_guardadas SET estado = 'PAGADA', created_at = now()
      WHERE grupo_key = $1 AND week_start = $2 AND estado = 'PENDIENTE'
      RETURNING id`,
     [grupoKey(parsed.data.agentIds), parsed.data.weekStart]
@@ -725,7 +751,11 @@ catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, asy
 
 // Historial de liquidaciones guardadas — más reciente primero.
 catalogRouter.get("/liquidacion/historial", requireAuth, requireAdmin, async (_req, res) => {
-  const r = await pool.query(`SELECT * FROM liquidaciones_guardadas ORDER BY created_at DESC LIMIT 200`);
+  // LIMIT subido de 200 a 1000 (29/09/2026, mismo bug de arriba): con el bug de filas
+  // duplicadas ya arreglado en /liquidacion/guardar y /liquidacion/resolver, esto no debería
+  // volver a hacer falta, pero mientras haya duplicados viejos de antes del fix dando vueltas,
+  // un límite más generoso evita que una liquidación pagada de verdad quede tapada.
+  const r = await pool.query(`SELECT * FROM liquidaciones_guardadas ORDER BY created_at DESC LIMIT 1000`);
   res.json(r.rows);
 });
 
