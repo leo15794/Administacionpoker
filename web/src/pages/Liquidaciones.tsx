@@ -218,6 +218,18 @@ export default function Liquidaciones() {
   const [historial, setHistorial] = useState<any[] | null>(null);
   const [borrandoHist, setBorrandoHist] = useState<string | null>(null);
   const [eliminandoPago, setEliminandoPago] = useState<string | null>(null);
+  // "Armar liquidación" (29/09/2026, pedido de Leo): antes, apenas se tildaba un agente ya
+  // aparecían los campos de Nombre y Semana -- ahora hay un paso explícito primero: se aprieta
+  // el botón, se pone el Nombre (a mano, nunca el de un agente) y recién ahí se eligen los
+  // agentes a combinar y la semana. "Cancelar" vuelve todo a cero sin dejar nada a medio armar.
+  const [armando, setArmando] = useState(false);
+
+  function cancelarArmado() {
+    setArmando(false);
+    setSeleccionados([]);
+    setNombreGrupo("");
+    setFiltro("");
+  }
 
   useEffect(() => {
     api.agentes().then(setAgentes).catch(() => {});
@@ -311,12 +323,10 @@ export default function Liquidaciones() {
     api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
     if (retomar) {
       setNombreGrupo(retomar.nombreGrupo);
-    } else if (seleccionados.length === 1) {
-      // Nombre por default: si es un solo agente, su nombre; si son varios, en blanco para que
-      // lo pongan a mano (ej. "Prodigio") — no hay forma de adivinar cómo se llama el grupo.
-      const a = agentes.find((x) => x.id === seleccionados[0]);
-      if (a) setNombreGrupo(a.name);
     }
+    // Ya NO se autocompleta el nombre con el del agente (29/09/2026, pedido de Leo: "ese
+    // nombre no tiene que ser el de un Agente, se lo vamos a dar nosotros") -- el nombre se pone
+    // a mano en el paso de "Armar liquidación", antes de elegir los agentes.
   }, [seleccionados]);
 
   // Vuelve a elegir ese mismo grupo de agentes + esa semana desde el historial -- para las
@@ -336,6 +346,7 @@ export default function Liquidaciones() {
       nota: h.nota ?? "",
     };
     setSeleccionados(h.agent_ids);
+    setArmando(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -948,72 +959,92 @@ export default function Liquidaciones() {
       </p>
 
       <div className="panel">
-        <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Agentes a combinar</label>
-        <input
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          placeholder="Buscar agente..."
-          style={{ width: "100%", maxWidth: 320, marginBottom: 8 }}
-        />
-        {seleccionados.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-            {seleccionados.map((id) => {
-              const a = agentes.find((x) => x.id === id);
-              return (
-                <span
-                  key={id}
-                  className="badge neutral"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                  onClick={() => toggleAgente(id)}
-                  title="Sacar de la liquidación"
-                >
-                  {a ? a.name : id}
-                  <span style={{ opacity: 0.6 }}>✕</span>
-                </span>
-              );
-            })}
-          </div>
-        )}
-        {agentesFiltrados.length > 0 && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-            <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => [...new Set([...s, ...agentesFiltrados.map((a) => a.id)])])}>
-              Seleccionar todos
-            </button>
-            <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => s.filter((id) => !agentesFiltrados.some((a) => a.id === id)))}>
-              Deseleccionar todos
-            </button>
-          </div>
-        )}
-        <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
-          {agentesFiltrados.map((a) => (
-            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
-              <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggleAgente(a.id)} />
-              {a.name}
-            </label>
-          ))}
-          {agentesFiltrados.length === 0 && <div className="muted">Sin resultados.</div>}
-        </div>
+        {!armando ? (
+          <button type="button" className="btn" onClick={() => setArmando(true)}>
+            + Armar liquidación
+          </button>
+        ) : (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+              <div>
+                <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
+                  Nombre del pago {seleccionados.length > 1 && "(varios agentes combinados)"}
+                </label>
+                <input
+                  value={nombreGrupo}
+                  onChange={(e) => setNombreGrupo(e.target.value)}
+                  placeholder="Ej: Prodigio"
+                  style={{ width: 220 }}
+                  autoFocus
+                />
+              </div>
+              <button type="button" className="btn secondary small" onClick={cancelarArmado}>
+                Cancelar
+              </button>
+            </div>
 
-        {seleccionados.length > 0 && (
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14 }}>
-            <div>
-              <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
-                Nombre del pago {seleccionados.length > 1 && "(varios agentes combinados)"}
-              </label>
-              <input value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} placeholder="Ej: Prodigio" style={{ width: 220 }} />
+            <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Agentes a combinar</label>
+            <input
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              placeholder="Buscar agente..."
+              style={{ width: "100%", maxWidth: 320, marginBottom: 8 }}
+            />
+            {seleccionados.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {seleccionados.map((id) => {
+                  const a = agentes.find((x) => x.id === id);
+                  return (
+                    <span
+                      key={id}
+                      className="badge neutral"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                      onClick={() => toggleAgente(id)}
+                      title="Sacar de la liquidación"
+                    >
+                      {a ? a.name : id}
+                      <span style={{ opacity: 0.6 }}>✕</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {agentesFiltrados.length > 0 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => [...new Set([...s, ...agentesFiltrados.map((a) => a.id)])])}>
+                  Seleccionar todos
+                </button>
+                <button type="button" className="btn secondary small" onClick={() => setSeleccionados((s) => s.filter((id) => !agentesFiltrados.some((a) => a.id === id)))}>
+                  Deseleccionar todos
+                </button>
+              </div>
+            )}
+            <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
+              {agentesFiltrados.map((a) => (
+                <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggleAgente(a.id)} />
+                  {a.name}
+                </label>
+              ))}
+              {agentesFiltrados.length === 0 && <div className="muted">Sin resultados.</div>}
             </div>
-            <div>
-              <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Semana</label>
-              <select value={weekStart} onChange={(e) => elegirSemana(e.target.value)} disabled={semanas.length === 0}>
-                <option value="">{semanas.length === 0 ? "Sin cierres para estos agentes" : "Elegir semana..."}</option>
-                {semanas.map((s) => (
-                  <option key={s.week_start} value={s.week_start}>
-                    {dateShort(s.week_start)} - {dateShort(s.week_end)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+
+            {seleccionados.length > 0 && (
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14 }}>
+                <div>
+                  <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Fecha</label>
+                  <select value={weekStart} onChange={(e) => elegirSemana(e.target.value)} disabled={semanas.length === 0}>
+                    <option value="">{semanas.length === 0 ? "Sin cierres para estos agentes" : "Elegir semana..."}</option>
+                    {semanas.map((s) => (
+                      <option key={s.week_start} value={s.week_start}>
+                        {dateShort(s.week_start)} - {dateShort(s.week_end)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
