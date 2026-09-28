@@ -420,6 +420,8 @@ export const api = {
   darDeBajaRakebackPendiente: (id: string, notes?: string) =>
     request(`/rakeback-pendiente/${id}/baja`, { method: "POST", body: JSON.stringify({ notes }) }),
   eliminarRakebackPendiente: (id: string) => request(`/rakeback-pendiente/${id}`, { method: "DELETE" }),
+  // Revierte/borra UN pago puntual ya aplicado (PAGO_FICHAS/PAGO_USDT) -- ver repo/rakebackPendiente.ts.
+  eliminarPagoRakebackPendiente: (movementId: string) => request(`/rakeback-pendiente/movimientos/${movementId}`, { method: "DELETE" }),
   // Borra UN movimiento puntual (solo el más reciente de su adelanto) — para corregir pruebas
   // sin tener que eliminar el adelanto entero. Ver nota en repo/advances.ts.
   eliminarMovimientoAdelanto: (movementId: string) => request(`/advances/movimientos/${movementId}`, { method: "DELETE" }),

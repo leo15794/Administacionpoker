@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
@@ -58,6 +58,21 @@ rakebackPendienteRouter.post("/:id/baja", requireAuth, requireAdmin, async (req:
 rakebackPendienteRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     await eliminarPendiente(req.params.id);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Revierte/borra UN pago puntual (PAGO_FICHAS/PAGO_USDT) ya aplicado -- para corregir pagos
+// mal cargados o, como en el caso real del 28/09/2026, un pago que quedó "huérfano" (su
+// movimiento de ledger ya se había borrado antes por otro lado, así que acá solo queda
+// deshacer el registro del pago en sí -- ver revertirPagoPendiente, que ya contempla que
+// movement_id puede venir null). Mismo criterio de orden que el resto: solo el más reciente de
+// ese pendiente puntual.
+rakebackPendienteRouter.delete("/movimientos/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await revertirPagoPendiente(req.params.id);
     res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

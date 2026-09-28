@@ -217,6 +217,7 @@ export default function Liquidaciones() {
   const [guardado, setGuardado] = useState(false); // ya se guardó ESTA liquidación tal cual está — evita duplicar
   const [historial, setHistorial] = useState<any[] | null>(null);
   const [borrandoHist, setBorrandoHist] = useState<string | null>(null);
+  const [eliminandoPago, setEliminandoPago] = useState<string | null>(null);
 
   useEffect(() => {
     api.agentes().then(setAgentes).catch(() => {});
@@ -419,6 +420,35 @@ export default function Liquidaciones() {
     ).then((ok) => {
       if (ok) setWeekStart(value);
     });
+  }
+
+  // Eliminar UN pago puntual de "Historial de pagos de esta liquidación" (29/09/2026, pedido de
+  // Leo: caso real de un pago que quedó huérfano -- su movimiento de ledger ya se había borrado
+  // por otro lado antes, así que quedaba visible acá para siempre sin forma de sacarlo). Según
+  // el tipo pega a un endpoint distinto (ver nota en repo/rakebackPendiente.ts): PAGO_FICHAS/
+  // PAGO_USDT son pagos vía rakeback_pendiente (cierres nuevos), PAGO/COBRO son movimientos
+  // genéricos del ledger (cierres viejos).
+  async function eliminarPago(p: any) {
+    if (
+      !(await confirmDialog(
+        `¿Eliminar este pago de ${usd(p.amount)} (${p.agentName})? Si el movimiento de ledger todavía existe, se revierte de verdad (vuelve a estar pendiente). Si ya no existía (huérfano), solo se saca de esta lista.`
+      ))
+    )
+      return;
+    setEliminandoPago(p.id);
+    try {
+      if (p.tipo === "PAGO_FICHAS" || p.tipo === "PAGO_USDT") {
+        await api.eliminarPagoRakebackPendiente(p.id);
+      } else {
+        await api.eliminarMovimiento(p.id);
+      }
+      refrescarLiquidacion(true);
+      refrescarHistorial();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar el pago.");
+    } finally {
+      setEliminandoPago(null);
+    }
   }
 
   const totalCruzado = Object.values(cruces).reduce((s, v) => s + (Number(v) || 0), 0);
@@ -1369,7 +1399,7 @@ export default function Liquidaciones() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Importe</th><th>Observación</th>
+                      <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Importe</th><th>Observación</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1385,6 +1415,17 @@ export default function Liquidaciones() {
                         </td>
                         <td className={p.tipo === "COBRO" ? "money neg" : "money pos"}>{usd(p.amount)}</td>
                         <td className="muted" style={{ fontSize: 12 }}>{p.observation || "-"}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn danger small"
+                            disabled={eliminandoPago === p.id}
+                            onClick={() => eliminarPago(p)}
+                            title="Eliminar este pago"
+                          >
+                            {eliminandoPago === p.id ? "..." : "Eliminar"}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
