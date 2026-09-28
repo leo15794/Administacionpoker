@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import GlobalSearch from "../components/GlobalSearch";
 
 const icon = {
   resumen: (
@@ -485,6 +486,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </div>
       <div className="main">
+        {role === "ADMIN" && <GlobalSearch />}
         <Outlet key={`${location.pathname}:${refreshKey}`} />
       </div>
     </div>
