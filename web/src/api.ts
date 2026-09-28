@@ -108,6 +108,19 @@ async function requestFormTb(path: string, form: FormData) {
   return res.json();
 }
 
+// (28/09/2026, pedido de Leo: filtros de semana y bancado(s) en Jugadores bancados) -- arma el
+// query string solo con lo que vino, para no romper compatibilidad con los llamados existentes
+// sin filtro (armarQueryFiltroBancados(undefined) === "").
+function armarQueryFiltroBancados(filtro?: { weekStart?: string; weekEnd?: string; playerIds?: string[] }): string {
+  if (!filtro) return "";
+  const params = new URLSearchParams();
+  if (filtro.weekStart) params.set("weekStart", filtro.weekStart);
+  if (filtro.weekEnd) params.set("weekEnd", filtro.weekEnd);
+  if (filtro.playerIds && filtro.playerIds.length > 0) params.set("playerIds", filtro.playerIds.join(","));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
@@ -577,7 +590,10 @@ export const api = {
   // pierde todo el capital y hay que volver a cargarle fichas.
   recargarCapitalBancado: (data: { playerId: string; monto: number; fecha: string; observaciones?: string }) =>
     request(`/bancados/recargar`, { method: "POST", body: JSON.stringify(data) }),
-  historialBancadoGlobal: () => request(`/bancados/historial`),
+  // (28/09/2026, pedido de Leo: filtros por semana y por bancado(s)) -- todos opcionales; sin
+  // ninguno se comporta igual que antes (trae todo).
+  historialBancadoGlobal: (filtro?: { weekStart?: string; weekEnd?: string; playerIds?: string[] }) =>
+    request(`/bancados/historial${armarQueryFiltroBancados(filtro)}`),
   historialBancado: (playerId: string) => request(`/bancados/historial/${playerId}`),
   revertirCierreBancado: (id: string, motivo?: string) =>
     request(`/bancados/historial/${id}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
@@ -587,7 +603,8 @@ export const api = {
 
   pagarCierreBancado: (id: string) =>
     request(`/bancados/historial/${id}/pagar`, { method: "POST" }),
-  resumenBancados: () => request(`/bancados/resumen`),
+  resumenBancados: (filtro?: { weekStart?: string; weekEnd?: string; playerIds?: string[] }) =>
+    request(`/bancados/resumen${armarQueryFiltroBancados(filtro)}`),
   resumenRodeo: () => request(`/rodeo/resumen`),
   // "Resumen por agente" en PDF (23/09/2026) -- ver repo/agentesResumen.ts.
   semanasConResumenAgente: () => request(`/agentes-resumen/semanas`),

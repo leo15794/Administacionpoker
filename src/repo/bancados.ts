@@ -141,7 +141,33 @@ export interface ResumenBancadoJugador {
   makeupActual: number;
 }
 
-export async function listResumenBancados(): Promise<ResumenBancadoJugador[]> {
+// (28/09/2026, pedido de Leo: "poner unos filtros para poder metrizar por semanas y ver las
+// diferentes ganancias/perdidas y que podamos seleccionar al bancado o bancados") -- filtros
+// opcionales de rango de semanas y de jugador(es) puntuales. "Capital actual"/"Makeup actual"
+// quedan SIEMPRE con el estado real más reciente (no se filtran por semana) -- son el saldo de
+// HOY, filtrar esos por una ventana vieja de fechas los volvería incorrectos/confusos.
+export interface FiltroResumenBancados {
+  weekStart?: string;
+  weekEnd?: string;
+  playerIds?: string[];
+}
+
+export async function listResumenBancados(filtro: FiltroResumenBancados = {}): Promise<ResumenBancadoJugador[]> {
+  const condiciones = [`h.status <> 'REVERTIDO'`];
+  const params: any[] = [];
+  if (filtro.weekStart) {
+    params.push(filtro.weekStart);
+    condiciones.push(`h.week_start >= $${params.length}::date`);
+  }
+  if (filtro.weekEnd) {
+    params.push(filtro.weekEnd);
+    condiciones.push(`h.week_end <= $${params.length}::date`);
+  }
+  if (filtro.playerIds && filtro.playerIds.length > 0) {
+    params.push(filtro.playerIds);
+    condiciones.push(`h.player_id = ANY($${params.length})`);
+  }
+
   const agregados = await pool.query(
     `SELECT h.player_id,
             p.display_name as player_name,
@@ -158,11 +184,13 @@ export async function listResumenBancados(): Promise<ResumenBancadoJugador[]> {
      JOIN players p ON p.id = h.player_id
      JOIN clubs c ON c.id = h.club_id
      LEFT JOIN agents a ON a.id = h.agent_id
-     WHERE h.status <> 'REVERTIDO'
+     WHERE ${condiciones.join(" AND ")}
      GROUP BY h.player_id, p.display_name, p.external_id, c.name, a.name
-     ORDER BY p.display_name`
+     ORDER BY p.display_name`,
+    params
   );
 
+  // Estado actual (capital/makeup) -- siempre sin filtro de semana, ver comentario arriba.
   const estados = await pool.query(
     `SELECT DISTINCT ON (player_id) player_id, capital_despues, makeup_nuevo
      FROM bancado_historial
@@ -383,7 +411,30 @@ export async function listHistorialBancado(playerId: string) {
 
 // Historial global (todos los jugadores bancados juntos) — equivalente a HISTORIAL_BANCADOS_
 // MASTER de la planilla.
-export async function listHistorialBancadoGlobal() {
+// (28/09/2026, pedido de Leo: filtros de semana y jugador(es), mismo criterio que
+// listResumenBancados de arriba.)
+export interface FiltroHistorialBancados {
+  weekStart?: string;
+  weekEnd?: string;
+  playerIds?: string[];
+}
+
+export async function listHistorialBancadoGlobal(filtro: FiltroHistorialBancados = {}) {
+  const condiciones = ["true"];
+  const params: any[] = [];
+  if (filtro.weekStart) {
+    params.push(filtro.weekStart);
+    condiciones.push(`h.week_start >= $${params.length}::date`);
+  }
+  if (filtro.weekEnd) {
+    params.push(filtro.weekEnd);
+    condiciones.push(`h.week_end <= $${params.length}::date`);
+  }
+  if (filtro.playerIds && filtro.playerIds.length > 0) {
+    params.push(filtro.playerIds);
+    condiciones.push(`h.player_id = ANY($${params.length})`);
+  }
+
   const r = await pool.query(
     `SELECT h.*, p.display_name as player_name, p.external_id as player_external_id,
             c.name as club_name, a.name as agent_name
@@ -391,7 +442,9 @@ export async function listHistorialBancadoGlobal() {
      JOIN players p ON p.id = h.player_id
      JOIN clubs c ON c.id = h.club_id
      LEFT JOIN agents a ON a.id = h.agent_id
-     ORDER BY h.week_start DESC, p.display_name`
+     WHERE ${condiciones.join(" AND ")}
+     ORDER BY h.week_start DESC, p.display_name`,
+    params
   );
   return r.rows;
 }

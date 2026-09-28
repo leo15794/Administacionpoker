@@ -29,6 +29,27 @@ export default function JugadoresBancados() {
   const [resumenBancados, setResumenBancados] = useState<any[]>([]);
   const [cargandoResumen, setCargandoResumen] = useState(true);
 
+  // (28/09/2026, pedido de Leo: "poner unos filtros para poder metrizar por semanas y ver las
+  // diferentes ganancias/perdidas y que podamos seleccionar al bancado o bancados") -- filtro
+  // compartido por "Resumen histórico" y "Historial de la banca", ambos abajo.
+  const [filtroWeekStart, setFiltroWeekStart] = useState("");
+  const [filtroWeekEnd, setFiltroWeekEnd] = useState("");
+  const [filtroPlayerIds, setFiltroPlayerIds] = useState<Set<string>>(new Set());
+  const [selectorJugadoresAbierto, setSelectorJugadoresAbierto] = useState(false);
+
+  function filtroActivo() {
+    return { weekStart: filtroWeekStart || undefined, weekEnd: filtroWeekEnd || undefined, playerIds: filtroPlayerIds.size > 0 ? Array.from(filtroPlayerIds) : undefined };
+  }
+
+  function toggleFiltroJugador(id: string) {
+    setFiltroPlayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function refresh() {
     setCargando(true);
     api
@@ -38,22 +59,36 @@ export default function JugadoresBancados() {
       .finally(() => setCargando(false));
   }
 
-  function refreshHistorial() {
+  function refreshHistorial(filtroOverride?: ReturnType<typeof filtroActivo>) {
     setCargandoHistorial(true);
     api
-      .historialBancadoGlobal()
+      .historialBancadoGlobal(filtroOverride ?? filtroActivo())
       .then(setHistorialGlobal)
       .catch((e: any) => setError(e.message))
       .finally(() => setCargandoHistorial(false));
   }
 
-  function refreshResumen() {
+  function refreshResumen(filtroOverride?: ReturnType<typeof filtroActivo>) {
     setCargandoResumen(true);
     api
-      .resumenBancados()
+      .resumenBancados(filtroOverride ?? filtroActivo())
       .then(setResumenBancados)
       .catch((e: any) => setError(e.message))
       .finally(() => setCargandoResumen(false));
+  }
+
+  function aplicarFiltros() {
+    refreshResumen();
+    refreshHistorial();
+  }
+
+  function limpiarFiltros() {
+    setFiltroWeekStart("");
+    setFiltroWeekEnd("");
+    setFiltroPlayerIds(new Set());
+    const vacio = { weekStart: undefined, weekEnd: undefined, playerIds: undefined };
+    refreshResumen(vacio);
+    refreshHistorial(vacio);
   }
 
   async function revertirGlobal(h: any) {
@@ -254,11 +289,63 @@ export default function JugadoresBancados() {
 
       <div className="panel">
         <div className="topbar" style={{ marginBottom: 14 }}>
+          <h3 style={{ margin: 0 }}>Filtros</h3>
+        </div>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          Filtra por rango de semanas y/o por bancado(s) puntuales — aplica tanto al resumen como
+          al historial de abajo. Sin filtros, se ve todo.
+        </div>
+        <div className="form-grid" style={{ marginBottom: 12 }}>
+          <div className="field">
+            <label>Semana desde</label>
+            <input type="date" value={filtroWeekStart} onChange={(e) => setFiltroWeekStart(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Semana hasta</label>
+            <input type="date" value={filtroWeekEnd} onChange={(e) => setFiltroWeekEnd(e.target.value)} />
+          </div>
+          <div className="field" style={{ position: "relative" }}>
+            <label>Bancado(s)</label>
+            <button
+              type="button"
+              className="btn secondary"
+              style={{ width: "100%", textAlign: "left" }}
+              onClick={() => setSelectorJugadoresAbierto((v) => !v)}
+            >
+              {filtroPlayerIds.size === 0 ? "Todos" : `${filtroPlayerIds.size} seleccionado(s)`}
+            </button>
+            {selectorJugadoresAbierto && (
+              <div
+                className="panel"
+                style={{ position: "absolute", zIndex: 10, top: "100%", left: 0, right: 0, maxHeight: 260, overflowY: "auto", marginTop: 4, boxShadow: "var(--shadow-lift, 0 8px 24px rgba(0,0,0,0.3))" }}
+              >
+                {bancados.length === 0 ? (
+                  <div className="muted">No hay jugadores bancados todavía.</div>
+                ) : (
+                  bancados.map((b) => (
+                    <label key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
+                      <input type="checkbox" checked={filtroPlayerIds.has(b.id)} onChange={() => toggleFiltroJugador(b.id)} />
+                      <span>{b.display_name ?? "Sin nombre"} <span className="muted">#{b.external_id}</span></span>
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          <div className="field" style={{ alignSelf: "flex-end", display: "flex", gap: 8 }}>
+            <button className="btn" onClick={aplicarFiltros}>Aplicar filtros</button>
+            <button className="btn secondary" onClick={limpiarFiltros}>Limpiar</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Resumen histórico de bancados</h3>
         </div>
         <div className="muted" style={{ marginBottom: 12 }}>
           Acumulado de todos los cierres semanales de cada jugador bancado — ganancia del jugador vs. ganancia de la
-          empresa, para ver el desglose sin tener que abrir cada uno.
+          empresa, para ver el desglose sin tener que abrir cada uno. Respeta los filtros de arriba.
         </div>
         {cargandoResumen ? (
           <div className="muted">Cargando...</div>
@@ -307,6 +394,9 @@ export default function JugadoresBancados() {
       <div className="panel">
         <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Historial de la banca</h3>
+        </div>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          Fila por fila, cada cierre semanal (o recarga de capital) de cada bancado. Respeta los filtros de arriba.
         </div>
         {cargandoHistorial ? (
           <div className="muted">Cargando...</div>

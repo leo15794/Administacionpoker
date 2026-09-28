@@ -121,15 +121,27 @@ bancadosRouter.post("/recargar", requireAuth, requireAdmin, async (req: AuthedRe
   }
 });
 
-bancadosRouter.get("/historial", requireAuth, requireAdmin, async (_req, res) => {
-  res.json(await listHistorialBancadoGlobal());
+// (28/09/2026, pedido de Leo: "poner unos filtros para poder metrizar por semanas ... y que
+// podamos seleccionar al bancado o bancados") -- weekStart/weekEnd/playerIds son todos
+// opcionales (querystring); sin ninguno, se comporta exactamente igual que antes (todo).
+// playerIds llega como "id1,id2,id3" (coma-separado) para no complicar el query string.
+function leerFiltroBancados(query: any): { weekStart?: string; weekEnd?: string; playerIds?: string[] } {
+  const weekStart = typeof query.weekStart === "string" && query.weekStart ? query.weekStart : undefined;
+  const weekEnd = typeof query.weekEnd === "string" && query.weekEnd ? query.weekEnd : undefined;
+  const playerIdsRaw = typeof query.playerIds === "string" ? query.playerIds : undefined;
+  const playerIds = playerIdsRaw ? playerIdsRaw.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined;
+  return { weekStart, weekEnd, playerIds };
+}
+
+bancadosRouter.get("/historial", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listHistorialBancadoGlobal(leerFiltroBancados(req.query)));
 });
 
 // Resumen histórico: una fila por jugador bancado, con el acumulado de todos sus cierres
 // semanales (ganancia jugador vs. ganancia empresa) — para ver el desglose global sin tener
 // que abrir cada jugador uno por uno.
-bancadosRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => {
-  res.json(await listResumenBancados());
+bancadosRouter.get("/resumen", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listResumenBancados(leerFiltroBancados(req.query)));
 });
 
 bancadosRouter.get("/historial/:playerId", requireAuth, requireAdmin, async (req, res) => {
