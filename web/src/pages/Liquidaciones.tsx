@@ -176,6 +176,16 @@ export default function Liquidaciones() {
   // abre este popup, mostrando la semana de ESTA liquidación (la que ya se eligió arriba) y el
   // monto a descontar, para confirmar antes de aplicarlo -- se aplica de a uno, al toque.
   const [modalCruce, setModalCruce] = useState<{ tipo: "ADELANTO" | "CARGA"; item: any; monto: string } | null>(null);
+  // Cruzar varios de una (30/09/2026, pedido de Leo: "estaria bueno poder elegir todos los
+  // cruces o ninguno, contra la liquidacion que se esta haciendo") -- además del botón "Cruzar"
+  // de a uno (arriba), cada pendiente tiene un checkbox; con "Seleccionar todos"/"Ninguno" y
+  // "Cruzar seleccionados" se abre UN popup con la lista completa (estilo el de Xubio que pasó
+  // Leo de ejemplo: checkbox + monto editable por fila) y se aplican todos juntos al confirmar.
+  const [seleccionCruce, setSeleccionCruce] = useState<Record<string, boolean>>({});
+  const [modalCrucesMasivo, setModalCrucesMasivo] = useState<Array<{ tipo: "ADELANTO" | "CARGA"; item: any }> | null>(
+    null
+  );
+  const [montosCrucesMasivo, setMontosCrucesMasivo] = useState<Record<string, string>>({});
   // Deshacer último cruce (22/09/2026, pedido de Leo, "estamos probando"): guarda los ids de
   // movimiento del ÚLTIMO cruce de adelantos/cargas que se aplicó en esta liquidación, para
   // poder deshacerlo de un click sin ir a Adelantos ni tener que resetear toda la base. Solo
@@ -380,6 +390,7 @@ export default function Liquidaciones() {
       .then((d) => {
         setData(d);
         setModalCruce(null);
+        setModalCrucesMasivo(null);
         setMostrarPago(false);
         setGuardado(false);
         setMovAbierto(null);
@@ -870,6 +881,107 @@ export default function Liquidaciones() {
     }
   }
 
+  function toggleSeleccionCruce(id: string) {
+    setSeleccionCruce((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function seleccionarTodosCruces() {
+    if (!data) return;
+    const next: Record<string, boolean> = {};
+    for (const a of data.adelantos) next[a.id] = true;
+    for (const cg of data.cargas) next[cg.id] = true;
+    setSeleccionCruce(next);
+  }
+
+  function deseleccionarTodosCruces() {
+    setSeleccionCruce({});
+  }
+
+  // Abre el popup de "cruzar varios de una" -- arma la lista en el mismo orden en que se ven en
+  // pantalla (adelantos primero, cargas después) y sugiere un monto por fila recortando en
+  // cascada para no pasarse del disponible TOTAL de esta liquidación (compartido entre adelantos
+  // y cargas, ver disponibleParaCruzar): la primera fila se lleva hasta lo que tenga pendiente o
+  // lo que quede disponible, la siguiente arranca con lo que sobró, y así -- si el total tildado
+  // supera el disponible, la o las últimas quedan recortadas (o en cero). Igual que en el popup
+  // de a uno, se puede subir a mano antes de confirmar.
+  function abrirModalCrucesMasivo() {
+    if (!data) return;
+    const items: Array<{ tipo: "ADELANTO" | "CARGA"; item: any }> = [];
+    for (const a of data.adelantos) if (seleccionCruce[a.id]) items.push({ tipo: "ADELANTO", item: a });
+    for (const cg of data.cargas) if (seleccionCruce[cg.id]) items.push({ tipo: "CARGA", item: cg });
+    if (items.length === 0) return;
+    let restante = disponibleParaCruzar;
+    const montosIniciales: Record<string, string> = {};
+    for (const { item } of items) {
+      const monto = Math.max(0, Math.min(Number(item.pendiente) || 0, restante));
+      montosIniciales[item.id] = String(monto);
+      restante -= monto;
+    }
+    setMontosCrucesMasivo(montosIniciales);
+    setModalCrucesMasivo(items);
+  }
+
+  // Confirma el popup de "cruzar varios de una" -- aplica cada fila con monto > 0, una por una
+  // (mismo efecto real que el popup de a uno: ajustarAdelanto CONSUMO / consumirCarga), y junta
+  // todos los movimientos generados bajo "Deshacer último cruce" para poder deshacer la tanda
+  // entera de un click. Si alguna fila puntual falla (ej. otro ajuste más nuevo encima de ese
+  // adelanto en el medio), no frena al resto -- se informan los errores al final.
+  async function confirmarCrucesMasivo() {
+    if (!modalCrucesMasivo) return;
+    setAplicando(true);
+    const movIdsAdelantos: string[] = [];
+    const movIdsCargas: string[] = [];
+    let sumaAdelantos = 0;
+    let sumaCargas = 0;
+    const errores: string[] = [];
+    try {
+      for (const { tipo, item } of modalCrucesMasivo) {
+        const monto = Math.min(Number(montosCrucesMasivo[item.id]) || 0, Number(item.pendiente) || 0);
+        if (monto <= 0) continue;
+        try {
+          if (tipo === "ADELANTO") {
+            const r = await api.ajustarAdelanto({
+              advanceId: item.id,
+              type: "CONSUMO",
+              amount: monto,
+              notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+            });
+            if (r?.movementRowId) movIdsAdelantos.push(r.movementRowId);
+            sumaAdelantos += monto;
+          } else {
+            const r = await api.consumirCarga({
+              cargaId: item.id,
+              amount: monto,
+              notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+            });
+            if (r?.movementRowId) movIdsCargas.push(r.movementRowId);
+            sumaCargas += monto;
+          }
+        } catch (err: any) {
+          errores.push(`${item.agentName || "?"}: ${err.message || "no se pudo aplicar"}`);
+        }
+      }
+      if (sumaAdelantos > 0) {
+        setAplicado((prev) => prev + sumaAdelantos);
+        setUltimoCruceAdelantos({ movIds: movIdsAdelantos, monto: sumaAdelantos });
+        setMovIdsAdelantosSesion((prev) => [...prev, ...movIdsAdelantos]);
+      }
+      if (sumaCargas > 0) {
+        setAplicadoCarga((prev) => prev + sumaCargas);
+        setUltimoCruceCargas({ movIds: movIdsCargas, monto: sumaCargas });
+        setMovIdsCargasSesion((prev) => [...prev, ...movIdsCargas]);
+      }
+      setModalCrucesMasivo(null);
+      setSeleccionCruce({});
+      refrescarLiquidacion(true);
+      if (errores.length > 0) {
+        await alertDialog(`Algunos cruces no se pudieron aplicar:\n${errores.join("\n")}`);
+      }
+    } finally {
+      setAplicando(false);
+    }
+  }
+
   // Deshace el ÚLTIMO cruce aplicado (adelantos y/o cargas) en esta liquidación -- ver estado
   // ultimoCruceAdelantos/ultimoCruceCargas arriba. Sigue habiendo un límite real: si el mismo
   // adelanto/carga tuvo OTRO ajuste después (desde Adelantos, por ejemplo), el backend rechaza
@@ -1341,7 +1453,28 @@ export default function Liquidaciones() {
           </table>
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <h3 style={{ marginTop: 0 }}>Cruzar adelantos pendientes</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <h3 style={{ margin: 0 }}>Cruzar pendientes</h3>
+              {(data.adelantos.length > 0 || data.cargas.length > 0) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button type="button" className="btn secondary small" onClick={seleccionarTodosCruces}>
+                    Seleccionar todos
+                  </button>
+                  <button type="button" className="btn secondary small" onClick={deseleccionarTodosCruces}>
+                    Ninguno
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={Object.values(seleccionCruce).every((v) => !v)}
+                    onClick={abrirModalCrucesMasivo}
+                  >
+                    Cruzar seleccionados ({Object.values(seleccionCruce).filter(Boolean).length})
+                  </button>
+                </div>
+              )}
+            </div>
+            <h4 style={{ marginBottom: 4 }}>Adelantos pendientes</h4>
             {data.adelantos.length > 0 && (
               <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                 Disponible para cruzar en esta liquidación: {usd(disponibleParaCruzar)} (no se propone cruzar más que esto por
@@ -1354,6 +1487,11 @@ export default function Liquidaciones() {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {data.adelantos.map((a: any) => (
                   <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!seleccionCruce[a.id]}
+                      onChange={() => toggleSeleccionCruce(a.id)}
+                    />
                     <span style={{ minWidth: 260 }}>
                       {a.agentName}{a.clubOrigenName ? ` (${a.clubOrigenName})` : ""} — pendiente {usd(a.pendiente)}
                       {a.createdAt && <span className="muted"> ({dateShort(a.createdAt)})</span>}
@@ -1370,7 +1508,7 @@ export default function Liquidaciones() {
             )}
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-              <h3 style={{ marginTop: 0 }}>Cruzar cargas de tesorería pendientes</h3>
+              <h4 style={{ marginTop: 0, marginBottom: 4 }}>Cargas de tesorería pendientes</h4>
               <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                 Fichas/USD que ya se le cargaron a este agente en este club (ver "Cargar Movimiento", tipo CARGA) y todavía
                 no se descontaron de ninguna liquidación.
@@ -1381,6 +1519,11 @@ export default function Liquidaciones() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {data.cargas.map((cg: any) => (
                     <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!seleccionCruce[cg.id]}
+                        onChange={() => toggleSeleccionCruce(cg.id)}
+                      />
                       <span style={{ minWidth: 260, flex: 1 }}>
                         {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
                         {cg.createdAt && <span className="muted"> ({dateShort(cg.createdAt)})</span>}
@@ -1936,6 +2079,77 @@ export default function Liquidaciones() {
                 onClick={confirmarModalCruce}
               >
                 {aplicando ? "Aplicando..." : "Confirmar cruce"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {modalCrucesMasivo && data && (
+        <Modal
+          title={`Cruzar ${modalCrucesMasivo.length} pendiente${modalCrucesMasivo.length === 1 ? "" : "s"}`}
+          onClose={() => !aplicando && setModalCrucesMasivo(null)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Semana de esta liquidación: {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
+            </div>
+            <table style={{ fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th>Agente</th>
+                  <th>Pendiente</th>
+                  <th>Monto a cruzar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modalCrucesMasivo.map(({ tipo, item }) => (
+                  <tr key={item.id}>
+                    <td>
+                      {item.agentName}
+                      {(item.clubOrigenName || item.clubName) && (
+                        <span className="muted"> ({item.clubOrigenName || item.clubName})</span>
+                      )}
+                      <span className="muted"> ({tipo === "ADELANTO" ? "adelanto" : "carga"})</span>
+                    </td>
+                    <td>{usd(item.pendiente)}</td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={item.pendiente}
+                        value={montosCrucesMasivo[item.id] ?? ""}
+                        onChange={(e) =>
+                          setMontosCrucesMasivo((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        }
+                        style={{ width: 110, textAlign: "right" }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="muted" style={{ fontSize: 13, textAlign: "right" }}>
+              Total a cruzar:{" "}
+              {usd(
+                modalCrucesMasivo.reduce(
+                  (s, { item }) => s + Math.min(Number(montosCrucesMasivo[item.id]) || 0, Number(item.pendiente) || 0),
+                  0
+                )
+              )}{" "}
+              / disponible {usd(disponibleParaCruzar)}
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Esto consume de verdad cada adelanto/carga tildado (mismo efecto que "Consumo"). Se puede deshacer con
+              "Deshacer último cruce" mientras no se aplique nada más encima.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6 }}>
+              <button className="btn secondary small" disabled={aplicando} onClick={() => setModalCrucesMasivo(null)}>
+                Cancelar
+              </button>
+              <button className="btn small" disabled={aplicando} onClick={confirmarCrucesMasivo}>
+                {aplicando ? "Aplicando..." : "Confirmar cruces"}
               </button>
             </div>
           </div>
