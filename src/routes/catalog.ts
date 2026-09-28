@@ -330,6 +330,16 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
      ORDER BY rpm.occurred_at DESC`,
     [closingIds]
   );
+  // (28/09/2026, pedido de Leo: "puedo ver los viejos?" -- el match solo por observación se
+  // perdía cualquier pago genérico cuya observación no tuviera el texto exacto "cierre
+  // <semana>", por ejemplo si se pagó desde Movimientos directo o se editó la observación a
+  // mano) -- ahora también entran los PAGO/COBRO de estos agentes+clubes cuya fecha caiga
+  // dentro de la semana del cierre (con un margen de 10 días después, para pagos que se hacen
+  // un poco más tarde que el cierre en sí). Sigue siendo "best effort" para cierres viejos: sin
+  // ningún campo que ligue el movimiento a una semana puntual, un pago hecho MUCHO después (o
+  // con fecha manual mal cargada) puede seguir sin aparecer -- no hay forma 100% precisa para
+  // estos casos viejos, ver comentario más arriba sobre rakeback_pendiente.
+  const weekEndRow = closings.rows[0].week_end;
   const pagosGenericos =
     clubIds.length === 0
       ? { rows: [] }
@@ -343,9 +353,12 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
            LEFT JOIN treasury_entries te ON te.movement_id = lm.id
            WHERE lm.agent_id = ANY($1::text[]) AND lm.club_id = ANY($2::text[])
              AND lm.type IN ('PAGO', 'COBRO') AND lm.status = 'APLICADO'
-             AND lm.observation ILIKE $3
+             AND (
+               lm.observation ILIKE $3
+               OR lm.occurred_at BETWEEN $4::date AND ($5::date + INTERVAL '10 days')
+             )
            ORDER BY lm.occurred_at DESC`,
-          [agentIds, clubIds, `%cierre ${weekStart}%`]
+          [agentIds, clubIds, `%cierre ${weekStart}%`, weekStart, weekEndRow]
         );
   const pagos = [...pagosModernos.rows, ...pagosGenericos.rows]
     .map((p) => ({
