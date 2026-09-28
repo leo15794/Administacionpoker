@@ -176,6 +176,10 @@ export const api = {
     nota?: string | null;
     adelantoMovIds?: string[];
     cargaMovIds?: string[];
+    // Pagos reales (Enviar/Recibir) ya aplicados en esta liquidación -- para poder revertirlos
+    // si se borra (28/09/2026, pedido de Leo). Ver nota en repo/rakebackPendiente.ts.
+    pagoPendienteMovIds?: string[];
+    pagoLedgerMovIds?: string[];
     // Si viene, pisa esa fila del historial en vez de crear una nueva -- se usa al rehacer una
     // liquidación ya Pagada después de "Liberar cruces de esta liquidación".
     reemplazarId?: string;
@@ -197,6 +201,8 @@ export const api = {
     nota?: string | null;
     adelantoMovIds?: string[];
     cargaMovIds?: string[];
+    pagoPendienteMovIds?: string[];
+    pagoLedgerMovIds?: string[];
   }) => request("/catalog/liquidacion/autoguardar", { method: "POST", body: JSON.stringify(data) }),
   // Marca como resuelto el autoguardado pendiente de este grupo+semana (si había uno) -- se
   // llama apenas se registra un pago o cobro real para estos mismos agentes.

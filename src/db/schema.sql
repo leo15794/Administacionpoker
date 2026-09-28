@@ -1287,6 +1287,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidaciones_pendiente_unica
 ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS adelanto_movement_ids TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS carga_movement_ids TEXT[] NOT NULL DEFAULT '{}';
 
+-- Revertir pagos reales al eliminar una liquidación (28/09/2026, pedido de Leo: "cuando
+-- eliminamos una liquidación todo tiene que volver para atrás" -- hasta acá, borrar una
+-- liquidación del historial (DELETE /liquidacion/historial/:id) solo liberaba los cruces de
+-- adelantos/cargas (arriba), pero los PAGOS DE VERDAD -- "Enviar (pagarle al agente)" /
+-- "Recibir", que se aplican al toque al ledger (ver Liquidaciones.tsx -> registrarMov()) -- no
+-- se tocaban: quedaba la plata movida en el ledger con la liquidación que la originó ya
+-- borrada. Mismo patrón que adelanto_movement_ids/carga_movement_ids: se llenan en
+-- /liquidacion/guardar y /liquidacion/autoguardar con lo que haya en la sesión del navegador.
+-- Separado en dos porque cada uno se revierte con una función distinta:
+--   pago_pendiente_movement_ids: ids de rakeback_pendiente_movements (pagos vía
+--     pagarPendiente/PAGO_FICHAS/PAGO_USDT, cierres nuevos con rakebackPendienteId) -- se
+--     revierten con revertirPagoPendiente() (repo/rakebackPendiente.ts).
+--   pago_ledger_movement_ids: ids de ledger_movements crudos (pagos/cobros genéricos vía
+--     crearMovimiento, tipo PAGO/COBRO -- cierres viejos sin rakebackPendienteId) -- se
+--     revierten directo con eliminarMovimiento(id, {ignorarOrden:true}).
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS pago_pendiente_movement_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS pago_ledger_movement_ids TEXT[] NOT NULL DEFAULT '{}';
+
 -- ===================== TeamBack Affiliates V1 (25/09/2026, pedido de Leo) =====================
 -- Sección TOTALMENTE APARTE del resto del sistema: agents/clubs/balances son el negocio de
 -- "backing" de agentes que manejan mesas (DigiPlayers) -- esto es un programa de rakeback +

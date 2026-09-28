@@ -264,6 +264,8 @@ export default function Liquidaciones() {
     cargasAplicadas: number;
     adelantoMovIds: string[];
     cargaMovIds: string[];
+    pagoPendienteMovIds: string[];
+    pagoLedgerMovIds: string[];
     filas: any[];
     nota: string;
   } | null>(null);
@@ -283,6 +285,13 @@ export default function Liquidaciones() {
   // el historial para poder liberarlos todos juntos después desde "Revisar".
   const [movIdsAdelantosSesion, setMovIdsAdelantosSesion] = useState<string[]>([]);
   const [movIdsCargasSesion, setMovIdsCargasSesion] = useState<string[]>([]);
+  // Igual que arriba, pero para pagos reales (Enviar/Recibir) ya aplicados al ledger en esta
+  // liquidación -- se manda al guardar/autoguardar para poder revertirlos si se borra
+  // (28/09/2026, pedido de Leo: "cuando eliminamos una liquidación todo tiene que volver para
+  // atrás"). pagoPendienteMovIds = pagos vía pagarRakebackPendiente (cierres nuevos);
+  // pagoLedgerMovIds = pagos/cobros genéricos vía crearMovimiento PAGO/COBRO (cierres viejos).
+  const [movIdsPagosPendienteSesion, setMovIdsPagosPendienteSesion] = useState<string[]>([]);
+  const [movIdsPagosGenericoSesion, setMovIdsPagosGenericoSesion] = useState<string[]>([]);
 
   useEffect(() => {
     setSemanas([]);
@@ -295,6 +304,8 @@ export default function Liquidaciones() {
     setReemplazarId(null);
     setMovIdsAdelantosSesion([]);
     setMovIdsCargasSesion([]);
+    setMovIdsPagosPendienteSesion([]);
+    setMovIdsPagosGenericoSesion([]);
     if (seleccionados.length === 0) return;
     api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
     if (retomar) {
@@ -318,6 +329,8 @@ export default function Liquidaciones() {
       cargasAplicadas: Number(h.cargas_aplicadas ?? 0) || 0,
       adelantoMovIds: h.adelanto_movement_ids ?? [],
       cargaMovIds: h.carga_movement_ids ?? [],
+      pagoPendienteMovIds: h.pago_pendiente_movement_ids ?? [],
+      pagoLedgerMovIds: h.pago_ledger_movement_ids ?? [],
       filas: h.filas ?? [],
       nota: h.nota ?? "",
     };
@@ -352,6 +365,8 @@ export default function Liquidaciones() {
           setAdelantosManual(restaurar.adelantosManual);
           setMovIdsAdelantosSesion(restaurar.adelantoMovIds);
           setMovIdsCargasSesion(restaurar.cargaMovIds);
+          setMovIdsPagosPendienteSesion(restaurar.pagoPendienteMovIds);
+          setMovIdsPagosGenericoSesion(restaurar.pagoLedgerMovIds);
           setNota(restaurar.nota);
           const ventas: Record<string, number> = {};
           const tickets: Record<string, number> = {};
@@ -428,6 +443,8 @@ export default function Liquidaciones() {
           nota,
           adelantoMovIds: movIdsAdelantosSesion,
           cargaMovIds: movIdsCargasSesion,
+          pagoPendienteMovIds: movIdsPagosPendienteSesion,
+          pagoLedgerMovIds: movIdsPagosGenericoSesion,
         })
         .then(() => refrescarHistorial())
         .catch(() => {}); // best-effort -- nunca bloquea ni avisa nada al usuario
@@ -436,7 +453,7 @@ export default function Liquidaciones() {
       if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga, movIdsAdelantosSesion, movIdsCargasSesion]);
+  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga, movIdsAdelantosSesion, movIdsCargasSesion, movIdsPagosPendienteSesion, movIdsPagosGenericoSesion]);
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
@@ -570,7 +587,7 @@ export default function Liquidaciones() {
       setRegistrandoMov(true);
       setMovMsg(null);
       try {
-        await api.crearMovimiento({
+        const r = await api.crearMovimiento({
           type: "COBRO",
           agentId,
           clubId,
@@ -580,6 +597,7 @@ export default function Liquidaciones() {
           occurredAt: new Date().toISOString(),
           observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
+        if (r?.id) setMovIdsPagosGenericoSesion((prev) => [...prev, r.id]);
         setMovMsg({ ok: true, text: "Cobro registrado y aplicado al ledger." });
         setMovObservacion("");
         if (seleccionados.length > 0 && weekStart) {
@@ -628,15 +646,16 @@ export default function Liquidaciones() {
       for (const [idx, split] of v.splits.entries()) {
         try {
           if (fila.rakebackPendienteId) {
-            await api.pagarRakebackPendiente({
+            const rp = await api.pagarRakebackPendiente({
               pendienteId: fila.rakebackPendienteId,
               amount: Number(split.monto),
               medio: split.medio as "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE",
               custodian: split.medio === "EFECTIVO" ? movCustodio.trim() : undefined,
               notes: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
             });
+            if (rp?.movementRowId) setMovIdsPagosPendienteSesion((prev) => [...prev, rp.movementRowId]);
           } else {
-            await api.crearMovimiento({
+            const rm = await api.crearMovimiento({
               type: "PAGO",
               agentId: fila.agentId,
               clubId: fila.clubId,
@@ -646,6 +665,7 @@ export default function Liquidaciones() {
               occurredAt: new Date().toISOString(),
               observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
             });
+            if (rm?.id) setMovIdsPagosGenericoSesion((prev) => [...prev, rm.id]);
           }
           exitos++;
         } catch (err: any) {
@@ -957,6 +977,8 @@ export default function Liquidaciones() {
                       nota,
                       adelantoMovIds: movIdsAdelantosSesion,
                       cargaMovIds: movIdsCargasSesion,
+                      pagoPendienteMovIds: movIdsPagosPendienteSesion,
+                      pagoLedgerMovIds: movIdsPagosGenericoSesion,
                       reemplazarId: reemplazarId ?? undefined,
                     });
                     setGuardado(true);
@@ -1679,13 +1701,14 @@ export default function Liquidaciones() {
                       className="btn danger small"
                       disabled={borrandoHist === h.id}
                       onClick={async () => {
-                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto borra el registro/foto Y revierte los cruces de adelantos/cargas que se hayan aplicado en esta liquidación puntual (vuelven a quedar pendientes) — no toca ningún cierre.`))) return;
+                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto borra el registro/foto Y revierte los cruces de adelantos/cargas Y los pagos reales (Enviar/Recibir) que se hayan aplicado en esta liquidación puntual — no toca ningún cierre.`))) return;
                         setBorrandoHist(h.id);
                         try {
                           const r = await api.eliminarLiquidacionGuardada(h.id);
-                          if (r?.cruces?.errores?.length > 0) {
+                          const erroresTotales = [...(r?.cruces?.errores ?? []), ...(r?.pagos?.errores ?? [])];
+                          if (erroresTotales.length > 0) {
                             await alertDialog(
-                              `Se borró la liquidación. Se revirtieron ${r.cruces.liberados} cruce(s), pero ${r.cruces.errores.length} no se pudieron deshacer (revisalos a mano en Adelantos/Liquidaciones):\n\n${r.cruces.errores.join("\n")}`
+                              `Se borró la liquidación. Se revirtieron ${r?.cruces?.liberados ?? 0} cruce(s) y ${r?.pagos?.revertidos ?? 0} pago(s), pero ${erroresTotales.length} no se pudieron deshacer (revisalos a mano en Adelantos/Movimientos/Liquidaciones):\n\n${erroresTotales.join("\n")}`
                             );
                           }
                           refrescarHistorial();

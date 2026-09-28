@@ -27,9 +27,10 @@ import {
   setJugadorBancado,
   setSubagenteJugador,
 } from "../repo/catalog.js";
-import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
+import { listBalancesByAgent, listMovementsByAgent, eliminarMovimiento as eliminarMovimientoLedger } from "../repo/ledger.js";
 import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarMovimientoCarga } from "../repo/cargaCruces.js";
 import { eliminarMovimientoAdelanto } from "../repo/advances.js";
+import { revertirPagoPendiente } from "../repo/rakebackPendiente.js";
 import { pool, newId } from "../db/pool.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
@@ -469,6 +470,15 @@ const guardarLiquidacionSchema = z.object({
   // navegador (Liquidaciones.tsx acumula los movIds de cada aplicarCruces/aplicarCrucesCarga).
   adelantoMovIds: z.array(z.string()).default([]),
   cargaMovIds: z.array(z.string()).default([]),
+  // IDs de pagos reales ya aplicados en ESTA liquidación puntual (28/09/2026, pedido de Leo:
+  // "cuando eliminamos una liquidación todo tiene que volver para atrás") -- mismo criterio que
+  // adelantoMovIds/cargaMovIds, pero para "Enviar"/"Recibir" (que aplican al ledger al toque,
+  // ver Liquidaciones.tsx -> registrarMov()). Separado en dos porque cada uno se revierte
+  // distinto: pagoPendienteMovIds son rakeback_pendiente_movements (pagarPendiente, cierres
+  // nuevos), pagoLedgerMovIds son ledger_movements crudos (crearMovimiento PAGO/COBRO, cierres
+  // viejos sin rakebackPendienteId).
+  pagoPendienteMovIds: z.array(z.string()).default([]),
+  pagoLedgerMovIds: z.array(z.string()).default([]),
   // Si viene, en vez de insertar una fila nueva en el historial se pisa la fila existente con
   // este id -- "rehacer" una liquidación ya Pagada reemplaza el registro original en vez de
   // duplicarlo (pedido de Leo).
@@ -494,8 +504,9 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
          nombre_grupo = $1, agent_ids = $2, week_start = $3, week_end = $4, filas = $5, total = $6,
          adelantos_aplicados = $7, adelantos_manual = $8, cargas_aplicadas = $9, total_a_pagar = $10,
          nota = $11, created_by = $12, grupo_key = $13, estado = 'PAGADA',
-         adelanto_movement_ids = $14, carga_movement_ids = $15, created_at = now()
-       WHERE id = $16 RETURNING *`,
+         adelanto_movement_ids = $14, carga_movement_ids = $15,
+         pago_pendiente_movement_ids = $16, pago_ledger_movement_ids = $17, created_at = now()
+       WHERE id = $18 RETURNING *`,
       [
         d.nombreGrupo,
         d.agentIds,
@@ -512,6 +523,8 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
         grupoKey(d.agentIds),
         d.adelantoMovIds,
         d.cargaMovIds,
+        d.pagoPendienteMovIds,
+        d.pagoLedgerMovIds,
         d.reemplazarId,
       ]
     );
@@ -521,8 +534,8 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
 
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA',$15,$16) RETURNING *`,
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids, pago_pendiente_movement_ids, pago_ledger_movement_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA',$15,$16,$17,$18) RETURNING *`,
     [
       newId("liq"),
       d.nombreGrupo,
@@ -540,6 +553,8 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
       grupoKey(d.agentIds),
       d.adelantoMovIds,
       d.cargaMovIds,
+      d.pagoPendienteMovIds,
+      d.pagoLedgerMovIds,
     ]
   );
   res.status(201).json(r.rows[0]);
@@ -558,15 +573,16 @@ catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async 
   const key = grupoKey(d.agentIds);
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
-       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDIENTE',$15,$16)
+       (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids, pago_pendiente_movement_ids, pago_ledger_movement_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDIENTE',$15,$16,$17,$18)
      ON CONFLICT (grupo_key, week_start) WHERE estado = 'PENDIENTE'
      DO UPDATE SET nombre_grupo = EXCLUDED.nombre_grupo, agent_ids = EXCLUDED.agent_ids,
        week_end = EXCLUDED.week_end, filas = EXCLUDED.filas, total = EXCLUDED.total,
        adelantos_aplicados = EXCLUDED.adelantos_aplicados, adelantos_manual = EXCLUDED.adelantos_manual,
        cargas_aplicadas = EXCLUDED.cargas_aplicadas, total_a_pagar = EXCLUDED.total_a_pagar,
        nota = EXCLUDED.nota, created_by = EXCLUDED.created_by, created_at = now(),
-       adelanto_movement_ids = EXCLUDED.adelanto_movement_ids, carga_movement_ids = EXCLUDED.carga_movement_ids
+       adelanto_movement_ids = EXCLUDED.adelanto_movement_ids, carga_movement_ids = EXCLUDED.carga_movement_ids,
+       pago_pendiente_movement_ids = EXCLUDED.pago_pendiente_movement_ids, pago_ledger_movement_ids = EXCLUDED.pago_ledger_movement_ids
      RETURNING *`,
     [
       newId("liq"),
@@ -585,6 +601,8 @@ catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async 
       key,
       d.adelantoMovIds,
       d.cargaMovIds,
+      d.pagoPendienteMovIds,
+      d.pagoLedgerMovIds,
     ]
   );
   res.status(201).json(r.rows[0]);
@@ -654,6 +672,48 @@ async function liberarCrucesDeLiquidacion(id: string) {
   return { liberados, errores };
 }
 
+// Revierte los PAGOS DE VERDAD ("Enviar"/"Recibir", ver registrarMov() en Liquidaciones.tsx) que
+// quedaron aplicados por esta liquidación puntual (28/09/2026, pedido de Leo: "cuando eliminamos
+// una liquidación todo tiene que volver para atrás" -- antes solo se llamaba a
+// liberarCrucesDeLiquidacion, que NUNCA tocó los pagos reales, solo los cruces de adelantos/
+// cargas). Usada SOLO desde DELETE /liquidacion/historial/:id -- a propósito no se usa desde
+// "Liberar cruces" (rehacer una Pagada), porque ahí la plata ya se mandó de verdad y no
+// corresponde deshacerla solo por recalcular montos.
+async function revertirPagosDeLiquidacion(id: string) {
+  const liqRes = await pool.query(
+    `SELECT id, pago_pendiente_movement_ids, pago_ledger_movement_ids FROM liquidaciones_guardadas WHERE id = $1`,
+    [id]
+  );
+  const liq = liqRes.rows[0];
+  if (!liq) return null;
+
+  const errores: string[] = [];
+  let revertidos = 0;
+  for (const movId of liq.pago_pendiente_movement_ids ?? []) {
+    try {
+      await revertirPagoPendiente(movId);
+      revertidos++;
+    } catch (err: any) {
+      errores.push(`Pago: ${err.message || "no se pudo revertir"}`);
+    }
+  }
+  for (const movId of liq.pago_ledger_movement_ids ?? []) {
+    try {
+      await eliminarMovimientoLedger(movId, { ignorarOrden: true });
+      revertidos++;
+    } catch (err: any) {
+      errores.push(`Pago: ${err.message || "no se pudo revertir"}`);
+    }
+  }
+
+  await pool.query(
+    `UPDATE liquidaciones_guardadas SET pago_pendiente_movement_ids = '{}', pago_ledger_movement_ids = '{}' WHERE id = $1`,
+    [liq.id]
+  );
+
+  return { revertidos, errores };
+}
+
 const liberarCrucesSchema = z.object({ id: z.string().min(1) });
 catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = liberarCrucesSchema.safeParse(req.body);
@@ -677,9 +737,13 @@ catalogRouter.get("/liquidacion/historial", requireAuth, requireAdmin, async (_r
 // un ajuste más nuevo encima), se informa en `errores` pero la liquidación se borra igual.
 catalogRouter.delete("/liquidacion/historial/:id", requireAuth, requireAdmin, async (req, res) => {
   const liberado = await liberarCrucesDeLiquidacion(req.params.id);
+  // 28/09/2026, pedido de Leo: acá faltaba esto -- antes solo se liberaban los cruces (arriba),
+  // los pagos reales (Enviar/Recibir) quedaban aplicados igual aunque la liquidación que los
+  // originó ya no existiera.
+  const pagos = await revertirPagosDeLiquidacion(req.params.id);
   const r = await pool.query(`DELETE FROM liquidaciones_guardadas WHERE id = $1 RETURNING id`, [req.params.id]);
   if (r.rowCount === 0) return res.status(404).json({ error: "No se encontró esa liquidación guardada." });
-  res.json({ ok: true, cruces: liberado });
+  res.json({ ok: true, cruces: liberado, pagos });
 });
 
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).
