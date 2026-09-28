@@ -21,6 +21,17 @@ export const pool = new Pool({
   ssl: isLocal ? undefined : { rejectUnauthorized: false },
   max: isLocal ? 10 : 3, // en serverless conviene un pool chico por invocación
   connectionTimeoutMillis: 8000, // si no puede conectar en 8s, tira error en vez de colgarse
+  // Sin esto, una query que se cuelga (o una invocación serverless que Vercel mata a mitad de
+  // una transacción, dejando la sesión de Postgres "idle in transaction" del lado de Neon) puede
+  // quedar bloqueando un lock de fila PARA SIEMPRE -- Postgres no tiene timeout de lock por
+  // default. Eso frena en seco a cualquier otra invocación que necesite esa misma fila (ej. el
+  // mismo agente+semana en liquidaciones_guardadas o rakeback_advances), y con un pool tan chico
+  // (max: 3 en producción) alcanza con una sola sesión colgada para tapar el servicio entero.
+  // Con esto, en vez de colgarse sin límite, la query/transacción se corta sola con un error
+  // claro de Postgres (reportado el 28/09/2026: "El servidor tardó demasiado en responder").
+  statement_timeout: 15000, // corta cualquier query individual que tarde más de 15s
+  query_timeout: 15000, // mismo límite del lado del cliente pg (por si statement_timeout no aplica)
+  idle_in_transaction_session_timeout: 20000, // mata una transacción abierta y olvidada (BEGIN sin COMMIT/ROLLBACK) a los 20s
 });
 
 pool.on("error", (err) => {
