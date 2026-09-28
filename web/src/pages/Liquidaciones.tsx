@@ -527,10 +527,26 @@ export default function Liquidaciones() {
   // (data) para un grupo+semana, se guarda solo como borrador PENDIENTE -- debounced 1s para no
   // pegarle a la API en cada tecla mientras se completan ventas/tickets/nota. No reemplaza
   // "Guardar en historial" (esa sigue siendo la foto definitiva que el usuario confirma a mano).
+  // BUG REAL (30/09/2026, pedido de Leo: "vuelve a pasar lo mismo, si aplicas el cierre y
+  // después retomas desaparece el cruce") -- soloRevision NO estaba en las dependencias de este
+  // efecto a propósito (para no relanzar el autoguardado solo por cambiar de modo vista/edición),
+  // pero eso tenía un agujero real: "Cerrar liquidación" pone soloRevision=true SIN cambiar
+  // seleccionados/weekStart/data -- y esos son los únicos deps que limpian el timer pendiente
+  // (ver cleanup más abajo). Si quedaba un autoguardado ya programado (por la última tecla/cruce
+  // antes de cerrar, debounced 1s), NO se cancelaba solo por cerrar -- un segundo después
+  // disparaba igual, y como la fila ya no está en estado PENDIENTE (está CERRADA), el índice
+  // único parcial (WHERE estado = 'PENDIENTE') no la encuentra como conflicto: en vez de pisarla,
+  // INSERTA UNA FILA NUEVA (PENDIENTE, duplicada) para el mismo grupo+semana. Esa fila nueva es
+  // la que "Retomar"/"elegir semana" terminaban encontrando después (por ser la más nueva),
+  // pisando lo que se veía en pantalla con datos que no eran los de la liquidación Cerrada de
+  // verdad -- el cruce "desaparecía". Ahora soloRevision SÍ está en las dependencias: apenas se
+  // cierra (o se retoma cualquier Pagada/Cerrada), el efecto se relanza, cancela cualquier timer
+  // pendiente en el cleanup de abajo, y no programa uno nuevo (por el guard de acá abajo).
   const autoguardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // soloRevision=true: esto se retomó desde una liquidación ya "Pagada" -- se puede mirar y
-    // tocar, pero no autoguarda nada mientras tanto (si no, la marcaría "Pendiente" de nuevo).
+    // soloRevision=true: esto se retomó desde una liquidación ya "Pagada"/"Cerrada" -- se puede
+    // mirar y tocar, pero no autoguarda nada mientras tanto (si no, la marcaría "Pendiente" de
+    // nuevo, o -- peor -- crearía una fila duplicada, ver nota arriba).
     if (!data || seleccionados.length === 0 || !weekStart || soloRevision) return;
     if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     autoguardadoTimer.current = setTimeout(() => {
@@ -559,7 +575,7 @@ export default function Liquidaciones() {
       if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, aplicadoCarga, movIdsAdelantosSesion, movIdsCargasSesion, movIdsPagosPendienteSesion, movIdsPagosGenericoSesion]);
+  }, [data, seleccionados, weekStart, soloRevision, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, aplicadoCarga, movIdsAdelantosSesion, movIdsCargasSesion, movIdsPagosPendienteSesion, movIdsPagosGenericoSesion]);
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).

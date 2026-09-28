@@ -623,6 +623,24 @@ catalogRouter.post("/liquidacion/autoguardar", requireAuth, requireAdmin, async 
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const d = parsed.data;
   const key = grupoKey(d.agentIds);
+
+  // Red de seguridad extra (30/09/2026, mismo bug que reportó Leo: "si aplicas el cierre y
+  // después retomas desaparece el cruce") -- el índice único parcial de abajo solo protege
+  // contra dos PENDIENTE del mismo grupo+semana; si ya hay una CERRADA o PAGADA para este mismo
+  // grupo+semana (por ejemplo, un autoguardado que quedó programado ANTES de cerrarla y disparó
+  // igual un segundo después), el ON CONFLICT no la encuentra como conflicto y terminaría
+  // insertando una fila PENDIENTE duplicada -- que después "Retomar"/"elegir semana" podían
+  // confundir con la de verdad. El arreglo de fondo ya está en el frontend (el autoguardado se
+  // cancela solo al cerrar/retomar), pero esto es un resguardo por si igual llega un autoguardado
+  // tarde: si ya existe una CERRADA/PAGADA para este grupo+semana, no se toca nada.
+  const yaCerradaOPagada = await pool.query(
+    `SELECT id FROM liquidaciones_guardadas WHERE grupo_key = $1 AND week_start = $2 AND estado IN ('CERRADA', 'PAGADA') LIMIT 1`,
+    [key, d.weekStart]
+  );
+  if (yaCerradaOPagada.rows[0]) {
+    return res.json({ ok: true, omitido: true });
+  }
+
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
        (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids, pago_pendiente_movement_ids, pago_ledger_movement_ids)
