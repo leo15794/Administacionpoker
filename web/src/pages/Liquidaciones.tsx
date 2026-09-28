@@ -299,6 +299,10 @@ export default function Liquidaciones() {
   const [revisandoEstado, setRevisandoEstado] = useState<"PAGADA" | "CERRADA" | null>(null);
   const [reabriendo, setReabriendo] = useState(false);
   const [cerrando, setCerrando] = useState(false);
+  // Los botones "Enviar"/"Recibir" (30/09/2026, pedido de Leo: "esos botones... no deberían
+  // estar ahí") ya no están sueltos -- primero hay "Guardar"/"Guardar y pagar", y recién al
+  // apretar "pagar" se despliega el menú de siempre (mostrarPago=true).
+  const [mostrarPago, setMostrarPago] = useState(false);
   // Se llena SOLO cuando se liberan los cruces de una liquidación Pagada para rehacerla: al
   // guardar de nuevo, en vez de crear una fila nueva en el historial, pisa ésta (pedido de Leo:
   // "que el estado quede pagada en este caso" + rehacer sin duplicar el historial).
@@ -376,6 +380,7 @@ export default function Liquidaciones() {
       .then((d) => {
         setData(d);
         setModalCruce(null);
+        setMostrarPago(false);
         setGuardado(false);
         setMovAbierto(null);
         setMovMsg(null);
@@ -951,6 +956,60 @@ export default function Liquidaciones() {
     }
   }
 
+  // Guarda/cierra la liquidación SIN mandar ni recibir plata (ver botón "Cerrar liquidación" y
+  // "Guardar"/"Guardar y pagar" más abajo) -- compartida entre los dos lugares para no repetir la
+  // llamada. confirmar=false se usa desde "Guardar y pagar" (30/09/2026, pedido de Leo: los
+  // botones "Enviar"/"Recibir" no tenían que estar sueltos ahí -- primero hay que guardar, y
+  // recién al apretar "pagar" se despliega el menú de siempre) para no interrumpir con un popup
+  // de confirmación cuando la intención de guardar ya está clara por apretar ESE botón puntual.
+  // Devuelve true si se guardó bien (para que el que llama sepa si seguir con el paso siguiente).
+  async function cerrarLiquidacion(confirmar: boolean): Promise<boolean> {
+    if (!data) return false;
+    if (
+      confirmar &&
+      !(await confirmDialog(
+        `¿Cerrar esta liquidación? Queda armada y guardada tal cual está ahora, SIN mandar ni recibir ningún pago -- listo para elegirla después desde el historial y recién ahí registrar el pago/cobro real. Se puede reabrir para editarla si hace falta corregir algo.`
+      ))
+    )
+      return false;
+    setCerrando(true);
+    try {
+      const r = await api.guardarLiquidacion({
+        nombreGrupo: nombreGrupo || "Liquidación",
+        agentIds: seleccionados,
+        weekStart: data.weekStart,
+        weekEnd: data.weekEnd,
+        filas: filasConAjustes,
+        total: data.total,
+        adelantosAplicados: aplicado,
+        adelantosManual,
+        cargasAplicadas: aplicadoCarga,
+        totalAPagar,
+        nota,
+        adelantoMovIds: movIdsAdelantosSesion,
+        cargaMovIds: movIdsCargasSesion,
+        pagoPendienteMovIds: movIdsPagosPendienteSesion,
+        pagoLedgerMovIds: movIdsPagosGenericoSesion,
+        reemplazarId: reemplazarId ?? undefined,
+        cerrar: true,
+      });
+      setGuardado(true);
+      setReemplazarId(null);
+      // Se congela como si se hubiera retomado una Cerrada -- así el autoguardado no la vuelve a
+      // pisar como PENDIENTE un segundo después (ver nota en /liquidacion/guardar del backend).
+      setSoloRevision(true);
+      setRevisandoId(r.id);
+      setRevisandoEstado("CERRADA");
+      refrescarHistorial();
+      return true;
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo cerrar la liquidación.");
+      return false;
+    } finally {
+      setCerrando(false);
+    }
+  }
+
   // "Reabrir para editar" una liquidación Cerrada (29/09/2026, pedido de Leo): a diferencia de
   // "Liberar cruces" (que es solo para las Pagadas), acá NO se revierte ningún cruce -- los
   // adelantos/cargas que ya se descontaron mientras se armaba siguen consumidos de verdad. Solo
@@ -1123,54 +1182,7 @@ export default function Liquidaciones() {
                 </button>
               )}
               {!soloRevision && (
-                <button
-                  className="btn secondary small"
-                  disabled={cerrando}
-                  onClick={async () => {
-                    if (
-                      !(await confirmDialog(
-                        `¿Cerrar esta liquidación? Queda armada y guardada tal cual está ahora, SIN mandar ni recibir ningún pago -- listo para elegirla después desde el historial y recién ahí registrar el pago/cobro real. Se puede reabrir para editarla si hace falta corregir algo.`
-                      ))
-                    )
-                      return;
-                    setCerrando(true);
-                    try {
-                      const r = await api.guardarLiquidacion({
-                        nombreGrupo: nombreGrupo || "Liquidación",
-                        agentIds: seleccionados,
-                        weekStart: data.weekStart,
-                        weekEnd: data.weekEnd,
-                        filas: filasConAjustes,
-                        total: data.total,
-                        adelantosAplicados: aplicado,
-                        adelantosManual,
-                        cargasAplicadas: aplicadoCarga,
-                        totalAPagar,
-                        nota,
-                        adelantoMovIds: movIdsAdelantosSesion,
-                        cargaMovIds: movIdsCargasSesion,
-                        pagoPendienteMovIds: movIdsPagosPendienteSesion,
-                        pagoLedgerMovIds: movIdsPagosGenericoSesion,
-                        reemplazarId: reemplazarId ?? undefined,
-                        cerrar: true,
-                      });
-                      setGuardado(true);
-                      setReemplazarId(null);
-                      // Se congela como si se hubiera retomado una Cerrada -- así el autoguardado
-                      // no la vuelve a pisar como PENDIENTE un segundo después (ver nota en
-                      // /liquidacion/guardar del backend).
-                      setSoloRevision(true);
-                      setRevisandoId(r.id);
-                      setRevisandoEstado("CERRADA");
-                      refrescarHistorial();
-                    } catch (err: any) {
-                      await alertDialog(err.message || "No se pudo cerrar la liquidación.");
-                    } finally {
-                      setCerrando(false);
-                    }
-                  }}
-                  title="Arma y guarda la liquidación sin mandar ni recibir ningún pago todavía"
-                >
+                <button className="btn secondary small" disabled={cerrando} onClick={() => cerrarLiquidacion(true)} title="Arma y guarda la liquidación sin mandar ni recibir ningún pago todavía">
                   {cerrando ? "Cerrando..." : "Cerrar liquidación"}
                 </button>
               )}
@@ -1484,14 +1496,39 @@ export default function Liquidaciones() {
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button type="button" className="btn" onClick={() => abrirMov("PAGO")}>
-                Enviar (pagarle al agente)
-              </button>
-              <button type="button" className="btn" onClick={() => abrirMov("COBRO")}>
-                Recibir (el agente nos debe)
-              </button>
-            </div>
+            {!mostrarPago ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                {!soloRevision && (
+                  <button type="button" className="btn secondary" disabled={cerrando} onClick={() => cerrarLiquidacion(true)}>
+                    {cerrando ? "Guardando..." : "Guardar"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={cerrando}
+                  onClick={async () => {
+                    if (!soloRevision) {
+                      const ok = await cerrarLiquidacion(false);
+                      if (!ok) return;
+                    }
+                    setMostrarPago(true);
+                  }}
+                  title="Guarda esta liquidación (si hace falta) y despliega el menú para registrar el pago/cobro real"
+                >
+                  {!soloRevision && cerrando ? "Guardando..." : soloRevision ? "Pagar" : "Guardar y pagar"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button type="button" className="btn" onClick={() => abrirMov("PAGO")}>
+                  Enviar (pagarle al agente)
+                </button>
+                <button type="button" className="btn" onClick={() => abrirMov("COBRO")}>
+                  Recibir (el agente nos debe)
+                </button>
+              </div>
+            )}
 
             {movAbierto === "PAGO" && (
               <div className="panel" style={{ marginTop: 10, maxWidth: 620 }}>
