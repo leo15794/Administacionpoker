@@ -381,11 +381,23 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
  * treasury_entry si tenía, y borra la fila. Pensado SOLO para limpiar cargas de prueba o mal
  * tipeadas -- para corregir un movimiento de negocio real ya asentado usar "Revertir".
  *
- * Limitado al ÚLTIMO movimiento (no revertido) de ese agente+club, mismo criterio que
- * eliminarMovimientoAdelanto en repo/advances.ts: borrar uno del medio dejaría el balance
- * corriente calculado sobre un orden de movimientos que ya no es el real.
+ * Por default, limitado al ÚLTIMO movimiento (no revertido) de ese agente+club: mismo criterio
+ * que eliminarMovimientoAdelanto en repo/advances.ts, para no desincronizar el resulting_amount/
+ * resulting_consumed de OTRAS tablas que sí llevan una cadena ordenada de snapshots (adelantos,
+ * cargas de tesorería, rakeback pendiente).
+ *
+ * opts.ignorarOrden (28/09/2026, pedido de Leo -- caso real: 5 adelantos de rakeback al mismo
+ * agente+club "TeamBack Suprema", quería borrar uno del medio y "Eliminar" tiraba este mismo
+ * error) salta ESA verificación puntual. Es seguro hacerlo para este caso porque `balances` es
+ * una simple SUMA corriente (ver upsertBalanceDelta: `amount = balances.amount + delta`), no una
+ * cadena de snapshots -- revertir el delta de un movimiento del medio deja el balance final
+ * exactamente igual, sin importar el orden. Solo lo usan eliminarAdelanto/
+ * eliminarMovimientoAdelanto (repo/advances.ts), que YA validan por su cuenta que nada más
+ * dependa de ese movimiento puntual (adelanto sin consumo, o el más reciente movimiento DE ESE
+ * adelanto) antes de llamar acá -- el borrado desde Movimientos (Eliminar movimiento, a mano)
+ * sigue exigiendo el orden estricto como siempre.
  */
-export async function eliminarMovimiento(movementId: string) {
+export async function eliminarMovimiento(movementId: string, opts?: { ignorarOrden?: boolean }) {
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -403,22 +415,24 @@ export async function eliminarMovimiento(movementId: string) {
       throw new Error("Este movimiento es la reversa de otro (generado por \"Revertir\") -- borrarlo dejaría el original mal marcado. No se puede eliminar.");
     }
 
-    const ultimoOrigen = await client.query(
-      `SELECT id FROM ledger_movements WHERE agent_id = $1 AND club_id = $2 AND status <> 'REVERTIDO'
-       ORDER BY occurred_at DESC, id DESC LIMIT 1`,
-      [mov.agent_id, mov.club_id]
-    );
-    if (ultimoOrigen.rows[0]?.id !== movementId) {
-      throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE de este agente+club -- borralos en orden, del más nuevo hacia atrás.");
-    }
-    if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
-      const ultimoDestino = await client.query(
+    if (!opts?.ignorarOrden) {
+      const ultimoOrigen = await client.query(
         `SELECT id FROM ledger_movements WHERE agent_id = $1 AND club_id = $2 AND status <> 'REVERTIDO'
          ORDER BY occurred_at DESC, id DESC LIMIT 1`,
-        [mov.agent_id, mov.club_destino_id]
+        [mov.agent_id, mov.club_id]
       );
-      if (ultimoDestino.rows[0]?.id !== movementId) {
-        throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE también en el club destino de la transferencia.");
+      if (ultimoOrigen.rows[0]?.id !== movementId) {
+        throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE de este agente+club -- borralos en orden, del más nuevo hacia atrás.");
+      }
+      if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
+        const ultimoDestino = await client.query(
+          `SELECT id FROM ledger_movements WHERE agent_id = $1 AND club_id = $2 AND status <> 'REVERTIDO'
+           ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+          [mov.agent_id, mov.club_destino_id]
+        );
+        if (ultimoDestino.rows[0]?.id !== movementId) {
+          throw new Error("Solo se puede borrar el movimiento MÁS RECIENTE también en el club destino de la transferencia.");
+        }
       }
     }
 

@@ -302,7 +302,12 @@ export async function eliminarAdelanto(advanceId: string) {
     [advanceId]
   );
   for (const row of movs.rows) {
-    await eliminarMovimientoLedger(row.movement_id);
+    // ignorarOrden=true: este adelanto puede no ser el movimiento MÁS RECIENTE de ese
+    // agente+club en el ledger general (ej. otro adelanto al mismo agente+club_origen creado
+    // después) -- ya validamos arriba que este adelanto en particular no tiene consumo, así que
+    // es seguro deshacer su propio movimiento sin importar el orden (ver nota en
+    // repo/ledger.ts, eliminarMovimiento).
+    await eliminarMovimientoLedger(row.movement_id, { ignorarOrden: true });
   }
 
   const client: PoolClient = await pool.connect();
@@ -341,7 +346,11 @@ export async function eliminarMovimientoAdelanto(movementId: string) {
     throw new Error("No se puede borrar la ALTA sola — para sacar el adelanto entero usá \"Eliminar\" sobre el adelanto.");
   }
   if (mov.movement_id) {
-    await eliminarMovimientoLedger(mov.movement_id);
+    // ignorarOrden=true: mismo motivo que en eliminarAdelanto -- ya se validó (más abajo) que
+    // este es el movimiento más reciente DE ESTE ADELANTO puntual, que es lo que importa para
+    // no desincronizar su propia cadena resulting_amount/resulting_consumed. Que sea o no el
+    // más reciente del agente+club en el ledger GENERAL es irrelevante acá.
+    await eliminarMovimientoLedger(mov.movement_id, { ignorarOrden: true });
   }
 
   const client: PoolClient = await pool.connect();
