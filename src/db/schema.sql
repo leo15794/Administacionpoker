@@ -1276,6 +1276,16 @@ ALTER TABLE liquidaciones_guardadas ADD COLUMN IF NOT EXISTS grupo_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidaciones_pendiente_unica
   ON liquidaciones_guardadas(grupo_key, week_start) WHERE estado = 'PENDIENTE';
 
+-- "Cerrar liquidación" (29/09/2026, pedido de Leo: "quiero tener un botón para poder cerrar la
+-- liquidación sin enviar el dinero o recibir dinero... esa liquidación guardada es la que yo voy
+-- a elegir para hacer el pago") -- tercer valor de estado, entre PENDIENTE (borrador que se
+-- sigue recalculando/autoguardando solo) y PAGADA (ya se mandó o recibió la plata de verdad):
+-- CERRADA = armada y congelada a propósito, sin pagar todavía. Se elige después desde el
+-- historial para recién ahí registrar el pago/cobro real (que la pasa sola a PAGADA, ver
+-- /liquidacion/resolver) o se puede "Reabrir para editar" (vuelve a PENDIENTE, ver
+-- /liquidacion/:id/reabrir). No tiene columna ni constraint propios -- mismo campo `estado`
+-- TEXT libre de siempre, sin CHECK.
+
 -- "Revisar" / rehacer una liquidación ya Pagada (23/09/2026 cont., pedido de Leo: "si ponemos
 -- revisar deberia darte la opcion para rehacerla y por ejemplo el monto descontado lo puedas
 -- volver a usar"): para poder liberar los adelantos/cargas que esta liquidación puntual dejó

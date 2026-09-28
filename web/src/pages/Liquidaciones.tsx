@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Modal from "../components/Modal";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
 // agente+club con lo que generó en rakeback esa semana, un total, y (abajo) lo que
@@ -164,12 +165,17 @@ export default function Liquidaciones() {
   const [semanas, setSemanas] = useState<any[]>([]);
   const [weekStart, setWeekStart] = useState("");
   const [data, setData] = useState<any>(null);
-  const [cruces, setCruces] = useState<Record<string, number>>({}); // advanceId -> monto a cruzar (tildado, todavía sin aplicar)
   const [aplicado, setAplicado] = useState<number>(0); // suma de lo YA aplicado (consumido de verdad) en esta liquidación
-  // Cargas de tesorería pendientes (21/09/2026) -- mismo patrón que "cruces"/"aplicado" de
-  // arriba, pero contra carga_pendientes_cruce en vez de rakeback_advances (ver repo/cargaCruces.ts).
-  const [crucesCarga, setCrucesCarga] = useState<Record<string, number>>({}); // cargaId -> monto a cruzar
+  // Cargas de tesorería pendientes (21/09/2026) -- mismo patrón que "aplicado" de arriba, pero
+  // contra carga_pendientes_cruce en vez de rakeback_advances (ver repo/cargaCruces.ts).
   const [aplicadoCarga, setAplicadoCarga] = useState<number>(0);
+  // Popup al cruzar (29/09/2026, pedido de Leo: "cuando elija los adelantos y/o cruces se tiene
+  // que desplegar un popup y yo seleccionar... la semana fecha que quiero hacer el cruce") --
+  // antes se tildaban varios adelantos/cargas y se mandaban juntos con un botón "Aplicar cruce"
+  // en lote, sin volver a mirarlos. Ahora cada adelanto/carga tiene su propio botón "Cruzar" que
+  // abre este popup, mostrando la semana de ESTA liquidación (la que ya se eligió arriba) y el
+  // monto a descontar, para confirmar antes de aplicarlo -- se aplica de a uno, al toque.
+  const [modalCruce, setModalCruce] = useState<{ tipo: "ADELANTO" | "CARGA"; item: any; monto: string } | null>(null);
   // Deshacer último cruce (22/09/2026, pedido de Leo, "estamos probando"): guarda los ids de
   // movimiento del ÚLTIMO cruce de adelantos/cargas que se aplicó en esta liquidación, para
   // poder deshacerlo de un click sin ir a Adelantos ni tener que resetear toda la base. Solo
@@ -288,6 +294,11 @@ export default function Liquidaciones() {
   // Id de la liquidación que se está revisando (soloRevision=true) -- hace falta después para
   // poder llamar a "Liberar cruces de esta liquidación" (ver más abajo).
   const [revisandoId, setRevisandoId] = useState<string | null>(null);
+  // Qué estado tenía la liquidación que se está revisando -- "Pagada" muestra "Liberar cruces",
+  // "Cerrada" muestra "Reabrir para editar" en su lugar (29/09/2026, pedido de Leo).
+  const [revisandoEstado, setRevisandoEstado] = useState<"PAGADA" | "CERRADA" | null>(null);
+  const [reabriendo, setReabriendo] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
   // Se llena SOLO cuando se liberan los cruces de una liquidación Pagada para rehacerla: al
   // guardar de nuevo, en vez de crear una fila nueva en el historial, pisa ésta (pedido de Leo:
   // "que el estado quede pagada en este caso" + rehacer sin duplicar el historial).
@@ -312,8 +323,10 @@ export default function Liquidaciones() {
     const retomar = retomarRef.current;
     retomarRef.current = null;
     setWeekStart(retomar?.weekStart ?? "");
-    setSoloRevision(retomar?.estadoOriginal === "PAGADA");
-    setRevisandoId(retomar?.estadoOriginal === "PAGADA" ? retomar.id : null);
+    const congelada = retomar?.estadoOriginal === "PAGADA" || retomar?.estadoOriginal === "CERRADA";
+    setSoloRevision(congelada);
+    setRevisandoId(congelada ? retomar!.id : null);
+    setRevisandoEstado(congelada ? (retomar!.estadoOriginal as "PAGADA" | "CERRADA") : null);
     setReemplazarId(null);
     setMovIdsAdelantosSesion([]);
     setMovIdsCargasSesion([]);
@@ -362,8 +375,7 @@ export default function Liquidaciones() {
       .liquidacion(seleccionados, weekStart)
       .then((d) => {
         setData(d);
-        setCruces({});
-        setCrucesCarga({});
+        setModalCruce(null);
         setGuardado(false);
         setMovAbierto(null);
         setMovMsg(null);
@@ -457,8 +469,10 @@ export default function Liquidaciones() {
           filas: existente.filas ?? [],
           nota: existente.nota ?? "",
         };
-        setSoloRevision(existente.estado === "PAGADA");
-        setRevisandoId(existente.estado === "PAGADA" ? existente.id : null);
+        const congelada = existente.estado === "PAGADA" || existente.estado === "CERRADA";
+        setSoloRevision(congelada);
+        setRevisandoId(congelada ? existente.id : null);
+        setRevisandoEstado(congelada ? existente.estado : null);
       }
       setWeekStart(value);
     });
@@ -493,11 +507,9 @@ export default function Liquidaciones() {
     }
   }
 
-  const totalCruzado = Object.values(cruces).reduce((s, v) => s + (Number(v) || 0), 0);
-  const totalCruzadoCarga = Object.values(crucesCarga).reduce((s, v) => s + (Number(v) || 0), 0);
-  // Lo que ya se descuenta de verdad: lo aplicado en rondas anteriores de esta misma
-  // liquidación + lo que está tildado ahora mismo (todavía sin aplicar, adelantos y cargas) + el manual.
-  const totalDescontarAdelantos = aplicado + totalCruzado + aplicadoCarga + totalCruzadoCarga + adelantosManual;
+  // Lo que ya se descuenta de verdad: cada cruce se aplica al toque desde su propio popup (ya
+  // no queda nada "tildado pero todavía sin aplicar") + el manual.
+  const totalDescontarAdelantos = aplicado + aplicadoCarga + adelantosManual;
   const totalVentasFilas = data ? data.filas.reduce((s: number, f: any) => s + (Number(ventasPorFila[filaKey(f)]) || 0), 0) : 0;
   const totalTicketsFilas = data ? data.filas.reduce((s: number, f: any) => s + (Number(ticketsPorFila[filaKey(f)]) || 0), 0) : 0;
   const totalVentasTickets = totalVentasFilas + totalTicketsFilas;
@@ -530,9 +542,9 @@ export default function Liquidaciones() {
           weekEnd: data.weekEnd,
           filas: filasConAjustes,
           total: data.total,
-          adelantosAplicados: aplicado + totalCruzado,
+          adelantosAplicados: aplicado,
           adelantosManual,
-          cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
+          cargasAplicadas: aplicadoCarga,
           totalAPagar,
           nota,
           adelantoMovIds: movIdsAdelantosSesion,
@@ -547,11 +559,11 @@ export default function Liquidaciones() {
       if (autoguardadoTimer.current) clearTimeout(autoguardadoTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, totalCruzado, aplicadoCarga, totalCruzadoCarga, movIdsAdelantosSesion, movIdsCargasSesion, movIdsPagosPendienteSesion, movIdsPagosGenericoSesion]);
+  }, [data, seleccionados, weekStart, nombreGrupo, nota, adelantosManual, ventasPorFila, ticketsPorFila, aplicado, aplicadoCarga, movIdsAdelantosSesion, movIdsCargasSesion, movIdsPagosPendienteSesion, movIdsPagosGenericoSesion]);
   // Cuánto rakeback de esta semana queda todavía "libre" para cruzar (contra un adelanto O una
   // carga de tesorería — comparten el mismo "cupo", no tiene sentido consumirle a un agente más
   // de lo que este cierre efectivamente cubre entre las dos cosas juntas).
-  const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - totalCruzado - aplicadoCarga - totalCruzadoCarga : 0);
+  const disponibleParaCruzar = Math.max(0, data ? data.total - aplicado - aplicadoCarga : 0);
 
   // Sugerencia de importe por fila para el pago en lote (22/09/2026: bug que encontró Leo --
   // antes esto sumaba el pendiente BRUTO de cada fila, sin restar lo que ya se descontó a nivel
@@ -789,53 +801,46 @@ export default function Liquidaciones() {
     setRegistrandoMov(false);
   }
 
-  async function aplicarCruces() {
-    const ids = Object.keys(cruces).filter((id) => cruces[id] > 0);
-    if (ids.length === 0) return;
-    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzado)} de ${ids.length} adelanto(s) — se puede deshacer con el botón "Deshacer último cruce" mientras no se aplique nada más encima de estos mismos adelantos. ¿Confirmás?`))) return;
-    setAplicando(true);
-    try {
-      const movIds: string[] = [];
-      for (const id of ids) {
-        const r = await api.ajustarAdelanto({
-          advanceId: id,
-          type: "CONSUMO",
-          amount: cruces[id],
-          notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
-        });
-        if (r?.movementRowId) movIds.push(r.movementRowId);
-      }
-      setAplicado((prev) => prev + totalCruzado);
-      setUltimoCruceAdelantos({ movIds, monto: totalCruzado });
-      setMovIdsAdelantosSesion((prev) => [...prev, ...movIds]);
-      refrescarLiquidacion(true);
-    } catch (err: any) {
-      await alertDialog(err.message || "No se pudo aplicar el cruce.");
-    } finally {
-      setAplicando(false);
-    }
+  // Abre el popup de cruce para UN adelanto/carga puntual -- sugiere por default el mismo monto
+  // de antes (lo que efectivamente cubre esta liquidación, sin comerse el pendiente entero si es
+  // mayor a lo que hay para cruzar), pero se puede cambiar a mano antes de confirmar.
+  function abrirModalCruce(tipo: "ADELANTO" | "CARGA", item: any) {
+    const sugerido = tipo === "ADELANTO" ? Math.min(item.pendiente, disponibleParaCruzar || item.pendiente) : item.pendiente;
+    setModalCruce({ tipo, item, monto: String(sugerido > 0 ? sugerido : item.pendiente) });
   }
 
-  // Mismo mecanismo que aplicarCruces() de arriba, pero para cargas de tesorería pendientes
-  // (ver repo/cargaCruces.ts) -- consumirCarga en vez de ajustarAdelanto CONSUMO.
-  async function aplicarCrucesCarga() {
-    const ids = Object.keys(crucesCarga).filter((id) => crucesCarga[id] > 0);
-    if (ids.length === 0) return;
-    if (!(await confirmDialog(`Se va a descontar ${usd(totalCruzadoCarga)} de ${ids.length} carga(s) de tesorería — se puede deshacer con el botón "Deshacer último cruce" mientras no se aplique nada más encima de estas mismas cargas. ¿Confirmás?`))) return;
+  // Confirma el cruce del popup -- se aplica de una, contra ESTA liquidación (la semana ya
+  // elegida arriba, se muestra en el popup nada más que para confirmar). Mismo efecto real que
+  // antes tenía "Aplicar cruce": ajustarAdelanto CONSUMO / consumirCarga.
+  async function confirmarModalCruce() {
+    if (!modalCruce) return;
+    const monto = Math.min(Number(modalCruce.monto) || 0, modalCruce.item.pendiente);
+    if (monto <= 0) return;
     setAplicando(true);
     try {
-      const movIds: string[] = [];
-      for (const id of ids) {
-        const r = await api.consumirCarga({
-          cargaId: id,
-          amount: crucesCarga[id],
+      if (modalCruce.tipo === "ADELANTO") {
+        const r = await api.ajustarAdelanto({
+          advanceId: modalCruce.item.id,
+          type: "CONSUMO",
+          amount: monto,
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
-        if (r?.movementRowId) movIds.push(r.movementRowId);
+        const movIds = r?.movementRowId ? [r.movementRowId] : [];
+        setAplicado((prev) => prev + monto);
+        setUltimoCruceAdelantos({ movIds, monto });
+        setMovIdsAdelantosSesion((prev) => [...prev, ...movIds]);
+      } else {
+        const r = await api.consumirCarga({
+          cargaId: modalCruce.item.id,
+          amount: monto,
+          notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+        });
+        const movIds = r?.movementRowId ? [r.movementRowId] : [];
+        setAplicadoCarga((prev) => prev + monto);
+        setUltimoCruceCargas({ movIds, monto });
+        setMovIdsCargasSesion((prev) => [...prev, ...movIds]);
       }
-      setAplicadoCarga((prev) => prev + totalCruzadoCarga);
-      setUltimoCruceCargas({ movIds, monto: totalCruzadoCarga });
-      setMovIdsCargasSesion((prev) => [...prev, ...movIds]);
+      setModalCruce(null);
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo aplicar el cruce.");
@@ -930,6 +935,28 @@ export default function Liquidaciones() {
     }
   }
 
+  // "Reabrir para editar" una liquidación Cerrada (29/09/2026, pedido de Leo): a diferencia de
+  // "Liberar cruces" (que es solo para las Pagadas), acá NO se revierte ningún cruce -- los
+  // adelantos/cargas que ya se descontaron mientras se armaba siguen consumidos de verdad. Solo
+  // vuelve a Pendiente para que se pueda seguir tocando (autoguardándose sola de nuevo) antes de
+  // mandar el pago.
+  async function reabrirLiquidacionCerrada() {
+    if (!revisandoId) return;
+    if (!(await confirmDialog(`¿Reabrir esta liquidación para seguir editándola? Los adelantos/cargas que ya se cruzaron mientras se armaba siguen consumidos igual -- esto solo la vuelve a dejar como "Pendiente de pago" para poder tocar algo antes de mandar el pago.`))) return;
+    setReabriendo(true);
+    try {
+      await api.reabrirLiquidacion(revisandoId);
+      setSoloRevision(false);
+      setRevisandoId(null);
+      setRevisandoEstado(null);
+      refrescarHistorial();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo reabrir la liquidación.");
+    } finally {
+      setReabriendo(false);
+    }
+  }
+
   // Borrado real de una carga pendiente (ej. cargada de prueba, o al agente/club equivocado) --
   // no queda en historial, a diferencia de consumirla. Mismo criterio que "Eliminar" en Adelantos.
   async function eliminarCargaPendiente(cg: any) {
@@ -937,11 +964,6 @@ export default function Liquidaciones() {
     setBorrandoCarga(cg.id);
     try {
       await api.eliminarCarga(cg.id);
-      setCrucesCarga((prev) => {
-        const next = { ...prev };
-        delete next[cg.id];
-        return next;
-      });
       refrescarLiquidacion(true);
     } catch (err: any) {
       await alertDialog(err.message || "No se pudo eliminar la carga.");
@@ -1060,15 +1082,80 @@ export default function Liquidaciones() {
                 Cierre {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
               </span>
               {soloRevision && (
-                <span className="badge pos" style={{ marginLeft: 10 }} title="Esto ya está Pagada -- se puede mirar/ajustar, pero no se autoguarda nada hasta que apretés Guardar">
-                  Revisando · Pagada
+                <span
+                  className={revisandoEstado === "PAGADA" ? "badge pos" : "badge neutral"}
+                  style={{ marginLeft: 10 }}
+                  title={
+                    revisandoEstado === "PAGADA"
+                      ? "Esto ya está Pagada -- se puede mirar/ajustar, pero no se autoguarda nada hasta que apretés Guardar"
+                      : 'Esto está Cerrada -- armada y lista para elegir, pero todavía no se mandó ni recibió ningún pago. No se autoguarda nada hasta que la reabras o registres el pago.'
+                  }
+                >
+                  Revisando · {revisandoEstado === "PAGADA" ? "Pagada" : "Cerrada"}
                 </span>
               )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              {soloRevision && revisandoId && (
+              {soloRevision && revisandoId && revisandoEstado === "PAGADA" && (
                 <button className="btn secondary small" disabled={liberandoCruces} onClick={liberarCrucesLiquidacion} title="Deshace los adelantos/cargas que quedaron descontados por esta liquidación puntual, para poder recalcularla y cruzarlos distinto">
                   {liberandoCruces ? "Liberando..." : "Liberar cruces de esta liquidación"}
+                </button>
+              )}
+              {soloRevision && revisandoId && revisandoEstado === "CERRADA" && (
+                <button className="btn secondary small" disabled={reabriendo} onClick={reabrirLiquidacionCerrada} title="La vuelve a Pendiente de pago para poder seguir editándola antes de mandar el pago">
+                  {reabriendo ? "Reabriendo..." : "Reabrir para editar"}
+                </button>
+              )}
+              {!soloRevision && (
+                <button
+                  className="btn secondary small"
+                  disabled={cerrando}
+                  onClick={async () => {
+                    if (
+                      !(await confirmDialog(
+                        `¿Cerrar esta liquidación? Queda armada y guardada tal cual está ahora, SIN mandar ni recibir ningún pago -- listo para elegirla después desde el historial y recién ahí registrar el pago/cobro real. Se puede reabrir para editarla si hace falta corregir algo.`
+                      ))
+                    )
+                      return;
+                    setCerrando(true);
+                    try {
+                      const r = await api.guardarLiquidacion({
+                        nombreGrupo: nombreGrupo || "Liquidación",
+                        agentIds: seleccionados,
+                        weekStart: data.weekStart,
+                        weekEnd: data.weekEnd,
+                        filas: filasConAjustes,
+                        total: data.total,
+                        adelantosAplicados: aplicado,
+                        adelantosManual,
+                        cargasAplicadas: aplicadoCarga,
+                        totalAPagar,
+                        nota,
+                        adelantoMovIds: movIdsAdelantosSesion,
+                        cargaMovIds: movIdsCargasSesion,
+                        pagoPendienteMovIds: movIdsPagosPendienteSesion,
+                        pagoLedgerMovIds: movIdsPagosGenericoSesion,
+                        reemplazarId: reemplazarId ?? undefined,
+                        cerrar: true,
+                      });
+                      setGuardado(true);
+                      setReemplazarId(null);
+                      // Se congela como si se hubiera retomado una Cerrada -- así el autoguardado
+                      // no la vuelve a pisar como PENDIENTE un segundo después (ver nota en
+                      // /liquidacion/guardar del backend).
+                      setSoloRevision(true);
+                      setRevisandoId(r.id);
+                      setRevisandoEstado("CERRADA");
+                      refrescarHistorial();
+                    } catch (err: any) {
+                      await alertDialog(err.message || "No se pudo cerrar la liquidación.");
+                    } finally {
+                      setCerrando(false);
+                    }
+                  }}
+                  title="Arma y guarda la liquidación sin mandar ni recibir ningún pago todavía"
+                >
+                  {cerrando ? "Cerrando..." : "Cerrar liquidación"}
                 </button>
               )}
               <button
@@ -1084,9 +1171,9 @@ export default function Liquidaciones() {
                       weekEnd: data.weekEnd,
                       filas: filasConAjustes,
                       total: data.total,
-                      adelantosAplicados: aplicado + totalCruzado,
+                      adelantosAplicados: aplicado,
                       adelantosManual,
-                      cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
+                      cargasAplicadas: aplicadoCarga,
                       totalAPagar,
                       nota,
                       adelantoMovIds: movIdsAdelantosSesion,
@@ -1121,9 +1208,9 @@ export default function Liquidaciones() {
                       filas: filasConAjustes,
                       multiAgente: data.agentes.length > 1,
                       total: data.total,
-                      adelantosAplicados: aplicado + totalCruzado,
+                      adelantosAplicados: aplicado,
                       adelantosManual,
-                      cargasAplicadas: aplicadoCarga + totalCruzadoCarga,
+                      cargasAplicadas: aplicadoCarga,
                       ventasTickets: totalVentasTickets,
                       nota,
                     });
@@ -1231,77 +1318,19 @@ export default function Liquidaciones() {
               <div className="muted">Sin adelantos activos para estos agentes.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                  <button
-                    type="button"
-                    className="btn secondary small"
-                    onClick={() => {
-                      setGuardado(false);
-                      setCruces(Object.fromEntries(data.adelantos.map((a: any) => [a.id, Math.min(a.pendiente, disponibleParaCruzar)])));
-                    }}
-                  >
-                    Seleccionar todos
-                  </button>
-                  <button
-                    type="button"
-                    className="btn secondary small"
-                    onClick={() => {
-                      setGuardado(false);
-                      setCruces({});
-                    }}
-                  >
-                    Deseleccionar todos
-                  </button>
-                </div>
                 {data.adelantos.map((a: any) => (
-                  <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <input
-                      type="checkbox"
-                      checked={a.id in cruces}
-                      onChange={(e) => {
-                        setGuardado(false);
-                        setCruces((prev) => {
-                          const next = { ...prev };
-                          if (e.target.checked) {
-                            // Por default solo cruza hasta lo que esta liquidación realmente
-                            // genera — si el adelanto pendiente es mayor al total a pagar de
-                            // esta semana, NO se lo come entero: se puede subir a mano si de
-                            // verdad se quiere consumir más de lo que cubre este cierre.
-                            next[a.id] = Math.min(a.pendiente, disponibleParaCruzar);
-                          } else {
-                            delete next[a.id];
-                          }
-                          return next;
-                        });
-                      }}
-                    />
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ minWidth: 260 }}>
                       {a.agentName}{a.clubOrigenName ? ` (${a.clubOrigenName})` : ""} — pendiente {usd(a.pendiente)}
                       {a.createdAt && <span className="muted"> ({dateShort(a.createdAt)})</span>}
                     </span>
-                    {a.id in cruces && (
-                      <input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        max={a.pendiente}
-                        value={cruces[a.id]}
-                        onChange={(e) => {
-                          setGuardado(false);
-                          setCruces((prev) => ({ ...prev, [a.id]: Math.min(Number(e.target.value) || 0, a.pendiente) }));
-                        }}
-                        style={{ width: 110, textAlign: "right" }}
-                      />
-                    )}
-                  </label>
+                    <button type="button" className="btn secondary small" onClick={() => abrirModalCruce("ADELANTO", a)}>
+                      Cruzar
+                    </button>
+                  </div>
                 ))}
-                <div>
-                  <button className="btn secondary small" disabled={totalCruzado <= 0 || aplicando} onClick={aplicarCruces} style={{ marginTop: 8 }}>
-                    {aplicando ? "Aplicando..." : `Aplicar cruce (${usd(totalCruzado)})`}
-                  </button>
-                  <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
-                    Esto consume de verdad el adelanto (mismo efecto que "Consumo" en Adelantos).
-                  </span>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Esto consume de verdad el adelanto (mismo efecto que "Consumo" en Adelantos) -- al confirmar en el popup.
                 </div>
               </div>
             )}
@@ -1316,66 +1345,15 @@ export default function Liquidaciones() {
                 <div className="muted">Sin cargas de tesorería pendientes para estos agentes/clubes.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                    <button
-                      type="button"
-                      className="btn secondary small"
-                      onClick={() => {
-                        setGuardado(false);
-                        setCrucesCarga(Object.fromEntries(data.cargas.map((cg: any) => [cg.id, cg.pendiente])));
-                      }}
-                    >
-                      Seleccionar todas
-                    </button>
-                    <button
-                      type="button"
-                      className="btn secondary small"
-                      onClick={() => {
-                        setGuardado(false);
-                        setCrucesCarga({});
-                      }}
-                    >
-                      Deseleccionar todas
-                    </button>
-                  </div>
                   {data.cargas.map((cg: any) => (
                     <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                        <input
-                          type="checkbox"
-                          checked={cg.id in crucesCarga}
-                          onChange={(e) => {
-                            setGuardado(false);
-                            setCrucesCarga((prev) => {
-                              const next = { ...prev };
-                              if (e.target.checked) {
-                                next[cg.id] = cg.pendiente;
-                              } else {
-                                delete next[cg.id];
-                              }
-                              return next;
-                            });
-                          }}
-                        />
-                        <span style={{ minWidth: 260 }}>
-                          {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
-                          {cg.createdAt && <span className="muted"> ({dateShort(cg.createdAt)})</span>}
-                        </span>
-                        {cg.id in crucesCarga && (
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            max={cg.pendiente}
-                            value={crucesCarga[cg.id]}
-                            onChange={(e) => {
-                              setGuardado(false);
-                              setCrucesCarga((prev) => ({ ...prev, [cg.id]: Math.min(Number(e.target.value) || 0, cg.pendiente) }));
-                            }}
-                            style={{ width: 110, textAlign: "right" }}
-                          />
-                        )}
-                      </label>
+                      <span style={{ minWidth: 260, flex: 1 }}>
+                        {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
+                        {cg.createdAt && <span className="muted"> ({dateShort(cg.createdAt)})</span>}
+                      </span>
+                      <button type="button" className="btn secondary small" onClick={() => abrirModalCruce("CARGA", cg)}>
+                        Cruzar
+                      </button>
                       <button
                         type="button"
                         className="btn secondary small"
@@ -1388,13 +1366,8 @@ export default function Liquidaciones() {
                       </button>
                     </div>
                   ))}
-                  <div>
-                    <button className="btn secondary small" disabled={totalCruzadoCarga <= 0 || aplicando} onClick={aplicarCrucesCarga} style={{ marginTop: 8 }}>
-                      {aplicando ? "Aplicando..." : `Aplicar cruce (${usd(totalCruzadoCarga)})`}
-                    </button>
-                    <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
-                      Esto consume de verdad la carga (mismo efecto que "Consumo" en cargas de tesorería).
-                    </span>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Esto consume de verdad la carga (mismo efecto que "Consumo" en cargas de tesorería) -- al confirmar en el popup.
                   </div>
                 </div>
               )}
@@ -1789,6 +1762,8 @@ export default function Liquidaciones() {
                   <td>
                     {h.estado === "PENDIENTE" ? (
                       <span className="badge neg" title="Se calculó pero todavía no se registró ningún pago ni cobro para este grupo/semana">Pendiente de pago</span>
+                    ) : h.estado === "CERRADA" ? (
+                      <span className="badge neutral" title="Armada y guardada, pero todavía no se mandó ni recibió ningún pago -- elegila para recién ahí pagar">Cerrada</span>
                     ) : (
                       <span className="badge pos">Pagada</span>
                     )}
@@ -1800,7 +1775,7 @@ export default function Liquidaciones() {
                   <td><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
-                      {h.estado === "PENDIENTE" ? "Retomar" : "Revisar"}
+                      {h.estado === "PENDIENTE" ? "Retomar" : h.estado === "CERRADA" ? "Retomar para pagar" : "Revisar"}
                     </button>
                     <button
                       className="btn secondary small"
@@ -1853,6 +1828,60 @@ export default function Liquidaciones() {
           </table>
         )}
       </div>
+
+      {modalCruce && data && (
+        <Modal
+          title={`Cruzar ${modalCruce.tipo === "ADELANTO" ? "adelanto" : "carga de tesorería"}`}
+          onClose={() => !aplicando && setModalCruce(null)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              <strong>{modalCruce.item.agentName}</strong>
+              {(modalCruce.item.clubOrigenName || modalCruce.item.clubName) && (
+                <span className="muted"> ({modalCruce.item.clubOrigenName || modalCruce.item.clubName})</span>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Semana de esta liquidación: {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Pendiente: {usd(modalCruce.item.pendiente)}
+            </div>
+            <div>
+              <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
+                Monto a cruzar contra esta semana
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                max={modalCruce.item.pendiente}
+                autoFocus
+                value={modalCruce.monto}
+                onChange={(e) => setModalCruce((prev) => (prev ? { ...prev, monto: e.target.value } : prev))}
+                style={{ width: 140, textAlign: "right" }}
+              />
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Esto consume de verdad el {modalCruce.tipo === "ADELANTO" ? "adelanto" : "la carga"} (mismo efecto que "Consumo" en{" "}
+              {modalCruce.tipo === "ADELANTO" ? "Adelantos" : "cargas de tesorería"}). Se puede deshacer con "Deshacer último
+              cruce" mientras no se aplique nada más encima.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6 }}>
+              <button className="btn secondary small" disabled={aplicando} onClick={() => setModalCruce(null)}>
+                Cancelar
+              </button>
+              <button
+                className="btn small"
+                disabled={aplicando || (Number(modalCruce.monto) || 0) <= 0}
+                onClick={confirmarModalCruce}
+              >
+                {aplicando ? "Aplicando..." : "Confirmar cruce"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

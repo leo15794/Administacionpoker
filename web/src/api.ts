@@ -183,6 +183,10 @@ export const api = {
     // Si viene, pisa esa fila del historial en vez de crear una nueva -- se usa al rehacer una
     // liquidación ya Pagada después de "Liberar cruces de esta liquidación".
     reemplazarId?: string;
+    // "Cerrar liquidación" (29/09/2026): la arma y la guarda como 'CERRADA' -- lista en el
+    // historial para elegir después y recién ahí mandar/recibir el pago, sin marcarla Pagada
+    // todavía.
+    cerrar?: boolean;
   }) => request("/catalog/liquidacion/guardar", { method: "POST", body: JSON.stringify(data) }),
   // Autoguardado (24/09/2026): mismo payload que guardarLiquidacion, pero pisa el borrador
   // PENDIENTE de este grupo+semana en vez de crear una fila nueva cada vez -- se llama solo,
@@ -212,6 +216,9 @@ export const api = {
   // consumos de adelantos/cargas que le quedaron asociados, para poder recalcular y reasignar.
   liberarCrucesLiquidacion: (id: string) =>
     request("/catalog/liquidacion/liberar-cruces", { method: "POST", body: JSON.stringify({ id }) }),
+  // "Reabrir para editar" una liquidación Cerrada -- la vuelve a Pendiente (autoguardándose de
+  // nuevo) sin revertir ningún cruce/pago real.
+  reabrirLiquidacion: (id: string) => request(`/catalog/liquidacion/${id}/reabrir`, { method: "POST" }),
   historialLiquidaciones: () => request("/catalog/liquidacion/historial"),
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 

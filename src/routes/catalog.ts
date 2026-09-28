@@ -483,6 +483,13 @@ const guardarLiquidacionSchema = z.object({
   // este id -- "rehacer" una liquidación ya Pagada reemplaza el registro original en vez de
   // duplicarlo (pedido de Leo).
   reemplazarId: z.string().optional(),
+  // "Cerrar liquidación" (29/09/2026, pedido de Leo): armar y guardar la liquidación SIN
+  // enviar/recibir plata todavía, en un estado propio ("CERRADA") distinto de PENDIENTE
+  // (borrador que se sigue autoguardando/recalculando solo) y de PAGADA (que hasta ahora se
+  // marcaba, por error, apenas se apretaba "Guardar en historial" -- ver más abajo). Una
+  // liquidación Cerrada es la que se elige después desde el historial para recién ahí mandar o
+  // recibir el pago de verdad.
+  cerrar: z.boolean().default(false),
 });
 
 // grupo_key: mismo grupo de agentes sin importar el orden en que se tildaron -- para poder
@@ -508,27 +515,43 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
   // drafts más nuevos de otros grupos -- "desaparecía" aunque la liquidación estuviera pagada
   // de verdad. Ahora, si no vino reemplazarId a mano, se busca si ya existe ALGUNA fila (de
   // cualquier estado) para este mismo grupo+semana y se pisa esa en vez de crear una nueva.
+  //
+  // reemplazarExplicito (29/09/2026, bug relacionado que reportó Leo: "esa liquidación
+  // guardada... no como está ahora que queda mal") -- OJO: reemplazarId puede llegar de DOS
+  // lugares muy distintos y hay que tratarlos distinto: (a) el frontend lo manda a mano después
+  // de "Liberar cruces de esta liquidación" (rehacer una ya Pagada -- ahí SÍ hay que dejarla
+  // Pagada de nuevo, pedido explícito de Leo), o (b) lo completa el bloque de arriba solo porque
+  // YA existía un borrador (normalmente PENDIENTE, del autoguardado) para este mismo grupo+
+  // semana -- ahí NO hay que forzar 'PAGADA' con solo guardar/cerrar, porque no se mandó ni
+  // recibió un peso todavía. Por eso se guarda el valor ORIGINAL antes de que el bloque de abajo
+  // lo pise.
+  const reemplazarExplicito = !!d.reemplazarId;
+  let estadoExistente: string | null = null;
   if (!d.reemplazarId) {
     const existente = await pool.query(
-      `SELECT id FROM liquidaciones_guardadas WHERE grupo_key = $1 AND week_start = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id, estado FROM liquidaciones_guardadas WHERE grupo_key = $1 AND week_start = $2 ORDER BY created_at DESC LIMIT 1`,
       [grupoKey(d.agentIds), d.weekStart]
     );
     if (existente.rows[0]) {
       d.reemplazarId = existente.rows[0].id;
+      estadoExistente = existente.rows[0].estado;
     }
   }
 
   if (d.reemplazarId) {
-    // Rehaciendo una liquidación ya Pagada (ver /liquidacion/liberar-cruces): pisa la fila
-    // original en vez de duplicarla en el historial.
+    // 'PAGADA' solo si vino reemplazarId de verdad desde el frontend (rehacer una ya Pagada
+    // después de "Liberar cruces"). 'CERRADA' si se pidió cerrar explícitamente. Si no,
+    // preserva el estado que YA tenía la fila encontrada (no la "desmarca" sola con un guardado
+    // de rutina) -- y si es una fila nueva para nosotros pero sin estado previo, PENDIENTE.
+    const estadoNuevo = reemplazarExplicito ? "PAGADA" : d.cerrar ? "CERRADA" : estadoExistente ?? "PENDIENTE";
     const r = await pool.query(
       `UPDATE liquidaciones_guardadas SET
          nombre_grupo = $1, agent_ids = $2, week_start = $3, week_end = $4, filas = $5, total = $6,
          adelantos_aplicados = $7, adelantos_manual = $8, cargas_aplicadas = $9, total_a_pagar = $10,
-         nota = $11, created_by = $12, grupo_key = $13, estado = 'PAGADA',
-         adelanto_movement_ids = $14, carga_movement_ids = $15,
-         pago_pendiente_movement_ids = $16, pago_ledger_movement_ids = $17, created_at = now()
-       WHERE id = $18 RETURNING *`,
+         nota = $11, created_by = $12, grupo_key = $13, estado = $14,
+         adelanto_movement_ids = $15, carga_movement_ids = $16,
+         pago_pendiente_movement_ids = $17, pago_ledger_movement_ids = $18, created_at = now()
+       WHERE id = $19 RETURNING *`,
       [
         d.nombreGrupo,
         d.agentIds,
@@ -543,6 +566,7 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
         d.nota ?? null,
         req.user?.email ?? null,
         grupoKey(d.agentIds),
+        estadoNuevo,
         d.adelantoMovIds,
         d.cargaMovIds,
         d.pagoPendienteMovIds,
@@ -554,10 +578,15 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
     return res.status(200).json(r.rows[0]);
   }
 
+  // Fila nueva de verdad (no existía ningún borrador previo para este grupo+semana): 'CERRADA'
+  // si se pidió cerrar explícitamente, 'PENDIENTE' en cualquier otro guardado manual (mismo
+  // estado que ya usa el autoguardado) -- 'PAGADA' queda reservada para cuando se registra un
+  // pago/cobro real (ver /liquidacion/resolver) o para rehacer una que ya estaba Pagada.
+  const estadoNuevo = d.cerrar ? "CERRADA" : "PENDIENTE";
   const r = await pool.query(
     `INSERT INTO liquidaciones_guardadas
        (id, nombre_grupo, agent_ids, week_start, week_end, filas, total, adelantos_aplicados, adelantos_manual, cargas_aplicadas, total_a_pagar, nota, created_by, grupo_key, estado, adelanto_movement_ids, carga_movement_ids, pago_pendiente_movement_ids, pago_ledger_movement_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PAGADA',$15,$16,$17,$18) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
     [
       newId("liq"),
       d.nombreGrupo,
@@ -573,6 +602,7 @@ catalogRouter.post("/liquidacion/guardar", requireAuth, requireAdmin, async (req
       d.nota ?? null,
       req.user?.email ?? null,
       grupoKey(d.agentIds),
+      estadoNuevo,
       d.adelantoMovIds,
       d.cargaMovIds,
       d.pagoPendienteMovIds,
@@ -644,13 +674,31 @@ catalogRouter.post("/liquidacion/resolver", requireAuth, requireAdmin, async (re
   // resuelve sola (autoguardado -> primer pago real) se queda con la fecha vieja de cuando era
   // todavía un borrador recién calculado -- en el historial (created_at DESC, LIMIT 200) eso la
   // hacía "hundirse" y desaparecer de la vista aunque ya estuviera pagada de verdad.
+  // También resuelve desde 'CERRADA' (29/09/2026): una liquidación cerrada sin pagar es
+  // justamente la que se retoma para mandar/recibir el pago de verdad -- apenas eso pasa, tiene
+  // que quedar Pagada igual que si viniera de un borrador Pendiente.
   const r = await pool.query(
     `UPDATE liquidaciones_guardadas SET estado = 'PAGADA', created_at = now()
-     WHERE grupo_key = $1 AND week_start = $2 AND estado = 'PENDIENTE'
+     WHERE grupo_key = $1 AND week_start = $2 AND estado IN ('PENDIENTE', 'CERRADA')
      RETURNING id`,
     [grupoKey(parsed.data.agentIds), parsed.data.weekStart]
   );
   res.json({ ok: true, resueltas: r.rowCount ?? 0 });
+});
+
+// "Reabrir para editar" una liquidación Cerrada (29/09/2026, pedido de Leo) -- la vuelve a
+// PENDIENTE para que se pueda seguir tocando (autoguardándose sola de nuevo) antes de mandar el
+// pago. No revierte ningún cruce ni pago real -- los adelantos/cargas que ya se cruzaron
+// mientras estaba "armándose" siguen consumidos de verdad (eso no cambia solo por reabrirla);
+// esto es solo la etiqueta de estado. Si hiciera falta deshacer cruces de verdad, para eso está
+// "Liberar cruces de esta liquidación" (solo disponible hoy para las Pagadas).
+catalogRouter.post("/liquidacion/:id/reabrir", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const r = await pool.query(
+    `UPDATE liquidaciones_guardadas SET estado = 'PENDIENTE' WHERE id = $1 AND estado = 'CERRADA' RETURNING id`,
+    [req.params.id]
+  );
+  if (!r.rows[0]) return res.status(404).json({ error: "No se encontró una liquidación Cerrada con ese id." });
+  res.json({ ok: true });
 });
 
 // "Liberar cruces" de una liquidación ya guardada (23/09/2026 cont., pedido de Leo: poder
