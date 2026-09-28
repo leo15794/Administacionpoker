@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import MovimientosHistorial from "../components/MovimientosHistorial";
+import { AdelantosPanel } from "./Adelantos";
 
 const TIPOS = [
   { value: "CARGA", label: "Carga (agente recibe fichas/crédito)" },
@@ -295,6 +296,13 @@ export default function Movimientos() {
           Últimos movimientos registrados en el sistema (los más recientes primero), para verificar rápido lo que se fue cargando.
         </div>
         <MovimientosHistorial key={refreshKey} />
+      </div>
+
+      {/* (29/09/2026, pedido de Leo: "la sección adelantos debería desaparecer") -- unificada acá
+          del todo, ya no es una pantalla propia. clubes ya está cargado arriba para el resto del
+          formulario, se reusa en vez de volver a pedirlo. */}
+      <div className="panel" style={{ marginTop: 24 }}>
+        <AdelantosPanel clubes={clubes} />
       </div>
     </div>
   );

@@ -277,7 +277,7 @@ export default function Resumen() {
 
         <div
           className={`kpi-hero-card row-click${filtroSigno === "nosDeben" ? " kpi-active" : ""}`}
-          onClick={() => nav("/dashboard/adelantos")}
+          onClick={() => nav("/dashboard/movimientos")}
           title="Agentes nos deben + adelantos de rakeback pendientes — comparable contra la fila 'Nos debe' de la planilla. Click para ver Adelantos."
         >
           <div className="kpi-hero-label">Por cobrar</div>
@@ -337,7 +337,7 @@ export default function Resumen() {
           <div className="pending-value pos">{usd(data.kpis.agentesNosDeben)}</div>
           <div className="pending-hint">Win/Lose {usd(nosDebenWinLose)} · Prepago {usd(nosDebenPrepago)}</div>
         </div>
-        <div className="pending-card row-click" onClick={() => nav("/dashboard/adelantos")} title="Ir a Adelantos de rakeback">
+        <div className="pending-card row-click" onClick={() => nav("/dashboard/movimientos")} title="Ir a Adelantos de rakeback">
           <div className="pending-label">Adelantos de rakeback</div>
           <div className="pending-value pos">{usd(data.kpis.adelantosPendientes)}</div>
         </div>

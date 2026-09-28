@@ -667,9 +667,9 @@ function NuevoCierre({
                 ))})
               </>
             )}
-            . Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra algún adelanto, hacelo a mano después en Adelantos.
+            . Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra algún adelanto, hacelo a mano después en Adelantos (Cargar movimiento).
           </span>
-          <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/adelantos")}>
+          <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/movimientos")}>
             Ir a Adelantos
           </button>
         </div>

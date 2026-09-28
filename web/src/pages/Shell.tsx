@@ -190,7 +190,6 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "finanzas" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "finanzas" },
   { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
-  { key: "adelantos", to: "/dashboard/adelantos", icon: "adelantos", label: "Adelantos", group: "finanzas" },
   { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "finanzas" },
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
   { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },
