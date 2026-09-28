@@ -547,13 +547,14 @@ catalogRouter.post("/liquidacion/resolver", requireAuth, requireAdmin, async (re
 // ejemplo), el backend rechaza deshacer ese movimiento puntual porque ya no es el más reciente
 // -- se informa como error individual, no rompe el resto. Al final, vacía los ids en esta fila
 // (se hayan podido deshacer o no) para no reintentar sobre movimientos que ya no existen.
-const liberarCrucesSchema = z.object({ id: z.string().min(1) });
-catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
-  const parsed = liberarCrucesSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const liqRes = await pool.query(`SELECT id, adelanto_movement_ids, carga_movement_ids FROM liquidaciones_guardadas WHERE id = $1`, [parsed.data.id]);
+// Función compartida entre POST /liquidacion/liberar-cruces (rehacer una liquidación Pagada) y
+// DELETE /liquidacion/historial/:id (28/09/2026, pedido de Leo: "si eliminamos la liquidación
+// todos los cruces realizados deberían ir para atrás" -- antes el borrado NO tocaba los cruces,
+// quedaban aplicados igual aunque la foto de la liquidación ya no existiera).
+async function liberarCrucesDeLiquidacion(id: string) {
+  const liqRes = await pool.query(`SELECT id, adelanto_movement_ids, carga_movement_ids FROM liquidaciones_guardadas WHERE id = $1`, [id]);
   const liq = liqRes.rows[0];
-  if (!liq) return res.status(404).json({ error: "No se encontró la liquidación." });
+  if (!liq) return null;
 
   const errores: string[] = [];
   let liberados = 0;
@@ -579,7 +580,16 @@ catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, asy
     [liq.id]
   );
 
-  res.json({ ok: true, liberados, errores });
+  return { liberados, errores };
+}
+
+const liberarCrucesSchema = z.object({ id: z.string().min(1) });
+catalogRouter.post("/liquidacion/liberar-cruces", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = liberarCrucesSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const r = await liberarCrucesDeLiquidacion(parsed.data.id);
+  if (!r) return res.status(404).json({ error: "No se encontró la liquidación." });
+  res.json({ ok: true, ...r });
 });
 
 // Historial de liquidaciones guardadas — más reciente primero.
@@ -588,13 +598,17 @@ catalogRouter.get("/liquidacion/historial", requireAuth, requireAdmin, async (_r
   res.json(r.rows);
 });
 
-// Borrado real — para limpiar liquidaciones de PRUEBA. No afecta ningún adelanto ni cierre real
-// (esto es solo la foto/reporte, ya guardada; los cruces de adelanto ya quedaron aplicados
-// aparte y hay que deshacerlos, si corresponde, desde Adelantos).
+// Borrado real — para limpiar liquidaciones de PRUEBA. (28/09/2026, pedido de Leo) Antes de
+// borrar la foto/reporte, libera los cruces (CONSUMO) que esta liquidación puntual generó
+// contra adelantos de rakeback y cargas de tesorería -- mismo mecanismo que
+// /liquidacion/liberar-cruces -- para que no queden adelantos/cargas "comidos" por una
+// liquidación que ya no existe. Si algún cruce no se puede deshacer (por ejemplo porque tiene
+// un ajuste más nuevo encima), se informa en `errores` pero la liquidación se borra igual.
 catalogRouter.delete("/liquidacion/historial/:id", requireAuth, requireAdmin, async (req, res) => {
+  const liberado = await liberarCrucesDeLiquidacion(req.params.id);
   const r = await pool.query(`DELETE FROM liquidaciones_guardadas WHERE id = $1 RETURNING id`, [req.params.id]);
   if (r.rowCount === 0) return res.status(404).json({ error: "No se encontró esa liquidación guardada." });
-  res.json({ ok: true });
+  res.json({ ok: true, cruces: liberado });
 });
 
 // Motor de reglas configurable (reemplaza "if agente === 'Manzur'" por una tabla versionada).

@@ -1562,10 +1562,15 @@ export default function Liquidaciones() {
                       className="btn danger small"
                       disabled={borrandoHist === h.id}
                       onClick={async () => {
-                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto NO afecta ningún adelanto ya cruzado ni ningún cierre — solo borra este registro/foto.`))) return;
+                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto borra el registro/foto Y revierte los cruces de adelantos/cargas que se hayan aplicado en esta liquidación puntual (vuelven a quedar pendientes) — no toca ningún cierre.`))) return;
                         setBorrandoHist(h.id);
                         try {
-                          await api.eliminarLiquidacionGuardada(h.id);
+                          const r = await api.eliminarLiquidacionGuardada(h.id);
+                          if (r?.cruces?.errores?.length > 0) {
+                            await alertDialog(
+                              `Se borró la liquidación. Se revirtieron ${r.cruces.liberados} cruce(s), pero ${r.cruces.errores.length} no se pudieron deshacer (revisalos a mano en Adelantos/Liquidaciones):\n\n${r.cruces.errores.join("\n")}`
+                            );
+                          }
                           refrescarHistorial();
                         } catch (err: any) {
                           await alertDialog(err.message || "No se pudo eliminar.");
