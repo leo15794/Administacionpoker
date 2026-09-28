@@ -408,6 +408,18 @@ export default function Liquidaciones() {
   // (antes de eso no hay nada que calcular ni guardar) -- por eso el gate va acá: recién si se
   // confirma se fija weekStart, que es lo que dispara el cálculo + autoguardado de arriba. Si se
   // cancela, el <select> vuelve solo a mostrar el valor anterior (no cambió el estado).
+  // BUG REAL (29/09/2026, pedido de Leo: "hay varios cruces que están mal realizados") --
+  // hasta acá, esto SOLO restauraba lo ya aplicado (aplicado/aplicadoCarga/movIds) cuando se
+  // entraba por el botón "Retomar" del historial (ver retomarLiquidacionPendiente). Si en vez de
+  // eso alguien volvía a tildar los MISMOS agentes a mano y elegía la MISMA semana (que ya tenía
+  // un borrador con cruces aplicados), el estado local arrancaba en 0 igual -- y 1s después el
+  // autoguardado mandaba adelantoMovIds/cargaMovIds/pagoMovIds VACÍOS, pisando los que ya
+  // estaban guardados en esa fila. El cruce seguía consumido de verdad en la base (eso no se
+  // pierde), pero la liquidación se quedaba sin forma de saber que ese cruce era suyo -- "Liberar
+  // cruces" y "Eliminar" ya no lo encontraban, y el total "adelantos aplicados" de esa fila
+  // arrancaba de nuevo en 0 en vez de sumar lo de antes. Ahora, elegir la semana busca primero si
+  // YA hay una fila guardada (historial ya está cargado en memoria) para este mismo grupo+semana
+  // -- si la hay, la restaura igual que "Retomar", sin que haga falta pasar por el historial.
   function elegirSemana(value: string) {
     if (!value) {
       setWeekStart("");
@@ -415,10 +427,29 @@ export default function Liquidaciones() {
     }
     const semana = semanas.find((s) => s.week_start === value);
     const rango = semana ? `${dateShort(semana.week_start)} - ${dateShort(semana.week_end)}` : value;
-    confirmDialog(
-      `¿Comenzar la liquidación de "${nombreGrupo || "estos agentes"}" — semana ${rango}? Se va a calcular y guardar como borrador ("Pendiente de pago") hasta que se registre un pago de verdad.`
-    ).then((ok) => {
-      if (ok) setWeekStart(value);
+    const key = [...seleccionados].sort().join(",");
+    const existente = (historial ?? []).find((h: any) => h.grupo_key === key && h.week_start === value);
+    const mensaje = existente
+      ? `Ya hay una liquidación ${existente.estado === "PAGADA" ? '"Pagada"' : '"Pendiente de pago"'} guardada para "${nombreGrupo || "estos agentes"}" — semana ${rango}, con ${usd(Number(existente.adelantos_aplicados) + Number(existente.adelantos_manual) + Number(existente.cargas_aplicadas ?? 0))} ya descontado. ¿Retomarla (con lo que ya tenía aplicado, en vez de arrancar de cero)?`
+      : `¿Comenzar la liquidación de "${nombreGrupo || "estos agentes"}" — semana ${rango}? Se va a calcular y guardar como borrador ("Pendiente de pago") hasta que se registre un pago de verdad.`;
+    confirmDialog(mensaje).then((ok) => {
+      if (!ok) return;
+      if (existente) {
+        restaurarRef.current = {
+          adelantosAplicados: Number(existente.adelantos_aplicados) || 0,
+          adelantosManual: Number(existente.adelantos_manual) || 0,
+          cargasAplicadas: Number(existente.cargas_aplicadas ?? 0) || 0,
+          adelantoMovIds: existente.adelanto_movement_ids ?? [],
+          cargaMovIds: existente.carga_movement_ids ?? [],
+          pagoPendienteMovIds: existente.pago_pendiente_movement_ids ?? [],
+          pagoLedgerMovIds: existente.pago_ledger_movement_ids ?? [],
+          filas: existente.filas ?? [],
+          nota: existente.nota ?? "",
+        };
+        setSoloRevision(existente.estado === "PAGADA");
+        setRevisandoId(existente.estado === "PAGADA" ? existente.id : null);
+      }
+      setWeekStart(value);
     });
   }
 
