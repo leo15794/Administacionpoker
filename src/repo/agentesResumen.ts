@@ -67,10 +67,13 @@ export interface ResumenAgentePDF {
       playerName: string;
       resultado: number;
       rake: number;
+      rebatePct: number;
       rebate: number;
       resultadoAjustado: number;
       rakebackPct: number;
-      rakeback: number;
+      rakeback: number; // bruto -- alias de rakebackBruto, se deja por compatibilidad
+      rakebackBruto: number;
+      rakebackNeto: number;
       cierre: number;
       subagenteName: string | null;
     }[];
@@ -203,13 +206,23 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
       // Fila normal del jugador: con % propio configurado, ESE % reemplaza al % del agente acá
       // -- pedido explícito de Leo, "solo necesitamos el % de rakeback para los jugadores".
       d.rakeback_pct_efectivo = pctOverride;
-      d.rakeback_efectivo = rakebackOverride;
+      // 30/09/2026: se separan bruto y neto (antes solo había un campo "rakeback_efectivo" que
+      // en esta rama guardaba el NETO pero en la rama de abajo guardaba el BRUTO -- inconsistencia
+      // que no se notaba porque nada mostraba los dos juntos. El PDF de referencia que pasó Leo
+      // ("Cierre El Latigo Loco") muestra "Rakeback bruto" y "Rakeback neto" como dos columnas
+      // separadas por jugador, así que hace falta que las dos estén bien en los dos casos.
+      d.rakeback_bruto_efectivo = rakebackBrutoOverride;
+      d.rakeback_neto_efectivo = rakebackOverride;
       d.cierre_efectivo = cierreOverride;
     } else {
       d.subagente_rakeback = null;
       d.subagente_cierre = null;
       d.rakeback_pct_efectivo = Number(d.rakeback_pct);
-      d.rakeback_efectivo = Number(d.rakeback);
+      // d.rakeback (columna de weekly_closing_player_details) siempre guarda el BRUTO -- ver
+      // repo/closings.ts: rakebackBruto = j.rake * calc.rakebackPct, cierreJugador =
+      // resultadoAjustado + rakebackBruto (mismo criterio que a nivel club, ver wc.rakeback).
+      d.rakeback_bruto_efectivo = Number(d.rakeback);
+      d.rakeback_neto_efectivo = Number(d.rakeback) + Number(d.rebate);
       d.cierre_efectivo = Number(d.cierre_jugador);
     }
   }
@@ -233,12 +246,15 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
         playerName: d.player_name,
         resultado: Number(d.resultado),
         rake: Number(d.rake),
+        rebatePct: Number(d.rebate_pct),
         rebate: Number(d.rebate),
         resultadoAjustado: Number(d.resultado_ajustado),
         // Con % propio configurado (con o sin nombre de subagente) esto ya viene calculado a SU
         // % en vez del % del agente -- ver el loop de arriba (pctOverride).
         rakebackPct: Number(d.rakeback_pct_efectivo),
-        rakeback: Number(d.rakeback_efectivo),
+        rakeback: Number(d.rakeback_bruto_efectivo),
+        rakebackBruto: Number(d.rakeback_bruto_efectivo),
+        rakebackNeto: Number(d.rakeback_neto_efectivo),
         cierre: Number(d.cierre_efectivo),
         subagenteName: d.subagente_name,
       })),

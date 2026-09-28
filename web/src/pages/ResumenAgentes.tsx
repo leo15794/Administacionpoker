@@ -341,45 +341,51 @@ function PreviewResumen({
         <div key={r.agentId}>
           {r.detallePorClub
             .filter((club: any) => club.jugadores.length > 0)
-            .map((club: any) => (
-              <div key={club.clubId}>
-                <h3 style={{ marginTop: 20, marginBottom: 8 }}>
-                  {club.clubName} · {r.agentName}
-                </h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Jugador / Cuenta</th>
-                      <th>Resultado</th>
-                      <th>Rake</th>
-                      <th>% Rebate</th>
-                      <th>Rebate</th>
-                      <th>Resultado ajustado</th>
-                      <th>% Rakeback</th>
-                      <th>Rakeback</th>
-                      <th>Cierre</th>
-                      <th>Subagente</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {club.jugadores.map((j: any, i: number) => (
-                      <tr key={i}>
-                        <td>{j.playerName}</td>
+            .map((club: any) =>
+              club.jugadores.map((j: any, i: number) => (
+                <div key={`${club.clubId}-${i}`} style={{ marginTop: 20 }}>
+                  <h3 style={{ marginBottom: 4 }}>Jugador / cuenta: {j.playerName}</h3>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                    Club: {club.clubName}
+                    {j.subagenteName && <> · Subagente: {j.subagenteName}</>}
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Resultado</th>
+                        <th>Rake</th>
+                        <th>Rebate {pct(j.rebatePct)}</th>
+                        <th>Rakeback {pct(j.rakebackPct)}</th>
+                        <th>Rakeback neto</th>
+                        <th>Cierre semanal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
                         <td>{usd(j.resultado)}</td>
                         <td>{usd(j.rake)}</td>
-                        <td>{pct(club.rebatePctAgente)}</td>
                         <td>{usd(j.rebate)}</td>
-                        <td>{usd(j.resultadoAjustado)}</td>
-                        <td>{pct(j.rakebackPct)}</td>
-                        <td>{usd(j.rakeback)}</td>
+                        <td>{usd(j.rakebackBruto)}</td>
+                        <td>{usd(j.rakebackNeto)}</td>
                         <td>{usd(j.cierre)}</td>
-                        <td>{j.subagenteName ?? "-"}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+                    </tbody>
+                  </table>
+                  <table style={{ maxWidth: 460, marginTop: 8 }}>
+                    <tbody>
+                      <tr><td>Resultado de juego</td><td>{usd(j.resultado)}</td></tr>
+                      <tr><td>Rebate = (resultado + rake) × {pct(j.rebatePct)}</td><td>{usd(j.rebate)}</td></tr>
+                      <tr><td>Rakeback bruto = rake × {pct(j.rakebackPct)}</td><td>{usd(j.rakebackBruto)}</td></tr>
+                      <tr><td>Rakeback neto = rakeback + rebate</td><td>{usd(j.rakebackNeto)}</td></tr>
+                      <tr><td><strong>Cierre semanal = resultado + rakeback neto</strong></td><td><strong>{usd(j.cierre)}</strong></td></tr>
+                    </tbody>
+                  </table>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                    Cierre individual del período; no incluye saldo anterior ni pagos posteriores.
+                  </div>
+                </div>
+              ))
+            )}
 
           {r.subagentes.length > 0 && (
             <div>
@@ -545,32 +551,74 @@ async function generarResumenCombinadoPdf(preview: any) {
   doc.text("Saldo anterior y pagos posteriores reconstruidos del historial de movimientos; no incluye pagos financieros de rakeback pendiente.", margen, y);
   doc.setTextColor(0);
 
-  // --- Detalle por club + subagentes, por cada agente original (sin combinar) ---
+  // --- Una página "ESTADO DE CUENTA SEMANAL" por JUGADOR (no una tabla combinada por club) --
+  // réplica exacta del PDF de referencia que pasó Leo ("Cierre El Latigo Loco"): cada jugador
+  // tiene su propia página con la tabla de resultado/rake/rebate/rakeback y el desglose
+  // "Detalle del cálculo" paso a paso -- más varias filas juntas en una tabla, esto es lo que
+  // hacía el sistema viejo que se está igualando acá (30/09/2026).
   for (const r of preview.porAgente) {
     for (const club of r.detallePorClub) {
-      if (club.jugadores.length === 0) continue;
-      doc.addPage();
-      encabezado(`CIERRE GENERAL ${club.clubName.toUpperCase()} · ${r.agentName.toUpperCase()}`);
-      y = 22;
-      doc.setFontSize(9);
-      doc.text(`Semana: ${dateShort(r.weekStart)} al ${dateShort(r.weekEnd)}`, margen, y);
-      y += 6;
-      const headDet = ["Jugador / Cuenta", "Resultado", "Rake", "% Rebate", "Rebate", "Resultado ajustado", "% Rakeback", "Rakeback", "Cierre", "Subagente"];
-      const bodyDet = club.jugadores.map((j: any) => [
-        j.playerName, usd(j.resultado), usd(j.rake), pct(club.rebatePctAgente), usd(j.rebate),
-        usd(j.resultadoAjustado), pct(j.rakebackPct), usd(j.rakeback), usd(j.cierre), j.subagenteName ?? "-",
-      ]);
-      const sumJ = (fn: (j: any) => number) => club.jugadores.reduce((s: number, j: any) => s + fn(j), 0);
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margen, right: margen },
-        head: [headDet],
-        body: bodyDet,
-        foot: [["TOTAL", usd(sumJ((j: any) => j.resultado)), usd(sumJ((j: any) => j.rake)), "", usd(sumJ((j: any) => j.rebate)), usd(sumJ((j: any) => j.resultadoAjustado)), "", usd(sumJ((j: any) => j.rakeback)), usd(sumJ((j: any) => j.cierre)), ""]],
-        styles: { fontSize: 7.5 },
-        headStyles: { fillColor: [40, 50, 90] },
-        footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
-      });
+      for (const j of club.jugadores) {
+        doc.addPage();
+        encabezado("ESTADO DE CUENTA SEMANAL");
+        y = 22;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Jugador / cuenta", margen, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(String(j.playerName), margen + 38, y);
+        y += 6;
+        doc.setFont("helvetica", "bold");
+        doc.text("Período", margen, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${dateShort(r.weekStart)} al ${dateShort(r.weekEnd)}`, margen + 38, y);
+        y += 6;
+        doc.setFont("helvetica", "bold");
+        doc.text("Club", margen, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(String(club.clubName), margen + 38, y);
+        if (j.subagenteName) {
+          y += 6;
+          doc.setFont("helvetica", "bold");
+          doc.text("Subagente", margen, y);
+          doc.setFont("helvetica", "normal");
+          doc.text(String(j.subagenteName), margen + 38, y);
+        }
+        y += 8;
+
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margen, right: margen },
+          head: [["Resultado", "Rake", `Rebate ${pct(j.rebatePct)}`, `Rakeback ${pct(j.rakebackPct)}`, "Rakeback neto", "Cierre semanal"]],
+          body: [[usd(j.resultado), usd(j.rake), usd(j.rebate), usd(j.rakebackBruto), usd(j.rakebackNeto), usd(j.cierre)]],
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [40, 50, 90] },
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+
+        autoTable(doc, {
+          startY: y,
+          margin: { left: margen, right: margen },
+          head: [["Detalle del cálculo", "Importe"]],
+          body: [
+            ["Resultado de juego", usd(j.resultado)],
+            [`Rebate = (resultado + rake) × ${pct(j.rebatePct)}`, usd(j.rebate)],
+            [`Rakeback bruto = rake × ${pct(j.rakebackPct)}`, usd(j.rakebackBruto)],
+            ["Rakeback neto = rakeback + rebate", usd(j.rakebackNeto)],
+            ["Cierre semanal = resultado + rakeback neto", usd(j.cierre)],
+          ],
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [40, 50, 90] },
+          didParseCell: (data: any) => {
+            if (data.row.section === "body" && data.row.index === 4) data.cell.styles.fontStyle = "bold";
+          },
+        });
+        y = (doc as any).lastAutoTable.finalY + 4;
+        doc.setFontSize(7.5);
+        doc.setTextColor(120);
+        doc.text("Cierre individual del período; no incluye saldo anterior ni pagos posteriores.", margen, y);
+        doc.setTextColor(0);
+      }
     }
 
     if (r.subagentes.length > 0) {
