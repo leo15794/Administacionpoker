@@ -110,7 +110,11 @@ export interface ResumenAgentePDF {
   };
 }
 
-export async function getResumenAgentePDF(agentId: string, weekStart: string): Promise<ResumenAgentePDF | null> {
+export async function getResumenAgentePDF(
+  agentId: string,
+  weekStart: string,
+  sistema: "WIN_LOSE" | "PREPAGO" = "WIN_LOSE"
+): Promise<ResumenAgentePDF | null> {
   const agentRes = await pool.query(`SELECT id, name FROM agents WHERE id = $1`, [agentId]);
   if (!agentRes.rows[0]) return null;
   const agentName: string = agentRes.rows[0].name;
@@ -310,23 +314,25 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
     ventas: 0,
   }));
 
-  // Estado de cuenta -- ver repo/agentesResumen.ts (comentario de cabecera) y la conversación
-  // con Leo (23/09/2026): "total económico" (balance de fichas + rakeback/rebate/rodeo/ajuste
-  // pendiente de pago), reconstruido desde el historial -- NUNCA escribe nada. Limitación
-  // conocida y avisada: un pago financiero (PAGO_RAKEBACK) de un rakeback pendiente generado
-  // en una semana anterior, pagado DESPUÉS de la semana de este reporte, no se resta de
-  // "Pagos posteriores" (ese pago no mueve el balance de fichas, que es lo único que este
-  // cálculo reconstruye del ledger) -- para verlo hay que mirar Rakeback pendiente aparte.
+  // Estado de cuenta (redefinido 30/09/2026, pedido de Leo sobre la versión anterior de este
+  // mismo cálculo):
+  //  - "Saldo anterior" = saldo de FICHAS puro (CARGA/DESCARGA únicamente) antes de la semana --
+  //    antes sumaba TODOS los tipos de movimiento (incluía COBRO/PAGO/AJUSTE/etc, que son plata
+  //    ya movida y no saldo de stock pendiente), lo que mezclaba dos cosas distintas.
+  //  - "Pagos / movimientos" = movimientos de TODO tipo ocurridos DURANTE la semana del cierre
+  //    (antes eran los posteriores a la semana, que en realidad es otra cosa).
+  //  - "Saldo operativo final" sigue siendo la suma de saldo anterior + cierre semanal + estos
+  //    movimientos de la semana -- misma fórmula, operandos redefinidos.
   const deltaRes = await pool.query(
     `SELECT
-       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date < $2::date), 0) as antes,
-       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date > $3::date), 0) as despues
+       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE type IN ('CARGA','DESCARGA') AND occurred_at::date < $2::date), 0) as saldo_fichas_antes,
+       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date BETWEEN $2::date AND $3::date), 0) as movimientos_semana
      FROM ledger_movements
      WHERE agent_id = $1 AND status <> 'REVERTIDO'`,
     [agentId, weekStart, weekEnd]
   );
-  const saldoFichasAntes = Number(deltaRes.rows[0]?.antes ?? 0);
-  const pagosPosteriores = Number(deltaRes.rows[0]?.despues ?? 0);
+  const saldoFichasAntes = Number(deltaRes.rows[0]?.saldo_fichas_antes ?? 0);
+  const pagosPosteriores = Number(deltaRes.rows[0]?.movimientos_semana ?? 0);
 
   const pendienteAntesRes = await pool.query(
     `SELECT COALESCE(SUM(rp.amount - rp.consumed), 0) as total
@@ -338,7 +344,15 @@ export async function getResumenAgentePDF(agentId: string, weekStart: string): P
   const rakebackPendienteAntes = Number(pendienteAntesRes.rows[0]?.total ?? 0);
 
   const saldoAnterior = saldoFichasAntes + rakebackPendienteAntes;
-  const cierreSemanal = clubes.reduce((s, c) => s + c.totalClub, 0);
+  // Cierre semanal: en WIN_LOSE es el total club de siempre (resultado + rakeback neto + rodeo +
+  // ajuste -- así lo pide el PDF de referencia "Cierre El Latigo Loco"). En PREPAGO el resultado
+  // de juego no es responsabilidad del agente (el club ya lo maneja directo), así que el cierre
+  // semanal del agente es solo el rakeback neto que se ganó esa semana -- pedido de Leo
+  // (30/09/2026), tras ver que con un club Prepago el total club incluía de más el resultado.
+  const cierreSemanal =
+    sistema === "PREPAGO"
+      ? clubes.reduce((s, c) => s + c.rakebackNeto, 0)
+      : clubes.reduce((s, c) => s + c.totalClub, 0);
   const saldoOperativoFinal = saldoAnterior + cierreSemanal + pagosPosteriores;
 
   return {

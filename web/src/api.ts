@@ -644,7 +644,8 @@ export const api = {
   resumenRodeo: () => request(`/rodeo/resumen`),
   // "Resumen por agente" en PDF (23/09/2026) -- ver repo/agentesResumen.ts.
   semanasConResumenAgente: () => request(`/agentes-resumen/semanas`),
-  resumenAgentePDF: (agentId: string, weekStart: string) => request(`/agentes-resumen/${agentId}/${weekStart}`),
+  resumenAgentePDF: (agentId: string, weekStart: string, sistema: "WIN_LOSE" | "PREPAGO" = "WIN_LOSE") =>
+    request(`/agentes-resumen/${agentId}/${weekStart}?sistema=${sistema}`),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

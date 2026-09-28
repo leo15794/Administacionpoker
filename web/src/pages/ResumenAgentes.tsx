@@ -26,6 +26,12 @@ export default function ResumenAgentes() {
   const [query, setQuery] = useState("");
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [nombreGrupo, setNombreGrupo] = useState("");
+  // Sistema (30/09/2026, pedido de Leo: "elegir antes de armar el resumen si va a ser winlose o
+  // prepago, así queda más prolijo") -- se manda al backend, que ya usa esto para decidir cómo
+  // calcular "Cierre semanal" en el estado de cuenta (ver repo/agentesResumen.ts): en Prepago el
+  // resultado de juego no es responsabilidad del agente, así que el cierre semanal es solo el
+  // rakeback neto, no el total club entero como en Win/Lose.
+  const [sistema, setSistema] = useState<"WIN_LOSE" | "PREPAGO">("WIN_LOSE");
   const [armando, setArmando] = useState(false);
   const [cargandoPreview, setCargandoPreview] = useState(false);
   const [preview, setPreview] = useState<any>(null);
@@ -53,6 +59,7 @@ export default function ResumenAgentes() {
     setArmando(false);
     setSeleccionados(new Set());
     setNombreGrupo("");
+    setSistema("WIN_LOSE");
     setQuery("");
     setPreview(null);
     setError("");
@@ -70,14 +77,14 @@ export default function ResumenAgentes() {
     setError("");
     try {
       const resultados = await Promise.all(
-        Array.from(seleccionados).map((agentId) => api.resumenAgentePDF(agentId, weekStart).catch(() => null))
+        Array.from(seleccionados).map((agentId) => api.resumenAgentePDF(agentId, weekStart, sistema).catch(() => null))
       );
       const datos = resultados.filter((r: any) => r);
       if (datos.length === 0) {
         setError("Ninguno de los agentes elegidos tiene un cierre aplicado en esa semana.");
         return;
       }
-      setPreview(combinarResumen(datos, nombreGrupo.trim()));
+      setPreview(combinarResumen(datos, nombreGrupo.trim(), sistema));
     } catch (err: any) {
       setError(err.message || "No se pudo armar el preview.");
     } finally {
@@ -129,6 +136,14 @@ export default function ResumenAgentes() {
             <button type="button" className="btn secondary small" onClick={cancelarArmado}>
               Cancelar
             </button>
+          </div>
+
+          <div className="field">
+            <label>Sistema</label>
+            <select value={sistema} onChange={(e) => setSistema(e.target.value as "WIN_LOSE" | "PREPAGO")}>
+              <option value="WIN_LOSE">Win/Lose</option>
+              <option value="PREPAGO">Prepago</option>
+            </select>
           </div>
 
           <div className="field">
@@ -203,7 +218,7 @@ export default function ResumenAgentes() {
 // portada (mismos totales que hoy suma Liquidaciones para combinar varias identidades de un
 // mismo agente real) -- el detalle por jugador y los subagentes NO se combinan, quedan tal cual
 // vinieron de cada agente (ver "porAgente" más abajo) para no perder a quién pertenece cada fila.
-function combinarResumen(datos: any[], nombreGrupo: string) {
+function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" | "PREPAGO") {
   const clubesCombinado = datos.flatMap((r: any) => r.clubes);
   const sum = (fn: (r: any) => number) => datos.reduce((s: number, r: any) => s + fn(r), 0);
   const saldoAnterior = sum((r) => r.estadoCuenta.saldoAnterior);
@@ -212,6 +227,7 @@ function combinarResumen(datos: any[], nombreGrupo: string) {
   const saldoOperativoFinal = saldoAnterior + cierreSemanal + pagosPosteriores;
   return {
     nombreGrupo,
+    sistema,
     weekStart: datos[0].weekStart,
     weekEnd: datos[0].weekEnd,
     clubesCombinado,
@@ -257,7 +273,7 @@ function PreviewResumen({
         <div>
           <strong>{preview.nombreGrupo}</strong>
           <span className="muted" style={{ marginLeft: 10, fontSize: 13 }}>
-            Cierre {dateShort(preview.weekStart)} - {dateShort(preview.weekEnd)}
+            Cierre {dateShort(preview.weekStart)} - {dateShort(preview.weekEnd)} · {preview.sistema === "PREPAGO" ? "Prepago" : "Win/Lose"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -325,7 +341,7 @@ function PreviewResumen({
         <tbody>
           <tr><td>Saldo anterior</td><td>{usd(ec.saldoAnterior)}</td></tr>
           <tr><td>Cierre semanal</td><td>{usd(ec.cierreSemanal)}</td></tr>
-          <tr><td>Pagos / movimientos posteriores</td><td>{usd(ec.pagosPosteriores)}</td></tr>
+          <tr><td>Pagos / movimientos de la semana</td><td>{usd(ec.pagosPosteriores)}</td></tr>
           <tr><td><strong>Saldo operativo final</strong></td><td><strong>{usd(ec.saldoOperativoFinal)}</strong></td></tr>
           <tr><td>Nos debe</td><td>{usd(ec.nosDebe)}</td></tr>
           <tr><td>Debemos / saldo a favor</td><td>{usd(ec.debemos)}</td></tr>
@@ -333,8 +349,8 @@ function PreviewResumen({
         </tbody>
       </table>
       <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-        Saldo anterior y pagos posteriores reconstruidos del historial de movimientos; no incluye pagos financieros de
-        rakeback pendiente.
+        Saldo anterior (solo cargas/descargas de fichas antes de esta semana) y movimientos de la semana reconstruidos
+        del historial de movimientos; no incluye pagos financieros de rakeback pendiente.
       </div>
 
       {preview.porAgente.map((r: any) => (
@@ -479,6 +495,11 @@ async function generarResumenCombinadoPdf(preview: any) {
   doc.text("Período", margen, y);
   doc.setFont("helvetica", "normal");
   doc.text(`${dateShort(preview.weekStart)} al ${dateShort(preview.weekEnd)}`, margen + 26, y);
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.text("Sistema", margen, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(preview.sistema === "PREPAGO" ? "Prepago" : "Win/Lose", margen + 26, y);
   y += 8;
 
   const mostrarRodeo = preview.clubesCombinado.some((c: any) => Number(c.rodeo) !== 0);
@@ -533,7 +554,7 @@ async function generarResumenCombinadoPdf(preview: any) {
     body: [
       ["Saldo anterior", usd(ec.saldoAnterior)],
       ["Cierre semanal", usd(ec.cierreSemanal)],
-      ["Pagos / movimientos posteriores", usd(ec.pagosPosteriores)],
+      ["Pagos / movimientos de la semana", usd(ec.pagosPosteriores)],
       ["Saldo operativo final", usd(ec.saldoOperativoFinal)],
       ["Nos debe", usd(ec.nosDebe)],
       ["Debemos / saldo a favor", usd(ec.debemos)],
@@ -548,7 +569,7 @@ async function generarResumenCombinadoPdf(preview: any) {
   y = (doc as any).lastAutoTable.finalY + 4;
   doc.setFontSize(7.5);
   doc.setTextColor(120);
-  doc.text("Saldo anterior y pagos posteriores reconstruidos del historial de movimientos; no incluye pagos financieros de rakeback pendiente.", margen, y);
+  doc.text("Saldo anterior (solo cargas/descargas de fichas antes de esta semana) y movimientos de la semana reconstruidos del historial; no incluye pagos financieros de rakeback pendiente.", margen, y);
   doc.setTextColor(0);
 
   // --- Una página "ESTADO DE CUENTA SEMANAL" por JUGADOR (no una tabla combinada por club) --

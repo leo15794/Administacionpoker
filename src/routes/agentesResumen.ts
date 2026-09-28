@@ -13,7 +13,8 @@ agentesResumenRouter.get("/semanas", requireAuth, requireAdmin, async (_req, res
 // jugador + subagentes) -- ver repo/agentesResumen.ts. 404 si ese agente no tiene ningún cierre
 // aplicado esa semana (nada que mostrar).
 agentesResumenRouter.get("/:agentId/:weekStart", requireAuth, requireAdmin, async (req, res) => {
-  const r = await getResumenAgentePDF(req.params.agentId, req.params.weekStart);
+  const sistema = req.query.sistema === "PREPAGO" ? "PREPAGO" : "WIN_LOSE";
+  const r = await getResumenAgentePDF(req.params.agentId, req.params.weekStart, sistema);
   if (!r) return res.status(404).json({ error: "Este agente no tiene ningún cierre aplicado en esa semana." });
   res.json(r);
 });
