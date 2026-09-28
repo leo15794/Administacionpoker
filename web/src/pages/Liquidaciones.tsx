@@ -213,6 +213,25 @@ export default function Liquidaciones() {
   // ya estaba "Pagada", NO queremos que el autoguardado la pise y la vuelva a marcar "Pendiente"
   // -- se puede mirar/ajustar sin que cambie su estado (pedido de Leo, 24/09/2026).
   const retomarRef = useRef<{ weekStart: string; nombreGrupo: string; estadoOriginal: string; id: string } | null>(null);
+  // (28/09/2026, pedido de Leo: "al retomar una liquidación, lo ya aplicado no aparece") --
+  // hasta acá, retomar solo restauraba weekStart/nombreGrupo -- refrescarLiquidacion() siempre
+  // reseteaba aplicado/aplicadoCarga/adelantosManual/ventas/tickets/nota/movIds a 0 o vacío,
+  // como si la liquidación se estuviera armando desde cero. El problema no era solo visual: el
+  // autoguardado manda SIEMPRE el movIdsAdelantosSesion/movIdsCargasSesion actual al guardar
+  // (pisa la fila entera) -- si volvías a entrar y esos ids ya estaban en [], el siguiente
+  // autoguardado los BORRABA del registro, aunque el cruce siguiera aplicado de verdad en la
+  // base (rakeback_advances/carga_pendientes_cruce) -- quedaba huérfano, imposible de revertir
+  // después desde "Eliminar" o "Liberar cruces". Este ref lleva todo lo que hay que restaurar
+  // (se consume una sola vez, dentro de refrescarLiquidacion, apenas termina de cargar).
+  const restaurarRef = useRef<{
+    adelantosAplicados: number;
+    adelantosManual: number;
+    cargasAplicadas: number;
+    adelantoMovIds: string[];
+    cargaMovIds: string[];
+    filas: any[];
+    nota: string;
+  } | null>(null);
   // true mientras lo que está cargado en pantalla vino de "Retomar" una liquidación ya PAGADA --
   // pausa el autoguardado por completo hasta que se vuelva a elegir agentes desde cero.
   const [soloRevision, setSoloRevision] = useState(false);
@@ -258,6 +277,15 @@ export default function Liquidaciones() {
   // volver a verla o ajustarla sin que eso la marque como pendiente de nuevo.
   function retomarLiquidacionPendiente(h: any) {
     retomarRef.current = { weekStart: h.week_start, nombreGrupo: h.nombre_grupo, estadoOriginal: h.estado, id: h.id };
+    restaurarRef.current = {
+      adelantosAplicados: Number(h.adelantos_aplicados) || 0,
+      adelantosManual: Number(h.adelantos_manual) || 0,
+      cargasAplicadas: Number(h.cargas_aplicadas ?? 0) || 0,
+      adelantoMovIds: h.adelanto_movement_ids ?? [],
+      cargaMovIds: h.carga_movement_ids ?? [],
+      filas: h.filas ?? [],
+      nota: h.nota ?? "",
+    };
     setSeleccionados(h.agent_ids);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -279,7 +307,29 @@ export default function Liquidaciones() {
         setGuardado(false);
         setMovAbierto(null);
         setMovMsg(null);
-        if (!preservarAplicado) {
+        const restaurar = restaurarRef.current;
+        restaurarRef.current = null;
+        if (restaurar) {
+          // Retomando una liquidación ya guardada -- reponer lo que ya se había aplicado/
+          // tipeado antes, en vez de arrancar de cero (ver nota en restaurarRef más arriba).
+          setAplicado(restaurar.adelantosAplicados);
+          setAplicadoCarga(restaurar.cargasAplicadas);
+          setAdelantosManual(restaurar.adelantosManual);
+          setMovIdsAdelantosSesion(restaurar.adelantoMovIds);
+          setMovIdsCargasSesion(restaurar.cargaMovIds);
+          setNota(restaurar.nota);
+          const ventas: Record<string, number> = {};
+          const tickets: Record<string, number> = {};
+          for (const f of restaurar.filas) {
+            const key = filaKey(f);
+            if (Number(f.ventas)) ventas[key] = Number(f.ventas);
+            if (Number(f.tickets)) tickets[key] = Number(f.tickets);
+          }
+          setVentasPorFila(ventas);
+          setTicketsPorFila(tickets);
+          setUltimoCruceAdelantos(null);
+          setUltimoCruceCargas(null);
+        } else if (!preservarAplicado) {
           setAplicado(0);
           setAplicadoCarga(0);
           setAdelantosManual(0);
