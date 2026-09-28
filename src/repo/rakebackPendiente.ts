@@ -1,5 +1,6 @@
 import { pool, newId } from "../db/pool.js";
 import { registrarMovimiento, eliminarMovimiento } from "./ledger.js";
+import type { PoolClient } from "pg";
 
 // Rakeback pendiente (22/09/2026, pedido de Leo): al aplicar un cierre semanal, el stock
 // físico del agente solo se mueve por el resultado de mesas (Win/Lose) -- ver repo/closings.ts.
@@ -119,22 +120,68 @@ export async function pagarPendiente(input: PagarPendienteInput) {
   return { ...pendiente, movementRowId: rpmId };
 }
 
+// Recalcula la cadena resulting_amount/resulting_consumed de UN pendiente entero, en orden
+// cronológico, después de borrar un movimiento del medio -- en vez de exigir borrar siempre el
+// más reciente primero (29/09/2026, pedido de Leo: "eso tiene que estar libre para todo", mismo
+// reclamo que ya resolvimos para adelantos, pero ahí con ignorarOrden porque balances es una
+// suma corrida; acá la cadena si depende del orden, así que en vez de saltear la validación
+// entera se recalculan los saldos de cada movimiento que quede, para que amount/consumed nunca
+// queden desincronizados). Solo ALTA fija el amount base (siempre existe, nunca se borra con
+// esto); PAGO_FICHAS/PAGO_USDT suman a consumed; BAJA marca active=false sin tocar amount/
+// consumed -- mismo efecto que tenían al aplicarse la primera vez (ver pagarPendiente/
+// darDeBajaPendiente más arriba).
+async function recalcularCadenaPendiente(client: PoolClient, pendienteId: string) {
+  const movs = (
+    await client.query(
+      `SELECT * FROM rakeback_pendiente_movements WHERE pendiente_id = $1 ORDER BY occurred_at ASC, id ASC`,
+      [pendienteId]
+    )
+  ).rows;
+  let amount = 0;
+  let consumed = 0;
+  let active = true;
+  for (const m of movs) {
+    if (m.type === "ALTA") {
+      amount = Number(m.amount);
+      consumed = 0;
+      active = true;
+    } else if (m.type === "PAGO_FICHAS" || m.type === "PAGO_USDT") {
+      consumed += Number(m.amount);
+    } else if (m.type === "BAJA") {
+      active = false;
+    }
+    await client.query(`UPDATE rakeback_pendiente_movements SET resulting_amount = $1, resulting_consumed = $2 WHERE id = $3`, [
+      amount,
+      consumed,
+      m.id,
+    ]);
+  }
+  await client.query(`UPDATE rakeback_pendiente SET amount = $1, consumed = $2, active = $3, updated_at = now() WHERE id = $4`, [
+    amount,
+    consumed,
+    active,
+    pendienteId,
+  ]);
+}
+
 /**
- * Revierte un pago de rakeback pendiente (PAGO_FICHAS/PAGO_USDT) ya aplicado -- mismo mecanismo
- * que eliminarMovimientoAdelanto (repo/advances.ts): solo se puede deshacer el movimiento MÁS
- * RECIENTE de ESTE pendiente puntual (la cadena resulting_amount/resulting_consumed exige orden
- * estricto), y primero borra el movimiento de ledger que generó (con ignorarOrden=true, mismo
- * fundamento ya documentado en eliminarMovimiento: balances es una suma corrida, no depende del
- * orden global). No toca ALTA/BAJA -- esas no son pagos, no se revierten con esto (28/09/2026,
- * pedido de Leo: "cuando eliminamos una liquidación todo tiene que volver para atrás" -- hasta
- * acá borrar una liquidación no revertía los pagos reales, solo los cruces de adelantos/cargas).
+ * Revierte/borra un pago de rakeback pendiente (PAGO_FICHAS/PAGO_USDT) ya aplicado -- a
+ * cualquier altura de la cadena de ese pendiente, no solo el más reciente (29/09/2026, pedido
+ * de Leo: "eso tiene que estar libre para todo" -- antes exigía borrar en orden estricto, mismo
+ * problema que ya habíamos resuelto para adelantos). Primero borra el movimiento de ledger que
+ * generó (con ignorarOrden=true, mismo fundamento ya documentado en eliminarMovimiento: balances
+ * es una suma corrida, no depende del orden global), después borra esta fila y recalcula la
+ * cadena entera de este pendiente (ver recalcularCadenaPendiente arriba) para que amount/
+ * consumed queden bien sin importar en qué posición estaba. No toca ALTA -- esa fija el origen
+ * del pendiente, no se borra con esto (para eso está eliminarPendiente, que exige no tener nada
+ * pagado todavía).
  */
 export async function revertirPagoPendiente(pendienteMovementId: string) {
   const movRes = await pool.query(`SELECT * FROM rakeback_pendiente_movements WHERE id = $1`, [pendienteMovementId]);
   const mov = movRes.rows[0];
   if (!mov) throw new Error("No se encontró ese pago.");
   if (mov.type !== "PAGO_FICHAS" && mov.type !== "PAGO_USDT") {
-    throw new Error("Esto no es un pago (ALTA/BAJA no se revierten así).");
+    throw new Error("Esto no es un pago (la ALTA no se revierte así).");
   }
   if (mov.movement_id) {
     await eliminarMovimiento(mov.movement_id, { ignorarOrden: true });
@@ -147,27 +194,8 @@ export async function revertirPagoPendiente(pendienteMovementId: string) {
     const mov2 = movRes2.rows[0];
     if (!mov2) throw new Error("No se encontró ese pago.");
 
-    const ultimo = await client.query(
-      `SELECT id FROM rakeback_pendiente_movements WHERE pendiente_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
-      [mov2.pendiente_id]
-    );
-    if (ultimo.rows[0]?.id !== pendienteMovementId) {
-      throw new Error("Solo se puede revertir el pago MÁS RECIENTE de este pendiente -- revertilos en orden, del más nuevo hacia atrás.");
-    }
-
-    const anterior = await client.query(
-      `SELECT resulting_amount, resulting_consumed FROM rakeback_pendiente_movements
-       WHERE pendiente_id = $1 AND id <> $2 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
-      [mov2.pendiente_id, pendienteMovementId]
-    );
-    const amount = anterior.rows[0] ? Number(anterior.rows[0].resulting_amount) : Number(mov2.resulting_amount);
-    const consumed = anterior.rows[0] ? Number(anterior.rows[0].resulting_consumed) : 0;
-
-    await client.query(
-      `UPDATE rakeback_pendiente SET consumed = $1, updated_at = now() WHERE id = $2`,
-      [consumed, mov2.pendiente_id]
-    );
     await client.query(`DELETE FROM rakeback_pendiente_movements WHERE id = $1`, [pendienteMovementId]);
+    await recalcularCadenaPendiente(client, mov2.pendiente_id);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
