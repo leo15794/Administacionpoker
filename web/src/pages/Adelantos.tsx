@@ -493,6 +493,12 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
   const [amount, setAmount] = useState(String(adelanto.amount));
   const [consumed, setConsumed] = useState(String(adelanto.consumed));
   const [clubOrigenId, setClubOrigenId] = useState(adelanto.club_origen_id ?? "");
+  // (28/09/2026, pedido de Leo: "sacarle esa liquidación y ajustarla después") -- precargada con
+  // la nota actual del adelanto (la que se ve en la columna "Notas" de la lista): suele quedar
+  // pegada de un cruce viejo (ej. "Liquidación X — cierre Y") aunque ese cruce ya se haya
+  // revertido/liberado -- ni "Deshacer cruce" ni revertirTodosLosCruces.ts tocan esta columna,
+  // así que si quedó desactualizada hay que poder editarla/borrarla acá a mano.
+  const [notasAdelanto, setNotasAdelanto] = useState(adelanto.notes ?? "");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -512,6 +518,7 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
         consumed: nuevoConsumed,
         clubOrigenId: clubOrigenId || null,
         notes: notes.trim() || undefined,
+        notasAdelanto: notasAdelanto.trim() || null,
       });
       onDone();
     } catch (err: any) {
@@ -542,6 +549,14 @@ function CorreccionForm({ adelanto, clubes, onDone }: { adelanto: any; clubes: a
             {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+      </div>
+      <div className="field">
+        <label>Nota del adelanto (lo que se ve en la lista — editable/borrable)</label>
+        <input
+          value={notasAdelanto}
+          onChange={(e) => setNotasAdelanto(e.target.value)}
+          placeholder="Ej: vacío, o una referencia propia -- dejalo vacío para sacar una leyenda vieja."
+        />
       </div>
       <div className="field">
         <label>Motivo de la corrección (opcional)</label>

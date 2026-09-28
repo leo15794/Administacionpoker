@@ -56,6 +56,14 @@ export interface CorreccionAdelantoInput {
   consumed?: number; // nuevo consumido TOTAL (no delta) — omitir para no tocarlo
   clubOrigenId?: string | null; // omitir (undefined) para no tocarlo; null para borrarlo
   notes?: string; // motivo de la corrección (opcional), queda en el historial si se cargó
+  // notasAdelanto (28/09/2026, pedido de Leo): a diferencia de `notes` de arriba (que es el
+  // MOTIVO de esta corrección puntual, queda en el historial tipo CORRECCION), esto pisa
+  // directamente la columna `notes` del adelanto (la que se ve en la lista de "Adelantos
+  // activos") -- para poder sacar una leyenda vieja que quedó pegada (ej. "Liquidación X —
+  // cierre Y" de un cruce que después se revirtió/liberó, ver "Deshacer cruce" en Liquidaciones
+  // y revertirTodosLosCruces.ts -- ninguno de los dos toca esta columna). Omitir (undefined)
+  // para no tocarla; string vacío o null la borra.
+  notasAdelanto?: string | null;
   createdBy?: string;
 }
 
@@ -252,10 +260,12 @@ export async function corregirAdelanto(input: CorreccionAdelantoInput) {
     if (nuevoAmount < 0 || nuevoConsumed < 0) throw new Error("Los montos no pueden ser negativos.");
     if (nuevoConsumed > nuevoAmount) throw new Error("El consumido no puede quedar por encima del monto total.");
     const nuevoClubOrigenId = input.clubOrigenId === undefined ? actual.club_origen_id : input.clubOrigenId;
+    const nuevoNotasAdelanto =
+      input.notasAdelanto === undefined ? actual.notes : input.notasAdelanto || null;
 
     const r = await client.query(
-      `UPDATE rakeback_advances SET amount=$1, consumed=$2, club_origen_id=$3, updated_at=now() WHERE id=$4 RETURNING *`,
-      [nuevoAmount, nuevoConsumed, nuevoClubOrigenId, actual.id]
+      `UPDATE rakeback_advances SET amount=$1, consumed=$2, club_origen_id=$3, notes=$4, updated_at=now() WHERE id=$5 RETURNING *`,
+      [nuevoAmount, nuevoConsumed, nuevoClubOrigenId, nuevoNotasAdelanto, actual.id]
     );
     const advance = r.rows[0];
     let detalle = `Corrección: monto ${actual.amount} → ${nuevoAmount}, consumido ${actual.consumed} → ${nuevoConsumed}.`;

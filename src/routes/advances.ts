@@ -86,6 +86,7 @@ const correccionSchema = z.object({
   consumed: z.number().min(0).optional(),
   clubOrigenId: z.string().nullable().optional(),
   notes: z.string().optional(),
+  notasAdelanto: z.string().nullable().optional(),
 });
 
 advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -98,6 +99,7 @@ advancesRouter.post("/correccion", requireAuth, requireAdmin, async (req: Authed
       consumed: parsed.data.consumed,
       clubOrigenId: parsed.data.clubOrigenId,
       notes: parsed.data.notes,
+      notasAdelanto: parsed.data.notasAdelanto,
       createdBy: req.user?.email,
     });
     res.status(200).json(advance);
