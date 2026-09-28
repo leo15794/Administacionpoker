@@ -304,6 +304,63 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   });
   const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);
 
+  // Historial de pagos reales ya registrados para esta liquidación (28/09/2026, pedido de Leo:
+  // "un historial ahí mismo de a dónde fueron los pagos y cómo fueron") -- dos fuentes, porque
+  // el sistema tiene dos caminos de pago (ver comentario de rakeback_pendiente más arriba):
+  //   1) Cierres nuevos (con rakebackPendienteId): pagos vía pagarPendiente() -- quedan en
+  //      rakeback_pendiente_movements (type PAGO_FICHAS/PAGO_USDT), ligados 1 a 1 a esta semana
+  //      a través de weekly_closing_id -- 100% preciso.
+  //   2) Cierres viejos sin migrar: pagos vía crearMovimiento() genérico (PAGO/COBRO) directo
+  //      sobre ledger_movements, sin ningún campo que los ligue a una semana puntual -- se
+  //      matchean por agente+club+observación conteniendo "cierre <weekStart>" (el texto que
+  //      Liquidaciones.tsx manda por default en la observación) -- best effort: si alguien borró
+  //      o cambió esa observación a mano, ese pago puntual no va a aparecer acá.
+  const clubIds = [...new Set(closings.rows.map((c) => c.club_id))];
+  const pagosModernos = await pool.query(
+    `SELECT rpm.id, rpm.type, rpm.amount, rpm.occurred_at, rpm.notes,
+            lm.payment_method, lm.observation, te.custodian,
+            a.name as agent_name, c.name as club_name
+     FROM rakeback_pendiente_movements rpm
+     JOIN rakeback_pendiente rp ON rp.id = rpm.pendiente_id
+     JOIN agents a ON a.id = rpm.agent_id
+     JOIN clubs c ON c.id = rp.club_id
+     LEFT JOIN ledger_movements lm ON lm.id = rpm.movement_id
+     LEFT JOIN treasury_entries te ON te.movement_id = rpm.movement_id
+     WHERE rp.weekly_closing_id = ANY($1::text[]) AND rpm.type IN ('PAGO_FICHAS', 'PAGO_USDT')
+     ORDER BY rpm.occurred_at DESC`,
+    [closingIds]
+  );
+  const pagosGenericos =
+    clubIds.length === 0
+      ? { rows: [] }
+      : await pool.query(
+          `SELECT lm.id, lm.type, lm.amount, lm.occurred_at, NULL as notes,
+                  lm.payment_method, lm.observation, te.custodian,
+                  a.name as agent_name, c.name as club_name
+           FROM ledger_movements lm
+           JOIN agents a ON a.id = lm.agent_id
+           JOIN clubs c ON c.id = lm.club_id
+           LEFT JOIN treasury_entries te ON te.movement_id = lm.id
+           WHERE lm.agent_id = ANY($1::text[]) AND lm.club_id = ANY($2::text[])
+             AND lm.type IN ('PAGO', 'COBRO') AND lm.status = 'APLICADO'
+             AND lm.observation ILIKE $3
+           ORDER BY lm.occurred_at DESC`,
+          [agentIds, clubIds, `%cierre ${weekStart}%`]
+        );
+  const pagos = [...pagosModernos.rows, ...pagosGenericos.rows]
+    .map((p) => ({
+      id: p.id,
+      tipo: p.type,
+      agentName: p.agent_name,
+      clubName: p.club_name,
+      amount: Number(p.amount),
+      medio: p.payment_method ?? (p.type === "PAGO_FICHAS" ? "FICHAS" : null),
+      custodian: p.custodian ?? null,
+      occurredAt: p.occurred_at,
+      observation: p.observation ?? p.notes ?? null,
+    }))
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+
   res.json({
     agentes: agentes.rows,
     weekStart: closings.rows[0].week_start,
@@ -328,6 +385,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       pendiente: Number(cp.amount) - Number(cp.consumed),
       createdAt: cp.created_at,
     })),
+    pagos,
   });
 });
 

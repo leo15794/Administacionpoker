@@ -21,6 +21,41 @@ function filaKey(f: any): string {
   return `${f.agentId}_${f.clubId}`;
 }
 
+// Etiquetas para el historial de pagos de una liquidación (28/09/2026, pedido de Leo) -- "tipo"
+// y "medio" vienen crudos de la base (ver GET /catalog/liquidacion, campo `pagos`).
+function etiquetaTipoPago(tipo: string): string {
+  switch (tipo) {
+    case "PAGO_FICHAS":
+      return "Pago (fichas)";
+    case "PAGO_USDT":
+      return "Pago";
+    case "PAGO":
+      return "Pago";
+    case "COBRO":
+      return "Cobro";
+    default:
+      return tipo;
+  }
+}
+function etiquetaMedioPago(medio: string | null): string {
+  switch (medio) {
+    case "FICHAS":
+      return "Fichas";
+    case "USDT":
+      return "USDT";
+    case "EFECTIVO":
+      return "Efectivo";
+    case "ZELLE":
+      return "Zelle";
+    case "SIN_TESORERIA":
+      return "Sin tesorería";
+    case "OTRO":
+      return "Otro";
+    default:
+      return "-";
+  }
+}
+
 interface PdfInput {
   nombreGrupo: string;
   weekStart: string;
@@ -1280,6 +1315,38 @@ export default function Liquidaciones() {
                 <span className={totalAPagar >= 0 ? "pos" : "neg"}>{usd(totalAPagar)}</span>
               </div>
             </div>
+
+            {data.pagos && data.pagos.length > 0 && (
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <h3 style={{ marginTop: 0 }}>Historial de pagos de esta liquidación</h3>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                  Pagos/cobros ya registrados de verdad (ledger) para estos agentes en esta semana — a dónde fueron y con qué medio.
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Importe</th><th>Observación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.pagos.map((p: any) => (
+                      <tr key={p.id}>
+                        <td className="muted">{dateShort(p.occurredAt)}</td>
+                        <td>{p.agentName}</td>
+                        <td>{p.clubName}</td>
+                        <td>{etiquetaTipoPago(p.tipo)}</td>
+                        <td>
+                          {etiquetaMedioPago(p.medio)}
+                          {p.custodian && <span className="muted"> ({p.custodian})</span>}
+                        </td>
+                        <td className={p.tipo === "COBRO" ? "money neg" : "money pos"}>{usd(p.amount)}</td>
+                        <td className="muted" style={{ fontSize: 12 }}>{p.observation || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button type="button" className="btn" onClick={() => abrirMov("PAGO")}>
