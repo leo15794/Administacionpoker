@@ -1,5 +1,13 @@
 import "dotenv/config";
 import express from "express";
+// 28/09/2026: Express 4 NO atrapa automáticamente un error tirado dentro de una ruta `async` sin
+// try/catch -- la promesa rechazada queda como unhandled rejection y el pedido se cuelga PARA
+// SIEMPRE, sin log, sin respuesta, nada (bug real que encontró Leo: "El servidor tardó demasiado
+// en responder", en una ruta de liquidaciones que no tenía try/catch). Este import parchea
+// Express para que cualquier error de una ruta async caiga solo en el manejador de errores de
+// abajo (que ya respondía 500, pero nunca lo alcanzaba). Tiene que importarse ANTES de crear
+// `app` y de montar cualquier router.
+import "express-async-errors";
 import cors from "cors";
 import { authRouter } from "./routes/auth.js";
 import { dashboardRouter } from "./routes/dashboard.js";
@@ -68,5 +76,8 @@ app.use("/teamback", teambackRouter);
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err);
-  res.status(500).json({ error: "Error interno" });
+  // Se manda el mensaje real (no solo "Error interno") -- esta es una herramienta interna de
+  // administración, no un producto público, y sin acceso a los logs de Vercel desde afuera este
+  // mensaje es la única forma de saber qué está fallando de verdad en cada caso.
+  res.status(500).json({ error: err?.message || "Error interno" });
 });
