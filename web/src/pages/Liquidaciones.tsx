@@ -1056,6 +1056,7 @@ export default function Liquidaciones() {
                     />
                     <span style={{ minWidth: 260 }}>
                       {a.agentName}{a.clubOrigenName ? ` (${a.clubOrigenName})` : ""} — pendiente {usd(a.pendiente)}
+                      {a.createdAt && <span className="muted"> ({dateShort(a.createdAt)})</span>}
                     </span>
                     {a.id in cruces && (
                       <input
@@ -1137,6 +1138,7 @@ export default function Liquidaciones() {
                         />
                         <span style={{ minWidth: 260 }}>
                           {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
+                          {cg.createdAt && <span className="muted"> ({dateShort(cg.createdAt)})</span>}
                         </span>
                         {cg.id in crucesCarga && (
                           <input

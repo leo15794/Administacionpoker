@@ -20,7 +20,7 @@ export interface ConsumirCargaInput {
 export async function listCargasPendientesPorAgentes(agentIds: string[]) {
   if (agentIds.length === 0) return [];
   const r = await pool.query(
-    `SELECT cpc.id, cpc.agent_id, cpc.club_id, cpc.amount, cpc.consumed,
+    `SELECT cpc.id, cpc.agent_id, cpc.club_id, cpc.amount, cpc.consumed, cpc.created_at,
             a.name as agent_name, c.name as club_name
      FROM carga_pendientes_cruce cpc
      JOIN agents a ON a.id = cpc.agent_id
