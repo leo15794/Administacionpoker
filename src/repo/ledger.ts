@@ -499,3 +499,183 @@ export async function listMovementsByAgent(agentId: string, limit = 200) {
   );
   return r.rows;
 }
+
+// Historial de saldo acumulado (30/09/2026, pedido de Leo: "necesito ver como se va
+// construyendo el saldo, con los dias que yo elija libremente -- no atado a la semana de
+// cierre -- y poder sumar varios agentes juntos"). Repo/agentesResumen.ts ya calcula un
+// saldoAnterior/saldoOperativoFinal, pero solo como DOS números (antes de la semana / después),
+// para un agente a la vez. Acá se arma la evolución completa, movimiento a movimiento, para uno
+// o varios agentes juntos (sumados) y con rango de fechas totalmente libre -- mismo patrón que
+// ya usa Proveedores (listMovimientosSaldoProveedor, ver repo/proveedores.ts) con su saldo
+// antes/después por fila, pero calculado al vuelo (ledger_movements no guarda saldo_anterior/
+// saldo_nuevo por fila como sí hace proveedor_pagos) porque acá el saldo puede ser la suma de
+// varios agentes a la vez, y guardar eso por fila no tendría sentido (cada fila es UN agente).
+//
+// El signo de cada movimiento (CASO_SQL de abajo) replica EXACTAMENTE deltaParaBalance() de
+// más arriba, que es la función que de verdad actualiza la tabla balances -- si alguna vez se
+// toca deltaParaBalance, hay que tocar esto también o el saldo reconstruido deja de coincidir
+// con el saldo real que se ve en "Saldos por agente y club".
+//
+// clubId es opcional: si se pasa, filtra a ESE club puntual y resuelve el signo de una
+// TRANSFERENCIA_ENTRE_CLUBES según si ese club es el origen o el destino de la transferencia
+// (una transferencia es UNA sola fila en la tabla pero mueve dos saldos distintos). Si NO se
+// pasa club, se suman TODOS los clubes de los agentes elegidos -- en ese caso una transferencia
+// entre dos clubes del mismo agente se cancela sola (sale de uno, entra al otro), así que sale
+// en 0 -- mismo criterio que ya usa el DELTA_SQL de repo/agentesResumen.ts para el total de un
+// agente.
+const SALDO_HISTORICO_DELTA_SQL = `
+  CASE m.type
+    WHEN 'CARGA' THEN ABS(m.amount)
+    WHEN 'DESCARGA' THEN -ABS(m.amount)
+    WHEN 'COBRO' THEN -ABS(m.amount)
+    WHEN 'PAGO' THEN -ABS(m.amount)
+    WHEN 'TICKET_PROMOCIONAL' THEN m.amount
+    WHEN 'AJUSTE' THEN m.amount
+    WHEN 'CIERRE_SEMANAL' THEN m.amount
+    WHEN 'PAGO_RAKEBACK' THEN 0
+    WHEN 'ADELANTO_RAKEBACK' THEN 0
+    WHEN 'ADELANTO_FICHAS' THEN -ABS(m.amount)
+    WHEN 'TRANSFERENCIA_ENTRE_CLUBES' THEN
+      CASE
+        WHEN $2::text IS NULL THEN 0
+        WHEN m.club_destino_id = $2::text THEN ABS(m.amount)
+        WHEN m.club_id = $2::text THEN -ABS(m.amount)
+        ELSE 0
+      END
+    ELSE m.amount
+  END
+`;
+
+export interface MovimientoConSaldo {
+  id: string;
+  tipo: string;
+  fecha: string;
+  agentId: string;
+  agentName: string;
+  clubName: string;
+  clubDestinoName: string | null;
+  amount: number;
+  delta: number;
+  saldoAnterior: number;
+  saldoNuevo: number;
+  status: string;
+  observation: string | null;
+}
+
+export interface SaldoHistorico {
+  saldoInicial: number;
+  saldoFinal: number;
+  movimientos: MovimientoConSaldo[];
+  porDia: { periodo: string; neto: number; movimientos: number; saldoCierre: number }[];
+  porSemana: { periodo: string; neto: number; movimientos: number; saldoCierre: number }[];
+}
+
+// Lunes de la semana ISO a la que pertenece la fecha (mismo criterio que lunesDe en
+// repo/resumenFinanciero.ts -- semana calendario pura, NO la semana de cierre de
+// weekly_closings, que puede tener otro criterio/estado).
+function lunesDeFecha(fechaIso: string): string {
+  const d = new Date(fechaIso + "T00:00:00Z");
+  const dow = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - (dow - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+export async function getSaldoHistorico(
+  agentIds: string[],
+  clubId: string | null,
+  desde?: string,
+  hasta?: string
+): Promise<SaldoHistorico> {
+  if (agentIds.length === 0) {
+    return { saldoInicial: 0, saldoFinal: 0, movimientos: [], porDia: [], porSemana: [] };
+  }
+
+  // Saldo antes del rango elegido: TODO lo anterior a "desde" (si no hay "desde", no hay nada
+  // antes -- el rango arranca desde el principio de los tiempos y el saldo inicial es 0).
+  let saldoInicial = 0;
+  if (desde) {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(${SALDO_HISTORICO_DELTA_SQL}), 0) as total
+       FROM ledger_movements m
+       WHERE m.agent_id = ANY($1) AND m.status <> 'REVERTIDO'
+         AND ($2::text IS NULL OR m.club_id = $2 OR m.club_destino_id = $2)
+         AND m.occurred_at::date < $3::date`,
+      [agentIds, clubId, desde]
+    );
+    saldoInicial = Number(r.rows[0]?.total ?? 0);
+  }
+
+  const conditions = [`m.agent_id = ANY($1)`, `m.status <> 'REVERTIDO'`, `($2::text IS NULL OR m.club_id = $2 OR m.club_destino_id = $2)`];
+  const values: any[] = [agentIds, clubId];
+  let i = 3;
+  if (desde) {
+    conditions.push(`m.occurred_at::date >= $${i++}::date`);
+    values.push(desde);
+  }
+  if (hasta) {
+    conditions.push(`m.occurred_at::date <= $${i++}::date`);
+    values.push(hasta);
+  }
+
+  const r = await pool.query(
+    `SELECT m.id, m.type, m.occurred_at, m.agent_id, a.name as agent_name, c.name as club_name,
+            cd.name as club_destino_name, m.amount, m.status, m.observation,
+            ${SALDO_HISTORICO_DELTA_SQL} as delta
+     FROM ledger_movements m
+     JOIN agents a ON a.id = m.agent_id
+     JOIN clubs c ON c.id = m.club_id
+     LEFT JOIN clubs cd ON cd.id = m.club_destino_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY m.occurred_at ASC, m.id ASC`,
+    values
+  );
+
+  let corriendo = saldoInicial;
+  const movimientos: MovimientoConSaldo[] = r.rows.map((row) => {
+    const delta = Number(row.delta);
+    const saldoAnterior = corriendo;
+    corriendo += delta;
+    return {
+      id: row.id,
+      tipo: row.type,
+      fecha: row.occurred_at,
+      agentId: row.agent_id,
+      agentName: row.agent_name,
+      clubName: row.club_name,
+      clubDestinoName: row.club_destino_name,
+      amount: Number(row.amount),
+      delta,
+      saldoAnterior,
+      saldoNuevo: corriendo,
+      status: row.status,
+      observation: row.observation,
+    };
+  });
+  const saldoFinal = corriendo;
+
+  // Buckets por día/semana -- el "saldo de cierre" de cada bucket es el saldoNuevo del último
+  // movimiento de ese bucket (la evolución solo se ve en los días/semanas que tuvieron
+  // movimientos, igual que ya hace "Desglose por período" en Resumen financiero -- no se
+  // rellenan huecos con filas vacías).
+  function agruparPorSaldo(clave: (fechaIso: string) => string) {
+    const map = new Map<string, { periodo: string; neto: number; movimientos: number; saldoCierre: number }>();
+    for (const mv of movimientos) {
+      const fechaIso = new Date(mv.fecha).toISOString().slice(0, 10);
+      const k = clave(fechaIso);
+      const existente = map.get(k);
+      if (existente) {
+        existente.neto += mv.delta;
+        existente.movimientos += 1;
+        existente.saldoCierre = mv.saldoNuevo; // el último gana (movimientos ya vienen ordenados por fecha asc)
+      } else {
+        map.set(k, { periodo: k, neto: mv.delta, movimientos: 1, saldoCierre: mv.saldoNuevo });
+      }
+    }
+    return [...map.values()].sort((a, b) => (a.periodo < b.periodo ? 1 : -1));
+  }
+
+  const porDia = agruparPorSaldo((f) => f);
+  const porSemana = agruparPorSaldo((f) => lunesDeFecha(f));
+
+  return { saldoInicial, saldoFinal, movimientos: movimientos.reverse(), porDia, porSemana };
+}

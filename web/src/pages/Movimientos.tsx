@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import MovimientosHistorial from "../components/MovimientosHistorial";
+import SaldoHistorico from "../components/SaldoHistorico";
 import { AdelantosPanel } from "./Adelantos";
 
 const TIPOS = [
@@ -437,6 +438,8 @@ export default function Movimientos() {
           hasta={filtroHasta || undefined}
         />
       </div>
+
+      <SaldoHistorico agentes={agentes} clubes={clubes} />
 
       {/* (29/09/2026, pedido de Leo: "la sección adelantos debería desaparecer") -- unificada acá
           del todo, ya no es una pantalla propia. clubes ya está cargado arriba para el resto del

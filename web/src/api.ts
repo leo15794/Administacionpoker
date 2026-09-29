@@ -254,6 +254,16 @@ export const api = {
     const q = qs.toString();
     return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
   },
+  // Evolución del saldo acumulado (30/09/2026) -- uno o varios agentes juntos, club opcional
+  // (si no se pasa, suma todos los clubes de esos agentes), rango de fechas libre.
+  saldoHistorico: (params: { agentIds: string[]; clubId?: string; desde?: string; hasta?: string }) => {
+    const qs = new URLSearchParams();
+    qs.set("agentIds", params.agentIds.join(","));
+    if (params.clubId) qs.set("clubId", params.clubId);
+    if (params.desde) qs.set("desde", params.desde);
+    if (params.hasta) qs.set("hasta", params.hasta);
+    return request(`/dashboard/movimientos/saldo-historico?${qs.toString()}`);
+  },
   tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" } = {}) =>
     request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
   // Resumen financiero (18/09/2026): ganancias generadas + ingresos/egresos reales de todo el

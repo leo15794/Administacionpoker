@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db/pool.js";
-import { listAllBalances } from "../repo/ledger.js";
+import { listAllBalances, getSaldoHistorico } from "../repo/ledger.js";
 import { listClosings } from "../repo/closings.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
@@ -368,6 +368,27 @@ dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) 
     values
   );
   res.json(r.rows);
+});
+
+// Evolucion del saldo acumulado (30/09/2026, pedido de Leo: "ver como se va construyendo el
+// saldo, con los dias que yo elija libremente -- no atado a la semana de cierre -- y poder
+// sumar varios agentes juntos") -- ver getSaldoHistorico en repo/ledger.ts para el detalle del
+// calculo. agentIds es obligatorio (uno o varios, separados por coma); clubId es opcional (si
+// no se pasa, suma todos los clubes de esos agentes).
+dashboardRouter.get("/movimientos/saldo-historico", requireAuth, requireAdmin, async (req, res) => {
+  const { agentIds, clubId, desde, hasta } = req.query;
+  const ids = typeof agentIds === "string" && agentIds ? agentIds.split(",").filter(Boolean) : [];
+  if (ids.length === 0) {
+    return res.status(400).json({ error: "Falta agentIds (al menos un agente)." });
+  }
+  const club = typeof clubId === "string" && clubId ? clubId : null;
+  const d = typeof desde === "string" && desde ? desde : undefined;
+  const h = typeof hasta === "string" && hasta ? hasta : undefined;
+  try {
+    res.json(await getSaldoHistorico(ids, club, d, h));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo calcular el saldo historico." });
+  }
 });
 
 // Tesorería real: agrega treasury_entries (automáticas, generadas por movimientos de
