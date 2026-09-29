@@ -458,6 +458,11 @@ export const api = {
   rakebackPendiente: () => request("/rakeback-pendiente"),
   pagarRakebackPendiente: (data: { pendienteId: string; amount: number; medio: "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE"; custodian?: string; notes?: string }) =>
     request("/rakeback-pendiente/pagar", { method: "POST", body: JSON.stringify(data) }),
+  // Salda un rakeback pendiente cruzándolo contra un adelanto (sin movimiento de plata nuevo --
+  // ver repo/rakebackPendiente.ts). Se usa desde Liquidaciones.tsx al cruzar un adelanto contra
+  // una fila que tiene rakebackPendienteId.
+  saldarRakebackPendienteConCruce: (data: { pendienteId: string; amount: number; notes?: string }) =>
+    request("/rakeback-pendiente/saldar-cruce", { method: "POST", body: JSON.stringify(data) }),
   darDeBajaRakebackPendiente: (id: string, notes?: string) =>
     request(`/rakeback-pendiente/${id}/baja`, { method: "POST", body: JSON.stringify({ notes }) }),
   eliminarRakebackPendiente: (id: string) => request(`/rakeback-pendiente/${id}`, { method: "DELETE" }),

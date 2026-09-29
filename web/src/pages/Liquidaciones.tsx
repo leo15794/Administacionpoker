@@ -193,6 +193,12 @@ export default function Liquidaciones() {
   // eliminarMovimientoCarga) igual exige que sea el más reciente de cada adelanto/carga.
   const [ultimoCruceAdelantos, setUltimoCruceAdelantos] = useState<{ movIds: string[]; monto: number } | null>(null);
   const [ultimoCruceCargas, setUltimoCruceCargas] = useState<{ movIds: string[]; monto: number } | null>(null);
+  // ultimoCrucePendiente (29/09/2026, pedido de Leo: "si en liquidación sale el pago en
+  // rakeback pendiente tiene que desaparecer"): cuando cruzar un ADELANTO además salda de
+  // rakeback pendiente (ver saldarPendientesDeAgente más abajo), estos son los movimientos que
+  // esa parte generó -- "Deshacer último cruce" los deshace junto con el/los adelantos, así el
+  // pendiente no queda marcado como pagado sin el adelanto que lo cubría.
+  const [ultimoCrucePendiente, setUltimoCrucePendiente] = useState<{ movIds: string[] } | null>(null);
   const [deshaciendoCruce, setDeshaciendoCruce] = useState(false);
   const [adelantosManual, setAdelantosManual] = useState<number>(0);
   // Ventas / tickets promocionales por fila (agente+club) -- keyed por filaKey(f).
@@ -841,9 +847,58 @@ export default function Liquidaciones() {
     setModalCruce({ tipo, item, monto: String(sugerido > 0 ? sugerido : item.pendiente) });
   }
 
+  // disponiblePorFila (29/09/2026, pedido de Leo: "si en liquidación sale el pago en rakeback
+  // pendiente tiene que desaparecer"): mapa rakebackPendienteId -> disponible, arrancando de lo
+  // que ya devolvió el backend. Se pasa MUTABLE a saldarPendientesDeAgente para que, en un cruce
+  // masivo, varios adelantos del MISMO agente (cruzados uno detrás del otro sin volver a pedirle
+  // datos al backend en el medio) no se coman dos veces el pendiente de la misma fila.
+  function construirDisponiblePorFila(): Record<string, number> {
+    const mapa: Record<string, number> = {};
+    for (const f of data?.filas ?? []) {
+      if (f.rakebackPendienteId) mapa[f.rakebackPendienteId] = Number(f.rakebackPendienteDisponible) || 0;
+    }
+    return mapa;
+  }
+
+  // Saldar el rakeback pendiente de un agente con lo que se le acaba de cruzar de un adelanto
+  // (ver saldarPendienteConCruce en repo/rakebackPendiente.ts) -- no es plata nueva, es la
+  // constancia de que ese pendiente quedó cubierto con el adelanto que ya se le había dado. Un
+  // mismo agente puede tener más de una fila (club distinto) con rakebackPendienteId en esta
+  // misma liquidación -- reparte el monto cruzado entre esas filas en cascada, cada una hasta lo
+  // que tenga disponible. Si sobra monto sin poder asignarlo a ninguna fila (el agente no tiene
+  // pendiente acá, o es menor a lo cruzado), simplemente no salda nada de más -- no es un error.
+  async function saldarPendientesDeAgente(
+    agentId: string,
+    montoDisponible: number,
+    notes: string,
+    disponiblePorFila: Record<string, number>
+  ) {
+    const movIds: string[] = [];
+    const errores: string[] = [];
+    let restante = montoDisponible;
+    const filasAgente = (data?.filas ?? []).filter((f: any) => f.agentId === agentId && f.rakebackPendienteId);
+    for (const f of filasAgente) {
+      if (restante <= 0.004) break;
+      const disp = disponiblePorFila[f.rakebackPendienteId] ?? 0;
+      const monto = Math.min(restante, disp);
+      if (monto <= 0.004) continue;
+      try {
+        const r = await api.saldarRakebackPendienteConCruce({ pendienteId: f.rakebackPendienteId, amount: monto, notes });
+        if (r?.movementRowId) movIds.push(r.movementRowId);
+        disponiblePorFila[f.rakebackPendienteId] = disp - monto;
+        restante -= monto;
+      } catch (err: any) {
+        errores.push(err.message || "No se pudo descontar del rakeback pendiente.");
+      }
+    }
+    return { movIds, errores };
+  }
+
   // Confirma el cruce del popup -- se aplica de una, contra ESTA liquidación (la semana ya
   // elegida arriba, se muestra en el popup nada más que para confirmar). Mismo efecto real que
-  // antes tenía "Aplicar cruce": ajustarAdelanto CONSUMO / consumirCarga.
+  // antes tenía "Aplicar cruce": ajustarAdelanto CONSUMO / consumirCarga -- y, si el adelanto
+  // pertenece a un agente con rakeback pendiente en esta liquidación, además descuenta ese mismo
+  // importe del rakeback pendiente (ver saldarPendientesDeAgente arriba).
   async function confirmarModalCruce() {
     if (!modalCruce) return;
     const monto = Math.min(Number(modalCruce.monto) || 0, modalCruce.item.pendiente);
@@ -861,6 +916,20 @@ export default function Liquidaciones() {
         setAplicado((prev) => prev + monto);
         setUltimoCruceAdelantos({ movIds, monto });
         setMovIdsAdelantosSesion((prev) => [...prev, ...movIds]);
+
+        const { movIds: pendienteMovIds, errores: erroresPendiente } = await saldarPendientesDeAgente(
+          modalCruce.item.agentId,
+          monto,
+          `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de adelanto).`.trim(),
+          construirDisponiblePorFila()
+        );
+        if (pendienteMovIds.length > 0) {
+          setUltimoCrucePendiente({ movIds: pendienteMovIds });
+          setMovIdsPagosPendienteSesion((prev) => [...prev, ...pendienteMovIds]);
+        }
+        if (erroresPendiente.length > 0) {
+          await alertDialog(`El cruce se aplicó, pero no se pudo descontar del todo el rakeback pendiente: ${erroresPendiente.join(" · ")}`);
+        }
       } else {
         const r = await api.consumirCarga({
           cargaId: modalCruce.item.id,
@@ -934,6 +1003,8 @@ export default function Liquidaciones() {
     let sumaAdelantos = 0;
     let sumaCargas = 0;
     const errores: string[] = [];
+    const movIdsPendiente: string[] = [];
+    const disponiblePorFila = construirDisponiblePorFila();
     try {
       for (const { tipo, item } of modalCrucesMasivo) {
         const monto = Math.min(Number(montosCrucesMasivo[item.id]) || 0, Number(item.pendiente) || 0);
@@ -948,6 +1019,15 @@ export default function Liquidaciones() {
             });
             if (r?.movementRowId) movIdsAdelantos.push(r.movementRowId);
             sumaAdelantos += monto;
+
+            const { movIds: pendienteMovIds, errores: erroresPendiente } = await saldarPendientesDeAgente(
+              item.agentId,
+              monto,
+              `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de adelanto).`.trim(),
+              disponiblePorFila
+            );
+            movIdsPendiente.push(...pendienteMovIds);
+            for (const e of erroresPendiente) errores.push(`${item.agentName || "?"} (rakeback pendiente): ${e}`);
           } else {
             const r = await api.consumirCarga({
               cargaId: item.id,
@@ -970,6 +1050,10 @@ export default function Liquidaciones() {
         setAplicadoCarga((prev) => prev + sumaCargas);
         setUltimoCruceCargas({ movIds: movIdsCargas, monto: sumaCargas });
         setMovIdsCargasSesion((prev) => [...prev, ...movIdsCargas]);
+      }
+      if (movIdsPendiente.length > 0) {
+        setUltimoCrucePendiente({ movIds: movIdsPendiente });
+        setMovIdsPagosPendienteSesion((prev) => [...prev, ...movIdsPendiente]);
       }
       setModalCrucesMasivo(null);
       setSeleccionCruce({});
@@ -1008,6 +1092,15 @@ export default function Liquidaciones() {
           errores.push(err.message || "No se pudo deshacer un cruce de carga.");
         }
       }
+      // Rakeback pendiente saldado por el/los cruces que se acaban de deshacer arriba -- tiene
+      // que volver a mostrarse pendiente junto con el adelanto (ver ultimoCrucePendiente arriba).
+      for (const id of ultimoCrucePendiente?.movIds ?? []) {
+        try {
+          await api.eliminarPagoRakebackPendiente(id);
+        } catch (err: any) {
+          errores.push(err.message || "No se pudo deshacer un descuento de rakeback pendiente.");
+        }
+      }
       if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.monto));
       if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.monto));
       if (ultimoCruceAdelantos) {
@@ -1018,8 +1111,13 @@ export default function Liquidaciones() {
         const idsDeshechos = new Set(ultimoCruceCargas.movIds);
         setMovIdsCargasSesion((prev) => prev.filter((id) => !idsDeshechos.has(id)));
       }
+      if (ultimoCrucePendiente) {
+        const idsDeshechos = new Set(ultimoCrucePendiente.movIds);
+        setMovIdsPagosPendienteSesion((prev) => prev.filter((id) => !idsDeshechos.has(id)));
+      }
       setUltimoCruceAdelantos(null);
       setUltimoCruceCargas(null);
+      setUltimoCrucePendiente(null);
       refrescarLiquidacion(true);
       if (errores.length > 0) await alertDialog(errores.join(" · "));
     } finally {
@@ -1399,7 +1497,7 @@ export default function Liquidaciones() {
                     <td className="num money">{usd(f.rakebackBruto)}</td>
                     <td className="num money">{usd(f.rebate)}</td>
                     <td className="num"><strong>{usd(f.rakebackNeto)}</strong></td>
-                    <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
+                    <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo, o cruzando un adelanto de este agente (\"Cruzar pendientes\" más abajo, si tiene)." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
                       {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
                     </td>
                     <td>
@@ -1478,7 +1576,9 @@ export default function Liquidaciones() {
             {data.adelantos.length > 0 && (
               <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                 Disponible para cruzar en esta liquidación: {usd(disponibleParaCruzar)} (no se propone cruzar más que esto por
-                default, aunque el adelanto tenga más pendiente — se puede subir a mano si hace falta).
+                default, aunque el adelanto tenga más pendiente — se puede subir a mano si hace falta). Al cruzar, si el
+                agente tiene rakeback pendiente en esta misma liquidación, se descuenta automáticamente de ahí también —
+                no hace falta pagarlo de nuevo con "Enviar".
               </div>
             )}
             {data.adelantos.length === 0 ? (

@@ -248,8 +248,12 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   );
   if (closings.rows.length === 0) return res.status(404).json({ error: "No hay cierres para esa semana." });
 
+  // ra.agent_id (29/09/2026, pedido de Leo: "si cruzo un adelanto contra el rakeback de la
+  // semana, tiene que descontarse también de rakeback pendiente" -- ver saldarPendienteConCruce
+  // más abajo): el frontend lo necesita para saber a qué agente pertenece cada adelanto, y así
+  // poder buscar SUS filas (con rakebackPendienteId) dentro de esta misma liquidación al cruzar.
   const adelantos = await pool.query(
-    `SELECT ra.id, ra.amount, ra.consumed, ra.kind, ra.created_at, a.name as agent_name, c.name as club_origen_name
+    `SELECT ra.id, ra.agent_id, ra.amount, ra.consumed, ra.kind, ra.created_at, a.name as agent_name, c.name as club_origen_name
      FROM rakeback_advances ra
      JOIN agents a ON a.id = ra.agent_id
      LEFT JOIN clubs c ON c.id = ra.club_origen_id
@@ -383,6 +387,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     total,
     adelantos: adelantos.rows.map((a) => ({
       id: a.id,
+      agentId: a.agent_id,
       agentName: a.agent_name,
       clubOrigenName: a.club_origen_name,
       kind: a.kind,
@@ -734,7 +739,10 @@ catalogRouter.post("/liquidacion/:id/reabrir", requireAuth, requireAdmin, async 
 // todos los cruces realizados deberían ir para atrás" -- antes el borrado NO tocaba los cruces,
 // quedaban aplicados igual aunque la foto de la liquidación ya no existiera).
 async function liberarCrucesDeLiquidacion(id: string) {
-  const liqRes = await pool.query(`SELECT id, adelanto_movement_ids, carga_movement_ids FROM liquidaciones_guardadas WHERE id = $1`, [id]);
+  const liqRes = await pool.query(
+    `SELECT id, adelanto_movement_ids, carga_movement_ids, pago_pendiente_movement_ids FROM liquidaciones_guardadas WHERE id = $1`,
+    [id]
+  );
   const liq = liqRes.rows[0];
   if (!liq) return null;
 
@@ -757,9 +765,33 @@ async function liberarCrucesDeLiquidacion(id: string) {
     }
   }
 
+  // Rakeback pendiente saldado CON un cruce (29/09/2026, pedido de Leo -- ver
+  // saldarPendienteConCruce en repo/rakebackPendiente.ts): a diferencia de un pago real
+  // (PAGO_FICHAS/PAGO_USDT, esos NUNCA se tocan acá -- ver revertirPagosDeLiquidacion, que a
+  // propósito no se llama desde "Liberar cruces"), un CRUCE_ADELANTO no es plata mandada de
+  // verdad, está atado 1 a 1 al cruce de adelanto que se acaba de liberar arriba -- así que
+  // tiene que liberarse junto con él, si no queda "huérfano": el adelanto vuelve a estar
+  // disponible pero el rakeback pendiente se sigue mostrando como pagado. Solo se tocan los
+  // que son CRUCE_ADELANTO -- los reales quedan intactos en el arreglo.
+  const pagoPendienteIdsRestantes: string[] = [];
+  for (const movId of liq.pago_pendiente_movement_ids ?? []) {
+    const tipoRes = await pool.query(`SELECT type FROM rakeback_pendiente_movements WHERE id = $1`, [movId]);
+    if (tipoRes.rows[0]?.type !== "CRUCE_ADELANTO") {
+      pagoPendienteIdsRestantes.push(movId);
+      continue;
+    }
+    try {
+      await revertirPagoPendiente(movId);
+      liberados++;
+    } catch (err: any) {
+      errores.push(`Rakeback pendiente: ${err.message || "no se pudo deshacer"}`);
+      pagoPendienteIdsRestantes.push(movId);
+    }
+  }
+
   await pool.query(
-    `UPDATE liquidaciones_guardadas SET adelanto_movement_ids = '{}', carga_movement_ids = '{}' WHERE id = $1`,
-    [liq.id]
+    `UPDATE liquidaciones_guardadas SET adelanto_movement_ids = '{}', carga_movement_ids = '{}', pago_pendiente_movement_ids = $2 WHERE id = $1`,
+    [liq.id, pagoPendienteIdsRestantes]
   );
 
   return { liberados, errores };

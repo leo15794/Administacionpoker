@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
@@ -29,6 +29,31 @@ rakebackPendienteRouter.post("/pagar", requireAuth, requireAdmin, async (req: Au
       amount: parsed.data.amount,
       medio: parsed.data.medio,
       custodian: parsed.data.custodian,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(pendiente);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const saldarCruceSchema = z.object({
+  pendienteId: z.string(),
+  amount: z.number().positive(),
+  notes: z.string().optional(),
+});
+
+// Salda (total o parcial) un rakeback pendiente cruzándolo contra un adelanto ya dado -- no
+// genera movimiento de ledger/tesorería nuevo (ver repo/rakebackPendiente.ts). Se llama desde
+// Liquidaciones.tsx en el mismo momento en que se cruza el adelanto.
+rakebackPendienteRouter.post("/saldar-cruce", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = saldarCruceSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pendiente = await saldarPendienteConCruce({
+      pendienteId: parsed.data.pendienteId,
+      amount: parsed.data.amount,
       notes: parsed.data.notes,
       createdBy: req.user?.email,
     });
