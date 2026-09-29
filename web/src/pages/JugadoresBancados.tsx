@@ -359,14 +359,14 @@ export default function JugadoresBancados() {
                   <th>Jugador</th>
                   <th>Club</th>
                   <th>Agente</th>
-                  <th>Semanas cerradas</th>
-                  <th>Resultado mesas total</th>
-                  <th>Ganancia total jugador</th>
-                  <th>Ganancia total empresa</th>
-                  <th>Rakeback Banca (acum.)</th>
-                  <th title="Informativo, no mueve plata">% Unión (acum., info.)</th>
-                  <th>Capital actual</th>
-                  <th>Makeup actual</th>
+                  <th className="num">Semanas cerradas</th>
+                  <th className="num">Resultado mesas total</th>
+                  <th className="num">Ganancia total jugador</th>
+                  <th className="num">Ganancia total empresa</th>
+                  <th className="num">Rakeback Banca (acum.)</th>
+                  <th className="num" title="Informativo, no mueve plata">% Unión (acum., info.)</th>
+                  <th className="num">Capital actual</th>
+                  <th className="num">Makeup actual</th>
                 </tr>
               </thead>
               <tbody>
@@ -375,14 +375,14 @@ export default function JugadoresBancados() {
                     <td>{r.playerName} <span className="muted">#{r.playerExternalId}</span></td>
                     <td>{r.clubName}</td>
                     <td>{r.agentName ?? <span className="muted">Sin agente</span>}</td>
-                    <td>{r.semanasCerradas}</td>
-                    <td>{usd(r.resultadoMesasTotal)}</td>
-                    <td><span className={`badge ${Number(r.gananciaJugadorTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaJugadorTotal)}</span></td>
-                    <td><span className={`badge ${Number(r.gananciaEmpresaTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaEmpresaTotal)}</span></td>
-                    <td className="muted">{usd(r.rakebackBancaTotal)}</td>
-                    <td className="muted">{usd(r.unionShareTotal)}</td>
-                    <td><strong>{usd(r.capitalActual)}</strong></td>
-                    <td className="muted">{usd(r.makeupActual)}</td>
+                    <td className="num">{r.semanasCerradas}</td>
+                    <td className="num money">{usd(r.resultadoMesasTotal)}</td>
+                    <td className="num"><span className={`badge ${Number(r.gananciaJugadorTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaJugadorTotal)}</span></td>
+                    <td className="num"><span className={`badge ${Number(r.gananciaEmpresaTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.gananciaEmpresaTotal)}</span></td>
+                    <td className="num muted">{usd(r.rakebackBancaTotal)}</td>
+                    <td className="num muted">{usd(r.unionShareTotal)}</td>
+                    <td className="num"><strong>{usd(r.capitalActual)}</strong></td>
+                    <td className="num muted">{usd(r.makeupActual)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -411,15 +411,15 @@ export default function JugadoresBancados() {
                   <th>Tipo</th>
                   <th>Jugador</th>
                   <th>Club</th>
-                  <th>Resultado mesas</th>
-                  <th>Rakeback total</th>
-                  <th>RB → Makeup</th>
-                  <th>RB → Jugador</th>
-                  <th>Makeup (ant. → nuevo)</th>
-                  <th>Pago mesas</th>
-                  <th>Pago total jugador</th>
-                  <th>Ganancia banca</th>
-                  <th>Capital (ant. → después)</th>
+                  <th className="num">Resultado mesas</th>
+                  <th className="num">Rakeback total</th>
+                  <th className="num">RB → Makeup</th>
+                  <th className="num">RB → Jugador</th>
+                  <th className="num">Makeup (ant. → nuevo)</th>
+                  <th className="num">Pago mesas</th>
+                  <th className="num">Pago total jugador</th>
+                  <th className="num">Ganancia banca</th>
+                  <th className="num">Capital (ant. → después)</th>
                   <th></th>
                 </tr>
               </thead>
@@ -436,15 +436,15 @@ export default function JugadoresBancados() {
                     </td>
                     <td>{h.player_name} <span className="muted">#{h.player_external_id}</span></td>
                     <td>{h.club_name}</td>
-                    <td>{usd(h.resultado_mesas)}</td>
-                    <td>{usd(h.rakeback_total)}</td>
-                    <td className="muted">{usd(h.rakeback_a_makeup)}</td>
-                    <td className="muted">{usd(h.rakeback_excedente_jugador)}</td>
-                    <td className="muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
-                    <td className="muted">{usd(h.pago_jugador_mesas)}</td>
-                    <td><span className={`badge ${Number(h.pago_jugador_total) >= 0 ? "pos" : "neg"}`}>{usd(h.pago_jugador_total)}</span></td>
-                    <td>{usd(h.ganancia_banca_mesas)}</td>
-                    <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
+                    <td className="num money">{usd(h.resultado_mesas)}</td>
+                    <td className="num money">{usd(h.rakeback_total)}</td>
+                    <td className="num muted">{usd(h.rakeback_a_makeup)}</td>
+                    <td className="num muted">{usd(h.rakeback_excedente_jugador)}</td>
+                    <td className="num muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
+                    <td className="num muted">{usd(h.pago_jugador_mesas)}</td>
+                    <td className="num"><span className={`badge ${Number(h.pago_jugador_total) >= 0 ? "pos" : "neg"}`}>{usd(h.pago_jugador_total)}</span></td>
+                    <td className="num money">{usd(h.ganancia_banca_mesas)}</td>
+                    <td className="num">{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
                     <td className="row-actions">
                       {h.tipo === "CIERRE_SEMANAL" && h.status !== "REVERTIDO" && (
                         h.wallet_pagado_at ? (
@@ -1004,11 +1004,11 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                     <table className="table-compact">
                       <thead>
                         <tr>
-                          <th>Semana</th><th>Tipo</th><th>Resultado</th><th>Rake total</th>
-                          <th>Rakeback total</th><th>RB → Makeup</th><th>RB → Jugador</th><th>Rake Banca</th>
-                          <th>Rakeback Banca</th><th title="% que la Unión reconoce sobre el rake total — informativo">Unión (info.)</th>
-                          <th>Makeup (ant. → nuevo)</th><th>Pago mesas</th><th>Pago total jugador</th>
-                          <th>Capital (ant. → después)</th><th></th>
+                          <th>Semana</th><th>Tipo</th><th className="num">Resultado</th><th className="num">Rake total</th>
+                          <th className="num">Rakeback total</th><th className="num">RB → Makeup</th><th className="num">RB → Jugador</th><th className="num">Rake Banca</th>
+                          <th className="num">Rakeback Banca</th><th className="num" title="% que la Unión reconoce sobre el rake total — informativo">Unión (info.)</th>
+                          <th className="num">Makeup (ant. → nuevo)</th><th className="num">Pago mesas</th><th className="num">Pago total jugador</th>
+                          <th className="num">Capital (ant. → después)</th><th></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1022,18 +1022,18 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                                 <span className="muted">Cierre semanal</span>
                               )}
                             </td>
-                            <td>{usd(h.resultado_mesas)}</td>
-                            <td>{usd(h.rake_total)}</td>
-                            <td>{usd(h.rakeback_total)}</td>
-                            <td className="muted">{usd(h.rakeback_a_makeup)}</td>
-                            <td className="muted">{usd(h.rakeback_excedente_jugador)}</td>
-                            <td>{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
-                            <td>{usd(h.rakeback_banca_total ?? 0)}</td>
-                            <td className="muted">{usd(h.union_share_total ?? 0)}</td>
-                            <td className="muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
-                            <td className="muted">{usd(h.pago_jugador_mesas)}</td>
-                            <td>{usd(h.pago_jugador_total)}</td>
-                            <td>{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
+                            <td className="num money">{usd(h.resultado_mesas)}</td>
+                            <td className="num money">{usd(h.rake_total)}</td>
+                            <td className="num money">{usd(h.rakeback_total)}</td>
+                            <td className="num muted">{usd(h.rakeback_a_makeup)}</td>
+                            <td className="num muted">{usd(h.rakeback_excedente_jugador)}</td>
+                            <td className="num money">{usd(Number(h.rake_total) - Number(h.rakeback_total))}</td>
+                            <td className="num money">{usd(h.rakeback_banca_total ?? 0)}</td>
+                            <td className="num muted">{usd(h.union_share_total ?? 0)}</td>
+                            <td className="num muted">{usd(h.makeup_anterior)} → {usd(h.makeup_nuevo)}</td>
+                            <td className="num muted">{usd(h.pago_jugador_mesas)}</td>
+                            <td className="num money">{usd(h.pago_jugador_total)}</td>
+                            <td className="num">{usd(h.capital_anterior)} → <strong>{usd(h.capital_despues)}</strong></td>
                             <td className="row-actions">
                               {h.tipo === "CIERRE_SEMANAL" && h.status !== "REVERTIDO" && (
                                 h.wallet_pagado_at ? (
@@ -1312,7 +1312,7 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
               <table>
                 <thead>
                   <tr>
-                    <th>Jugador</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>Ticket promo.</th><th></th>
+                    <th>Jugador</th><th>Club</th><th>Agente</th><th className="num">Resultado</th><th className="num">Rake</th><th className="num">Ticket promo.</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1401,14 +1401,14 @@ function FilaImportBancado({
         <td>{item.playerName} <span className="muted">#{item.playerExternalId ?? item.playerId}</span></td>
         <td>{item.clubName}</td>
         <td>{item.agentName}</td>
-        <td>
-          <input value={resultadoMesas} onChange={(e) => { setResultadoMesas(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} />
+        <td className="num">
+          <input value={resultadoMesas} onChange={(e) => { setResultadoMesas(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90, textAlign: "right" }} disabled={aplicado} />
         </td>
-        <td>
-          <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} />
+        <td className="num">
+          <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90, textAlign: "right" }} disabled={aplicado} />
         </td>
-        <td>
-          <input value={ticketPromocional} onChange={(e) => { setTicketPromocional(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90 }} disabled={aplicado} placeholder="0" />
+        <td className="num">
+          <input value={ticketPromocional} onChange={(e) => { setTicketPromocional(e.target.value); setPrevia(null); }} type="number" step="0.01" style={{ width: 90, textAlign: "right" }} disabled={aplicado} placeholder="0" />
         </td>
         <td className="row-actions">
           {aplicado ? (

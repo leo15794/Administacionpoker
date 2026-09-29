@@ -132,7 +132,7 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Tipo</th><th>Medio</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th>Tipo</th><th>Medio</th><th>Club origen</th><th className="num">Adelantado</th><th className="num">Consumido</th><th className="num">Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {adelantos.map((a) => (
@@ -159,9 +159,9 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
                     )}
                   </td>
                   <td className="muted">{a.club_origen_name || "—"}</td>
-                  <td>{usd(a.amount)}</td>
-                  <td>{usd(a.consumed)}</td>
-                  <td><span className="badge neutral">{usd(Number(a.amount) - Number(a.consumed))}</span></td>
+                  <td className="num money">{usd(a.amount)}</td>
+                  <td className="num money">{usd(a.consumed)}</td>
+                  <td className="num"><span className="badge neutral">{usd(Number(a.amount) - Number(a.consumed))}</span></td>
                   <td className="muted" style={{ fontSize: 12 }} title={a.notes || undefined}>{a.notes || "—"}</td>
                   <td className="muted">{dateShort(a.updated_at)}</td>
                   <td className="row-actions">
@@ -197,7 +197,7 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th>Monto</th><th>Adelanto resultante</th><th>Consumido resultante</th><th>Notas</th><th></th></tr>
+              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th className="num">Monto</th><th className="num">Adelanto resultante</th><th className="num">Consumido resultante</th><th>Notas</th><th></th></tr>
             </thead>
             <tbody>
               {(() => {
@@ -212,9 +212,9 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
                       <td>{dateShort(m.occurred_at)}</td>
                       <td>{m.agent_name}</td>
                       <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
-                      <td>{m.type === "BAJA" || m.type === "CORRECCION" ? "—" : usd(m.amount)}</td>
-                      <td>{usd(m.resulting_amount)}</td>
-                      <td>{usd(m.resulting_consumed)}</td>
+                      <td className="num money">{m.type === "BAJA" || m.type === "CORRECCION" ? "—" : usd(m.amount)}</td>
+                      <td className="num money">{usd(m.resulting_amount)}</td>
+                      <td className="num money">{usd(m.resulting_consumed)}</td>
                       <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                       <td>
                         {esElMasReciente && m.type !== "ALTA" && (

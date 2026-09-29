@@ -88,13 +88,13 @@ export default function Tesoreria() {
           <div className="muted">Todavía no hay movimientos en efectivo cargados.</div>
         ) : (
           <table>
-            <thead><tr><th>Custodio</th><th>Neto en su poder</th><th>Movimientos</th></tr></thead>
+            <thead><tr><th>Custodio</th><th className="num">Neto en su poder</th><th className="num">Movimientos</th></tr></thead>
             <tbody>
               {data.porCustodio.map((c: any) => (
                 <tr key={c.custodio}>
                   <td>{c.custodio}</td>
-                  <td><span className={`badge ${Number(c.neto) >= 0 ? "pos" : "neg"}`}>{usd(c.neto)}</span></td>
-                  <td className="muted">{c.movimientos}</td>
+                  <td className="num"><span className={`badge ${Number(c.neto) >= 0 ? "pos" : "neg"}`}>{usd(c.neto)}</span></td>
+                  <td className="num muted">{c.movimientos}</td>
                 </tr>
               ))}
             </tbody>
@@ -130,14 +130,14 @@ export default function Tesoreria() {
           <div className="muted">Sin movimientos todavía.</div>
         ) : (
           <table>
-            <thead><tr><th>Fecha</th><th>Tesorería</th><th>Dirección</th><th>Monto</th><th>Custodio</th><th>Detalle</th><th></th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Tesorería</th><th>Dirección</th><th className="num">Monto</th><th>Custodio</th><th>Detalle</th><th></th></tr></thead>
             <tbody>
               {data.ultimosMovimientos.map((m: any) => (
                 <tr key={m.id} style={estaRevertido(m) ? { opacity: 0.55 } : undefined}>
                   <td>{dateShort(m.occurred_at)}</td>
                   <td><span className="badge neutral">{LEDGER_LABEL[m.ledger] ?? m.ledger}</span></td>
                   <td className="muted">{m.direction === "INGRESO" ? "Ingreso" : "Egreso"}</td>
-                  <td><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
+                  <td className="num"><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
                   <td>{m.custodian || "—"}</td>
                   <td>
                     {estaRevertido(m) && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}

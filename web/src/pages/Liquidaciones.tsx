@@ -1377,14 +1377,14 @@ export default function Liquidaciones() {
               <tr>
                 <th>Club</th>
                 {data.agentes.length > 1 && <th>Agente</th>}
-                <th>Ganancias/Pérdidas</th>
-                <th>Rake</th>
-                <th>Rakeback bruto</th>
-                <th>Rebate</th>
-                <th>Rakeback neto</th>
-                <th>Rakeback pendiente</th>
-                <th>Ventas</th>
-                <th>Tickets</th>
+                <th className="num">Ganancias/Pérdidas</th>
+                <th className="num">Rake</th>
+                <th className="num">Rakeback bruto</th>
+                <th className="num">Rebate</th>
+                <th className="num">Rakeback neto</th>
+                <th className="num">Rakeback pendiente</th>
+                <th className="num">Ventas</th>
+                <th className="num">Tickets</th>
               </tr>
             </thead>
             <tbody>
@@ -1394,12 +1394,12 @@ export default function Liquidaciones() {
                   <tr key={key}>
                     <td>{f.clubName}</td>
                     {data.agentes.length > 1 && <td className="muted">{f.agentName}</td>}
-                    <td className={Number(f.resultado) >= 0 ? "pos" : "neg"}>{usd(f.resultado)}</td>
-                    <td>{usd(f.rakeTotal)}</td>
-                    <td>{usd(f.rakebackBruto)}</td>
-                    <td>{usd(f.rebate)}</td>
-                    <td><strong>{usd(f.rakebackNeto)}</strong></td>
-                    <td className="muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
+                    <td className={`num ${Number(f.resultado) >= 0 ? "pos" : "neg"}`}>{usd(f.resultado)}</td>
+                    <td className="num money">{usd(f.rakeTotal)}</td>
+                    <td className="num money">{usd(f.rakebackBruto)}</td>
+                    <td className="num money">{usd(f.rebate)}</td>
+                    <td className="num"><strong>{usd(f.rakebackNeto)}</strong></td>
+                    <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
                       {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
                     </td>
                     <td>
@@ -1616,7 +1616,7 @@ export default function Liquidaciones() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Importe</th><th>Observación</th><th></th>
+                      <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th className="num">Importe</th><th>Observación</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1630,7 +1630,7 @@ export default function Liquidaciones() {
                           {etiquetaMedioPago(p.medio)}
                           {p.custodian && <span className="muted"> ({p.custodian})</span>}
                         </td>
-                        <td className={p.tipo === "COBRO" ? "money neg" : "money pos"}>{usd(p.amount)}</td>
+                        <td className={`num money ${p.tipo === "COBRO" ? "neg" : "pos"}`}>{usd(p.amount)}</td>
                         <td className="muted" style={{ fontSize: 12 }}>{p.observation || "-"}</td>
                         <td>
                           <button
@@ -1714,7 +1714,7 @@ export default function Liquidaciones() {
                     <tr>
                       <th></th>
                       <th>Agente / club</th>
-                      <th>Importe (USD)</th>
+                      <th className="num">Importe (USD)</th>
                       <th>Medio</th>
                     </tr>
                   </thead>
@@ -1775,14 +1775,14 @@ export default function Liquidaciones() {
                               </>
                             )}
                           </td>
-                          <td>
+                          <td className="num">
                             <input
                               type="number"
                               step="0.01"
                               value={split.monto}
                               disabled={!v.checked}
                               onChange={(e) => actualizarSplit(key, idx, { monto: e.target.value })}
-                              style={{ width: 110 }}
+                              style={{ width: 110, textAlign: "right" }}
                             />
                           </td>
                           <td>
@@ -1958,8 +1958,8 @@ export default function Liquidaciones() {
           <table>
             <thead>
               <tr>
-                <th>Fecha</th><th>Estado</th><th>Nombre</th><th>Semana</th><th>Rakeback total</th>
-                <th>Descontado</th><th>Total pagado</th><th></th>
+                <th>Fecha</th><th>Estado</th><th>Nombre</th><th>Semana</th><th className="num">Rakeback total</th>
+                <th className="num">Descontado</th><th className="num">Total pagado</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -1977,9 +1977,9 @@ export default function Liquidaciones() {
                   </td>
                   <td>{h.nombre_grupo}</td>
                   <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
-                  <td>{usd(h.total)}</td>
-                  <td>-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
-                  <td><strong>{usd(h.total_a_pagar)}</strong></td>
+                  <td className="num money">{usd(h.total)}</td>
+                  <td className="num money">-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
+                  <td className="num"><strong>{usd(h.total_a_pagar)}</strong></td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
                       {h.estado === "PENDIENTE" ? "Retomar" : h.estado === "CERRADA" ? "Retomar para pagar" : "Revisar"}
@@ -2103,8 +2103,8 @@ export default function Liquidaciones() {
               <thead>
                 <tr>
                   <th>Agente</th>
-                  <th>Pendiente</th>
-                  <th>Monto a cruzar</th>
+                  <th className="num">Pendiente</th>
+                  <th className="num">Monto a cruzar</th>
                 </tr>
               </thead>
               <tbody>
@@ -2117,7 +2117,7 @@ export default function Liquidaciones() {
                       )}
                       <span className="muted"> ({tipo === "ADELANTO" ? (item.kind === "FICHAS_PENDIENTE" ? "fichas" : "adelanto") : "carga"})</span>
                     </td>
-                    <td>{usd(item.pendiente)}</td>
+                    <td className="num money">{usd(item.pendiente)}</td>
                     <td>
                       <input
                         type="number"

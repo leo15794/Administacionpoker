@@ -197,9 +197,9 @@ export default function ResumenFinanciero() {
                   <table>
                     <tbody>
                       {data.desgloseCierres.ingresos.map((f: any) => (
-                        <tr key={f.label}><td>{f.label}</td><td className="pos">{usd(f.monto)}</td></tr>
+                        <tr key={f.label}><td>{f.label}</td><td className="num pos">{usd(f.monto)}</td></tr>
                       ))}
-                      <tr><td><strong>Total ingresos</strong></td><td className="pos"><strong>{usd(data.desgloseCierres.totalIngresos)}</strong></td></tr>
+                      <tr><td><strong>Total ingresos</strong></td><td className="num pos"><strong>{usd(data.desgloseCierres.totalIngresos)}</strong></td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -208,9 +208,9 @@ export default function ResumenFinanciero() {
                   <table>
                     <tbody>
                       {data.desgloseCierres.egresos.map((f: any) => (
-                        <tr key={f.label}><td>{f.label}</td><td className="neg">{usd(f.monto)}</td></tr>
+                        <tr key={f.label}><td>{f.label}</td><td className="num neg">{usd(f.monto)}</td></tr>
                       ))}
-                      <tr><td><strong>Total egresos</strong></td><td className="neg"><strong>{usd(data.desgloseCierres.totalEgresos)}</strong></td></tr>
+                      <tr><td><strong>Total egresos</strong></td><td className="num neg"><strong>{usd(data.desgloseCierres.totalEgresos)}</strong></td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -219,7 +219,7 @@ export default function ResumenFinanciero() {
                 <tbody>
                   <tr>
                     <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
-                    <td className={data.desgloseCierres.gananciaNeta >= 0 ? "pos" : "neg"}>
+                    <td className={`num ${data.desgloseCierres.gananciaNeta >= 0 ? "pos" : "neg"}`}>
                       <strong>{usd(data.desgloseCierres.gananciaNeta)}</strong>
                     </td>
                   </tr>
@@ -243,10 +243,10 @@ export default function ResumenFinanciero() {
                   <thead>
                     <tr>
                       <th>Club</th>
-                      <th>Semanas con cierres</th>
-                      <th>Ganancia cierres</th>
-                      <th>Ganancia bancados</th>
-                      <th>Ganancia total</th>
+                      <th className="num">Semanas con cierres</th>
+                      <th className="num">Ganancia cierres</th>
+                      <th className="num">Ganancia bancados</th>
+                      <th className="num">Ganancia total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -258,12 +258,12 @@ export default function ResumenFinanciero() {
                         title="Ver el resumen de este club"
                       >
                         <td>{c.clubName}</td>
-                        <td className="muted">{c.semanas}</td>
-                        <td className={c.gananciaCierres >= 0 ? "pos" : "neg"}>{usd(c.gananciaCierres)}</td>
-                        <td className={c.gananciaBancados === 0 ? "muted" : c.gananciaBancados >= 0 ? "pos" : "neg"}>
+                        <td className="num muted">{c.semanas}</td>
+                        <td className={`num ${c.gananciaCierres >= 0 ? "pos" : "neg"}`}>{usd(c.gananciaCierres)}</td>
+                        <td className={`num ${c.gananciaBancados === 0 ? "muted" : c.gananciaBancados >= 0 ? "pos" : "neg"}`}>
                           {usd(c.gananciaBancados)}
                         </td>
-                        <td className={c.gananciaTotal >= 0 ? "pos" : "neg"}><strong>{usd(c.gananciaTotal)}</strong></td>
+                        <td className={`num ${c.gananciaTotal >= 0 ? "pos" : "neg"}`}><strong>{usd(c.gananciaTotal)}</strong></td>
                       </tr>
                     ))}
                   </tbody>
@@ -289,26 +289,26 @@ export default function ResumenFinanciero() {
                   <thead>
                     <tr>
                       <th>Período</th>
-                      <th>Ingresos Wallet</th>
-                      <th>Egresos Wallet</th>
-                      <th>Neto Wallet</th>
-                      <th>Ganancia cierres</th>
-                      <th>Ganancia bancados</th>
-                      <th>Comisiones acreditadas</th>
-                      <th>Comisiones pagadas</th>
+                      <th className="num">Ingresos Wallet</th>
+                      <th className="num">Egresos Wallet</th>
+                      <th className="num">Neto Wallet</th>
+                      <th className="num">Ganancia cierres</th>
+                      <th className="num">Ganancia bancados</th>
+                      <th className="num">Comisiones acreditadas</th>
+                      <th className="num">Comisiones pagadas</th>
                     </tr>
                   </thead>
                   <tbody>
                     {serie.map((f: any) => (
                       <tr key={f.periodo}>
                         <td>{labelPeriodo(f.periodo, granularidad)}</td>
-                        <td className="pos">{usd(f.walletIngresos)}</td>
-                        <td className="neg">{usd(f.walletEgresos)}</td>
-                        <td className={f.walletIngresos - f.walletEgresos >= 0 ? "pos" : "neg"}>
+                        <td className="num pos">{usd(f.walletIngresos)}</td>
+                        <td className="num neg">{usd(f.walletEgresos)}</td>
+                        <td className={`num ${f.walletIngresos - f.walletEgresos >= 0 ? "pos" : "neg"}`}>
                           {usd(f.walletIngresos - f.walletEgresos)}
                         </td>
                         <td
-                          className={granularidad === "semana" && f.gananciaCierres !== 0 ? "row-click" : undefined}
+                          className={`num ${granularidad === "semana" && f.gananciaCierres !== 0 ? "row-click" : ""}`}
                           onClick={
                             granularidad === "semana" && f.gananciaCierres !== 0
                               ? () => nav(`/dashboard/cierres?week=${f.periodo}`)
@@ -318,9 +318,9 @@ export default function ResumenFinanciero() {
                         >
                           {usd(f.gananciaCierres)}
                         </td>
-                        <td>{usd(f.gananciaBancados)}</td>
-                        <td className="muted">{usd(f.comisionesAcreditadas)}</td>
-                        <td className="muted">{usd(f.comisionesPagadas)}</td>
+                        <td className="num">{usd(f.gananciaBancados)}</td>
+                        <td className="num muted">{usd(f.comisionesAcreditadas)}</td>
+                        <td className="num muted">{usd(f.comisionesPagadas)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -351,7 +351,7 @@ export default function ResumenFinanciero() {
                 <table className="table-compact">
                   <thead>
                     <tr>
-                      <th>Fecha</th><th>Categoría</th><th>Origen</th><th>Tipo</th><th>Monto</th><th>Detalle</th>
+                      <th>Fecha</th><th>Categoría</th><th>Origen</th><th>Tipo</th><th className="num">Monto</th><th>Detalle</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -366,7 +366,7 @@ export default function ResumenFinanciero() {
                         <td><span className="badge neutral">{CATEGORIA_LABEL[e.categoria] ?? e.categoria}</span></td>
                         <td className="muted">{e.subcategoria}</td>
                         <td className="muted">{e.tipo}</td>
-                        <td className={Number(e.monto) >= 0 ? "pos" : "neg"}>{usd(e.monto)}</td>
+                        <td className={`num ${Number(e.monto) >= 0 ? "pos" : "neg"}`}>{usd(e.monto)}</td>
                         <td className="muted">{e.detalle}</td>
                       </tr>
                     ))}

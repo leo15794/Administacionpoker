@@ -266,7 +266,7 @@ export default function Cierres() {
           <thead>
             <tr>
               <th></th><th>Agente</th><th>Club</th><th>Sistema</th>
-              <th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Cierre final</th><th>Extra</th><th></th>
+              <th className="num">Resultado</th><th className="num">Rake</th><th className="num">Rakeback</th><th className="num">Cierre final</th><th>Extra</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -322,10 +322,10 @@ export default function Cierres() {
                             <td>{c.agent_name}</td>
                             <td>{c.club_name}</td>
                             <td className="muted">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                            <td>{usd(c.result)}</td>
-                            <td>{usd(c.rake_total)}</td>
-                            <td>{usd(c.rakeback)}</td>
-                            <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
+                            <td className="num money">{usd(c.result)}</td>
+                            <td className="num money">{usd(c.rake_total)}</td>
+                            <td className="num money">{usd(c.rakeback)}</td>
+                            <td className="num"><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
                             <td>
                               {/* "Extra" junta Rodeo + Regla + Revertido en una sola columna, en blanco
                                   cuando no hay nada que mostrar (antes eran dos columnas separadas que
@@ -397,16 +397,16 @@ export default function Cierres() {
             queda acá y se descuenta de sus próximas semanas positivas antes de acreditarle nada.
           </div>
           <table>
-            <thead><tr><th>Bancado</th><th>Club</th><th>Memoria pendiente</th><th>Saldo en ese club</th></tr></thead>
+            <thead><tr><th>Bancado</th><th>Club</th><th className="num">Memoria pendiente</th><th className="num">Saldo en ese club</th></tr></thead>
             <tbody>
               {bancados.map((b) => (
                 <tr key={`${b.agent_id}_${b.club_id}`}>
                   <td>{b.agent_name}</td>
                   <td>{b.club_name}</td>
-                  <td>
+                  <td className="num">
                     {Number(b.debt) > 0 ? <span className="badge neg">{usd(b.debt)}</span> : <span className="badge pos">Al día</span>}
                   </td>
-                  <td>{usd(b.saldo_agente_club)}</td>
+                  <td className="num money">{usd(b.saldo_agente_club)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1622,7 +1622,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                 </div>
               )}
               <table>
-                <thead><tr><th>Jugador</th><th>Agente en el archivo</th><th>Resultado</th><th>Rake</th><th>Asignar a</th><th></th></tr></thead>
+                <thead><tr><th>Jugador</th><th>Agente en el archivo</th><th className="num">Resultado</th><th className="num">Rake</th><th>Asignar a</th><th></th></tr></thead>
                 <tbody>
                   {grupo.items.map((it: any) => {
                     const claveSel = `${grupo.clubId}|${it.playerId}`;
@@ -1630,8 +1630,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                       <tr key={it.playerId}>
                         <td>{it.playerName} <span className="muted">#{it.playerId}</span></td>
                         <td>{it.agentNameRaw ?? <span className="muted">(vacío)</span>}</td>
-                        <td>{usd(it.resultado)}</td>
-                        <td>{usd(it.rake)}</td>
+                        <td className="num money">{usd(it.resultado)}</td>
+                        <td className="num money">{usd(it.rake)}</td>
                         <td>
                           <select value={asignando[claveSel] ?? ""} onChange={(e) => setAsignando((s) => ({ ...s, [claveSel]: e.target.value }))}>
                             <option value="">Elegir agente...</option>
@@ -1675,14 +1675,14 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   total {usd(totalResultado)}, rake total {usd(totalRake)}
                 </div>
                 <table>
-                  <thead><tr><th>Jugador</th><th>Agente</th><th>Resultado</th><th>Rake</th></tr></thead>
+                  <thead><tr><th>Jugador</th><th>Agente</th><th className="num">Resultado</th><th className="num">Rake</th></tr></thead>
                   <tbody>
                     {grupo.items.map((it: any) => (
                       <tr key={it.playerId}>
                         <td>{it.playerName} <span className="muted">#{it.playerExternalId ?? it.playerId}</span></td>
                         <td>{it.agentName}</td>
-                        <td>{usd(it.resultado)}</td>
-                        <td>{usd(it.rake)}</td>
+                        <td className="num money">{usd(it.resultado)}</td>
+                        <td className="num money">{usd(it.rake)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1713,25 +1713,25 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <thead>
                     <tr>
                       <th>Super agente (archivo)</th>
-                      <th>RG Pre-rake excl. JP</th>
-                      <th>Rebate Union (nuestro)</th>
-                      <th>Rebate Union (Tiny)</th>
-                      <th>Rake share</th>
+                      <th className="num">RG Pre-rake excl. JP</th>
+                      <th className="num">Rebate Union (nuestro)</th>
+                      <th className="num">Rebate Union (Tiny)</th>
+                      <th className="num">Rake share</th>
                     </tr>
                   </thead>
                   <tbody>
                     {grupo.items.map((it: any, idx: number) => (
                       <tr key={idx}>
                         <td>{it.superAgentNickname ?? it.fileName}</td>
-                        <td>{it.rgPreRakeExclJp != null ? usd(it.rgPreRakeExclJp) : "-"}</td>
-                        <td>{usd(it.rebateUnionCalculado)}</td>
-                        <td>
+                        <td className="num money">{it.rgPreRakeExclJp != null ? usd(it.rgPreRakeExclJp) : "-"}</td>
+                        <td className="num money">{usd(it.rebateUnionCalculado)}</td>
+                        <td className="num">
                           {it.rebateUnionTiny != null ? usd(it.rebateUnionTiny) : "-"}
                           {it.rebateUnionTiny != null && Math.abs(it.rebateUnionTiny - it.rebateUnionCalculado) > 0.5 && (
                             <span className="neg" style={{ marginLeft: 6 }}>difiere</span>
                           )}
                         </td>
-                        <td>{it.rakeShare != null ? usd(it.rakeShare) : "-"}</td>
+                        <td className="num money">{it.rakeShare != null ? usd(it.rakeShare) : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1774,7 +1774,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <table style={{ marginTop: 10 }}>
             <thead>
               <tr>
-                <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Rake</th>
+                <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th className="num">Resultado</th><th className="num">Rake</th>
                 <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Subagentes</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
@@ -1785,8 +1785,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td>{f.clubName}</td>
                   <td>{f.agentName}</td>
                   <td>{f.jugadores}</td>
-                  <td><Monto value={f.resultado} /></td>
-                  <td><Monto value={f.rakeTotal} /></td>
+                  <td className="num"><Monto value={f.resultado} /></td>
+                  <td className="num"><Monto value={f.rakeTotal} /></td>
                   <td>
                     <div className="muted" style={{ fontSize: 12 }}>{(f.rakebackPct * 100).toFixed(1)}%</div>
                     {(() => {

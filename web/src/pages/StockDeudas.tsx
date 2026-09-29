@@ -192,15 +192,15 @@ function TablaStockPorClub({ titulo, filas }: { titulo: string; filas: any[] }) 
       ) : (
         <table>
           <thead>
-            <tr><th>Club</th><th>Cuentas</th><th>Unidades</th><th>USD físico ref.</th></tr>
+            <tr><th>Club</th><th className="num">Cuentas</th><th className="num">Unidades</th><th className="num">USD físico ref.</th></tr>
           </thead>
           <tbody>
             {filas.map((c: any) => (
               <tr key={c.club_id}>
                 <td>{c.club_name}</td>
-                <td>{c.cuentas}</td>
-                <td>{num(c.unidades)}</td>
-                <td>{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
+                <td className="num">{c.cuentas}</td>
+                <td className="num">{num(c.unidades)}</td>
+                <td className="num">{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -221,30 +221,30 @@ function DeudasTab({ deudas }: { deudas: any }) {
       <table>
         <thead>
           <tr>
-            <th>Agente / supervisor</th><th>Nos debe</th><th>Debemos</th><th>Neto</th>
-            <th>Garantía separada</th><th>Adelantos separados</th><th>Stock prepago custodia</th>
+            <th>Agente / supervisor</th><th className="num">Nos debe</th><th className="num">Debemos</th><th className="num">Neto</th>
+            <th className="num">Garantía separada</th><th className="num">Adelantos separados</th><th className="num">Stock prepago custodia</th>
           </tr>
         </thead>
         <tbody>
           {deudas.filas.map((f: any) => (
             <tr key={f.grupo}>
               <td><strong>{f.grupo}</strong></td>
-              <td>{usd(f.nosDebe)}</td>
-              <td>{usd(f.debemos)}</td>
-              <td><span className={`badge ${f.neto >= 0 ? "pos" : "neg"}`}>{usd(f.neto)}</span></td>
-              <td>{usd(f.garantia)}</td>
-              <td>{usd(f.adelantos)}</td>
-              <td>{usd(f.stockPrepago)}</td>
+              <td className="num money">{usd(f.nosDebe)}</td>
+              <td className="num money">{usd(f.debemos)}</td>
+              <td className="num"><span className={`badge ${f.neto >= 0 ? "pos" : "neg"}`}>{usd(f.neto)}</span></td>
+              <td className="num money">{usd(f.garantia)}</td>
+              <td className="num money">{usd(f.adelantos)}</td>
+              <td className="num money">{usd(f.stockPrepago)}</td>
             </tr>
           ))}
           <tr style={{ fontWeight: 600, background: "var(--panel-soft, rgba(255,255,255,0.03))" }}>
             <td>TOTAL</td>
-            <td>{usd(deudas.totales.nosDebe)}</td>
-            <td>{usd(deudas.totales.debemos)}</td>
-            <td>{usd(deudas.totales.neto)}</td>
-            <td>{usd(deudas.totales.garantia)}</td>
-            <td>{usd(deudas.totales.adelantos)}</td>
-            <td>{usd(deudas.totales.stockPrepago)}</td>
+            <td className="num money">{usd(deudas.totales.nosDebe)}</td>
+            <td className="num money">{usd(deudas.totales.debemos)}</td>
+            <td className="num money">{usd(deudas.totales.neto)}</td>
+            <td className="num money">{usd(deudas.totales.garantia)}</td>
+            <td className="num money">{usd(deudas.totales.adelantos)}</td>
+            <td className="num money">{usd(deudas.totales.stockPrepago)}</td>
           </tr>
         </tbody>
       </table>
@@ -266,7 +266,7 @@ function PrepagoTab({ prepago }: { prepago: any[] | null }) {
       ) : (
         <table>
           <thead>
-            <tr><th>Cuenta</th><th>Supervisor</th><th>Club</th><th>Unidades</th><th>Tasa</th><th>Equivalente USD</th></tr>
+            <tr><th>Cuenta</th><th>Supervisor</th><th>Club</th><th className="num">Unidades</th><th className="num">Tasa</th><th className="num">Equivalente USD</th></tr>
           </thead>
           <tbody>
             {prepago.map((p) => (
@@ -274,14 +274,14 @@ function PrepagoTab({ prepago }: { prepago: any[] | null }) {
                 <td>{p.agent_name}</td>
                 <td className="muted">{p.grupo}</td>
                 <td>{p.club_name}</td>
-                <td>{num(p.units)}</td>
-                <td>{p.rate ?? <span className="muted">sin tasa</span>}</td>
-                <td>{p.usd_ref !== null ? usd(p.usd_ref) : <span className="muted">sin tasa</span>}</td>
+                <td className="num">{num(p.units)}</td>
+                <td className="num">{p.rate ?? <span className="muted">sin tasa</span>}</td>
+                <td className="num">{p.usd_ref !== null ? usd(p.usd_ref) : <span className="muted">sin tasa</span>}</td>
               </tr>
             ))}
             <tr style={{ fontWeight: 600, background: "var(--panel-soft, rgba(255,255,255,0.03))" }}>
               <td colSpan={5}>TOTAL</td>
-              <td>{usd(total)}</td>
+              <td className="num money">{usd(total)}</td>
             </tr>
           </tbody>
         </table>
@@ -302,7 +302,7 @@ function TablaConsolidadoPorSistema({ titulo, filas }: { titulo: string; filas: 
       ) : (
         <table>
           <thead>
-            <tr><th>Supervisor / agente</th><th>Club</th><th>Cuentas incluidas</th><th>Unidades</th><th>USD físico ref.</th></tr>
+            <tr><th>Supervisor / agente</th><th>Club</th><th>Cuentas incluidas</th><th className="num">Unidades</th><th className="num">USD físico ref.</th></tr>
           </thead>
           <tbody>
             {filas.map((c) => (
@@ -310,8 +310,8 @@ function TablaConsolidadoPorSistema({ titulo, filas }: { titulo: string; filas: 
                 <td><strong>{c.grupo}</strong></td>
                 <td>{c.club_name}</td>
                 <td className="muted" style={{ fontSize: 12 }}>{c.cuentas.join(", ")}</td>
-                <td>{num(c.unidades)}</td>
-                <td>{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
+                <td className="num">{num(c.unidades)}</td>
+                <td className="num">{c.usd !== null ? usd(c.usd) : <span className="muted">sin tasa</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -359,8 +359,8 @@ function CuentasTab({
         <table>
           <thead>
             <tr>
-              <th>Cuenta</th><th>Supervisor</th><th>Club</th><th>Sistema</th><th>Unidades</th><th>Tasa</th>
-              <th>USD ref.</th><th>Excluida</th><th>Estado</th><th>Confirmado</th><th></th>
+              <th>Cuenta</th><th>Supervisor</th><th>Club</th><th>Sistema</th><th className="num">Unidades</th><th className="num">Tasa</th>
+              <th className="num">USD ref.</th><th>Excluida</th><th>Estado</th><th>Confirmado</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -370,9 +370,9 @@ function CuentasTab({
                 <td className="muted">{s.grupo}</td>
                 <td>{s.club_name}</td>
                 <td><span className="badge neutral">{s.system}</span></td>
-                <td>{num(s.units)}</td>
-                <td>{s.rate ?? "—"}</td>
-                <td>{s.usd_ref !== null ? usd(s.usd_ref) : "—"}</td>
+                <td className="num">{num(s.units)}</td>
+                <td className="num">{s.rate ?? "—"}</td>
+                <td className="num">{s.usd_ref !== null ? usd(s.usd_ref) : "—"}</td>
                 <td>{s.excluded ? "Sí" : "—"}</td>
                 <td className="muted" style={{ fontSize: 12 }} title={s.observaciones || undefined}>{s.estado || "—"}</td>
                 <td>{dateShort(s.confirmado_en)}</td>

@@ -361,27 +361,27 @@ export default function ResumenClub() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Agente</th><th>Jugadores</th><th>Resultado</th><th>Ring Game</th><th>MTT</th><th>SNG</th>
-                        <th>Rake total</th><th>% Rakeback</th><th>Comisión agente</th><th>Comisión plataforma</th>
-                        <th>Ganancia por rake</th><th>Rodeo agente</th><th>Cierre final agente</th>
+                        <th>Agente</th><th className="num">Jugadores</th><th className="num">Resultado</th><th className="num">Ring Game</th><th className="num">MTT</th><th className="num">SNG</th>
+                        <th className="num">Rake total</th><th className="num">% Rakeback</th><th className="num">Comisión agente</th><th className="num">Comisión plataforma</th>
+                        <th className="num">Ganancia por rake</th><th className="num">Rodeo agente</th><th className="num">Cierre final agente</th>
                       </tr>
                     </thead>
                     <tbody>
                       {resumen.filas.map((f: any) => (
                         <tr key={f.agentId}>
                           <td>{f.agentName}</td>
-                          <td className="muted">{f.jugadores ?? "-"}</td>
-                          <td>{usd(f.resultado)}</td>
-                          <td className="muted">{f.ringGame !== null ? usd(f.ringGame) : "-"}</td>
-                          <td className="muted">{f.mtt !== null ? usd(f.mtt) : "-"}</td>
-                          <td className="muted">{f.sng !== null ? usd(f.sng) : "-"}</td>
-                          <td>{usd(f.rakeTotal)}</td>
-                          <td className="muted">{pct(f.rakebackPct)}</td>
-                          <td>{usd(f.rakebackAgente)}</td>
-                          <td className="muted">{usd(f.comisionPlataforma)}</td>
-                          <td>{usd(f.gananciaPorRake)}</td>
-                          <td className="muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
-                          <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
+                          <td className="num muted">{f.jugadores ?? "-"}</td>
+                          <td className="num money">{usd(f.resultado)}</td>
+                          <td className="num muted">{f.ringGame !== null ? usd(f.ringGame) : "-"}</td>
+                          <td className="num muted">{f.mtt !== null ? usd(f.mtt) : "-"}</td>
+                          <td className="num muted">{f.sng !== null ? usd(f.sng) : "-"}</td>
+                          <td className="num money">{usd(f.rakeTotal)}</td>
+                          <td className="num muted">{pct(f.rakebackPct)}</td>
+                          <td className="num money">{usd(f.rakebackAgente)}</td>
+                          <td className="num muted">{usd(f.comisionPlataforma)}</td>
+                          <td className="num money">{usd(f.gananciaPorRake)}</td>
+                          <td className="num muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
+                          <td className="num"><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -390,22 +390,22 @@ export default function ResumenClub() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Agente</th><th>Resultado</th><th>Rake total</th><th>% Rakeback</th>
-                        <th>Rakeback agente</th><th>Comisión plataforma</th><th>Rebate</th><th>Ganancia por rake</th><th>Cierre final agente</th>
+                        <th>Agente</th><th className="num">Resultado</th><th className="num">Rake total</th><th className="num">% Rakeback</th>
+                        <th className="num">Rakeback agente</th><th className="num">Comisión plataforma</th><th className="num">Rebate</th><th className="num">Ganancia por rake</th><th className="num">Cierre final agente</th>
                       </tr>
                     </thead>
                     <tbody>
                       {resumen.filas.map((f: any) => (
                         <tr key={f.agentId}>
                           <td>{f.agentName}</td>
-                          <td>{usd(f.resultado)}</td>
-                          <td>{usd(f.rakeTotal)}</td>
-                          <td className="muted">{pct(f.rakebackPct)}</td>
-                          <td>{usd(f.rakebackAgente)}</td>
-                          <td className="muted">{usd(f.comisionPlataforma)}</td>
-                          <td className="muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
-                          <td>{usd(f.gananciaPorRake)}</td>
-                          <td><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
+                          <td className="num money">{usd(f.resultado)}</td>
+                          <td className="num money">{usd(f.rakeTotal)}</td>
+                          <td className="num muted">{pct(f.rakebackPct)}</td>
+                          <td className="num money">{usd(f.rakebackAgente)}</td>
+                          <td className="num muted">{usd(f.comisionPlataforma)}</td>
+                          <td className="num muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
+                          <td className="num money">{usd(f.gananciaPorRake)}</td>
+                          <td className="num"><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -464,9 +464,9 @@ export default function ResumenClub() {
                     <table>
                       <tbody>
                         {ingresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className={f.monto >= 0 ? "pos" : "neg"}>{usd(f.monto)}</td></tr>
+                          <tr key={f.label}><td>{f.label}</td><td className={`num ${f.monto >= 0 ? "pos" : "neg"}`}>{usd(f.monto)}</td></tr>
                         ))}
-                        <tr><td><strong>Total ingresos</strong></td><td className="pos"><strong>{usd(totalIngresos)}</strong></td></tr>
+                        <tr><td><strong>Total ingresos</strong></td><td className="num pos"><strong>{usd(totalIngresos)}</strong></td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -475,9 +475,9 @@ export default function ResumenClub() {
                     <table>
                       <tbody>
                         {egresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className={f.monto >= 0 ? "neg" : "pos"}>{usd(f.monto)}</td></tr>
+                          <tr key={f.label}><td>{f.label}</td><td className={`num ${f.monto >= 0 ? "neg" : "pos"}`}>{usd(f.monto)}</td></tr>
                         ))}
-                        <tr><td><strong>Total egresos</strong></td><td className="neg"><strong>{usd(totalEgresos)}</strong></td></tr>
+                        <tr><td><strong>Total egresos</strong></td><td className="num neg"><strong>{usd(totalEgresos)}</strong></td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -512,41 +512,41 @@ export default function ResumenClub() {
               <tbody>
                 <tr className="panel" style={{ background: "var(--green-soft)" }}>
                   <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
-                  <td><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
+                  <td className="num"><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
                 </tr>
-                <tr><td className="muted">Agentes</td><td className="muted">{resumen.agentesConCierre}</td></tr>
-                <tr><td className="muted">Jugadores</td><td className="muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
-                <tr><td className="muted">Resultado</td><td className={Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.resultadoTotal)}</td></tr>
-                <tr><td className="muted">Rake total generado por el club</td><td className={Number(resumen.rakeTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.rakeTotal)}</td></tr>
-                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className={Number(resumen.comisionesAgentes) >= 0 ? "pos" : "neg"}>{usd(resumen.comisionesAgentes)}</td></tr>
-                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className={Number(resumen.comisionPlataformaTotal) >= 0 ? "pos" : "neg"}>{usd(resumen.comisionPlataformaTotal)}</td></tr>
+                <tr><td className="muted">Agentes</td><td className="num muted">{resumen.agentesConCierre}</td></tr>
+                <tr><td className="muted">Jugadores</td><td className="num muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
+                <tr><td className="muted">Resultado</td><td className={`num ${Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.resultadoTotal)}</td></tr>
+                <tr><td className="muted">Rake total generado por el club</td><td className={`num ${Number(resumen.rakeTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.rakeTotal)}</td></tr>
+                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className={`num ${Number(resumen.comisionesAgentes) >= 0 ? "pos" : "neg"}`}>{usd(resumen.comisionesAgentes)}</td></tr>
+                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className={`num ${Number(resumen.comisionPlataformaTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.comisionPlataformaTotal)}</td></tr>
                 <tr>
                   <td className="muted">Ventas/VIP</td>
-                  <td className={Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}>
+                  <td className={`num ${Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}`}>
                     {usd(resumen.ajusteManualTotal)}
                   </td>
                 </tr>
                 <tr>
                   <td className="muted">Ajuste manual Promociones</td>
-                  <td className={Number(resumen.ingresoPorVentas) === 0 ? "muted" : Number(resumen.ingresoPorVentas) >= 0 ? "pos" : "neg"}>
+                  <td className={`num ${Number(resumen.ingresoPorVentas) === 0 ? "muted" : Number(resumen.ingresoPorVentas) >= 0 ? "pos" : "neg"}`}>
                     {usd(resumen.ingresoPorVentas)}
                   </td>
                 </tr>
                 {Number(resumen.cargasTesoreriaTotal) !== 0 && (
                   <tr>
                     <td className="muted">Cargado en tesorería esta semana (informativo — se cruza en Liquidaciones)</td>
-                    <td className="muted">{usd(resumen.cargasTesoreriaTotal)}</td>
+                    <td className="num muted">{usd(resumen.cargasTesoreriaTotal)}</td>
                   </tr>
                 )}
                 <tr>
                   <td className="muted">Tasa semanal fija (Tasas)</td>
-                  <td className={Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}>
+                  <td className={`num ${Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}`}>
                     {usd(resumen.tasaSemanalFija)}
                   </td>
                 </tr>
                 <tr>
                   <td className="muted">Cierre total agentes</td>
-                  <td className={Number(resumen.cierreTotalAgentes) >= 0 ? "pos" : "neg"}>{usd(resumen.cierreTotalAgentes)}</td>
+                  <td className={`num ${Number(resumen.cierreTotalAgentes) >= 0 ? "pos" : "neg"}`}>{usd(resumen.cierreTotalAgentes)}</td>
                 </tr>
               </tbody>
             </table>

@@ -165,7 +165,7 @@ export default function Agentes() {
             </div>
             <table>
               <thead>
-                <tr><th>Nombre</th><th>Sistema</th><th>Tipo de cuenta</th><th>% Rakeback / Rebate</th><th>Saldo total</th><th>Garantía</th><th></th></tr>
+                <tr><th>Nombre</th><th>Sistema</th><th>Tipo de cuenta</th><th>% Rakeback / Rebate</th><th className="num">Saldo total</th><th className="num">Garantía</th><th></th></tr>
               </thead>
               <tbody>
                 {agentesFiltrados.map((a) => (
@@ -213,8 +213,8 @@ export default function Agentes() {
                         </span>
                       )}
                     </td>
-                    <td><span className={`badge ${Number(a.saldo_total) > 0 ? "pos" : Number(a.saldo_total) < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
-                    <td>
+                    <td className="num"><span className={`badge ${Number(a.saldo_total) > 0 ? "pos" : Number(a.saldo_total) < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
+                    <td className="num">
                       {a.garantia_monto != null ? (
                         <span className="muted" style={{ fontSize: 12.5 }}>
                           {usd(a.garantia_consumida)} / {usd(a.garantia_monto)}

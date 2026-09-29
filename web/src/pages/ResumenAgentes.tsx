@@ -296,39 +296,39 @@ function PreviewResumen({
         <thead>
           <tr>
             <th>Club</th>
-            <th>Resultado</th>
-            <th>Rebate</th>
-            <th>Rakeback bruto</th>
-            <th>Rakeback neto</th>
-            {mostrarRodeo && <th>Rodeo</th>}
-            {mostrarAjuste && <th>Ajuste</th>}
-            <th>Total club</th>
+            <th className="num">Resultado</th>
+            <th className="num">Rebate</th>
+            <th className="num">Rakeback bruto</th>
+            <th className="num">Rakeback neto</th>
+            {mostrarRodeo && <th className="num">Rodeo</th>}
+            {mostrarAjuste && <th className="num">Ajuste</th>}
+            <th className="num">Total club</th>
           </tr>
         </thead>
         <tbody>
           {preview.clubesCombinado.map((c: any, i: number) => (
             <tr key={i}>
               <td>{c.clubName}</td>
-              <td>{usd(c.resultado)}</td>
-              <td>{usd(c.rebate)}</td>
-              <td>{usd(c.rakebackBruto)}</td>
-              <td>{usd(c.rakebackNeto)}</td>
-              {mostrarRodeo && <td>{usd(c.rodeo)}</td>}
-              {mostrarAjuste && <td>{usd(c.ajusteManual)}</td>}
-              <td>{usd(c.totalClub)}</td>
+              <td className="num money">{usd(c.resultado)}</td>
+              <td className="num money">{usd(c.rebate)}</td>
+              <td className="num money">{usd(c.rakebackBruto)}</td>
+              <td className="num money">{usd(c.rakebackNeto)}</td>
+              {mostrarRodeo && <td className="num money">{usd(c.rodeo)}</td>}
+              {mostrarAjuste && <td className="num money">{usd(c.ajusteManual)}</td>}
+              <td className="num money">{usd(c.totalClub)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <td><strong>TOTAL SEMANAL</strong></td>
-            <td><strong>{usd(sumClub((c) => c.resultado))}</strong></td>
-            <td><strong>{usd(sumClub((c) => c.rebate))}</strong></td>
-            <td><strong>{usd(sumClub((c) => c.rakebackBruto))}</strong></td>
-            <td><strong>{usd(sumClub((c) => c.rakebackNeto))}</strong></td>
-            {mostrarRodeo && <td><strong>{usd(sumClub((c) => c.rodeo))}</strong></td>}
-            {mostrarAjuste && <td><strong>{usd(sumClub((c) => c.ajusteManual))}</strong></td>}
-            <td><strong>{usd(sumClub((c) => c.totalClub))}</strong></td>
+            <td className="num"><strong>{usd(sumClub((c) => c.resultado))}</strong></td>
+            <td className="num"><strong>{usd(sumClub((c) => c.rebate))}</strong></td>
+            <td className="num"><strong>{usd(sumClub((c) => c.rakebackBruto))}</strong></td>
+            <td className="num"><strong>{usd(sumClub((c) => c.rakebackNeto))}</strong></td>
+            {mostrarRodeo && <td className="num"><strong>{usd(sumClub((c) => c.rodeo))}</strong></td>}
+            {mostrarAjuste && <td className="num"><strong>{usd(sumClub((c) => c.ajusteManual))}</strong></td>}
+            <td className="num"><strong>{usd(sumClub((c) => c.totalClub))}</strong></td>
           </tr>
         </tfoot>
       </table>
@@ -344,19 +344,19 @@ function PreviewResumen({
       <h3 style={{ marginTop: 20, marginBottom: 8 }}>Estado de cuenta</h3>
       <table style={{ maxWidth: 420 }}>
         <tbody>
-          <tr><td>Saldo anterior</td><td>{usd(ec.saldoAnterior)}</td></tr>
-          <tr><td>Cierre semanal</td><td>{usd(ec.cierreSemanal)}</td></tr>
-          <tr><td>Pagos / movimientos de la semana</td><td>{usd(ec.pagosPosteriores)}</td></tr>
-          <tr><td><strong>Saldo operativo final</strong></td><td><strong>{usd(ec.saldoOperativoFinal)}</strong></td></tr>
+          <tr><td>Saldo anterior</td><td className="num money">{usd(ec.saldoAnterior)}</td></tr>
+          <tr><td>Cierre semanal</td><td className="num money">{usd(ec.cierreSemanal)}</td></tr>
+          <tr><td>Pagos / movimientos de la semana</td><td className="num money">{usd(ec.pagosPosteriores)}</td></tr>
+          <tr><td><strong>Saldo operativo final</strong></td><td className="num"><strong>{usd(ec.saldoOperativoFinal)}</strong></td></tr>
           {/* (29/09/2026, pedido de Leo: "necesito poder ver las fichas que se le cargaron y
               estan pendiente de cobrar") -- solo Prepago, que es la modalidad que usa esto (ver
               nota en repo/advances.ts). Ya está incluido en Saldo anterior, se muestra aparte
               solo como referencia de cuánto de eso es por esto. */}
           {preview.sistema === "PREPAGO" && Number(ec.fichasAdelantadasPendientes) > 0 && (
-            <tr><td className="muted">Fichas adelantadas pendientes de cobro</td><td className="muted">{usd(ec.fichasAdelantadasPendientes)}</td></tr>
+            <tr><td className="muted">Fichas adelantadas pendientes de cobro</td><td className="num money muted">{usd(ec.fichasAdelantadasPendientes)}</td></tr>
           )}
-          <tr><td>Nos debe</td><td>{usd(ec.nosDebe)}</td></tr>
-          <tr><td>Debemos / saldo a favor</td><td>{usd(ec.debemos)}</td></tr>
+          <tr><td>Nos debe</td><td className="num money">{usd(ec.nosDebe)}</td></tr>
+          <tr><td>Debemos / saldo a favor</td><td className="num money">{usd(ec.debemos)}</td></tr>
           <tr><td>Situación</td><td>{ec.situacion}</td></tr>
         </tbody>
       </table>
@@ -380,32 +380,32 @@ function PreviewResumen({
                   <table>
                     <thead>
                       <tr>
-                        <th>Resultado</th>
-                        <th>Rake</th>
-                        <th>Rebate {pct(j.rebatePct)}</th>
-                        <th>Rakeback {pct(j.rakebackPct)}</th>
-                        <th>Rakeback neto</th>
-                        <th>Cierre semanal</th>
+                        <th className="num">Resultado</th>
+                        <th className="num">Rake</th>
+                        <th className="num">Rebate {pct(j.rebatePct)}</th>
+                        <th className="num">Rakeback {pct(j.rakebackPct)}</th>
+                        <th className="num">Rakeback neto</th>
+                        <th className="num">Cierre semanal</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td>{usd(j.resultado)}</td>
-                        <td>{usd(j.rake)}</td>
-                        <td>{usd(j.rebate)}</td>
-                        <td>{usd(j.rakebackBruto)}</td>
-                        <td>{usd(j.rakebackNeto)}</td>
-                        <td>{usd(j.cierre)}</td>
+                        <td className="num money">{usd(j.resultado)}</td>
+                        <td className="num money">{usd(j.rake)}</td>
+                        <td className="num money">{usd(j.rebate)}</td>
+                        <td className="num money">{usd(j.rakebackBruto)}</td>
+                        <td className="num money">{usd(j.rakebackNeto)}</td>
+                        <td className="num money">{usd(j.cierre)}</td>
                       </tr>
                     </tbody>
                   </table>
                   <table style={{ maxWidth: 460, marginTop: 8 }}>
                     <tbody>
-                      <tr><td>Resultado de juego</td><td>{usd(j.resultado)}</td></tr>
-                      <tr><td>Rebate = (resultado + rake) × {pct(j.rebatePct)}</td><td>{usd(j.rebate)}</td></tr>
-                      <tr><td>Rakeback bruto = rake × {pct(j.rakebackPct)}</td><td>{usd(j.rakebackBruto)}</td></tr>
-                      <tr><td>Rakeback neto = rakeback + rebate</td><td>{usd(j.rakebackNeto)}</td></tr>
-                      <tr><td><strong>Cierre semanal = resultado + rakeback neto</strong></td><td><strong>{usd(j.cierre)}</strong></td></tr>
+                      <tr><td>Resultado de juego</td><td className="num money">{usd(j.resultado)}</td></tr>
+                      <tr><td>Rebate = (resultado + rake) × {pct(j.rebatePct)}</td><td className="num money">{usd(j.rebate)}</td></tr>
+                      <tr><td>Rakeback bruto = rake × {pct(j.rakebackPct)}</td><td className="num money">{usd(j.rakebackBruto)}</td></tr>
+                      <tr><td>Rakeback neto = rakeback + rebate</td><td className="num money">{usd(j.rakebackNeto)}</td></tr>
+                      <tr><td><strong>Cierre semanal = resultado + rakeback neto</strong></td><td className="num"><strong>{usd(j.cierre)}</strong></td></tr>
                     </tbody>
                   </table>
                   <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
@@ -423,15 +423,15 @@ function PreviewResumen({
                   <tr>
                     <th>Subagente</th>
                     <th>Club</th>
-                    <th>Resultado</th>
-                    <th>Rake</th>
-                    <th>% RB principal</th>
-                    <th>RB principal</th>
-                    <th>% RB subagente</th>
-                    <th>RB subagente</th>
-                    <th>Margen principal</th>
-                    <th>Cierre subagente</th>
-                    <th>Impacto principal</th>
+                    <th className="num">Resultado</th>
+                    <th className="num">Rake</th>
+                    <th className="num">% RB principal</th>
+                    <th className="num">RB principal</th>
+                    <th className="num">% RB subagente</th>
+                    <th className="num">RB subagente</th>
+                    <th className="num">Margen principal</th>
+                    <th className="num">Cierre subagente</th>
+                    <th className="num">Impacto principal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -439,15 +439,15 @@ function PreviewResumen({
                     <tr key={i}>
                       <td>{s.subagenteName}</td>
                       <td>{s.clubName}</td>
-                      <td>{usd(s.resultado)}</td>
-                      <td>{usd(s.rake)}</td>
-                      <td>{pct(s.rakebackPctPrincipal)}</td>
-                      <td>{usd(s.rakebackPrincipal)}</td>
-                      <td>{pct(s.rakebackPctSubagente)}</td>
-                      <td>{usd(s.rakebackSubagente)}</td>
-                      <td>{usd(s.margenPrincipal)}</td>
-                      <td>{usd(s.cierreSubagente)}</td>
-                      <td>{usd(s.impactoPrincipal)}</td>
+                      <td className="num money">{usd(s.resultado)}</td>
+                      <td className="num money">{usd(s.rake)}</td>
+                      <td className="num">{pct(s.rakebackPctPrincipal)}</td>
+                      <td className="num money">{usd(s.rakebackPrincipal)}</td>
+                      <td className="num">{pct(s.rakebackPctSubagente)}</td>
+                      <td className="num money">{usd(s.rakebackSubagente)}</td>
+                      <td className="num money">{usd(s.margenPrincipal)}</td>
+                      <td className="num money">{usd(s.cierreSubagente)}</td>
+                      <td className="num money">{usd(s.impactoPrincipal)}</td>
                     </tr>
                   ))}
                 </tbody>

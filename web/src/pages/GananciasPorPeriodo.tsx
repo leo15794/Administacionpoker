@@ -117,7 +117,7 @@ export default function GananciasPorPeriodo() {
         ) : (
           <table>
             <thead>
-              <tr><th>Nombre</th><th>Semanas</th><th>Estado</th><th>Ganancia neta final</th><th>Cerrado</th><th></th></tr>
+              <tr><th>Nombre</th><th>Semanas</th><th>Estado</th><th className="num">Ganancia neta final</th><th>Cerrado</th><th></th></tr>
             </thead>
             <tbody>
               {periodos.map((p) => (
@@ -125,7 +125,7 @@ export default function GananciasPorPeriodo() {
                   <td><strong>{p.name}</strong></td>
                   <td>{p.semanas?.length ?? 0}</td>
                   <td><span className={`badge ${p.status === "CERRADO" ? "pos" : "neutral"}`}>{p.status === "CERRADO" ? "Cerrado" : "Abierto"}</span></td>
-                  <td>{p.ganancia_neta_final !== null ? <span className={Number(p.ganancia_neta_final) >= 0 ? "pos" : "neg"}>{usd(p.ganancia_neta_final)}</span> : <span className="muted">—</span>}</td>
+                  <td className="num">{p.ganancia_neta_final !== null ? <span className={Number(p.ganancia_neta_final) >= 0 ? "pos" : "neg"}>{usd(p.ganancia_neta_final)}</span> : <span className="muted">—</span>}</td>
                   <td className="muted" style={{ fontSize: 12 }}>{p.closed_at ? dateShort(p.closed_at) : "—"}</td>
                   <td className="row-actions">
                     <button className="btn secondary small" onClick={() => setShowDetalle(p.id)}>Ver</button>
@@ -164,7 +164,7 @@ export default function GananciasPorPeriodo() {
         ) : (
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Absorbe DP</th><th>Cuotas</th><th>Próxima cuota</th><th>Estado</th><th></th></tr>
+              <tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th className="num">Absorbe DP</th><th>Cuotas</th><th className="num">Próxima cuota</th><th>Estado</th><th></th></tr>
             </thead>
             <tbody>
               {ajustes.map((a) => (
@@ -172,9 +172,9 @@ export default function GananciasPorPeriodo() {
                   <td>{dateShort(a.occurred_at)}</td>
                   <td>{a.tipo}</td>
                   <td style={{ maxWidth: 320 }} title={a.descripcion}>{a.descripcion}</td>
-                  <td>{usd(a.absorbe_digiplayers)}</td>
+                  <td className="num money">{usd(a.absorbe_digiplayers)}</td>
                   <td>{a.periodos_aplicados} / {a.periodos_totales}</td>
-                  <td>{a.estado === "ACTIVO" ? usd(a.proximaCuota) : <span className="muted">—</span>}</td>
+                  <td className="num">{a.estado === "ACTIVO" ? usd(a.proximaCuota) : <span className="muted">—</span>}</td>
                   <td><span className={`badge ${a.estado === "ACTIVO" ? "neutral" : "pos"}`}>{a.estado === "ACTIVO" ? "Activo" : "Finalizado"}</span></td>
                   <td className="row-actions">
                     <button className="btn secondary small" onClick={() => setShowEditarAjuste(a)}>Editar</button>
@@ -446,13 +446,13 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
         <div className="muted">Sin cierres en las semanas elegidas.</div>
       ) : (
         <table>
-          <thead><tr><th>Semana</th><th>Club</th><th>Ganancia</th></tr></thead>
+          <thead><tr><th>Semana</th><th>Club</th><th className="num">Ganancia</th></tr></thead>
           <tbody>
             {periodo.detalle?.map((d: any, i: number) => (
               <tr key={i}>
                 <td>{dateShort(d.week_start)} al {dateShort(d.week_end)}</td>
                 <td>{d.club_name}</td>
-                <td>{usd(d.ganancia)}</td>
+                <td className="num money">{usd(d.ganancia)}</td>
               </tr>
             ))}
           </tbody>

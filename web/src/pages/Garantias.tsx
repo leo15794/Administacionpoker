@@ -81,15 +81,15 @@ export default function Garantias() {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Garantizado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th className="num">Garantizado</th><th className="num">Consumido</th><th className="num">Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {garantias.map((g) => (
                 <tr key={g.id}>
                   <td>{g.agent_name}</td>
-                  <td>{usd(g.amount)}</td>
-                  <td>{usd(g.consumed)}</td>
-                  <td><span className="badge neutral">{usd(Number(g.amount) - Number(g.consumed))}</span></td>
+                  <td className="num money">{usd(g.amount)}</td>
+                  <td className="num money">{usd(g.consumed)}</td>
+                  <td className="num"><span className="badge neutral">{usd(Number(g.amount) - Number(g.consumed))}</span></td>
                   <td className="muted" style={{ fontSize: 12 }} title={g.notes || undefined}>{g.notes || "—"}</td>
                   <td className="muted">{dateShort(g.updated_at)}</td>
                   <td>
@@ -113,7 +113,7 @@ export default function Garantias() {
         ) : (
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th>Monto</th><th>Garantía resultante</th><th>Consumido resultante</th><th>Notas</th></tr>
+              <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th className="num">Monto</th><th className="num">Garantía resultante</th><th className="num">Consumido resultante</th><th>Notas</th></tr>
             </thead>
             <tbody>
               {historial.map((m) => (
@@ -121,9 +121,9 @@ export default function Garantias() {
                   <td>{dateShort(m.occurred_at)}</td>
                   <td>{m.agent_name}</td>
                   <td><span className="badge neutral">{TIPO_LABEL[m.type] ?? m.type}</span></td>
-                  <td>{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
-                  <td>{usd(m.resulting_amount)}</td>
-                  <td>{usd(m.resulting_consumed)}</td>
+                  <td className="num money">{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
+                  <td className="num money">{usd(m.resulting_amount)}</td>
+                  <td className="num money">{usd(m.resulting_consumed)}</td>
                   <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                 </tr>
               ))}

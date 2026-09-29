@@ -148,7 +148,7 @@ export default function CuentasSocios() {
         ) : (
           <table>
             <thead>
-              <tr><th>Cuenta</th><th>Descripción</th><th>Saldo</th><th>Movimientos</th><th></th></tr>
+              <tr><th>Cuenta</th><th>Descripción</th><th className="num">Saldo</th><th className="num">Movimientos</th><th></th></tr>
             </thead>
             <tbody>
               {cuentas.map((c) => (
@@ -156,8 +156,8 @@ export default function CuentasSocios() {
                   <tr>
                     <td><strong>{c.name}</strong></td>
                     <td className="muted" style={{ fontSize: 12 }} title={c.description || undefined}>{c.description || "—"}</td>
-                    <td><span className={`badge ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</span></td>
-                    <td>{c.movimientos}</td>
+                    <td className="num"><span className={`badge ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</span></td>
+                    <td className="num">{c.movimientos}</td>
                     <td className="row-actions">
                       <button className="btn secondary small" onClick={() => toggleExpandir(c.id)}>
                         {expandida === c.id ? "Ocultar" : "Ver movimientos"}
@@ -189,7 +189,7 @@ export default function CuentasSocios() {
                         ) : (
                           <table>
                             <thead>
-                              <tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Monto</th><th>Notas</th><th></th></tr>
+                              <tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th className="num">Monto</th><th>Notas</th><th></th></tr>
                             </thead>
                             <tbody>
                               {movimientos[c.id].map((m) => (
@@ -204,7 +204,7 @@ export default function CuentasSocios() {
                                       </span>
                                     )}
                                   </td>
-                                  <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{usd(m.amount)}</td>
+                                  <td className={`num ${Number(m.amount) >= 0 ? "pos" : "neg"}`}>{usd(m.amount)}</td>
                                   <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                                   <td className="row-actions">
                                     <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>

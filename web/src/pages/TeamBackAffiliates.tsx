@@ -395,12 +395,12 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
           <thead>
             <tr>
               <th>Semana</th>
-              <th>Rake propio</th>
-              <th>Referidos activos</th>
-              <th>Escalón</th>
-              <th>Rakeback</th>
-              <th>Comisión 3%</th>
-              <th>Total</th>
+              <th className="num">Rake propio</th>
+              <th className="num">Referidos activos</th>
+              <th className="num">Escalón</th>
+              <th className="num">Rakeback</th>
+              <th className="num">Comisión 3%</th>
+              <th className="num">Total</th>
               <th></th>
             </tr>
           </thead>
@@ -408,16 +408,16 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
             {historial.map((l) => (
               <tr key={l.id}>
                 <td>{dateShort(l.week_start)} al {dateShort(l.week_end)}</td>
-                <td>{usd(l.rake_propio)}</td>
-                <td>{l.referidos_activos_count}</td>
-                <td>
+                <td className="num">{usd(l.rake_propio)}</td>
+                <td className="num">{l.referidos_activos_count}</td>
+                <td className="num">
                   {pct(l.rakeback_pct)}{" "}
                   <span className="muted" style={{ fontSize: 11 }}>
                     ({l.tier_alcanzado_por === "BASE" ? "base" : l.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
                   </span>
                 </td>
-                <td>{usd(l.rakeback_generado)}</td>
-                <td>
+                <td className="num">{usd(l.rakeback_generado)}</td>
+                <td className="num">
                   {usd(l.comision_3pct_acreditada)}
                   {l.comision_3pct_pausada && (
                     <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
@@ -425,7 +425,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                     </span>
                   )}
                 </td>
-                <td><strong>{usd(l.total_acreditado)}</strong></td>
+                <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
                 <td>
                   <button className="btn secondary small" onClick={() => setSeleccion(l)}>Ver</button>
                 </td>
@@ -625,13 +625,13 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
           <tr>
             <th>Jugador</th>
             <th>ID Suprema</th>
-            <th>Rake propio</th>
-            <th>Referidos activos</th>
-            <th>Escalón</th>
-            <th>Rakeback</th>
-            <th>Rake referidos</th>
-            <th>Comisión 3%</th>
-            <th>Total</th>
+            <th className="num">Rake propio</th>
+            <th className="num">Referidos activos</th>
+            <th className="num">Escalón</th>
+            <th className="num">Rakeback</th>
+            <th className="num">Rake referidos</th>
+            <th className="num">Comisión 3%</th>
+            <th className="num">Total</th>
             <th>Pago</th>
             <th></th>
           </tr>
@@ -641,17 +641,17 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
             <tr key={f.id}>
               <td>{f.player_name}</td>
               <td className="muted">{f.suprema_player_id}</td>
-              <td>{usd(f.rake_propio)}</td>
-              <td>{f.referidos_activos_count}</td>
-              <td>
+              <td className="num">{usd(f.rake_propio)}</td>
+              <td className="num">{f.referidos_activos_count}</td>
+              <td className="num">
                 {pct(f.rakeback_pct)}{" "}
                 <span className="muted" style={{ fontSize: 11 }}>
                   ({f.tier_alcanzado_por === "BASE" ? "base" : f.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
                 </span>
               </td>
-              <td>{usd(f.rakeback_generado)}</td>
-              <td>{usd(f.rake_referidos_directos)}</td>
-              <td>
+              <td className="num">{usd(f.rakeback_generado)}</td>
+              <td className="num">{usd(f.rake_referidos_directos)}</td>
+              <td className="num">
                 {usd(f.comision_3pct_acreditada)}
                 {f.comision_3pct_pausada && (
                   <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="El referente no tuvo actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
@@ -659,7 +659,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
                   </span>
                 )}
               </td>
-              <td>
+              <td className="num">
                 <strong>{usd(f.total_acreditado)}</strong>
               </td>
               <td>
@@ -697,7 +697,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
               <td colSpan={8}>
                 <strong>Total general</strong>
               </td>
-              <td>
+              <td className="num">
                 <strong>{usd(totalGeneral)}</strong>
               </td>
               <td></td>
@@ -785,20 +785,20 @@ function GananciaSemanalTab() {
         <thead>
           <tr>
             <th>Semana</th>
-            <th>Rake propio total</th>
-            <th>Rake al 80%</th>
-            <th>Total liquidado</th>
-            <th>Ganancia</th>
+            <th className="num">Rake propio total</th>
+            <th className="num">Rake al 80%</th>
+            <th className="num">Total liquidado</th>
+            <th className="num">Ganancia</th>
           </tr>
         </thead>
         <tbody>
           {filas.map((f) => (
             <tr key={f.week_start}>
               <td>{dateShort(f.week_start)} al {dateShort(f.week_end)}</td>
-              <td>{usd(f.rake_propio_total)}</td>
-              <td>{usd(f.rake_al_80_pct)}</td>
-              <td>{usd(f.total_liquidado)}</td>
-              <td>
+              <td className="num">{usd(f.rake_propio_total)}</td>
+              <td className="num">{usd(f.rake_al_80_pct)}</td>
+              <td className="num">{usd(f.total_liquidado)}</td>
+              <td className="num">
                 <strong className={f.ganancia >= 0 ? "pos" : "neg"}>{usd(f.ganancia)}</strong>
               </td>
             </tr>
@@ -813,10 +813,10 @@ function GananciaSemanalTab() {
           <tfoot>
             <tr>
               <td><strong>Acumulado</strong></td>
-              <td><strong>{usd(acumulado.rake_propio_total)}</strong></td>
-              <td><strong>{usd(acumulado.rake_al_80_pct)}</strong></td>
-              <td><strong>{usd(acumulado.total_liquidado)}</strong></td>
-              <td><strong className={acumulado.ganancia >= 0 ? "pos" : "neg"}>{usd(acumulado.ganancia)}</strong></td>
+              <td className="num"><strong>{usd(acumulado.rake_propio_total)}</strong></td>
+              <td className="num"><strong>{usd(acumulado.rake_al_80_pct)}</strong></td>
+              <td className="num"><strong>{usd(acumulado.total_liquidado)}</strong></td>
+              <td className="num"><strong className={acumulado.ganancia >= 0 ? "pos" : "neg"}>{usd(acumulado.ganancia)}</strong></td>
             </tr>
           </tfoot>
         )}
@@ -898,10 +898,10 @@ function JugadoresTab() {
         <td className="muted">{j.suprema_player_id}</td>
         <td>{dateShort(j.fecha_alta)}</td>
         <td className="muted">{j.referido_por_name ?? "—"}</td>
-        <td>{j.referidos_count}</td>
-        <td>{usd(j.comision_total)}</td>
-        <td>{usd(j.comision_pagada)}</td>
-        <td>
+        <td className="num">{j.referidos_count}</td>
+        <td className="num">{usd(j.comision_total)}</td>
+        <td className="num">{usd(j.comision_pagada)}</td>
+        <td className="num">
           {j.tiene_config ? (
             <span className="badge pos">Configurado</span>
           ) : (
@@ -947,10 +947,10 @@ function JugadoresTab() {
               <th>ID Suprema</th>
               <th>Fecha de alta</th>
               <th>Referido por</th>
-              <th># Referidos</th>
-              <th>Comisión acumulada</th>
-              <th>Comisiones pagadas</th>
-              <th>%</th>
+              <th className="num"># Referidos</th>
+              <th className="num">Comisión acumulada</th>
+              <th className="num">Comisiones pagadas</th>
+              <th className="num">%</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -971,10 +971,10 @@ function JugadoresTab() {
               <th>ID Suprema</th>
               <th>Fecha de alta</th>
               <th>Referido por</th>
-              <th># Referidos</th>
-              <th>Comisión acumulada</th>
-              <th>Comisiones pagadas</th>
-              <th>%</th>
+              <th className="num"># Referidos</th>
+              <th className="num">Comisión acumulada</th>
+              <th className="num">Comisiones pagadas</th>
+              <th className="num">%</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -1355,7 +1355,7 @@ function ImportTab() {
                   <tr>
                     <th>Jugador (del archivo)</th>
                     <th>ID Suprema</th>
-                    <th>Rake esta semana</th>
+                    <th className="num">Rake esta semana</th>
                     <th>Referido por</th>
                     <th></th>
                   </tr>
@@ -1382,7 +1382,7 @@ function ImportTab() {
                 </th>
                 <th>Jugador</th>
                 <th>ID Suprema</th>
-                <th>Rake esta semana</th>
+                <th className="num">Rake esta semana</th>
               </tr>
             </thead>
             <tbody>
@@ -1393,7 +1393,7 @@ function ImportTab() {
                   </td>
                   <td>{c.player.name}</td>
                   <td className="muted">{c.player.suprema_player_id}</td>
-                  <td>{usd(c.rake)}</td>
+                  <td className="num">{usd(c.rake)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1443,7 +1443,7 @@ function FilaDesconocido({
     <tr>
       <td>{d.supremaPlayerName}</td>
       <td className="muted">{d.supremaPlayerId}</td>
-      <td>{usd(d.rake)}</td>
+      <td className="num">{usd(d.rake)}</td>
       <td>
         <select value={referidoPorId} onChange={(e) => setReferidoPorId(e.target.value)}>
           <option value="">Nadie (llegó directo)</option>

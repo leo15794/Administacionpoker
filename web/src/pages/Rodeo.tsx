@@ -45,11 +45,11 @@ export default function Rodeo() {
                 <tr>
                   <th>Agente</th>
                   <th>Club</th>
-                  <th>Semanas con Rodeo</th>
+                  <th className="num">Semanas con Rodeo</th>
                   <th>Última semana</th>
-                  <th>Rodeo pagado a agente (acum.)</th>
-                  <th title="Informativo, nunca se acredita a nadie">Rodeo club (acum., info.)</th>
-                  <th>Memoria actual</th>
+                  <th className="num">Rodeo pagado a agente (acum.)</th>
+                  <th className="num" title="Informativo, nunca se acredita a nadie">Rodeo club (acum., info.)</th>
+                  <th className="num">Memoria actual</th>
                 </tr>
               </thead>
               <tbody>
@@ -57,11 +57,11 @@ export default function Rodeo() {
                   <tr key={`${r.agentId}_${r.clubId}`}>
                     <td>{r.agentName}</td>
                     <td>{r.clubName}</td>
-                    <td>{r.semanasConRodeo}</td>
+                    <td className="num">{r.semanasConRodeo}</td>
                     <td className="muted">{r.ultimaSemana ? dateShort(r.ultimaSemana) : "-"}</td>
-                    <td><span className={`badge ${Number(r.rodeoPagadoAgenteTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.rodeoPagadoAgenteTotal)}</span></td>
-                    <td className="muted">{usd(r.rodeoClubTotal)}</td>
-                    <td>
+                    <td className="num"><span className={`badge ${Number(r.rodeoPagadoAgenteTotal) >= 0 ? "pos" : "neg"}`}>{usd(r.rodeoPagadoAgenteTotal)}</span></td>
+                    <td className="num muted">{usd(r.rodeoClubTotal)}</td>
+                    <td className="num">
                       <strong className={Number(r.memoriaActual) > 0 ? "neg" : "pos"}>{usd(r.memoriaActual)}</strong>
                     </td>
                   </tr>

@@ -119,9 +119,9 @@ export default function RakebackPendiente() {
                 <th>Agente</th>
                 <th>Club</th>
                 <th>Rol</th>
-                <th>Monto</th>
-                <th>Pagado</th>
-                <th>Pendiente</th>
+                <th className="num">Monto</th>
+                <th className="num">Pagado</th>
+                <th className="num">Pendiente</th>
                 <th></th>
               </tr>
             </thead>
@@ -135,9 +135,9 @@ export default function RakebackPendiente() {
                       <td>{p.agent_name}</td>
                       <td>{p.club_name}</td>
                       <td className="muted">{p.role === "SUPERVISOR" ? "Supervisor" : "Agente"}</td>
-                      <td>{usd(p.amount)}</td>
-                      <td className="muted">{usd(p.consumed)}</td>
-                      <td><strong className={pendiente >= 0 ? "pos" : "neg"}>{usd(pendiente)}</strong></td>
+                      <td className="num money">{usd(p.amount)}</td>
+                      <td className="num muted">{usd(p.consumed)}</td>
+                      <td className="num"><strong className={pendiente >= 0 ? "pos" : "neg"}>{usd(pendiente)}</strong></td>
                       <td style={{ display: "flex", gap: 6 }}>
                         <button className="btn secondary small" onClick={() => abrir(p)}>Pagar</button>
                         <button className="btn secondary small" onClick={() => darDeBaja(p)}>Dar de baja</button>

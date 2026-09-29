@@ -142,13 +142,13 @@ export default function ComisionesReferidos() {
               </div>
             </div>
             <table>
-              <thead><tr><th>Agente referido</th><th>%</th><th>Saldo</th></tr></thead>
+              <thead><tr><th>Agente referido</th><th className="num">%</th><th className="num">Saldo</th></tr></thead>
               <tbody>
                 {s.referidos.map((r: any) => (
                   <tr key={r.id}>
                     <td>{r.agenteName}</td>
-                    <td className="muted">{r.porcentaje}%</td>
-                    <td className={Number(r.saldo) >= 0 ? "pos" : "neg"}>{usd(r.saldo)}</td>
+                    <td className="num muted">{r.porcentaje}%</td>
+                    <td className={`num ${Number(r.saldo) >= 0 ? "pos" : "neg"}`}>{usd(r.saldo)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -169,7 +169,7 @@ export default function ComisionesReferidos() {
               ) : (
                 <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8 }}>
                   <table>
-                    <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th><th></th></tr></thead>
+                    <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th className="num">Monto</th><th className="num">Saldo resultante</th><th></th></tr></thead>
                     <tbody>
                       {(() => {
                         const vistos = new Set<string>();
@@ -189,8 +189,8 @@ export default function ComisionesReferidos() {
                                   {m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}
                                 </span>
                               </td>
-                              <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{m.amount}</td>
-                              <td>{m.resulting_saldo}</td>
+                              <td className={`num ${Number(m.amount) >= 0 ? "pos" : "neg"}`}>{m.amount}</td>
+                              <td className="num">{m.resulting_saldo}</td>
                               <td>
                                 {esElMasReciente && (
                                   <button
