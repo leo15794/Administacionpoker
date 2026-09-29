@@ -78,12 +78,17 @@ export interface CorreccionAdelantoInput {
 // Todos los adelantos activos, de todos los agentes — puede haber varias filas para el mismo
 // agente (uno por cada adelanto independiente que tenga vigente).
 export async function listAdvancesConAgente() {
+  // amount > consumed (29/09/2026, pedido de Leo): un adelanto cruzado al 100% (consumed ===
+  // amount) sigue con active=true para siempre -- CONSUMO nunca lo da de baja, solo un BAJA
+  // manual lo hace (ver ajustarAdelanto). Sin este filtro se quedaba pegado acá con "pendiente
+  // $0" después de cruzarlo entero, aunque ya había desaparecido correctamente del panel de
+  // Liquidaciones (esa consulta en catalog.ts ya filtraba amount > consumed).
   const r = await pool.query(
     `SELECT ra.*, a.name as agent_name, c.name as club_origen_name
      FROM rakeback_advances ra
      JOIN agents a ON a.id = ra.agent_id
      LEFT JOIN clubs c ON c.id = ra.club_origen_id
-     WHERE ra.active = true
+     WHERE ra.active = true AND ra.amount > ra.consumed
      ORDER BY a.name, ra.created_at`
   );
   return r.rows;
