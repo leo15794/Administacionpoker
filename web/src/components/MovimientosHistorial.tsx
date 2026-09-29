@@ -15,13 +15,26 @@ const TIPO_LABEL: Record<string, string> = {
   CIERRE_SEMANAL: "Cierre semanal",
   PAGO_RAKEBACK: "Pago de rakeback pendiente",
   ADELANTO_RAKEBACK: "Adelanto de rakeback (USDT)",
+  ADELANTO_FICHAS: "Adelanto de fichas",
 };
 
 function truncar(texto: string, max = 140) {
   return texto.length > max ? `${texto.slice(0, max)}…` : texto;
 }
 
-export default function MovimientosHistorial({ agentId, clubId }: { agentId?: string; clubId?: string }) {
+export default function MovimientosHistorial({
+  agentId,
+  clubId,
+  type,
+  desde,
+  hasta,
+}: {
+  agentId?: string;
+  clubId?: string;
+  type?: string;
+  desde?: string;
+  hasta?: string;
+}) {
   const { alertDialog, promptDialog, confirmDialog } = useConfirmDialog();
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState("");
@@ -30,13 +43,13 @@ export default function MovimientosHistorial({ agentId, clubId }: { agentId?: st
 
   function refresh() {
     setError("");
-    api.movimientos({ agentId, clubId }).then(setRows).catch((e) => setError(e.message));
+    api.movimientos({ agentId, clubId, type, desde, hasta }).then(setRows).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
     setRows(null);
     refresh();
-  }, [agentId, clubId]);
+  }, [agentId, clubId, type, desde, hasta]);
 
   async function onRevertir(id: string) {
     const motivo = await promptDialog("¿Por qué revertís este movimiento? (queda registrado en el historial)");

@@ -15,6 +15,7 @@ const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
   CIERRE_SEMANAL: "Cierre semanal",
   PAGO_RAKEBACK: "Pago de rakeback pendiente",
   ADELANTO_RAKEBACK: "Adelanto de rakeback (USDT)",
+  ADELANTO_FICHAS: "Adelanto de fichas",
 };
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {

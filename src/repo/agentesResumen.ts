@@ -23,6 +23,7 @@ const DELTA_SQL = `
     WHEN 'CIERRE_SEMANAL' THEN amount
     WHEN 'PAGO_RAKEBACK' THEN 0
     WHEN 'ADELANTO_RAKEBACK' THEN 0
+    WHEN 'ADELANTO_FICHAS' THEN -ABS(amount)
     WHEN 'TRANSFERENCIA_ENTRE_CLUBES' THEN 0
     ELSE amount
   END
@@ -107,6 +108,12 @@ export interface ResumenAgentePDF {
     nosDebe: number;
     debemos: number;
     situacion: "AGENTE ENVÍA" | "NOSOTROS ENVIAMOS" | "AL DÍA";
+    // fichasAdelantadasPendientes (29/09/2026, pedido de Leo: "necesito poder ver las fichas
+    // que se le cargaron y estan pendiente de cobrar, por agente") -- total ACTUAL (no de esta
+    // semana en particular) de "Adelanto de fichas" activos sin cobrar del todo, ya incluido en
+    // saldoAnterior/saldoOperativoFinal (ver ADELANTO_FICHAS en deltaParaBalance) -- se muestra
+    // aparte solo para que quede explícito cuánto de ese saldo es por esto.
+    fichasAdelantadasPendientes: number;
   };
 }
 
@@ -323,9 +330,13 @@ export async function getResumenAgentePDF(
   //    (antes eran los posteriores a la semana, que en realidad es otra cosa).
   //  - "Saldo operativo final" sigue siendo la suma de saldo anterior + cierre semanal + estos
   //    movimientos de la semana -- misma fórmula, operandos redefinidos.
+  // ADELANTO_FICHAS entra acá también (29/09/2026) -- es fichas físicas entregadas, mismo
+  // "saldo de stock" que CARGA/DESCARGA, solo que en contra del agente (ver deltaParaBalance) --
+  // sin esto, un adelanto de fichas de una semana anterior desaparecía de "saldo anterior" al
+  // pasar la semana, aunque siguiera sin cobrarse.
   const deltaRes = await pool.query(
     `SELECT
-       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE type IN ('CARGA','DESCARGA') AND occurred_at::date < $2::date), 0) as saldo_fichas_antes,
+       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE type IN ('CARGA','DESCARGA','ADELANTO_FICHAS') AND occurred_at::date < $2::date), 0) as saldo_fichas_antes,
        COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date BETWEEN $2::date AND $3::date), 0) as movimientos_semana
      FROM ledger_movements
      WHERE agent_id = $1 AND status <> 'REVERTIDO'`,
@@ -333,6 +344,14 @@ export async function getResumenAgentePDF(
   );
   const saldoFichasAntes = Number(deltaRes.rows[0]?.saldo_fichas_antes ?? 0);
   const pagosPosteriores = Number(deltaRes.rows[0]?.movimientos_semana ?? 0);
+
+  const fichasAdelantadasRes = await pool.query(
+    `SELECT COALESCE(SUM(amount - consumed), 0) as total
+     FROM rakeback_advances
+     WHERE agent_id = $1 AND kind = 'FICHAS_PENDIENTE' AND active = true AND amount > consumed`,
+    [agentId]
+  );
+  const fichasAdelantadasPendientes = Number(fichasAdelantadasRes.rows[0]?.total ?? 0);
 
   const pendienteAntesRes = await pool.query(
     `SELECT COALESCE(SUM(rp.amount - rp.consumed), 0) as total
@@ -371,6 +390,7 @@ export async function getResumenAgentePDF(
       nosDebe: saldoOperativoFinal < 0 ? -saldoOperativoFinal : 0,
       debemos: saldoOperativoFinal > 0 ? saldoOperativoFinal : 0,
       situacion: saldoOperativoFinal < 0 ? "AGENTE ENVÍA" : saldoOperativoFinal > 0 ? "NOSOTROS ENVIAMOS" : "AL DÍA",
+      fichasAdelantadasPendientes,
     },
   };
 }

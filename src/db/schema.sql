@@ -1493,3 +1493,21 @@ BEGIN
 END $$;
 ALTER TABLE tb_users DROP CONSTRAINT IF EXISTS tb_users_email_key;
 ALTER TABLE tb_users DROP COLUMN IF EXISTS email;
+
+-- Adelanto de fichas (29/09/2026, pedido de Leo): "le cargamos las fichas pero todavía no las
+-- pago" -- un adelanto de rakeback normal en fichas usa el tipo CARGA (a favor del agente, ver
+-- deltaParaBalance), porque las fichas SON del agente. Este caso es distinto: le damos fichas
+-- de adelanto (el stock físico sube, igual que una carga) pero el agente NOS LAS DEBE -- no
+-- podemos reusar CARGA (que tiene que seguir siendo +, a favor del agente, para las cargas
+-- reales) así que es un tipo de movimiento propio, con signo negativo en el saldo.
+ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
+ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
+  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK','ADELANTO_FICHAS'));
+
+-- kind (29/09/2026, pedido de Leo): distingue un adelanto de rakeback (medio FICHAS/USDT/NULL,
+-- se compensa contra un cierre real, "Consumo" es puramente contable) de un adelanto de fichas
+-- pendiente de cobro (medio SIEMPRE FICHAS, el Alta genera ADELANTO_FICHAS en vez de CARGA, y
+-- "Consumo" al cruzarlo en Liquidaciones SÍ genera un COBRO real -- ver repo/advances.ts). Sin
+-- esto, ambos quedaban indistinguibles en la tabla (mismo medio='FICHAS'). Default 'RAKEBACK'
+-- para que las filas viejas se comporten exactamente igual que hasta ahora.
+ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'RAKEBACK' CHECK (kind IN ('RAKEBACK','FICHAS_PENDIENTE'));

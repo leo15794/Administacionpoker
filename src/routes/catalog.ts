@@ -249,7 +249,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   if (closings.rows.length === 0) return res.status(404).json({ error: "No hay cierres para esa semana." });
 
   const adelantos = await pool.query(
-    `SELECT ra.id, ra.amount, ra.consumed, ra.created_at, a.name as agent_name, c.name as club_origen_name
+    `SELECT ra.id, ra.amount, ra.consumed, ra.kind, ra.created_at, a.name as agent_name, c.name as club_origen_name
      FROM rakeback_advances ra
      JOIN agents a ON a.id = ra.agent_id
      LEFT JOIN clubs c ON c.id = ra.club_origen_id
@@ -385,6 +385,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       id: a.id,
       agentName: a.agent_name,
       clubOrigenName: a.club_origen_name,
+      kind: a.kind,
       amount: Number(a.amount),
       consumed: Number(a.consumed),
       pendiente: Number(a.amount) - Number(a.consumed),

@@ -322,7 +322,7 @@ dashboardRouter.get("/agentes/:id/deals", requireAuth, requireAdmin, async (req,
 // Drill-down: historial de movimientos que arman un saldo. Filtra por agente y/o club
 // (club matchea tanto origen como destino, para que una transferencia aparezca en ambos).
 dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) => {
-  const { agentId, clubId } = req.query;
+  const { agentId, clubId, type, desde, hasta } = req.query;
   const conditions: string[] = [];
   const values: any[] = [];
   let i = 1;
@@ -335,6 +335,21 @@ dashboardRouter.get("/movimientos", requireAuth, requireAdmin, async (req, res) 
     conditions.push(`(m.club_id = $${i} OR m.club_destino_id = $${i})`);
     values.push(clubId);
     i++;
+  }
+  // (29/09/2026, pedido de Leo: "faltarian filtros para poder rastrear un movimiento") -- tipo y
+  // rango de fechas, mismo criterio que el resto de los filtros de acá (todos opcionales, AND
+  // entre sí).
+  if (typeof type === "string" && type) {
+    conditions.push(`m.type = $${i++}`);
+    values.push(type);
+  }
+  if (typeof desde === "string" && desde) {
+    conditions.push(`m.occurred_at::date >= $${i++}::date`);
+    values.push(desde);
+  }
+  if (typeof hasta === "string" && hasta) {
+    conditions.push(`m.occurred_at::date <= $${i++}::date`);
+    values.push(hasta);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

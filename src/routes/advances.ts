@@ -23,10 +23,14 @@ const altaSchema = z.object({
   amount: z.number().positive(),
   medio: z.enum(["FICHAS", "USDT"]).nullable().optional(),
   clubOrigenId: z.string().nullable().optional(),
+  kind: z.enum(["RAKEBACK", "FICHAS_PENDIENTE"]).optional(),
   notes: z.string().optional(),
 }).refine((v) => !v.medio || !!v.clubOrigenId, {
   message: "Un adelanto en fichas o USDT necesita club de origen.",
   path: ["clubOrigenId"],
+}).refine((v) => v.kind !== "FICHAS_PENDIENTE" || v.medio === "FICHAS", {
+  message: "Un adelanto de fichas siempre es en fichas.",
+  path: ["medio"],
 });
 
 advancesRouter.post("/alta", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -38,6 +42,7 @@ advancesRouter.post("/alta", requireAuth, requireAdmin, async (req: AuthedReques
       amount: parsed.data.amount,
       medio: parsed.data.medio,
       clubOrigenId: parsed.data.clubOrigenId,
+      kind: parsed.data.kind,
       notes: parsed.data.notes,
       createdBy: req.user?.email,
     });

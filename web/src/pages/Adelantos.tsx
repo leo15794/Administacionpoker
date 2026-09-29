@@ -132,12 +132,23 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Agente</th><th>Medio</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
+              <tr><th>Agente</th><th>Tipo</th><th>Medio</th><th>Club origen</th><th>Adelantado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th>Actualizado</th><th></th></tr>
             </thead>
             <tbody>
               {adelantos.map((a) => (
                 <tr key={a.id}>
                   <td>{a.agent_name}</td>
+                  <td>
+                    {/* kind (29/09/2026, pedido de Leo): distingue el adelanto de rakeback de
+                        siempre del nuevo "Adelanto de fichas" (fichas que se le cargan pero
+                        todavía nos las debe) -- mismo medio=FICHAS en los dos casos, por eso
+                        hace falta esta columna aparte para no mezclarlos. */}
+                    {a.kind === "FICHAS_PENDIENTE" ? (
+                      <span className="badge neg" title="Fichas cargadas de adelanto, pendientes de cobrar -- no es plata que el agente ya ganó.">Fichas pendientes</span>
+                    ) : (
+                      <span className="badge neutral">Rakeback</span>
+                    )}
+                  </td>
                   <td>
                     {a.medio === "FICHAS" ? (
                       <span className="badge neutral">Fichas</span>
@@ -279,12 +290,18 @@ function AjusteForm({ adelanto, onDone }: { adelanto: any; onDone: () => void })
     }
   }
 
+  const esFichasPendiente = adelanto.kind === "FICHAS_PENDIENTE";
+
   return (
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
         Adelantado {usd(adelanto.amount)} · consumido {usd(adelanto.consumed)} · pendiente {usd(Number(adelanto.amount) - Number(adelanto.consumed))}.
         {adelanto.medio && (
-          <> Medio: {adelanto.medio === "FICHAS" ? "fichas" : "USDT"} — un Aumento va a mover {adelanto.medio === "FICHAS" ? "stock" : "la wallet"} de nuevo; Reducción/Consumo/Baja no mueven nada, solo corrigen cuánto se le sigue debiendo.</>
+          esFichasPendiente ? (
+            <> Fichas pendientes de cobrar — un Aumento va a mover stock de nuevo; Consumo genera un cobro real (así queda asentado el pago); Reducción/Baja no mueven nada, solo corrigen cuánto se le sigue debiendo.</>
+          ) : (
+            <> Medio: {adelanto.medio === "FICHAS" ? "fichas" : "USDT"} — un Aumento va a mover {adelanto.medio === "FICHAS" ? "stock" : "la wallet"} de nuevo; Reducción/Consumo/Baja no mueven nada, solo corrigen cuánto se le sigue debiendo.</>
+          )
         )}
       </div>
       <div className="form-grid">
@@ -293,7 +310,7 @@ function AjusteForm({ adelanto, onDone }: { adelanto: any; onDone: () => void })
           <select value={type} onChange={(e) => setType(e.target.value as any)}>
             <option value="AUMENTO">Aumento</option>
             <option value="REDUCCION">Reducción</option>
-            <option value="CONSUMO">Consumo (se compensó contra un cierre real)</option>
+            <option value="CONSUMO">{esFichasPendiente ? "Consumo (cobro real -- el agente pagó)" : "Consumo (se compensó contra un cierre real)"}</option>
             <option value="BAJA">Baja (se cancela el adelanto)</option>
           </select>
         </div>

@@ -244,10 +244,13 @@ export const api = {
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 
   // Drill-down de movimientos y tesorería
-  movimientos: (params: { agentId?: string; clubId?: string } = {}) => {
+  movimientos: (params: { agentId?: string; clubId?: string; type?: string; desde?: string; hasta?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.agentId) qs.set("agentId", params.agentId);
     if (params.clubId) qs.set("clubId", params.clubId);
+    if (params.type) qs.set("type", params.type);
+    if (params.desde) qs.set("desde", params.desde);
+    if (params.hasta) qs.set("hasta", params.hasta);
     const q = qs.toString();
     return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
   },
@@ -425,7 +428,7 @@ export const api = {
   // tener varios a la vez (distintos momentos, distintos clubes de origen).
   adelantos: () => request("/advances"),
   adelantosHistorial: (agentId?: string) => request(`/advances/historial${agentId ? `?agentId=${agentId}` : ""}`),
-  altaAdelanto: (data: { agentId: string; amount: number; medio?: "FICHAS" | "USDT" | null; clubOrigenId?: string | null; notes?: string }) =>
+  altaAdelanto: (data: { agentId: string; amount: number; medio?: "FICHAS" | "USDT" | null; clubOrigenId?: string | null; kind?: "RAKEBACK" | "FICHAS_PENDIENTE"; notes?: string }) =>
     request("/advances/alta", { method: "POST", body: JSON.stringify(data) }),
   ajustarAdelanto: (data: { advanceId: string; type: "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA"; amount: number; notes?: string }) =>
     request("/advances/ajuste", { method: "POST", body: JSON.stringify(data) }),

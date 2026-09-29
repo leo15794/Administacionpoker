@@ -1493,6 +1493,10 @@ export default function Liquidaciones() {
                       onChange={() => toggleSeleccionCruce(a.id)}
                     />
                     <span style={{ minWidth: 260 }}>
+                      {/* kind (29/09/2026): distingue un adelanto de rakeback de un "Adelanto de
+                          fichas" pendiente de cobro -- cruzarlo genera un cobro real, no es
+                          puramente contable como el de rakeback (ver repo/advances.ts). */}
+                      {a.kind === "FICHAS_PENDIENTE" && <span className="badge neg" style={{ marginRight: 6 }}>Fichas</span>}
                       {a.agentName}{a.clubOrigenName ? ` (${a.clubOrigenName})` : ""} — pendiente {usd(a.pendiente)}
                       {a.createdAt && <span className="muted"> ({dateShort(a.createdAt)})</span>}
                     </span>
@@ -1503,6 +1507,7 @@ export default function Liquidaciones() {
                 ))}
                 <div className="muted" style={{ fontSize: 12 }}>
                   Esto consume de verdad el adelanto (mismo efecto que "Consumo" en Adelantos) -- al confirmar en el popup.
+                  Para uno de fichas ("Fichas" en rojo), además genera un cobro real por ese monto.
                 </div>
               </div>
             )}
@@ -2110,7 +2115,7 @@ export default function Liquidaciones() {
                       {(item.clubOrigenName || item.clubName) && (
                         <span className="muted"> ({item.clubOrigenName || item.clubName})</span>
                       )}
-                      <span className="muted"> ({tipo === "ADELANTO" ? "adelanto" : "carga"})</span>
+                      <span className="muted"> ({tipo === "ADELANTO" ? (item.kind === "FICHAS_PENDIENTE" ? "fichas" : "adelanto") : "carga"})</span>
                     </td>
                     <td>{usd(item.pendiente)}</td>
                     <td>

@@ -179,6 +179,13 @@ function deltaParaBalance(type: string, amount: number, esDestinoDeTransferencia
       // PAGO_RAKEBACK. Un adelanto en FICHAS, en cambio, SÍ usa el tipo CARGA normal (mueve el
       // stock de verdad, porque son fichas físicas que se le dieron).
       return 0;
+    case "ADELANTO_FICHAS":
+      // Adelanto de fichas (29/09/2026, pedido de Leo): a diferencia del adelanto de rakeback en
+      // fichas (que SÍ usa CARGA normal, ver arriba), acá las fichas que se le dan NO son del
+      // agente -- se las estamos adelantando, nos las debe. El stock físico sube igual que una
+      // carga (ver total_cargado más abajo, que también suma este tipo), pero el saldo va
+      // negativo (a favor nuestro) -- lo opuesto de CARGA.
+      return -Math.abs(amount);
     case "TRANSFERENCIA_ENTRE_CLUBES":
       return esDestinoDeTransferencia ? Math.abs(amount) : -Math.abs(amount);
     default:
@@ -245,16 +252,21 @@ export async function listAllBalances() {
      -- Cargado/Descargado (24/09/2026, pedido de Leo: 3 columnas para PREPAGO -- cargas,
      -- descargas y el saldo, que tiene que dar la resta de las dos). Para un agente PREPAGO,
      -- CARGA y DESCARGA son los ÚNICOS tipos que mueven el balance (ver repo/closings.ts y
-     -- repo/rakebackPendiente.ts) -- por eso total_cargado - total_descargado siempre coincide
-     -- con balances.amount para ellos. Se calcula igual para todos (no solo PREPAGO) porque es
-     -- más simple y no afecta nada -- el frontend decide para qué sistema mostrar las columnas.
+     -- repo/rakebackPendiente.ts) -- por eso total_cargado - total_descargado coincidía siempre
+     -- con balances.amount para ellos. ADELANTO_FICHAS (29/09/2026) rompe esa igualdad A
+     -- PROPÓSITO: suma acá (las fichas físicas sí subieron) pero resta del balance real (ver
+     -- deltaParaBalance) -- así "Cargado" queda mostrando el stock físico entregado y el saldo
+     -- queda mostrando lo que se le debe, que para un agente con fichas adelantadas pendientes
+     -- son dos números distintos por diseño. Se calcula igual para todos (no solo PREPAGO)
+     -- porque es más simple y no afecta nada -- el frontend decide para qué sistema mostrar las
+     -- columnas.
      LEFT JOIN LATERAL (
        SELECT
-         COALESCE(SUM(ABS(m.amount)) FILTER (WHERE m.type = 'CARGA'), 0) as total_cargado,
+         COALESCE(SUM(ABS(m.amount)) FILTER (WHERE m.type IN ('CARGA', 'ADELANTO_FICHAS')), 0) as total_cargado,
          COALESCE(SUM(ABS(m.amount)) FILTER (WHERE m.type = 'DESCARGA'), 0) as total_descargado
        FROM ledger_movements m
        WHERE m.agent_id = b.agent_id AND m.club_id = b.club_id AND m.status <> 'REVERTIDO'
-         AND m.type IN ('CARGA', 'DESCARGA')
+         AND m.type IN ('CARGA', 'DESCARGA', 'ADELANTO_FICHAS')
      ) cargas_descargas ON true
      -- Fichas ganadas en mesas (24/09/2026, pedido de Leo: nueva columna para PREPAGO, "Cargado
      -- - Descargado + Fichas ganadas en las mesas = Fichas") -- el resultado crudo de mesas

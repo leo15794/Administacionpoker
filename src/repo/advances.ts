@@ -32,12 +32,20 @@ import { registrarMovimiento as registrarMovimientoLedger, eliminarMovimiento as
 export type AdvanceMovementType = "ALTA" | "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA" | "CORRECCION";
 export type AjusteMovementType = "AUMENTO" | "REDUCCION" | "CONSUMO" | "BAJA";
 export type AdvanceMedio = "FICHAS" | "USDT";
+// kind (29/09/2026, pedido de Leo): "RAKEBACK" es el adelanto de siempre (a cuenta de un
+// rakeback que todavía no se generó). "FICHAS_PENDIENTE" es el nuevo "Adelanto de fichas" --
+// fichas que se le cargan al agente de una, pero nos las debe (no es plata que ya ganó). Mismo
+// mecanismo de amount/consumed, pero el Alta usa el tipo de ledger ADELANTO_FICHAS en vez de
+// CARGA (ver deltaParaBalance) y el Consumo, en vez de ser puramente contable, genera un COBRO
+// real al cruzarlo (ver ajustarAdelanto más abajo).
+export type AdvanceKind = "RAKEBACK" | "FICHAS_PENDIENTE";
 
 export interface AltaAdelantoInput {
   agentId: string;
   amount: number;
   medio?: AdvanceMedio | null; // omitir/null = adelanto viejo estilo, no mueve stock ni wallet
   clubOrigenId?: string | null; // obligatorio si medio viene informado (de dónde sale la plata/fichas)
+  kind?: AdvanceKind; // omitir = "RAKEBACK" (comportamiento de siempre)
   notes?: string;
   createdBy?: string;
 }
@@ -110,22 +118,32 @@ export async function altaAdelanto(input: AltaAdelantoInput) {
   if (input.medio && !input.clubOrigenId) {
     throw new Error("Un adelanto en fichas o USDT necesita club de origen (de dónde sale la plata/fichas).");
   }
+  const kind: AdvanceKind = input.kind ?? "RAKEBACK";
+  if (kind === "FICHAS_PENDIENTE" && input.medio !== "FICHAS") {
+    throw new Error("Un adelanto de fichas siempre es en fichas.");
+  }
 
   const id = newId("adv");
   let movementId: string | null = null;
   if (input.medio) {
+    const tipoLedger =
+      kind === "FICHAS_PENDIENTE" ? "ADELANTO_FICHAS" : input.medio === "FICHAS" ? "CARGA" : "ADELANTO_RAKEBACK";
     const reg = await registrarMovimientoLedger({
       idempotencyKey: `adv_alta:${id}`,
-      // FICHAS = CARGA real (mueve el stock físico, se descuenta después en la liquidación).
+      // FICHAS_PENDIENTE = ADELANTO_FICHAS (fichas físicas que se le dan, pero nos las debe --
+      // resta del saldo, ver deltaParaBalance). RAKEBACK+FICHAS = CARGA real (mueve el stock
+      // físico, las fichas SON del agente, se descuenta después en la liquidación). RAKEBACK+
       // USDT = tipo propio que sale de la wallet (entrada de tesorería) pero no toca el
       // balance/stock -- ver deltaParaBalance en repo/ledger.ts.
-      type: input.medio === "FICHAS" ? "CARGA" : "ADELANTO_RAKEBACK",
+      type: tipoLedger,
       clubId: input.clubOrigenId!,
       agentId: input.agentId,
       amount: input.amount,
       paymentMethod: input.medio === "FICHAS" ? "SIN_TESORERIA" : "USDT",
       occurredAt: new Date(),
-      observation: input.notes || `Adelanto de rakeback en ${input.medio === "FICHAS" ? "fichas" : "USDT"}.`,
+      observation:
+        input.notes ||
+        (kind === "FICHAS_PENDIENTE" ? "Adelanto de fichas (pendiente de cobrar)." : `Adelanto de rakeback en ${input.medio === "FICHAS" ? "fichas" : "USDT"}.`),
       createdBy: input.createdBy ?? null,
       // El "pendiente de cobrar" ya lo trackea rakeback_advances (amount/consumed) -- no hace
       // falta además una nota de crédito de carga_pendientes_cruce para esto.
@@ -138,8 +156,8 @@ export async function altaAdelanto(input: AltaAdelantoInput) {
   try {
     await client.query("BEGIN");
     const r = await client.query(
-      `INSERT INTO rakeback_advances (id, agent_id, amount, consumed, active, club_origen_id, medio, notes) VALUES ($1,$2,$3,0,true,$4,$5,$6) RETURNING *`,
-      [id, input.agentId, input.amount, input.clubOrigenId ?? null, input.medio ?? null, input.notes ?? null]
+      `INSERT INTO rakeback_advances (id, agent_id, amount, consumed, active, club_origen_id, medio, kind, notes) VALUES ($1,$2,$3,0,true,$4,$5,$6,$7) RETURNING *`,
+      [id, input.agentId, input.amount, input.clubOrigenId ?? null, input.medio ?? null, kind, input.notes ?? null]
     );
     const advance = r.rows[0];
     await registrarMovimiento(client, advance, "ALTA", input.amount, input.notes, input.createdBy, movementId);
@@ -158,10 +176,12 @@ export async function altaAdelanto(input: AltaAdelantoInput) {
  * agente", porque puede tener varios a la vez.
  *
  * Solo AUMENTO sobre un adelanto con medio (FICHAS/USDT) mueve stock/wallet de verdad, con un
- * movimiento adicional al mismo club de origen del Alta. Reducción/Consumo/Baja nunca generan
- * movimiento: Consumo es el descuento que ya se aplica aparte en la liquidación real (el stock
- * ya se movió en el Alta/Aumento), y Reducción/Baja corrigen cuánto se le sigue debiendo al
- * agente, no una devolución física de fichas/plata.
+ * movimiento adicional al mismo club de origen del Alta. Reducción/Baja nunca generan
+ * movimiento: corrigen cuánto se le sigue debiendo al agente, no una devolución física de
+ * fichas/plata. Consumo depende del kind (29/09/2026): en un adelanto de RAKEBACK sigue siendo
+ * puramente contable (la plata real ya se paga por otro lado, en el cierre); en uno de
+ * FICHAS_PENDIENTE genera además un COBRO real (ver más abajo) -- no hay "otro lado" que lo
+ * pague solo.
  */
 export async function ajustarAdelanto(input: AjusteAdelantoInput) {
   if (input.amount < 0) throw new Error("El monto tiene que ser positivo — el tipo de movimiento ya define si suma o resta.");
@@ -175,15 +195,42 @@ export async function ajustarAdelanto(input: AjusteAdelantoInput) {
     if (!actualParaMov.club_origen_id) {
       throw new Error("Este adelanto no tiene club de origen cargado -- corregilo primero (botón \"Corregir\") antes de aumentarlo.");
     }
+    const esFichasPendiente = actualParaMov.kind === "FICHAS_PENDIENTE";
     const reg = await registrarMovimientoLedger({
       idempotencyKey: `adv_aumento:${newId("x")}`,
-      type: actualParaMov.medio === "FICHAS" ? "CARGA" : "ADELANTO_RAKEBACK",
+      type: esFichasPendiente ? "ADELANTO_FICHAS" : actualParaMov.medio === "FICHAS" ? "CARGA" : "ADELANTO_RAKEBACK",
       clubId: actualParaMov.club_origen_id,
       agentId: actualParaMov.agent_id,
       amount: input.amount,
       paymentMethod: actualParaMov.medio === "FICHAS" ? "SIN_TESORERIA" : "USDT",
       occurredAt: new Date(),
-      observation: input.notes || `Aumento de adelanto de rakeback en ${actualParaMov.medio === "FICHAS" ? "fichas" : "USDT"}.`,
+      observation:
+        input.notes ||
+        (esFichasPendiente ? "Aumento de adelanto de fichas (pendiente de cobrar)." : `Aumento de adelanto de rakeback en ${actualParaMov.medio === "FICHAS" ? "fichas" : "USDT"}.`),
+      createdBy: input.createdBy ?? null,
+      sinNotaDeCredito: true,
+    });
+    movementId = reg.id;
+  }
+
+  // Consumo de un adelanto de fichas pendiente (29/09/2026, pedido de Leo): a diferencia del
+  // Consumo de un adelanto de rakeback (puramente contable -- la plata real ya se paga por otro
+  // lado, en el cierre), acá no hay otro lado: si no generamos un movimiento real, el pago nunca
+  // queda asentado en ningún lado. Genera un COBRO real por el monto consumido, mismo club de
+  // origen del adelanto (informativo, ya se usa igual para el Alta/Aumento).
+  if (input.type === "CONSUMO" && actualParaMov.kind === "FICHAS_PENDIENTE") {
+    if (!actualParaMov.club_origen_id) {
+      throw new Error("Este adelanto de fichas no tiene club de origen cargado -- corregilo primero (botón \"Corregir\") antes de cobrarlo.");
+    }
+    const reg = await registrarMovimientoLedger({
+      idempotencyKey: `adv_consumo:${newId("x")}`,
+      type: "COBRO",
+      clubId: actualParaMov.club_origen_id,
+      agentId: actualParaMov.agent_id,
+      amount: input.amount,
+      paymentMethod: "SIN_TESORERIA",
+      occurredAt: new Date(),
+      observation: input.notes || "Cobro de adelanto de fichas.",
       createdBy: input.createdBy ?? null,
       sinNotaDeCredito: true,
     });

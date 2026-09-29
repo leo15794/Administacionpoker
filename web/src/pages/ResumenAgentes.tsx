@@ -225,6 +225,10 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
   const cierreSemanal = sum((r) => r.estadoCuenta.cierreSemanal);
   const pagosPosteriores = sum((r) => r.estadoCuenta.pagosPosteriores);
   const saldoOperativoFinal = saldoAnterior + cierreSemanal + pagosPosteriores;
+  // fichasAdelantadasPendientes (29/09/2026, pedido de Leo): ya está incluido en saldoAnterior
+  // (ver ADELANTO_FICHAS en deltaParaBalance/repo/agentesResumen.ts) -- esto es solo para
+  // mostrarlo aparte, así queda claro cuánto de ese saldo es por fichas adelantadas sin cobrar.
+  const fichasAdelantadasPendientes = sum((r) => r.estadoCuenta.fichasAdelantadasPendientes);
   return {
     nombreGrupo,
     sistema,
@@ -239,6 +243,7 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
       nosDebe: saldoOperativoFinal < 0 ? -saldoOperativoFinal : 0,
       debemos: saldoOperativoFinal > 0 ? saldoOperativoFinal : 0,
       situacion: saldoOperativoFinal < 0 ? "AGENTE ENVÍA" : saldoOperativoFinal > 0 ? "NOSOTROS ENVIAMOS" : "AL DÍA",
+      fichasAdelantadasPendientes,
     },
     porAgente: datos,
   };
@@ -343,6 +348,13 @@ function PreviewResumen({
           <tr><td>Cierre semanal</td><td>{usd(ec.cierreSemanal)}</td></tr>
           <tr><td>Pagos / movimientos de la semana</td><td>{usd(ec.pagosPosteriores)}</td></tr>
           <tr><td><strong>Saldo operativo final</strong></td><td><strong>{usd(ec.saldoOperativoFinal)}</strong></td></tr>
+          {/* (29/09/2026, pedido de Leo: "necesito poder ver las fichas que se le cargaron y
+              estan pendiente de cobrar") -- solo Prepago, que es la modalidad que usa esto (ver
+              nota en repo/advances.ts). Ya está incluido en Saldo anterior, se muestra aparte
+              solo como referencia de cuánto de eso es por esto. */}
+          {preview.sistema === "PREPAGO" && Number(ec.fichasAdelantadasPendientes) > 0 && (
+            <tr><td className="muted">Fichas adelantadas pendientes de cobro</td><td className="muted">{usd(ec.fichasAdelantadasPendientes)}</td></tr>
+          )}
           <tr><td>Nos debe</td><td>{usd(ec.nosDebe)}</td></tr>
           <tr><td>Debemos / saldo a favor</td><td>{usd(ec.debemos)}</td></tr>
           <tr><td>Situación</td><td>{ec.situacion}</td></tr>
@@ -556,6 +568,9 @@ async function generarResumenCombinadoPdf(preview: any) {
       ["Cierre semanal", usd(ec.cierreSemanal)],
       ["Pagos / movimientos de la semana", usd(ec.pagosPosteriores)],
       ["Saldo operativo final", usd(ec.saldoOperativoFinal)],
+      ...(preview.sistema === "PREPAGO" && Number(ec.fichasAdelantadasPendientes) > 0
+        ? [["Fichas adelantadas pendientes de cobro", usd(ec.fichasAdelantadasPendientes)]]
+        : []),
       ["Nos debe", usd(ec.nosDebe)],
       ["Debemos / saldo a favor", usd(ec.debemos)],
       ["Situación", ec.situacion],
