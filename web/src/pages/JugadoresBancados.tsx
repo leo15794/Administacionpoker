@@ -477,7 +477,7 @@ export default function JugadoresBancados() {
                         disabled={accionandoGlobal === h.id}
                         onClick={() => borrarGlobal(h)}
                         title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                        style={{ color: "var(--danger, #e5484d)" }}
+                        style={{ color: "var(--red)" }}
                       >
                         {accionandoGlobal === h.id ? "..." : "Borrar"}
                       </button>
@@ -954,7 +954,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                   <tr><td><strong>Pago total jugador</strong></td><td><strong>{usd(previa.pagoJugadorTotal)}</strong></td></tr>
                   <tr><td>Rakeback Banca</td><td>{usd(previa.rakebackBancaTotal)}</td></tr>
                   {Number(previa.ticketPromocional) !== 0 && (
-                    <tr><td>Ticket promocional (a nuestro cargo)</td><td style={{ color: "var(--danger, #e5484d)" }}>-{usd(previa.ticketPromocional)}</td></tr>
+                    <tr><td>Ticket promocional (a nuestro cargo)</td><td style={{ color: "var(--red)" }}>-{usd(previa.ticketPromocional)}</td></tr>
                   )}
                   <tr><td><strong>Ganancia banca (mesas + Rakeback Banca{Number(previa.ticketPromocional) !== 0 ? " − ticket" : ""})</strong></td><td><strong>{usd(previa.gananciaBancaMesas)}</strong></td></tr>
                   <tr><td className="muted">% Unión sobre este rake (informativo)</td><td className="muted">{usd(previa.unionShareTotal)}</td></tr>
@@ -1058,7 +1058,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
                                 className="btn secondary small"
                                 onClick={() => borrarDefinitivo(h.id)}
                                 title="Borrado real — no queda en el historial. Solo para datos de prueba, nunca para plata real."
-                                style={{ color: "var(--danger, #e5484d)" }}
+                                style={{ color: "var(--red)" }}
                               >
                                 Borrar
                               </button>
@@ -1451,7 +1451,7 @@ function FilaImportBancado({
                 <span>Makeup: {usd(previa.makeupAnterior)} → {usd(previa.makeupNuevo)}</span>
                 <span>Pago total jugador: <strong>{usd(previa.pagoJugadorTotal)}</strong></span>
                 {Number(previa.ticketPromocional) !== 0 && (
-                  <span>Ticket promocional (a nuestro cargo): <strong style={{ color: "var(--danger, #e5484d)" }}>-{usd(previa.ticketPromocional)}</strong></span>
+                  <span>Ticket promocional (a nuestro cargo): <strong style={{ color: "var(--red)" }}>-{usd(previa.ticketPromocional)}</strong></span>
                 )}
                 <span>Ganancia banca mesas: {usd(previa.gananciaBancaMesas)}</span>
                 <span>Capital después: <strong>{usd(previa.capitalDespues)}</strong></span>

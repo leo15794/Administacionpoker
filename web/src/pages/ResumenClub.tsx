@@ -510,7 +510,7 @@ export default function ResumenClub() {
             )}
             <table>
               <tbody>
-                <tr className="panel" style={{ background: "rgba(120,200,120,0.08)" }}>
+                <tr className="panel" style={{ background: "var(--green-soft)" }}>
                   <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
                   <td><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
                 </tr>

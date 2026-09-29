@@ -113,7 +113,7 @@ export default function MovimientosHistorial({
       </div>
       <table>
         <thead>
-          <tr><th>Fecha</th><th>Tipo</th><th>Agente</th><th>Club</th><th>Monto</th><th>Observación</th><th></th></tr>
+          <tr><th>Fecha</th><th>Tipo</th><th>Agente</th><th>Club</th><th className="num">Monto</th><th>Observación</th><th></th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
@@ -125,7 +125,7 @@ export default function MovimientosHistorial({
               </td>
               <td>{r.agent_name}</td>
               <td>{r.club_name}{r.club_destino_name ? ` → ${r.club_destino_name}` : ""}</td>
-              <td><span className={`badge ${Number(r.amount) > 0 ? "pos" : Number(r.amount) < 0 ? "neg" : "neutral"}`}>{usd(r.amount)}</span></td>
+              <td className="num"><span className={`badge ${Number(r.amount) > 0 ? "pos" : Number(r.amount) < 0 ? "neg" : "neutral"}`}>{usd(r.amount)}</span></td>
               <td className="muted" style={{ fontSize: 12 }} title={r.observation || undefined}>{r.observation ? truncar(r.observation) : "—"}</td>
               <td style={{ display: "flex", gap: 6 }}>
                 {r.status !== "REVERTIDO" && (
@@ -144,7 +144,7 @@ export default function MovimientosHistorial({
                     disabled={eliminando === r.id}
                     onClick={() => onEliminar(r)}
                     title="Borrado real -- no queda en el historial. Solo funciona si es el último movimiento de ese agente+club (ej. para sacar una carga de prueba)."
-                    style={{ color: "var(--danger, #e5484d)" }}
+                    style={{ color: "var(--red)" }}
                   >
                     {eliminando === r.id ? "..." : "Eliminar"}
                   </button>

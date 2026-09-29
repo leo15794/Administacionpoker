@@ -208,7 +208,7 @@ export default function Movimientos() {
         occurredAt: new Date(occurredAt).toISOString(),
         observation: observation.trim() || undefined,
       });
-      setMsg({ ok: true, text: "Movimiento registrado y aplicado al ledger." });
+      setMsg({ ok: true, text: "Movimiento registrado y aplicado." });
       setAmount("");
       setObservation("");
       setRefreshKey((k) => k + 1);
@@ -237,7 +237,7 @@ export default function Movimientos() {
       <div className="topbar">
         <div>
           <h2>Cargar movimiento</h2>
-          <div className="muted">Cada movimiento se aplica de forma atómica al ledger y actualiza saldos al instante.</div>
+          <div className="muted">Cada movimiento se aplica al instante y actualiza los saldos en el momento.</div>
         </div>
       </div>
 

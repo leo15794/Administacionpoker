@@ -173,7 +173,7 @@ export default function CuentasSocios() {
                         disabled={borrando === c.id}
                         onClick={() => eliminarCuenta(c)}
                         title="Borrado real — la cuenta y todos sus movimientos."
-                        style={{ color: "var(--danger, #e5484d)" }}
+                        style={{ color: "var(--red)" }}
                       >
                         {borrando === c.id ? "..." : "Eliminar"}
                       </button>
@@ -212,7 +212,7 @@ export default function CuentasSocios() {
                                       className="btn secondary small"
                                       disabled={borrando === m.id}
                                       onClick={() => eliminarMovimiento(m)}
-                                      style={{ color: "var(--danger, #e5484d)" }}
+                                      style={{ color: "var(--red)" }}
                                     >
                                       {borrando === m.id ? "..." : "Eliminar"}
                                     </button>

@@ -55,8 +55,6 @@ function formatearHoraActualizacion(d: Date) {
   return esHoy ? `Hoy ${hora}` : `${dateShort(d.toISOString())} ${hora}`;
 }
 
-const OPCIONES_PERIODO = ["Esta semana", "Hoy", "Semana anterior", "Este mes", "Mes anterior", "Personalizado"];
-
 export default function Resumen() {
   const nav = useNavigate();
   const [data, setData] = useState<any>(null);
@@ -64,6 +62,8 @@ export default function Resumen() {
   const [filtro, setFiltro] = useState("");
   const [filtroSigno, setFiltroSigno] = useState<FiltroSigno>("todos");
   const [filtroSistema, setFiltroSistema] = useState<FiltroSistema>("todos");
+  const [tabSaldoClub, setTabSaldoClub] = useState<"general" | "win_lose" | "prepago">("general");
+  const [tabResultadoClub, setTabResultadoClub] = useState<"general" | "win_lose" | "prepago">("general");
   const [detalle, setDetalle] = useState<{ title: string; agentId?: string; clubId?: string } | null>(null);
   const tablaSaldosRef = useRef<HTMLDivElement>(null);
   // Edición manual de Fichas (24/09/2026, pedido de Leo, SOLO PREPAGO): "por temas internos" el
@@ -75,12 +75,6 @@ export default function Resumen() {
   const [guardandoFichas, setGuardandoFichas] = useState(false);
   const [actualizadoEn, setActualizadoEn] = useState<Date | null>(null);
   const [infoAbierta, setInfoAbierta] = useState(false);
-  // Filtro de período global (25/09/2026, pedido de Leo) -- PREPARADO VISUALMENTE nada más: el
-  // backend de /dashboard/resumen hoy siempre calcula sobre "la última semana con cierres
-  // reales" y los saldos/pendientes son la foto ACTUAL (no admiten recortar por fecha todavía).
-  // Cambiar esto para que recalcule de verdad es tarea de una próxima etapa (ver nota debajo del
-  // selector) -- se deja preparado en vez de mentir con un filtro que no hace nada visible.
-  const [periodoGlobal, setPeriodoGlobal] = useState("Esta semana");
 
   function cargar() {
     return api
@@ -194,14 +188,12 @@ export default function Resumen() {
         </div>
         <div className="dash-header-right">
           <div>
-            <label className="muted" style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, display: "block", marginBottom: 6 }}>
+            <div className="muted" style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, marginBottom: 6 }}>
               Período
-            </label>
-            <select className="period-select" value={periodoGlobal} onChange={(e) => setPeriodoGlobal(e.target.value)} title="Filtro de período (preparado visualmente -- ver nota abajo del header)">
-              {OPCIONES_PERIODO.map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
+            </div>
+            <div className="period-static" title="Por ahora el resumen siempre muestra la semana actual. Vas a poder elegir otros períodos más adelante.">
+              Esta semana
+            </div>
           </div>
           {actualizadoEn && (
             <div className="dash-updated-at">
@@ -211,21 +203,16 @@ export default function Resumen() {
           )}
         </div>
       </div>
-      {periodoGlobal !== "Esta semana" && (
-        <div className="warning" style={{ marginTop: -14, marginBottom: 18 }}>
-          El filtro de período todavía no recalcula las métricas de abajo (quedó preparado visualmente, pendiente para una próxima etapa de backend -- ver comentario en Resumen.tsx). Los números siguen siendo "Esta semana" / la foto actual.
-        </div>
-      )}
 
       {/* ============================== Resumen financiero ============================== */}
       <div className="dash-section">
         <div className="dash-section-title">Resumen financiero</div>
-        <div className="dash-section-subtitle">Calculado en vivo desde el ledger — no desde celdas fijas.</div>
+        <div className="dash-section-subtitle">Se actualiza solo con cada movimiento cargado — nunca son números fijos.</div>
       </div>
 
       <div className="kpi-hero-grid">
         <div
-          className="kpi-hero-card row-click"
+          className="kpi-hero-card featured row-click"
           onClick={() => nav("/dashboard/cierres")}
           title={
             data.kpis.gananciaSemanaInicio
@@ -359,7 +346,10 @@ export default function Resumen() {
         </div>
       )}
 
-      {/* ============================== Saldo por club ============================== */}
+      {/* ============================== Saldo por club ==============================
+          Antes eran 1 (General) + hasta 2 paneles más (Win/Lose, Prepago) apilados uno debajo
+          del otro. Pedido de Leo: agruparlos en pestañas para no alargar tanto la página --
+          mismos datos, mismos cálculos, solo cambia cómo se muestran. */}
       <div className="panel" id="panel-saldo-por-club" style={{ marginTop: historico.length > 1 ? 20 : 34 }}>
         <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Saldo neto por club</h3>
@@ -375,12 +365,30 @@ export default function Resumen() {
             Exportar CSV
           </button>
         </div>
-        <SaldoPorClubBarras porClub={data.porClub} onClickClub={(clubId, club) => setDetalle({ title: `Movimientos — ${club}`, clubId })} />
+        {data.porClubPorSistema && data.porClubPorSistema.length > 0 && (
+          <div className="tabs" style={{ marginBottom: 14 }}>
+            {([
+              ["general", "General"],
+              ["win_lose", "Win/Lose"],
+              ["prepago", "Prepago"],
+            ] as const).map(([key, label]) => (
+              <button key={key} className={`btn secondary small ${tabSaldoClub === key ? "active" : ""}`} onClick={() => setTabSaldoClub(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {tabSaldoClub === "general" && (
+          <SaldoPorClubBarras porClub={data.porClub} onClickClub={(clubId, club) => setDetalle({ title: `Movimientos — ${club}`, clubId })} />
+        )}
+        {tabSaldoClub !== "general" && data.porClubPorSistema && (
+          <SaldoPorClubPorSistema
+            porClubPorSistema={data.porClubPorSistema}
+            onClickClub={(clubId, club) => setDetalle({ title: `Movimientos — ${club}`, clubId })}
+            sistema={tabSaldoClub === "win_lose" ? "WIN_LOSE" : "PREPAGO"}
+          />
+        )}
       </div>
-
-      {data.porClubPorSistema && data.porClubPorSistema.length > 0 && (
-        <SaldoPorClubPorSistema porClubPorSistema={data.porClubPorSistema} onClickClub={(clubId, club) => setDetalle({ title: `Movimientos — ${club}`, clubId })} />
-      )}
 
       {data.resultadoPorClub && data.resultadoPorClub.length > 0 && (
         <div className="panel">
@@ -410,26 +418,43 @@ export default function Resumen() {
               Exportar CSV
             </button>
           </div>
-          <table>
-            <thead>
-              <tr><th>Club</th><th>Rake</th><th>Ganancia nuestra</th><th>Cierre agentes</th></tr>
-            </thead>
-            <tbody>
-              {data.resultadoPorClub.map((c: any) => (
-                <tr key={c.club_id}>
-                  <td>{c.club_name}</td>
-                  <td>{usd(c.rake_total)}</td>
-                  <td>{usd(c.ganancia)}</td>
-                  <td><span className={`badge ${Number(c.cierre_agentes) >= 0 ? "pos" : "neg"}`}>{usd(c.cierre_agentes)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="tabs" style={{ marginBottom: 14 }}>
+            {([
+              ["general", "General"],
+              ["win_lose", "Win/Lose"],
+              ["prepago", "Prepago"],
+            ] as const).map(([key, label]) => (
+              <button key={key} className={`btn secondary small ${tabResultadoClub === key ? "active" : ""}`} onClick={() => setTabResultadoClub(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {tabResultadoClub === "general" && (
+            <table>
+              <thead>
+                <tr><th>Club</th><th className="num">Rake</th><th className="num">Ganancia nuestra</th><th className="num">Cierre agentes</th></tr>
+              </thead>
+              <tbody>
+                {data.resultadoPorClub.map((c: any) => (
+                  <tr key={c.club_id}>
+                    <td>{c.club_name}</td>
+                    <td className="num money">{usd(c.rake_total)}</td>
+                    <td className="num money">{usd(c.ganancia)}</td>
+                    <td className="num"><span className={`badge ${Number(c.cierre_agentes) >= 0 ? "pos" : "neg"}`}>{usd(c.cierre_agentes)}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {tabResultadoClub !== "general" && (
+            <>
+              <ResultadoPorClubPorSistema resultadoPorClub={data.resultadoPorClub} sistema={tabResultadoClub === "win_lose" ? "win_lose" : "prepago"} />
+              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                "Ganancia nuestra" acá es solo la parte atribuible al rake de cada agente — el rodeo del club, ventas y tasa fija (si el club los tiene) quedan afuera de este desglose y siguen en el total de la pestaña "General".
+              </div>
+            </>
+          )}
         </div>
-      )}
-
-      {data.resultadoPorClub && data.resultadoPorClub.length > 0 && (
-        <ResultadoPorClubPorSistema resultadoPorClub={data.resultadoPorClub} />
       )}
 
       <div className="panel" ref={tablaSaldosRef}>
@@ -494,9 +519,10 @@ export default function Resumen() {
           {" · "}
           Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
         </div>
+        <div className="table-scroll">
         <table>
           <thead>
-            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th>Cierre última semana</th><th>Cargado</th><th>Descargado</th><th>Fichas ganadas en mesas</th><th>Fichas</th></tr>
+            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th className="num">Cierre última semana</th><th className="num">Cargado</th><th className="num">Descargado</th><th className="num">Fichas ganadas en mesas</th><th className="num">Fichas</th></tr>
           </thead>
           <tbody>
             {balancesFiltrados.map((b: any) => (
@@ -508,7 +534,7 @@ export default function Resumen() {
                 <td>{b.agent_name}</td>
                 <td>{b.club_name}</td>
                 <td><span className="badge neutral">{b.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span></td>
-                <td>
+                <td className="num">
                   {/* Solo Win/Lose (24/09/2026, pedido de Leo: "Todos los agentes WIN/LOSE en su
                       resumen deberia aparecer el cierre final de la semana") -- el cierre de la
                       última semana cerrada de ESTE agente+club, puramente informativo: el Saldo
@@ -525,7 +551,7 @@ export default function Resumen() {
                     <span className="muted">—</span>
                   )}
                 </td>
-                <td>
+                <td className="num">
                   {/* Cargado/Descargado (24/09/2026, pedido de Leo: "3 columnas... la suma y la
                       resta de eso") -- solo tiene sentido para PREPAGO: ahí CARGA y DESCARGA son
                       los ÚNICOS movimientos que tocan el balance (ver repo/closings.ts y
@@ -534,10 +560,10 @@ export default function Resumen() {
                       columnas ahí confundiría más de lo que aclara, así que se dejan vacías. */}
                   {b.system === "PREPAGO" ? <span className="badge pos">{usd(b.total_cargado)}</span> : <span className="muted">—</span>}
                 </td>
-                <td>
+                <td className="num">
                   {b.system === "PREPAGO" ? <span className="badge neg">{usd(-Math.abs(Number(b.total_descargado)))}</span> : <span className="muted">—</span>}
                 </td>
-                <td>
+                <td className="num">
                   {/* Fichas ganadas en mesas (24/09/2026, pedido de Leo): "Cargado - Descargado +
                       Fichas ganadas en las mesas = Fichas". Solo informativo -- referencia para
                       saber qué compone el número de Fichas, que abajo se puede editar a mano. */}
@@ -549,7 +575,7 @@ export default function Resumen() {
                     <span className="muted">—</span>
                   )}
                 </td>
-                <td onClick={(e) => e.stopPropagation()}>
+                <td className="num" onClick={(e) => e.stopPropagation()}>
                   {/* Fichas = balance + fichas ganadas en mesas para PREPAGO (24/09/2026,
                       aclaración de Leo: el número mostrado TIENE que ser la suma de las 3
                       columnas, no solo tenerla al lado de referencia -- ver fichasTotal() arriba).
@@ -592,6 +618,7 @@ export default function Resumen() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {detalle && (
@@ -607,6 +634,11 @@ export default function Resumen() {
 // por nombre, ver la query original en repo/dashboard.ts que sigue trayendo el mismo orden; el
 // reordenamiento es 100% client-side, no toca el backend) con una barra horizontal proporcional
 // al saldo de cada club, para que salte a la vista cuál concentra más plata sin leer cada número.
+// Barra divergente: crece desde un cero central hacia la derecha (saldo a favor del agente,
+// verde) o hacia la izquierda (a favor nuestro, rojo) -- el cero real queda siempre visible
+// como referencia en el medio, en vez de ser el borde de la barra (25/09/2026, pedido de Leo:
+// "para saldos positivos y negativos por club, utilizá barras divergentes con un cero de
+// referencia, manteniendo los importes visibles").
 function SaldoPorClubBarras({ porClub, onClickClub }: { porClub: any[]; onClickClub: (clubId: string, club: string) => void }) {
   const ordenado = [...porClub].sort((a, b) => Math.abs(Number(b.saldo_neto)) - Math.abs(Number(a.saldo_neto)));
   const maxAbs = Math.max(...ordenado.map((c) => Math.abs(Number(c.saldo_neto))), 1);
@@ -616,13 +648,17 @@ function SaldoPorClubBarras({ porClub, onClickClub }: { porClub: any[]; onClickC
       {ordenado.map((c) => {
         const saldo = Number(c.saldo_neto);
         const signo = saldo > 0 ? "pos" : saldo < 0 ? "neg" : "neutral";
-        const anchoPct = Math.max((Math.abs(saldo) / maxAbs) * 100, saldo === 0 ? 0 : 2);
+        // Cada lado del cero tiene la mitad del ancho de la barra -- por eso el porcentaje es
+        // sobre 50, no sobre 100.
+        const anchoPct = Math.max((Math.abs(saldo) / maxAbs) * 50, saldo === 0 ? 0 : 1.5);
         return (
           <div key={c.club_id} className="club-balance-row" onClick={() => onClickClub(c.club_id, c.club)}>
             <div className="club-balance-name">{c.club}</div>
             <div className="club-balance-agentes">{c.agentes} agente{Number(c.agentes) === 1 ? "" : "s"}</div>
-            <div className="club-balance-bar-wrap">
-              <div className="club-balance-bar-track">
+            <div className="club-balance-bar-outer">
+              <div className="club-balance-bar-wrap">
+                <div className="club-balance-bar-track" />
+                <div className="club-balance-bar-zero" />
                 <div className={`club-balance-bar-fill ${signo}`} style={{ width: `${anchoPct}%` }} />
               </div>
               <span className={`club-balance-amount ${signo === "neutral" ? "muted" : signo}`}>{usd(saldo)}</span>
@@ -638,94 +674,67 @@ function SaldoPorClubBarras({ porClub, onClickClub }: { porClub: any[]; onClickC
 // separes en resumen", extendido a Operación > Resumen). El sistema de un balance no viene
 // guardado ahí (ver repo/dashboard.ts porClubPorSistema) -- se resuelve en vivo, así que un
 // club sin ningún balance con ese sistema simplemente no tiene fila ahí (no se inventa un 0).
+// Se muestra una sola tabla a la vez, la del sistema activo (ver pestañas General/Win-Lose/
+// Prepago en el panel que la llama) -- antes eran dos paneles apilados, uno por sistema.
 function SaldoPorClubPorSistema({
   porClubPorSistema,
   onClickClub,
+  sistema,
 }: {
   porClubPorSistema: any[];
   onClickClub: (clubId: string, club: string) => void;
+  sistema: "WIN_LOSE" | "PREPAGO";
 }) {
-  const winLose = porClubPorSistema.filter((c) => c.system === "WIN_LOSE");
-  const prepago = porClubPorSistema.filter((c) => c.system === "PREPAGO");
-  function Tabla({ titulo, filas }: { titulo: string; filas: any[] }) {
-    return (
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h3>{titulo}</h3>
-        {filas.length === 0 ? (
-          <div className="muted">Sin saldos con este sistema.</div>
-        ) : (
-          <table>
-            <thead>
-              <tr><th>Club</th><th>Agentes con saldo</th><th>Saldo neto</th></tr>
-            </thead>
-            <tbody>
-              {filas.map((c: any) => (
-                <tr key={c.club_id} className="row-click" onClick={() => onClickClub(c.club_id, c.club)}>
-                  <td>{c.club}</td>
-                  <td>{c.agentes}</td>
-                  <td>
-                    <span className={`badge ${Number(c.saldo_neto) > 0 ? "pos" : Number(c.saldo_neto) < 0 ? "neg" : "neutral"}`}>
-                      {usd(c.saldo_neto)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  }
+  const filas = porClubPorSistema.filter((c) => c.system === sistema);
+  if (filas.length === 0) return <div className="muted">Sin saldos con este sistema.</div>;
   return (
-    <div>
-      <Tabla titulo="Saldo neto por club — Win/Lose" filas={winLose} />
-      <Tabla titulo="Saldo neto por club — Prepago" filas={prepago} />
-    </div>
+    <table>
+      <thead>
+        <tr><th>Club</th><th>Agentes con saldo</th><th className="num">Saldo neto</th></tr>
+      </thead>
+      <tbody>
+        {filas.map((c: any) => (
+          <tr key={c.club_id} className="row-click" onClick={() => onClickClub(c.club_id, c.club)}>
+            <td>{c.club}</td>
+            <td>{c.agentes}</td>
+            <td className="num">
+              <span className={`badge ${Number(c.saldo_neto) > 0 ? "pos" : Number(c.saldo_neto) < 0 ? "neg" : "neutral"}`}>
+                {usd(c.saldo_neto)}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
 // "Resultado por club" separado por sistema (24/09/2026, pedido de Leo). Solo se puede separar
 // lo que es atribuible a un agente puntual (rake, ganancia por rake, cierre) -- lo que es del
-// CLUB entero (rodeo, ventas, tasa fija, override de Tiny) queda afuera de estas dos tablas, ya
-// que no tiene sentido partirlo a la mitad; sigue estando en la tabla "Resultado por club" de
-// arriba (el total real). Por eso la suma de estas dos tablas NO da exacto el total de esa
-// tabla en clubes con esos "otros ingresos" -- no es un error.
-function ResultadoPorClubPorSistema({ resultadoPorClub }: { resultadoPorClub: any[] }) {
-  function Tabla({ titulo, sufijo }: { titulo: string; sufijo: "win_lose" | "prepago" }) {
-    const filas = resultadoPorClub.filter((c) => Number(c[`rake_total_${sufijo}`]) !== 0 || Number(c[`cierre_agentes_${sufijo}`]) !== 0);
-    return (
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h3>{titulo}</h3>
-        {filas.length === 0 ? (
-          <div className="muted">Sin cierres con este sistema esta semana.</div>
-        ) : (
-          <table>
-            <thead>
-              <tr><th>Club</th><th>Rake</th><th>Ganancia nuestra</th><th>Cierre agentes</th></tr>
-            </thead>
-            <tbody>
-              {filas.map((c: any) => (
-                <tr key={c.club_id}>
-                  <td>{c.club_name}</td>
-                  <td>{usd(c[`rake_total_${sufijo}`])}</td>
-                  <td>{usd(c[`ganancia_${sufijo}`])}</td>
-                  <td><span className={`badge ${Number(c[`cierre_agentes_${sufijo}`]) >= 0 ? "pos" : "neg"}`}>{usd(c[`cierre_agentes_${sufijo}`])}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  }
+// CLUB entero (rodeo, ventas, tasa fija, override de Tiny) queda afuera de esta tabla, ya que
+// no tiene sentido partirlo a la mitad; sigue estando en la tabla "Resultado por club" de la
+// pestaña General (el total real). Por eso esta tabla NO suma exacto el total de esa pestaña en
+// clubes con esos "otros ingresos" -- no es un error (la aclaración se muestra debajo, en el
+// panel que llama a este componente). Una sola tabla a la vez, la del sistema activo.
+function ResultadoPorClubPorSistema({ resultadoPorClub, sistema }: { resultadoPorClub: any[]; sistema: "win_lose" | "prepago" }) {
+  const filas = resultadoPorClub.filter((c) => Number(c[`rake_total_${sistema}`]) !== 0 || Number(c[`cierre_agentes_${sistema}`]) !== 0);
+  if (filas.length === 0) return <div className="muted">Sin cierres con este sistema esta semana.</div>;
   return (
-    <div>
-      <Tabla titulo="Resultado por club — Win/Lose" sufijo="win_lose" />
-      <Tabla titulo="Resultado por club — Prepago" sufijo="prepago" />
-      <div className="muted" style={{ fontSize: 12, marginTop: -8, marginBottom: 16 }}>
-        "Ganancia nuestra" acá es solo la parte atribuible al rake de cada agente — el rodeo del club, ventas y tasa fija (si el club los tiene) quedan afuera de este desglose y siguen en el total de "Resultado por club" de arriba.
-      </div>
-    </div>
+    <table>
+      <thead>
+        <tr><th>Club</th><th className="num">Rake</th><th className="num">Ganancia nuestra</th><th className="num">Cierre agentes</th></tr>
+      </thead>
+      <tbody>
+        {filas.map((c: any) => (
+          <tr key={c.club_id}>
+            <td>{c.club_name}</td>
+            <td className="num money">{usd(c[`rake_total_${sistema}`])}</td>
+            <td className="num money">{usd(c[`ganancia_${sistema}`])}</td>
+            <td className="num"><span className={`badge ${Number(c[`cierre_agentes_${sistema}`]) >= 0 ? "pos" : "neg"}`}>{usd(c[`cierre_agentes_${sistema}`])}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -765,7 +774,7 @@ function EvolucionGananciaRake({ semanas }: { semanas: { week_start: string; wee
         <div>
           <h3 style={{ margin: 0, marginBottom: 4 }}>Ganancia y Rake — últimas {periodo} semanas</h3>
           <div className="muted" style={{ fontSize: 12 }}>
-            Datos reales de los cierres semanales cargados. La línea de Rake semana a semana todavía no está disponible (ver nota en el código, es tarea de backend).
+            Datos reales de los cierres semanales cargados. La línea de Rake semana a semana todavía no está disponible — la vamos a sumar más adelante.
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -776,7 +785,7 @@ function EvolucionGananciaRake({ semanas }: { semanas: { week_start: string; wee
                 key={n}
                 className={`chip${periodo === n ? " chip-active" : ""}`}
                 disabled={!disponible}
-                title={disponible ? undefined : "Requiere ampliar el backend (hoy trae máximo 8 semanas) — pendiente para una próxima etapa"}
+                title={disponible ? undefined : "Por ahora solo se pueden ver hasta 8 semanas — vas a poder ver más semanas próximamente"}
                 onClick={() => disponible && setPeriodo(n)}
                 style={!disponible ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
               >
@@ -809,7 +818,7 @@ function EvolucionGananciaRake({ semanas }: { semanas: { week_start: string; wee
             <title>
               Semana {dateShort(visibles[i].week_start)} al {dateShort(visibles[i].week_end)}
               {"\n"}Ganancia: {usd(valores[i])}
-              {"\n"}Rake: no disponible todavía (pendiente de backend)
+              {"\n"}Rake: no disponible todavía
             </title>
           </circle>
         ))}

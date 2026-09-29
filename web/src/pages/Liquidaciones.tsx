@@ -503,7 +503,7 @@ export default function Liquidaciones() {
   async function eliminarPago(p: any) {
     if (
       !(await confirmDialog(
-        `¿Eliminar este pago de ${usd(p.amount)} (${p.agentName})? Si el movimiento de ledger todavía existe, se revierte de verdad (vuelve a estar pendiente). Si ya no existía (huérfano), solo se saca de esta lista.`
+        `¿Eliminar este pago de ${usd(p.amount)} (${p.agentName})? Si el movimiento todavía existe, se revierte de verdad (vuelve a estar pendiente). Si ya no existía (huérfano), solo se saca de esta lista.`
       ))
     )
       return;
@@ -736,7 +736,7 @@ export default function Liquidaciones() {
           observation: movObservacion.trim() || `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
         if (r?.id) setMovIdsPagosGenericoSesion((prev) => [...prev, r.id]);
-        setMovMsg({ ok: true, text: "Cobro registrado y aplicado al ledger." });
+        setMovMsg({ ok: true, text: "Cobro registrado y aplicado." });
         setMovObservacion("");
         if (seleccionados.length > 0 && weekStart) {
           const dataActualizada = await api.liquidacion(seleccionados, weekStart);
@@ -1542,7 +1542,7 @@ export default function Liquidaciones() {
                         disabled={borrandoCarga === cg.id}
                         onClick={() => eliminarCargaPendiente(cg)}
                         title="Borrado real — no queda en el historial. Para una carga que nunca debió cargarse (ej. de prueba)."
-                        style={{ color: "var(--danger, #e5484d)" }}
+                        style={{ color: "var(--red)" }}
                       >
                         {borrandoCarga === cg.id ? "..." : "Eliminar"}
                       </button>
@@ -1611,7 +1611,7 @@ export default function Liquidaciones() {
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
                 <h3 style={{ marginTop: 0 }}>Historial de pagos de esta liquidación</h3>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                  Pagos/cobros ya registrados de verdad (ledger) para estos agentes en esta semana — a dónde fueron y con qué medio.
+                  Pagos/cobros ya registrados de verdad para estos agentes en esta semana — a dónde fueron y con qué medio.
                 </div>
                 <table>
                   <thead>

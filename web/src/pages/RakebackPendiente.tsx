@@ -146,7 +146,7 @@ export default function RakebackPendiente() {
                             className="btn secondary small"
                             disabled={borrando === p.id}
                             onClick={() => eliminar(p)}
-                            style={{ color: "var(--danger, #e5484d)" }}
+                            style={{ color: "var(--red)" }}
                           >
                             {borrando === p.id ? "..." : "Eliminar"}
                           </button>

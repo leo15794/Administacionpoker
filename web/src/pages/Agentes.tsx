@@ -940,7 +940,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   async function moverAgente(clubId: string, agentId: string, agentName: string, toClubId: string) {
     if (!toClubId) return;
     const clubDestino = clubes.find((c) => c.id === toClubId)?.name ?? toClubId;
-    if (!(await confirmDialog(`¿Mover TODOS los jugadores de "${agentName}" a "${clubDestino}"? No toca ningún cierre ni movimiento del ledger, solo el club del jugador en el catálogo.`))) return;
+    if (!(await confirmDialog(`¿Mover TODOS los jugadores de "${agentName}" a "${clubDestino}"? No toca ningún cierre ni movimiento de plata, solo el club del jugador en el catálogo.`))) return;
     setMoviendoAgente(`${clubId}|${agentId}`);
     try {
       const r = await api.moverAgenteDeClub(clubId, agentId, toClubId);

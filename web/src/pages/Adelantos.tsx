@@ -176,7 +176,7 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
                       disabled={borrando === a.id}
                       onClick={() => eliminarAdelanto(a)}
                       title="Borrado real — no queda en el historial. Para un adelanto que nunca debió cargarse."
-                      style={{ color: "var(--danger, #e5484d)" }}
+                      style={{ color: "var(--red)" }}
                     >
                       {borrando === a.id ? "..." : "Eliminar"}
                     </button>

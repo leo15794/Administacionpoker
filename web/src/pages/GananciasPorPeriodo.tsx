@@ -138,7 +138,7 @@ export default function GananciasPorPeriodo() {
                       className="btn secondary small"
                       disabled={busy === p.id}
                       onClick={() => eliminarPeriodo(p)}
-                      style={{ color: "var(--danger, #e5484d)" }}
+                      style={{ color: "var(--red)" }}
                     >
                       {busy === p.id ? "..." : "Eliminar"}
                     </button>
@@ -182,7 +182,7 @@ export default function GananciasPorPeriodo() {
                       className="btn secondary small"
                       disabled={busy === a.id}
                       onClick={() => eliminarAjuste(a)}
-                      style={{ color: "var(--danger, #e5484d)" }}
+                      style={{ color: "var(--red)" }}
                     >
                       {busy === a.id ? "..." : "Eliminar"}
                     </button>

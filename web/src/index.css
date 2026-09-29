@@ -1,63 +1,83 @@
 :root {
-  --bg: #0a0d16;
-  --bg-elevated: #0f1320;
-  --panel: #131829;
-  --panel-2: #1a2036;
-  --panel-hover: #1c2340;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #eef1fb;
-  --text-dim: #8d96b8;
-  --text-faint: #5c6485;
-  --accent: #6366f1;
-  --accent-2: #4f7cff;
-  --accent-grad: linear-gradient(135deg, #7c6ffc 0%, #4f7cff 100%);
-  --green: #22c55e;
-  --green-soft: rgba(34, 197, 94, 0.14);
-  --red: #f43f5e;
-  --red-soft: rgba(244, 63, 94, 0.14);
-  --amber: #f59e0b;
-  --amber-soft: rgba(245, 158, 11, 0.14);
+  --bg: #0b1210;
+  --sidebar-bg: #0e1814;
+  --bg-elevated: #101c17;
+  --panel: #14211b;
+  --panel-2: #1a2b23;
+  --panel-hover: #21362b;
+  --border: #2b3d33;
+  --border-strong: #3b5245;
+  --text: #f1f5f2;
+  --text-dim: #a8b8af;
+  --text-faint: #6e8177;
+  --accent: #2dbe85;
+  --accent-2: #c6a66b;
+  --accent-grad: linear-gradient(135deg, #34d399 0%, #229a6c 100%);
+  --accent-ink: #0b1210;
+  --green: #2dbe85;
+  --green-soft: rgba(45, 190, 133, 0.14);
+  --red: #f07178;
+  --red-soft: rgba(240, 113, 120, 0.14);
+  --amber: #e3a83b;
+  --amber-soft: rgba(227, 168, 59, 0.14);
+  --gold: #c6a66b;
+  --gold-soft: rgba(198, 166, 107, 0.14);
   --radius: 14px;
-  --radius-sm: 9px;
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px rgba(0, 0, 0, 0.45);
-  --shadow-lift: 0 4px 8px rgba(0, 0, 0, 0.25), 0 16px 40px -12px rgba(79, 124, 255, 0.18);
-  --hairline: rgba(255, 255, 255, 0.045);
-  --row-hover: rgba(255, 255, 255, 0.025);
+  --radius-sm: 10px;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 4px 10px rgba(0, 0, 0, 0.4), 0 18px 44px -14px rgba(45, 190, 133, 0.22);
+  --hairline: rgba(255, 255, 255, 0.05);
+  --row-hover: rgba(45, 190, 133, 0.06);
   --scrollbar-thumb: rgba(255, 255, 255, 0.12);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* ---------- identidad "club privado de póker" ----------
+   Paleta verde esmeralda + dorado apagado sobre negro con matiz verde. El dorado (--gold,
+   alias de --accent-2) es un acento DECORATIVO puntual (detalles, líneas de gráfico, hover
+   secundario) -- nunca reemplaza al verde esmeralda (--accent) en botones o estados activos,
+   y nunca se usa para semántica financiera (eso sigue siendo --green / --red). */
 
 /* ---------- modo día (claro) ----------
    Se activa poniendo data-theme="light" en <html> (ver ThemeToggle en Shell.tsx, que lo
    guarda en localStorage). Mismos nombres de variable que el modo noche de arriba — todo el
    resto del CSS y de los componentes no necesita saber en qué modo está, solo usa var(...). */
 :root[data-theme="light"] {
-  --bg: #f4f5fa;
+  --bg: #f4f7f5;
+  --sidebar-bg: #eff5f1;
   --bg-elevated: #ffffff;
   --panel: #ffffff;
-  --panel-2: #eef0f9;
-  --panel-hover: #e6e9f7;
-  --border: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(15, 23, 42, 0.18);
-  --text: #161a2c;
-  --text-dim: #5b6280;
-  --text-faint: #8a90ab;
-  --green-soft: rgba(22, 163, 74, 0.12);
-  --red-soft: rgba(225, 29, 72, 0.12);
-  --amber-soft: rgba(217, 119, 6, 0.14);
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -8px rgba(15, 23, 42, 0.12);
-  --shadow-lift: 0 4px 8px rgba(15, 23, 42, 0.08), 0 16px 40px -12px rgba(79, 124, 255, 0.16);
-  --hairline: rgba(15, 23, 42, 0.06);
-  --row-hover: rgba(79, 124, 255, 0.045);
-  --scrollbar-thumb: rgba(15, 23, 42, 0.14);
-  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.22);
+  --panel-2: #eaf1ec;
+  --panel-hover: #e1ebe4;
+  --border: rgba(11, 24, 18, 0.10);
+  --border-strong: rgba(11, 24, 18, 0.18);
+  --text: #14201a;
+  --text-dim: #55655c;
+  --text-faint: #7c887f;
+  --accent: #157a57;
+  --accent-2: #8a6a32;
+  --accent-grad: linear-gradient(135deg, #1e9a6e 0%, #146b4c 100%);
+  --accent-ink: #ffffff;
+  --green: #157a57;
+  --green-soft: rgba(21, 122, 87, 0.12);
+  --red: #c23744;
+  --red-soft: rgba(194, 55, 68, 0.12);
+  --amber: #9c6a17;
+  --amber-soft: rgba(156, 106, 23, 0.14);
+  --gold: #8a6a32;
+  --gold-soft: rgba(138, 106, 50, 0.12);
+  --shadow-soft: 0 1px 2px rgba(11, 24, 18, 0.06), 0 8px 24px -8px rgba(11, 24, 18, 0.12);
+  --shadow-lift: 0 4px 8px rgba(11, 24, 18, 0.08), 0 16px 40px -12px rgba(21, 122, 87, 0.16);
+  --hairline: rgba(11, 24, 18, 0.05);
+  --row-hover: rgba(21, 122, 87, 0.045);
+  --scrollbar-thumb: rgba(11, 24, 18, 0.14);
+  --scrollbar-thumb-hover: rgba(11, 24, 18, 0.22);
 }
 :root[data-theme="light"] body {
   background:
-    radial-gradient(1100px 600px at 12% -10%, rgba(99, 102, 241, 0.08), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(79, 124, 255, 0.06), transparent 55%),
+    radial-gradient(1100px 600px at 12% -10%, rgba(21, 122, 87, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(138, 106, 50, 0.05), transparent 55%),
     var(--bg);
 }
 
@@ -66,8 +86,8 @@
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 600px at 12% -10%, rgba(99, 102, 241, 0.16), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(79, 124, 255, 0.10), transparent 55%),
+    radial-gradient(1100px 600px at 12% -10%, rgba(45, 190, 133, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(198, 166, 107, 0.05), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -79,7 +99,7 @@ body {
 
 a { color: inherit; }
 
-::selection { background: rgba(99, 102, 241, 0.35); }
+::selection { background: rgba(45, 190, 133, 0.35); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -95,13 +115,19 @@ a { color: inherit; }
 
 .sidebar {
   width: 244px;
-  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   padding: 22px 14px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   transition: width 0.18s ease, padding 0.18s ease;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 .sidebar.collapsed {
   width: 68px;
@@ -149,8 +175,8 @@ a { color: inherit; }
   justify-content: center;
   font-weight: 800;
   font-size: 15px;
-  color: white;
-  box-shadow: 0 6px 18px -4px rgba(99, 102, 241, 0.55);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 18px -4px rgba(45, 190, 133, 0.55);
   flex-shrink: 0;
 }
 .sidebar h1 {
@@ -188,9 +214,9 @@ a { color: inherit; }
   color: var(--text);
 }
 .nav-link.active {
-  background: linear-gradient(135deg, rgba(124, 111, 252, 0.22), rgba(79, 124, 255, 0.14));
+  background: var(--green-soft);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(124, 111, 252, 0.35);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .nav-link.active svg { opacity: 1; }
 
@@ -261,7 +287,7 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 
 .btn {
   background: var(--accent-grad);
-  color: white;
+  color: var(--accent-ink);
   border: none;
   padding: 10px 18px;
   border-radius: var(--radius-sm);
@@ -269,11 +295,11 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
   font-weight: 600;
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 14px -4px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 4px 14px -4px rgba(45, 190, 133, 0.5);
   font-family: inherit;
   white-space: nowrap;
 }
-.btn:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -4px rgba(99, 102, 241, 0.65); }
+.btn:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -4px rgba(45, 190, 133, 0.65); }
 .btn:active { transform: translateY(1px) scale(0.99); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; filter: none; box-shadow: none; }
 
@@ -293,7 +319,7 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
   color: var(--red);
   box-shadow: none;
 }
-.btn.danger:hover { background: var(--red); color: #fff; filter: none; box-shadow: none; }
+.btn.danger:hover { background: var(--red); color: var(--accent-ink); filter: none; box-shadow: none; }
 
 /* ---------- actions menu ("⋯" popover para acciones secundarias de fila) ---------- */
 
@@ -388,8 +414,8 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 .kpi-card .value.pos { color: var(--green); }
 .kpi-card .value.neg { color: var(--red); }
 .kpi-card.kpi-active {
-  border-color: var(--accent, #6366f1);
-  box-shadow: 0 0 0 1px var(--accent, #6366f1) inset;
+  border-color: var(--accent, #2dbe85);
+  box-shadow: 0 0 0 1px var(--accent, #2dbe85) inset;
 }
 
 /* ---------- chips (filtros rápidos tipo "toggle") ---------- */
@@ -406,7 +432,7 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 }
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
 .chip.chip-active {
-  background: var(--accent-grad, #6366f1);
+  background: var(--accent-grad, #2dbe85);
   border-color: transparent;
   color: #fff;
 }
@@ -437,7 +463,7 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 /* El signo "-" nunca se separa del monto: sin esto, un currency negativo angosto puede
    partirse en dos lineas ("-" arriba, "US$ 1.234,56" abajo) por el espacio que Intl mete
    despues del simbolo de moneda. */
-.money { white-space: nowrap; }
+.money { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th {
@@ -470,6 +496,23 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .table-compact tbody tr:hover td:first-child { background: var(--panel-2); }
 
+/* Columnas de importes: alineadas a la derecha y con números tabulares, para que los montos
+   queden en columna recta en vez de en bandera. Opt-in (className="num" en el th/td), para no
+   tener que tocar cada tabla del sistema de una sola vez. */
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Encabezado fijo para tablas largas: el contenedor con "table-scroll" scrollea verticalmente
+   y el thead queda pegado arriba. Opt-in (envolver la <table> en un div.table-scroll). */
+.table-scroll { max-height: 62vh; overflow-y: auto; overflow-x: auto; border-radius: var(--radius-sm); }
+.table-scroll table { border-collapse: separate; border-spacing: 0; }
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--border);
+}
+
 /* ---------- badges ---------- */
 
 .badge {
@@ -496,7 +539,7 @@ tbody tr:last-child td { border-bottom: none; }
 /* Un "deal" (% rakeback/rebate asignado) no es una ganancia ni una pérdida — usa un tono propio,
    más apagado, para no competir visualmente con los badges pos/neg que sí marcan plata a favor o
    en contra (ver lista de Agentes, columna "% Rakeback / Rebate"). */
-.badge.deal { background: rgba(122, 143, 255, 0.14); color: var(--accent, #7a8fff); }
+.badge.deal { background: var(--gold-soft); color: var(--gold); }
 .badge { white-space: nowrap; }
 
 /* ---------- login ---------- */
@@ -535,9 +578,9 @@ tbody tr:last-child td { border-bottom: none; }
   justify-content: center;
   font-weight: 800;
   font-size: 19px;
-  color: white;
+  color: var(--accent-ink);
   margin-bottom: 18px;
-  box-shadow: 0 8px 22px -6px rgba(99, 102, 241, 0.6);
+  box-shadow: 0 8px 22px -6px rgba(45, 190, 133, 0.6);
 }
 .login-box h1 { margin: 0 0 4px; font-size: 21px; font-weight: 750; letter-spacing: -0.01em; }
 .login-box .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 26px; }
@@ -572,7 +615,7 @@ tbody tr:last-child td { border-bottom: none; }
 .field textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
 }
 .field input::placeholder { color: var(--text-faint); }
 /* Checkboxes/radios sueltos DENTRO de un .field (ej. checklist de agentes en Usuarios y
@@ -603,7 +646,7 @@ tbody tr:last-child td { border-bottom: none; }
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
 }
 :where(input, textarea)::placeholder {
   color: var(--text-faint);
@@ -676,8 +719,8 @@ select option {
 .tabs button:hover { color: var(--text); }
 .tabs button.active {
   background: var(--accent-grad);
-  color: white;
-  box-shadow: 0 4px 12px -4px rgba(99, 102, 241, 0.55);
+  color: var(--accent-ink);
+  box-shadow: 0 4px 12px -4px rgba(45, 190, 133, 0.55);
 }
 
 /* ---------- modal ---------- */
@@ -738,14 +781,14 @@ select option {
 /* ---------- clickable rows / search ---------- */
 
 .row-click { cursor: pointer; }
-.row-click:hover td { background: rgba(99, 102, 241, 0.08) !important; }
+.row-click:hover td { background: rgba(45, 190, 133, 0.08) !important; }
 
 /* Fila/bloque marcado al llegar desde un link externo (ej. Resumen financiero → Cierres, con
    ?week=&club= en la URL) — mismo acento que el resto de la UI, con un pulso corto para que el
    ojo lo encuentre apenas carga la pantalla sin quedar parpadeando para siempre. */
 @keyframes fila-destacada-pulso {
-  0%, 100% { background: rgba(99, 102, 241, 0.22); }
-  50% { background: rgba(99, 102, 241, 0.08); }
+  0%, 100% { background: rgba(45, 190, 133, 0.22); }
+  50% { background: rgba(45, 190, 133, 0.08); }
 }
 .fila-destacada { animation: fila-destacada-pulso 1.4s ease-in-out 3; box-shadow: inset 3px 0 0 var(--accent); }
 .fila-destacada td { position: relative; }
@@ -765,7 +808,7 @@ select option {
 .search-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
 }
 
 /* ---------- selector de club buscable (ClubPicker) ---------- */
@@ -796,7 +839,7 @@ select option {
 .club-picker-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
 }
 .club-picker-list {
   position: absolute;
@@ -820,7 +863,7 @@ select option {
   color: var(--text);
 }
 .club-picker-item:hover { background: var(--panel-hover); }
-.club-picker-item.active { background: rgba(99, 102, 241, 0.16); color: var(--accent-2); font-weight: 600; }
+.club-picker-item.active { background: rgba(45, 190, 133, 0.16); color: var(--accent-2); font-weight: 600; }
 .club-picker-empty { padding: 10px 11px; font-size: 13px; color: var(--text-dim); }
 
 /* ---------- TeamBack Affiliates (sección aparte, fuera del Shell -- sin esto ".page" no
@@ -855,13 +898,38 @@ button.nav-link {
 /* Header del dashboard: título + subtítulo a la izquierda, "última actualización" + selector de
    período a la derecha. */
 .dash-header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 28px;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(120% 180% at 100% -20%, var(--gold-soft), transparent 60%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.012) 0, rgba(255, 255, 255, 0.012) 1px, transparent 1px, transparent 7px),
+    var(--panel);
+  overflow: hidden;
 }
+/* Detalle discreto de póker (pica), muy tenue -- nunca detrás de tablas ni importes, solo acá
+   en el encabezado, y por debajo del texto (z-index). */
+.dash-header::after {
+  content: "\2660";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 76px;
+  line-height: 1;
+  color: var(--text);
+  opacity: 0.035;
+  pointer-events: none;
+  z-index: 0;
+}
+.dash-header > * { position: relative; z-index: 1; }
 .dash-header-right {
   display: flex;
   align-items: center;
@@ -887,7 +955,20 @@ button.nav-link {
   font-weight: 600;
   cursor: pointer;
 }
-.period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22); }
+.period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22); }
+
+/* Indicador de período honesto (reemplaza al <select> viejo que tenía 5 opciones de 6 que no
+   hacían nada): se ve, pero no pretende ser un control funcional -- ningún cursor de mano,
+   ningún estado hover interactivo. */
+.period-static {
+  padding: 9px 13px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
 
 /* Títulos de sección ("Resumen financiero", "Operación", "Pendientes financieros"...) — separan
    claramente cada bloque sin meter otro panel/borde, para no recargar. */
@@ -904,14 +985,9 @@ button.nav-link {
 /* ---------- KPI hero (Resumen financiero — las 5 tarjetas principales) ---------- */
 .kpi-hero-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
   gap: 14px;
-}
-@media (max-width: 1180px) {
-  .kpi-hero-grid { grid-template-columns: repeat(3, 1fr); }
-}
-@media (max-width: 760px) {
-  .kpi-hero-grid { grid-template-columns: repeat(2, 1fr); }
+  align-items: stretch;
 }
 
 .kpi-hero-card {
@@ -922,7 +998,7 @@ button.nav-link {
   padding: 20px 22px;
   box-shadow: var(--shadow-soft);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  overflow: hidden;
+  min-width: 0;
 }
 .kpi-hero-card.row-click:hover {
   transform: translateY(-2px);
@@ -934,8 +1010,19 @@ button.nav-link {
   position: absolute;
   inset: 0 0 auto 0;
   height: 3px;
+  border-radius: 16px 16px 0 0;
   background: var(--accent-grad);
   opacity: 0.55;
+}
+/* Tarjeta con más protagonismo (Ganancia semanal): ocupa 2 columnas cuando el ancho alcanza,
+   monto más grande, y un borde superior más marcado en vez del degradé fino genérico. */
+.kpi-hero-card.featured {
+  grid-column: span 2;
+  border-color: var(--border-strong);
+}
+.kpi-hero-card.featured::before { height: 3px; opacity: 0.9; }
+@media (max-width: 620px) {
+  .kpi-hero-card.featured { grid-column: span 1; }
 }
 .kpi-hero-label {
   font-size: 12.5px;
@@ -946,11 +1033,17 @@ button.nav-link {
   margin-bottom: 10px;
 }
 .kpi-hero-amount {
-  font-size: 30px;
+  /* El pedido es explícito: nunca puntos suspensivos ni recorte de importes. La tipografía
+     responsive (clamp) + la grilla adaptable de arriba son lo que evita que se corten. */
+  font-size: clamp(18px, 1.1vw + 14px, 30px);
   font-weight: 750;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.15;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  display: block;
 }
+.kpi-hero-card.featured .kpi-hero-amount { font-size: clamp(24px, 1.4vw + 16px, 36px); }
 .kpi-hero-amount.pos { color: var(--green); }
 .kpi-hero-amount.neg { color: var(--red); }
 .kpi-hero-amount.neutral { color: var(--text); }
@@ -1065,12 +1158,37 @@ button.nav-link {
 .club-balance-row:last-child { border-bottom: none; }
 .club-balance-name { font-size: 13.5px; font-weight: 600; }
 .club-balance-agentes { font-size: 12.5px; color: var(--text-dim); }
-.club-balance-bar-wrap { display: flex; align-items: center; gap: 10px; }
-.club-balance-bar-track { flex: 1; height: 9px; border-radius: 5px; background: var(--panel-2); overflow: hidden; min-width: 40px; }
-.club-balance-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
-.club-balance-bar-fill.pos { background: linear-gradient(90deg, rgba(34,197,94,0.55), var(--green)); }
-.club-balance-bar-fill.neg { background: linear-gradient(90deg, rgba(244,63,94,0.55), var(--red)); }
-.club-balance-bar-fill.neutral { background: var(--text-faint); }
+/* Barra divergente (saldo neto por club): crece desde un cero central hacia la derecha
+   (saldo a favor, verde) o hacia la izquierda (saldo en contra, rojo), en vez de una barra de
+   un solo sentido -- así el cero real queda visible como referencia, no como el borde de la
+   barra. El ancho de cada .club-balance-bar-fill lo calcula el componente (0-50% del track). */
+.club-balance-bar-outer { display: flex; align-items: center; gap: 10px; }
+.club-balance-bar-wrap { position: relative; flex: 1; height: 9px; min-width: 60px; }
+.club-balance-bar-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.club-balance-bar-zero {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 50%;
+  width: 1px;
+  background: var(--border-strong);
+}
+.club-balance-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+.club-balance-bar-fill.pos { left: 50%; background: linear-gradient(90deg, rgba(45, 190, 133, 0.55), var(--green)); }
+.club-balance-bar-fill.neg { right: 50%; background: linear-gradient(270deg, rgba(240, 113, 120, 0.55), var(--red)); }
+.club-balance-bar-fill.neutral { left: 50%; width: 2px !important; background: var(--text-faint); }
 .club-balance-amount { font-size: 13.5px; font-weight: 700; white-space: nowrap; text-align: right; }
 @media (max-width: 640px) {
   .club-balance-row { grid-template-columns: 1fr; gap: 6px; }

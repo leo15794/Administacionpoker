@@ -95,7 +95,7 @@ export default function StockDeudas() {
           <button
             key={key}
             className={`btn secondary small ${tab === key ? "active" : ""}`}
-            style={tab === key ? { borderColor: "var(--accent, #6366f1)" } : undefined}
+            style={tab === key ? { borderColor: "var(--accent)" } : undefined}
             onClick={() => setTab(key)}
           >
             {label}
@@ -382,7 +382,7 @@ function CuentasTab({
                     className="btn secondary small"
                     disabled={borrando === s.id}
                     onClick={() => onEliminar(s)}
-                    style={{ color: "var(--danger, #e5484d)" }}
+                    style={{ color: "var(--red)" }}
                   >
                     {borrando === s.id ? "..." : "Eliminar"}
                   </button>

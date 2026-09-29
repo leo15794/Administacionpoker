@@ -228,7 +228,7 @@ export default function Cierres() {
                 disabled={borrandoSemana}
                 onClick={borrarSemanaCompleta}
                 title="Borrado real de toda la semana (con el filtro de club, si elegiste uno) — solo para datos de prueba."
-                style={{ color: "var(--danger, #e5484d)" }}
+                style={{ color: "var(--red)" }}
               >
                 {borrandoSemana ? "Borrando..." : "Borrar todo"}
               </button>
@@ -648,7 +648,7 @@ function NuevoCierre({
       <div className="muted" style={{ marginBottom: 14 }}>
         {esBancado
           ? "Cuenta tipo Bancado: la mesa se reparte 50/50 (ajustable) y el rakeback es 100% del bancado — si viene con memoria pendiente, se descuenta antes de acreditarle nada."
-          : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como movimiento al ledger."}
+          : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como un movimiento más en el sistema."}
         {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.
       </div>
 
