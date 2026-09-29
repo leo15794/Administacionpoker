@@ -334,10 +334,17 @@ export async function getResumenAgentePDF(
   // "saldo de stock" que CARGA/DESCARGA, solo que en contra del agente (ver deltaParaBalance) --
   // sin esto, un adelanto de fichas de una semana anterior desaparecía de "saldo anterior" al
   // pasar la semana, aunque siguiera sin cobrarse.
+  //
+  // CIERRE_SEMANAL se excluye de "movimientos_semana" (30/09/2026, bug reportado por Leo: "por
+  // que se suma dos veces") -- al aplicar un cierre se genera un movimiento de ledger tipo
+  // CIERRE_SEMANAL fechado el weekEnd (ver repo/closings.ts), por el mismo monto que ya
+  // representa "cierreSemanal" más abajo (calculado aparte, de clubes.totalClub/rakebackNeto).
+  // Como cae DENTRO del rango [weekStart, weekEnd], sin este filtro quedaba sumado dos veces en
+  // "Saldo operativo final" (cierreSemanal + ese mismo monto otra vez via pagosPosteriores).
   const deltaRes = await pool.query(
     `SELECT
        COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE type IN ('CARGA','DESCARGA','ADELANTO_FICHAS') AND occurred_at::date < $2::date), 0) as saldo_fichas_antes,
-       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date BETWEEN $2::date AND $3::date), 0) as movimientos_semana
+       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date BETWEEN $2::date AND $3::date AND type <> 'CIERRE_SEMANAL'), 0) as movimientos_semana
      FROM ledger_movements
      WHERE agent_id = $1 AND status <> 'REVERTIDO'`,
     [agentId, weekStart, weekEnd]
