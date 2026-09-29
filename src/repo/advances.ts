@@ -468,3 +468,39 @@ async function registrarMovimiento(
   // buscar el movimiento a mano en la pantalla de Adelantos (ver eliminarMovimientoAdelanto).
   return advMovId;
 }
+
+// Reconstrucción histórica del adelanto de rakeback pendiente de compensar (30/09/2026, pedido
+// de Leo, misma idea que ya se hizo para rakeback_pendiente -- ver getRakebackPendienteEnFechas
+// en repo/rakebackPendiente.ts, mismo patrón exacto acá). Para uno o varios agentes, calcula
+// cuánto adelanto seguía sin compensar en cada fecha pedida, usando el estado real que tenía
+// cada adelanto en ese momento (rakeback_advance_movements ya guarda resulting_amount/
+// resulting_consumed después de cada ALTA/AUMENTO/REDUCCION/CONSUMO/BAJA/CORRECCION).
+//
+// SOLO kind='RAKEBACK' (30/09/2026, IMPORTANTE): un adelanto kind='FICHAS_PENDIENTE' es el
+// mismo mecanismo pero para ADELANTO_FICHAS (ver repo/ledger.ts) -- ESE tipo de adelanto YA
+// resta del saldo del ledger directamente (deltaParaBalance le da -ABS(amount)), así que ya
+// está adentro del "saldo" que calcula getSaldoHistorico. Si se sumara acá también, se contaría
+// dos veces la misma plata. Un adelanto de rakeback normal (kind='RAKEBACK'), en cambio, nunca
+// toca el ledger (ver ADELANTO_RAKEBACK en deltaParaBalance, siempre 0) -- por eso a ESE sí hay
+// que sumarlo aparte, es la única forma de que se refleje en algún lado.
+export async function getAdelantoRakebackEnFechas(agentIds: string[], fechas: string[]): Promise<Record<string, number>> {
+  if (agentIds.length === 0 || fechas.length === 0) return {};
+  const r = await pool.query(
+    `SELECT to_char(d.fecha, 'YYYY-MM-DD') as fecha,
+            COALESCE(SUM(CASE WHEN latest.type = 'BAJA' THEN 0 ELSE latest.resulting_amount - latest.resulting_consumed END), 0) as outstanding
+     FROM (SELECT DISTINCT unnest($2::date[]) as fecha) d
+     LEFT JOIN LATERAL (
+       SELECT DISTINCT ON (ram.advance_id) ram.advance_id, ram.type, ram.resulting_amount, ram.resulting_consumed
+       FROM rakeback_advance_movements ram
+       JOIN rakeback_advances ra ON ra.id = ram.advance_id
+       WHERE ram.agent_id = ANY($1) AND ram.occurred_at::date <= d.fecha AND ra.kind = 'RAKEBACK'
+       ORDER BY ram.advance_id, ram.occurred_at DESC, ram.id DESC
+     ) latest ON true
+     GROUP BY d.fecha`,
+    [agentIds, fechas]
+  );
+  const map: Record<string, number> = {};
+  for (const row of r.rows) map[row.fecha] = Number(row.outstanding);
+  for (const f of fechas) if (!(f in map)) map[f] = 0;
+  return map;
+}

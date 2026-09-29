@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db/pool.js";
 import { listAllBalances, getSaldoHistorico } from "../repo/ledger.js";
+import { getRakebackPendienteEnFechas } from "../repo/rakebackPendiente.js";
+import { getAdelantoRakebackEnFechas } from "../repo/advances.js";
 import { listClosings } from "../repo/closings.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
@@ -385,7 +387,55 @@ dashboardRouter.get("/movimientos/saldo-historico", requireAuth, requireAdmin, a
   const d = typeof desde === "string" && desde ? desde : undefined;
   const h = typeof hasta === "string" && hasta ? hasta : undefined;
   try {
-    res.json(await getSaldoHistorico(ids, club, d, h));
+    const saldo = await getSaldoHistorico(ids, club, d, h);
+
+    // Rakeback pendiente (30/09/2026, pedido de Leo: "necesito poder recrear ese valor... no
+    // hay forma de que hagas la funcion del rakeback para saber lo que tienen pendiente" -- ver
+    // getRakebackPendienteEnFechas en repo/rakebackPendiente.ts). Se suma AL LADO del saldo del
+    // ledger, no adentro -- son dos cosas separadas en la base (ver comentario ahí), y mezclarlas
+    // en un solo numero sin mostrar el desglose haria mas dificil, no mas facil, verificar que
+    // este bien.
+    const fechaAntes = d ? new Date(new Date(d + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10) : null;
+    const fechaFinal = h || new Date().toISOString().slice(0, 10);
+    const fechasBuckets = [...new Set([...saldo.porDia.map((f) => f.periodo), ...saldo.porSemana.map((f) => f.periodo)])];
+    const fechasTotales = [...new Set([...(fechaAntes ? [fechaAntes] : []), fechaFinal, ...fechasBuckets])];
+
+    // Adelanto de rakeback (30/09/2026, mismo pedido): plata YA entregada a cuenta de rakeback
+    // futuro -- resta de lo que en definitiva se le debe al agente (ver
+    // getAdelantoRakebackEnFechas en repo/advances.ts, que ya excluye los adelantos de FICHAS
+    // porque esos ya están adentro del saldo del ledger).
+    const [pendientePorFecha, adelantoPorFecha] = await Promise.all([
+      getRakebackPendienteEnFechas(ids, fechasTotales, club),
+      getAdelantoRakebackEnFechas(ids, fechasTotales),
+    ]);
+
+    const rakebackPendienteInicial = fechaAntes ? (pendientePorFecha[fechaAntes] ?? 0) : 0;
+    const rakebackPendienteFinal = pendientePorFecha[fechaFinal] ?? 0;
+    const adelantoRakebackInicial = fechaAntes ? (adelantoPorFecha[fechaAntes] ?? 0) : 0;
+    const adelantoRakebackFinal = adelantoPorFecha[fechaFinal] ?? 0;
+
+    function combinar(f: { periodo: string; saldoCierre: number }) {
+      const pendiente = pendientePorFecha[f.periodo] ?? 0;
+      const adelanto = adelantoPorFecha[f.periodo] ?? 0;
+      return {
+        ...f,
+        rakebackPendiente: pendiente,
+        adelantoRakeback: adelanto,
+        saldoTotal: f.saldoCierre + pendiente - adelanto,
+      };
+    }
+
+    res.json({
+      ...saldo,
+      rakebackPendienteInicial,
+      rakebackPendienteFinal,
+      adelantoRakebackInicial,
+      adelantoRakebackFinal,
+      saldoTotalInicial: saldo.saldoInicial + rakebackPendienteInicial - adelantoRakebackInicial,
+      saldoTotalFinal: saldo.saldoFinal + rakebackPendienteFinal - adelantoRakebackFinal,
+      porDia: saldo.porDia.map(combinar),
+      porSemana: saldo.porSemana.map(combinar),
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo calcular el saldo historico." });
   }

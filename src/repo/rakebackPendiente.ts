@@ -258,3 +258,45 @@ export async function eliminarPendiente(pendienteId: string) {
     client.release();
   }
 }
+
+// Reconstrucción histórica del rakeback pendiente (30/09/2026, pedido de Leo: "necesito poder
+// recrear ese valor para saber si esta bien o esta mal" -- comparando contra el "Saldo anterior"
+// de Resumen por agente, que SÍ suma el rakeback pendiente además del saldo de fichas). Para uno
+// o varios agentes, calcula cuánto rakeback pendiente seguía sin cobrarse EN CADA una de las
+// fechas pedidas -- usando el estado real que tenía cada pendiente en ese momento (no el estado
+// actual), a partir de rakeback_pendiente_movements (que guarda resulting_amount/
+// resulting_consumed ya calculados después de cada ALTA/PAGO_FICHAS/PAGO_USDT/BAJA, ver
+// recalcularCadenaPendiente más arriba). Un pendiente dado de BAJA cuenta como 0 desde ese
+// momento (mismo criterio que ya usa listRakebackPendiente/getResumenAgentePDF, que solo miran
+// los activos) -- OJO: esto es una reconstrucción histórica de verdad (el estado que tenía cada
+// pendiente EN esa fecha puntual), mientras que "Saldo anterior" de Resumen por agente usa el
+// estado ACTUAL de los pendientes viejos (rp.amount/rp.consumed de HOY, no de la fecha de esa
+// semana) -- si algún pendiente se pagó más después, los dos números legítimamente no van a
+// coincidir, y esto no es un error de ninguno de los dos lados.
+export async function getRakebackPendienteEnFechas(
+  agentIds: string[],
+  fechas: string[],
+  clubId: string | null
+): Promise<Record<string, number>> {
+  if (agentIds.length === 0 || fechas.length === 0) return {};
+  const r = await pool.query(
+    `SELECT to_char(d.fecha, 'YYYY-MM-DD') as fecha,
+            COALESCE(SUM(CASE WHEN latest.type = 'BAJA' THEN 0 ELSE latest.resulting_amount - latest.resulting_consumed END), 0) as outstanding
+     FROM (SELECT DISTINCT unnest($2::date[]) as fecha) d
+     LEFT JOIN LATERAL (
+       SELECT DISTINCT ON (rpm.pendiente_id) rpm.pendiente_id, rpm.type, rpm.resulting_amount, rpm.resulting_consumed
+       FROM rakeback_pendiente_movements rpm
+       JOIN rakeback_pendiente rp ON rp.id = rpm.pendiente_id
+       WHERE rpm.agent_id = ANY($1) AND rpm.occurred_at::date <= d.fecha
+         AND ($3::text IS NULL OR rp.club_id = $3)
+       ORDER BY rpm.pendiente_id, rpm.occurred_at DESC, rpm.id DESC
+     ) latest ON true
+     GROUP BY d.fecha`,
+    [agentIds, fechas, clubId]
+  );
+  const map: Record<string, number> = {};
+  for (const row of r.rows) map[row.fecha] = Number(row.outstanding);
+  // Fechas sin ningún pendiente todavía (ninguna fila coincidió) -- 0, no "sin datos".
+  for (const f of fechas) if (!(f in map)) map[f] = 0;
+  return map;
+}

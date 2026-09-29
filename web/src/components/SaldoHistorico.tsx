@@ -169,21 +169,35 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
 
       {data && (
         <>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+            Desglose al final del rango elegido -- las tres cajas son distintas en el sistema, por
+            eso van separadas: el saldo del ledger es lo que ya ves en "Saldos por agente y club";
+            el rakeback pendiente es lo que ya ganaron y todavía no se les pagó (se lo debemos);
+            el adelanto de rakeback es lo que ya les dimos por adelantado (nos lo deben, por eso
+            resta).
+          </div>
           <div className="kpi-sub-grid" style={{ marginBottom: 16 }}>
             <div className="kpi-sub-card">
-              <div className="kpi-sub-label">Saldo al inicio del rango</div>
-              <div className="kpi-sub-value">{usd(data.saldoInicial)}</div>
+              <div className="kpi-sub-label">Saldo del ledger</div>
+              <div className="kpi-sub-value">{usd(data.saldoFinal)}</div>
             </div>
             <div className="kpi-sub-card">
-              <div className="kpi-sub-label">Saldo al final del rango</div>
-              <div className="kpi-sub-value" style={{ color: data.saldoFinal >= 0 ? "var(--green)" : "var(--red)" }}>
-                {usd(data.saldoFinal)}
+              <div className="kpi-sub-label">+ Rakeback pendiente</div>
+              <div className="kpi-sub-value">{usd(data.rakebackPendienteFinal)}</div>
+            </div>
+            <div className="kpi-sub-card">
+              <div className="kpi-sub-label">− Adelanto de rakeback</div>
+              <div className="kpi-sub-value">{usd(data.adelantoRakebackFinal)}</div>
+            </div>
+            <div className="kpi-sub-card">
+              <div className="kpi-sub-label">= Saldo total</div>
+              <div className="kpi-sub-value" style={{ color: data.saldoTotalFinal >= 0 ? "var(--green)" : "var(--red)" }}>
+                <strong>{usd(data.saldoTotalFinal)}</strong>
               </div>
             </div>
-            <div className="kpi-sub-card">
-              <div className="kpi-sub-label">Movimientos en el rango</div>
-              <div className="kpi-sub-value">{data.movimientos.length}</div>
-            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
+            Al inicio del rango: saldo del ledger {usd(data.saldoInicial)}, saldo total {usd(data.saldoTotalInicial)} -- {data.movimientos.length} movimiento(s) en el rango.
           </div>
 
           <div className="topbar" style={{ marginBottom: 10 }}>
@@ -204,7 +218,10 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
                     <th>Período</th>
                     <th className="num">Movimientos</th>
                     <th className="num">Neto del período</th>
-                    <th className="num">Saldo al cierre</th>
+                    <th className="num">Saldo del ledger</th>
+                    <th className="num">Rakeback pendiente</th>
+                    <th className="num">Adelanto rakeback</th>
+                    <th className="num">Saldo total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -213,7 +230,10 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
                       <td>{labelPeriodo(f.periodo, granularidad)}</td>
                       <td className="num muted">{f.movimientos}</td>
                       <td className={`num ${f.neto >= 0 ? "pos" : "neg"}`}>{usd(f.neto)}</td>
-                      <td className="num"><strong>{usd(f.saldoCierre)}</strong></td>
+                      <td className="num">{usd(f.saldoCierre)}</td>
+                      <td className="num muted">{usd(f.rakebackPendiente)}</td>
+                      <td className="num muted">{usd(f.adelantoRakeback)}</td>
+                      <td className="num"><strong>{usd(f.saldoTotal)}</strong></td>
                     </tr>
                   ))}
                 </tbody>
