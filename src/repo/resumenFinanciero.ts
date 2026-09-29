@@ -77,7 +77,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
        JOIN ledger_movements m ON m.id = t.movement_id
        JOIN agents a ON a.id = m.agent_id
        WHERE m.status <> 'REVERTIDO'
-         AND NOT (t.ledger = 'WALLET_MANOS' AND m.created_by = 'import:historial-automatizacion')
+         AND NOT (t.ledger = 'WALLET_MANOS' AND COALESCE(m.created_by, '') = 'import:historial-automatizacion')
          AND t.occurred_at >= $1 AND t.occurred_at < $2
        ORDER BY t.occurred_at`,
       [desde, hastaParam]

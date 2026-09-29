@@ -507,7 +507,7 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
        FROM treasury_entries t
        JOIN ledger_movements m ON m.id = t.movement_id
        JOIN agents a ON a.id = m.agent_id
-       WHERE NOT (t.ledger = 'WALLET_MANOS' AND m.created_by = 'import:historial-automatizacion')
+       WHERE NOT (t.ledger = 'WALLET_MANOS' AND COALESCE(m.created_by, '') = 'import:historial-automatizacion')
        ${ledgerFiltro ? "AND t.ledger = $2" : ""}
        ORDER BY t.occurred_at DESC LIMIT $1`,
       ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
