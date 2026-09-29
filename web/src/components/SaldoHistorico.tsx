@@ -32,6 +32,7 @@ function labelPeriodo(periodo: string, gran: Granularidad) {
 // repo/ledger.ts -> getSaldoHistorico).
 export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [busquedaAgente, setBusquedaAgente] = useState("");
   const [clubId, setClubId] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -51,11 +52,22 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
     });
   }
 
+  const agentesFiltrados = busquedaAgente.trim()
+    ? agentes.filter((a) => a.name.toLowerCase().includes(busquedaAgente.trim().toLowerCase()))
+    : agentes;
+
   function seleccionarTodos() {
-    setSeleccionados(new Set(agentes.map((a) => a.id)));
+    setSeleccionados((prev) => new Set([...prev, ...agentesFiltrados.map((a) => a.id)]));
   }
   function destildarTodos() {
-    setSeleccionados(new Set());
+    // Solo destilda los que están visibles con el filtro actual -- si ya elegiste agentes de
+    // otra búsqueda antes, esos quedan como estaban (30/09/2026, mismo criterio que "Todos": el
+    // buscador filtra la LISTA, no pisa lo que ya elegiste).
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      for (const a of agentesFiltrados) next.delete(a.id);
+      return next;
+    });
   }
 
   async function verEvolucion() {
@@ -101,6 +113,13 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
               <button type="button" className="btn secondary small" onClick={destildarTodos}>Ninguno</button>
             </div>
           </div>
+          <input
+            type="text"
+            placeholder="Buscar agente..."
+            value={busquedaAgente}
+            onChange={(e) => setBusquedaAgente(e.target.value)}
+            style={{ marginBottom: 6 }}
+          />
           <div
             style={{
               maxHeight: 180,
@@ -110,7 +129,10 @@ export default function SaldoHistorico({ agentes, clubes }: { agentes: any[]; cl
               padding: 8,
             }}
           >
-            {agentes.map((a) => (
+            {agentesFiltrados.length === 0 && (
+              <div className="muted" style={{ fontSize: 13, padding: "4px 0" }}>Sin resultados para "{busquedaAgente}".</div>
+            )}
+            {agentesFiltrados.map((a) => (
               <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={seleccionados.has(a.id)} onChange={() => toggleAgente(a.id)} />
                 {a.name}
