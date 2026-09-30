@@ -212,11 +212,14 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
 catalogRouter.get("/liquidacion/semanas", requireAuth, requireAdmin, async (req, res) => {
   const agentIds = String(req.query.agentIds || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (agentIds.length === 0) return res.status(400).json({ error: "Falta agentIds" });
+  // system (30/09/2026, pedido de Leo -- separar los motores WIN_LOSE/PREPAGO para que no se
+  // pisen): opcional, filtra las semanas a las que tengan al menos un cierre de ese sistema.
+  const system = req.query.system === "WIN_LOSE" || req.query.system === "PREPAGO" ? String(req.query.system) : null;
   const r = await pool.query(
     `SELECT DISTINCT week_start, week_end FROM weekly_closings
-     WHERE agent_id = ANY($1::text[]) AND status <> 'REVERTIDO'
+     WHERE agent_id = ANY($1::text[]) AND status <> 'REVERTIDO' ${system ? "AND system = $2" : ""}
      ORDER BY week_start DESC LIMIT 52`,
-    [agentIds]
+    system ? [agentIds, system] : [agentIds]
   );
   res.json(r.rows);
 });
@@ -234,6 +237,14 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   const weekStart = String(req.query.weekStart || "");
   if (agentIds.length === 0) return res.status(400).json({ error: "Falta agentIds" });
   if (!weekStart) return res.status(400).json({ error: "Falta weekStart" });
+  // system (30/09/2026, pedido de Leo: "separar... que al ir a liquidaciones aparezca que
+  // queremos liquidar si win lose o prepago, así los motores quedan independiente y no se
+  // pisan" -- surgió justo después de encontrar el bug del pendiente negativo de WIN_LOSE
+  // mezclado en un mismo total): opcional, filtra los cierres al sistema elegido -- red de
+  // seguridad del lado del servidor además del filtro que ya hace el frontend sobre la lista de
+  // agentes (un agente no debería tener nunca los dos sistemas a la vez, pero si algún día pasa,
+  // el cierre del otro sistema simplemente queda afuera de esta liquidación en vez de mezclarse).
+  const system = req.query.system === "WIN_LOSE" || req.query.system === "PREPAGO" ? String(req.query.system) : null;
 
   const agentes = await pool.query(`SELECT id, name FROM agents WHERE id = ANY($1::text[])`, [agentIds]);
   if (agentes.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
@@ -242,9 +253,9 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     `SELECT wc.*, c.name as club_name, a.name as agent_name FROM weekly_closings wc
      JOIN clubs c ON c.id = wc.club_id
      JOIN agents a ON a.id = wc.agent_id
-     WHERE wc.agent_id = ANY($1::text[]) AND wc.week_start = $2 AND wc.status <> 'REVERTIDO'
+     WHERE wc.agent_id = ANY($1::text[]) AND wc.week_start = $2 AND wc.status <> 'REVERTIDO' ${system ? "AND wc.system = $3" : ""}
      ORDER BY c.name`,
-    [agentIds, weekStart]
+    system ? [agentIds, weekStart, system] : [agentIds, weekStart]
   );
   if (closings.rows.length === 0) return res.status(404).json({ error: "No hay cierres para esa semana." });
 

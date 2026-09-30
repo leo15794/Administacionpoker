@@ -177,10 +177,15 @@ export const api = {
   // Resumen de liquidación (rakeback por club) de una semana puntual, combinando uno o varios
   // agentes/clubes en un solo total (ej. "Prodigio" = varias identidades de agente juntas) — no
   // confundir con cuentaDeAgente (que es el estado de cuenta completo con saldo histórico).
-  semanasLiquidacion: (agentIds: string[]) =>
-    request(`/catalog/liquidacion/semanas?agentIds=${agentIds.join(",")}`),
-  liquidacion: (agentIds: string[], weekStart: string) =>
-    request(`/catalog/liquidacion?agentIds=${agentIds.join(",")}&weekStart=${weekStart}`),
+  // system (30/09/2026, pedido de Leo: "separar... que al ir a liquidaciones aparezca que
+  // queremos liquidar si win lose o prepago, así los motores quedan independiente y no se
+  // pisan") -- opcional, filtra los cierres al sistema elegido (además del filtro que ya hace
+  // el frontend sobre la lista de agentes por default_system, esto es la red de seguridad del
+  // lado del servidor: aunque se cuele un agentId del otro sistema, sus cierres no entran).
+  semanasLiquidacion: (agentIds: string[], system?: "WIN_LOSE" | "PREPAGO") =>
+    request(`/catalog/liquidacion/semanas?agentIds=${agentIds.join(",")}${system ? `&system=${system}` : ""}`),
+  liquidacion: (agentIds: string[], weekStart: string, system?: "WIN_LOSE" | "PREPAGO") =>
+    request(`/catalog/liquidacion?agentIds=${agentIds.join(",")}&weekStart=${weekStart}${system ? `&system=${system}` : ""}`),
   // Historial: guarda una foto congelada de la liquidación (para consultar después "qué le
   // mandamos") — separado de liquidacion() de arriba, que siempre recalcula en vivo.
   guardarLiquidacion: (data: {

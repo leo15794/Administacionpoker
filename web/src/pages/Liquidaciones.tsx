@@ -245,12 +245,29 @@ export default function Liquidaciones() {
   // el botón, se pone el Nombre (a mano, nunca el de un agente) y recién ahí se eligen los
   // agentes a combinar y la semana. "Cancelar" vuelve todo a cero sin dejar nada a medio armar.
   const [armando, setArmando] = useState(false);
+  // sistemaLiquidar (30/09/2026, pedido de Leo: "separar... que al ir a liquidaciones aparezca
+  // que queremos liquidar si win lose o prepago, así los motores quedan independiente y no se
+  // pisan" -- surgió justo después del bug del pendiente negativo WIN_LOSE mezclado en un mismo
+  // total): se elige ANTES de tocar agentes, en el mismo paso que el nombre del pago. Filtra la
+  // lista de agentes a combinar (por default_system) y viaja como query param a
+  // semanasLiquidacion/liquidacion, que también filtran del lado del servidor -- doble red, para
+  // que WIN_LOSE y PREPAGO nunca se mezclen en un mismo total aunque un agente tuviera cierres
+  // de los dos (Leo confirma que no debería pasar nunca, pero si pasa, el del otro sistema queda
+  // afuera en vez de mezclarse).
+  const [sistemaLiquidar, setSistemaLiquidar] = useState<"WIN_LOSE" | "PREPAGO" | null>(null);
+
+  function elegirSistemaLiquidar(s: "WIN_LOSE" | "PREPAGO") {
+    setSistemaLiquidar(s);
+    setSeleccionados([]);
+    setFiltro("");
+  }
 
   function cancelarArmado() {
     setArmando(false);
     setSeleccionados([]);
     setNombreGrupo("");
     setFiltro("");
+    setSistemaLiquidar(null);
   }
 
   useEffect(() => {
@@ -264,9 +281,10 @@ export default function Liquidaciones() {
 
   const agentesFiltrados = useMemo(() => {
     const f = filtro.trim().toLowerCase();
-    if (!f) return agentes;
-    return agentes.filter((a) => a.name.toLowerCase().includes(f));
-  }, [agentes, filtro]);
+    return agentes
+      .filter((a) => !sistemaLiquidar || a.default_system === sistemaLiquidar)
+      .filter((a) => !f || a.name.toLowerCase().includes(f));
+  }, [agentes, filtro, sistemaLiquidar]);
 
   function toggleAgente(id: string) {
     setSeleccionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -353,14 +371,14 @@ export default function Liquidaciones() {
     setMovIdsPagosPendienteSesion([]);
     setMovIdsPagosGenericoSesion([]);
     if (seleccionados.length === 0) return;
-    api.semanasLiquidacion(seleccionados).then(setSemanas).catch(() => {});
+    api.semanasLiquidacion(seleccionados, sistemaLiquidar ?? undefined).then(setSemanas).catch(() => {});
     if (retomar) {
       setNombreGrupo(retomar.nombreGrupo);
     }
     // Ya NO se autocompleta el nombre con el del agente (29/09/2026, pedido de Leo: "ese
     // nombre no tiene que ser el de un Agente, se lo vamos a dar nosotros") -- el nombre se pone
     // a mano en el paso de "Armar liquidación", antes de elegir los agentes.
-  }, [seleccionados]);
+  }, [seleccionados, sistemaLiquidar]);
 
   // Vuelve a elegir ese mismo grupo de agentes + esa semana desde el historial -- para las
   // "Pendiente de pago", para terminar de definir cómo pagar; para las "Pagada", solo para
@@ -392,7 +410,7 @@ export default function Liquidaciones() {
     setError("");
     setCargando(true);
     api
-      .liquidacion(seleccionados, weekStart)
+      .liquidacion(seleccionados, weekStart, sistemaLiquidar ?? undefined)
       .then((d) => {
         setData(d);
         setModalCruce(null);
@@ -745,7 +763,7 @@ export default function Liquidaciones() {
         setMovMsg({ ok: true, text: "Cobro registrado y aplicado." });
         setMovObservacion("");
         if (seleccionados.length > 0 && weekStart) {
-          const dataActualizada = await api.liquidacion(seleccionados, weekStart);
+          const dataActualizada = await api.liquidacion(seleccionados, weekStart, sistemaLiquidar ?? undefined);
           setData(dataActualizada);
           // Ya se registró un movimiento real para este grupo+semana -- si había un
           // autoguardado PENDIENTE, queda resuelto (pedido de Leo: automático al registrar el pago).
@@ -828,7 +846,7 @@ export default function Liquidaciones() {
     );
     setMovObservacion("");
     if (seleccionados.length > 0 && weekStart) {
-      const dataActualizada = await api.liquidacion(seleccionados, weekStart);
+      const dataActualizada = await api.liquidacion(seleccionados, weekStart, sistemaLiquidar ?? undefined);
       setData(dataActualizada);
       if (exitos > 0) {
         // Mismo criterio que en COBRO -- al menos un pago se registró de verdad para este
@@ -1296,6 +1314,30 @@ export default function Liquidaciones() {
               </button>
             </div>
 
+            <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Sistema a liquidar</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button
+                type="button"
+                className={`btn secondary small ${sistemaLiquidar === "WIN_LOSE" ? "active" : ""}`}
+                onClick={() => elegirSistemaLiquidar("WIN_LOSE")}
+              >
+                Win/Lose
+              </button>
+              <button
+                type="button"
+                className={`btn secondary small ${sistemaLiquidar === "PREPAGO" ? "active" : ""}`}
+                onClick={() => elegirSistemaLiquidar("PREPAGO")}
+              >
+                Prepago
+              </button>
+            </div>
+
+            {!sistemaLiquidar && (
+              <div className="muted" style={{ marginBottom: 10 }}>Elegí primero qué sistema vas a liquidar.</div>
+            )}
+
+            {sistemaLiquidar && (
+              <>
             <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Agentes a combinar</label>
             <input
               value={filtro}
@@ -1356,6 +1398,8 @@ export default function Liquidaciones() {
                   </select>
                 </div>
               </div>
+            )}
+              </>
             )}
           </>
         )}
