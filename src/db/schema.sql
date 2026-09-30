@@ -1512,7 +1512,18 @@ CREATE TABLE IF NOT EXISTS tb_users (
 -- de arriba -- login por USUARIO (cualquier texto, sin formato de email obligatorio), no por
 -- email. Si ya había algún usuario cargado con `email`, se copia tal cual a `username`.
 ALTER TABLE tb_users ADD COLUMN IF NOT EXISTS username TEXT;
-UPDATE tb_users SET username = email WHERE username IS NULL;
+-- FIX (30/09/2026, migrate rompía con "column email does not exist"): este UPDATE asumía que
+-- `email` siempre existe, pero unas líneas más abajo esa misma columna se DROPEA -- la primera
+-- vez que el migrate corrió completo, `email` quedó borrada, y en cualquier corrida siguiente
+-- (como esta, para las tablas nuevas de cuentas consolidadas) este UPDATE explotaba antes de
+-- llegar a nada de lo que viene después en el archivo. Se guarda contra eso: si `email` ya no
+-- existe, no hay nada que copiar, se saltea.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tb_users' AND column_name = 'email') THEN
+    UPDATE tb_users SET username = email WHERE username IS NULL;
+  END IF;
+END $$;
 ALTER TABLE tb_users ALTER COLUMN username SET NOT NULL;
 DO $$
 BEGIN
