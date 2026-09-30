@@ -36,6 +36,11 @@ export default function Proveedores() {
   const [editandoProveedor, setEditandoProveedor] = useState<any | null>(null);
   const [showCierre, setShowCierre] = useState(false);
   const [showPago, setShowPago] = useState(false);
+  // Ajuste manual (30/09/2026, pedido de Leo: "necesitamos hacer varios ajuste manuales sobre
+  // los proveedores... que esos ajuste los podamos hacer desde aca adentro") -- separado del
+  // modal de Pago/Cobro porque es un concepto distinto (una corrección suelta, no el cobro de
+  // un cierre puntual) aunque use el mismo endpoint por abajo (origen: "AJUSTE").
+  const [showAjuste, setShowAjuste] = useState(false);
   const [showGarantiaAjuste, setShowGarantiaAjuste] = useState<{ proveedorId?: string } | null>(null);
   const [showLiquidacion, setShowLiquidacion] = useState(false);
 
@@ -77,6 +82,19 @@ export default function Proveedores() {
   const totalAFavorNuestro = (saldos ?? []).reduce((s, x) => s + Math.max(-Number(x.amount), 0), 0);
   const totalGarantizado = (garantias ?? []).reduce((s, g) => s + Number(g.amount), 0);
   const totalGarantiaPendiente = (garantias ?? []).reduce((s, g) => s + (Number(g.amount) - Number(g.consumed)), 0);
+
+  // Deuda total por proveedor (30/09/2026, pedido de Leo: "necesito que en proveedores
+  // aparezca la deuda de manzur") -- deuda operativa (todos sus clubes) + garantía vigente,
+  // el mismo TOTAL CONTROLADO que ya calcula el PDF de Liquidación (ver generarLiquidacionPdf
+  // más abajo) -- acá se muestra directo en la fila de la tabla, sin tener que armar un PDF.
+  function deudaTotalProveedor(proveedorId: string): number {
+    const deudaOperativa = -(saldos ?? [])
+      .filter((s) => s.proveedor_id === proveedorId)
+      .reduce((s, x) => s + Number(x.amount), 0);
+    const garantia = (garantias ?? []).find((g) => g.proveedor_id === proveedorId);
+    const garantiaVigente = garantia ? Number(garantia.amount) - Number(garantia.consumed) : 0;
+    return deudaOperativa + garantiaVigente;
+  }
 
   async function onRevertirCierre(id: string) {
     if (!confirm("¿Revertir este cierre? Solo funciona si no hay pagos/cierres más nuevos encima.")) return;
@@ -162,6 +180,7 @@ export default function Proveedores() {
           <button className="btn secondary" onClick={() => setShowNuevoProveedor(true)}>+ Nuevo proveedor</button>
           <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
           <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>
+          <button className="btn secondary" onClick={() => setShowAjuste(true)} disabled={proveedores.length === 0}>+ Ajuste manual</button>
           <button className="btn secondary" onClick={() => setShowLiquidacion(true)} disabled={proveedores.length === 0}>+ Liquidación PDF</button>
         </div>
       </div>
@@ -192,11 +211,16 @@ export default function Proveedores() {
       <div className="panel">
         <h3>Proveedores</h3>
         <table>
-          <thead><tr><th>Nombre</th><th>Auto-cierre</th><th>Notas</th><th></th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Deuda</th><th>Auto-cierre</th><th>Notas</th><th></th></tr></thead>
           <tbody>
-            {proveedores.map((p) => (
+            {proveedores.map((p) => {
+              const deuda = deudaTotalProveedor(p.id);
+              return (
               <tr key={p.id}>
                 <td>{p.name}</td>
+                <td className={deuda >= 0 ? "pos" : "neg"} title="Deuda operativa (todos sus clubes) + garantía vigente">
+                  {usd(deuda)}
+                </td>
                 <td className="muted" style={{ fontSize: 12 }}>
                   {autoCierreClubesTodos.filter((c) => c.proveedorId === p.id).length === 0
                     ? "Sin auto-cierre"
@@ -211,7 +235,8 @@ export default function Proveedores() {
                   <button className="btn danger small" onClick={() => onEliminarProveedor(p.id, p.name)}>Eliminar</button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -400,6 +425,15 @@ export default function Proveedores() {
             proveedores={proveedores}
             clubes={clubes}
             onDone={() => { setShowPago(false); refresh(); }}
+          />
+        </Modal>
+      )}
+      {showAjuste && (
+        <Modal title="Ajuste manual de proveedor" onClose={() => setShowAjuste(false)}>
+          <AjusteForm
+            proveedores={proveedores}
+            clubes={clubes}
+            onDone={() => { setShowAjuste(false); refresh(); }}
           />
         </Modal>
       )}
@@ -1024,17 +1058,49 @@ function CierreForm({
   );
 }
 
+// Pago/Cobro (30/09/2026, rediseñado a pedido de Leo: "en pago/cobro deberiamos poder elegir
+// varios clubes y elegir el cierre el cual pago"). Dos modos:
+//  - "Por línea" (default): elegís proveedor, se listan TODAS sus líneas de cierre con saldo
+//    pendiente (de cualquier club/semana, ver listLineasPendientesProveedor), tildás las que
+//    estás pagando/cobrando ahora -- pueden ser de clubes y semanas distintas -- y un solo
+//    envío registra un pago por cada línea tildada, cada uno atado a su línea (así queda el
+//    rastro de qué línea puntual ya se saldó).
+//  - "Suelto" (comportamiento de siempre): un pago directo contra el saldo total de un
+//    proveedor+club, sin atarlo a ninguna línea -- para casos sin una línea que matchee (o
+//    cierres viejos, de antes de este cambio, que no tienen nada que trackear todavía).
 function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
+  const [modo, setModo] = useState<"lineas" | "suelto">("lineas");
   const [proveedorId, setProveedorId] = useState("");
-  const [clubId, setClubId] = useState("");
-  const [amount, setAmount] = useState("");
   const [medio, setMedio] = useState<"USDT" | "EFECTIVO" | "ZELLE" | "OTRO">("USDT");
-  const [direction, setDirection] = useState<"PAGO" | "COBRO">("PAGO");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  // Modo "Por línea"
+  const [lineas, setLineas] = useState<any[] | null>(null);
+  const [seleccion, setSeleccion] = useState<Record<string, { checked: boolean; monto: string }>>({});
+
+  useEffect(() => {
+    setLineas(null);
+    setSeleccion({});
+    if (!proveedorId || modo !== "lineas") return;
+    api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => setLineas([]));
+  }, [proveedorId, modo]);
+
+  function toggleLinea(l: any) {
+    setSeleccion((prev) => {
+      const actual = prev[l.id];
+      if (actual?.checked) return { ...prev, [l.id]: { checked: false, monto: actual.monto } };
+      return { ...prev, [l.id]: { checked: true, monto: Math.abs(Number(l.disponible)).toFixed(2) } };
+    });
+  }
+
+  // Modo "Suelto"
+  const [clubId, setClubId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [direction, setDirection] = useState<"PAGO" | "COBRO">("PAGO");
+
+  async function onSubmitSuelto(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
@@ -1057,8 +1123,221 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
     }
   }
 
+  async function onSubmitLineas(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    const elegidas = Object.entries(seleccion).filter(([, v]) => v.checked);
+    if (elegidas.length === 0) return setMsg({ ok: false, text: "Tildá al menos una línea." });
+    for (const [, v] of elegidas) {
+      if (!(Number(v.monto) > 0)) return setMsg({ ok: false, text: "Todos los montos tildados tienen que ser mayores a 0." });
+    }
+    setLoading(true);
+    let exitos = 0;
+    let ultimoError = "";
+    for (const [lineaId, v] of elegidas) {
+      const l = (lineas ?? []).find((x) => x.id === lineaId);
+      if (!l) continue;
+      try {
+        await api.registrarPagoProveedor({
+          proveedorId,
+          clubId: l.club_id,
+          amount: Number(v.monto),
+          medio,
+          direction: Number(l.disponible) >= 0 ? "PAGO" : "COBRO",
+          notes: notes.trim() || undefined,
+          cierreLineaId: l.id,
+        });
+        exitos++;
+      } catch (err: any) {
+        ultimoError = err.message || "Error desconocido.";
+      }
+    }
+    setLoading(false);
+    if (exitos === elegidas.length) {
+      onDone();
+    } else if (exitos > 0) {
+      setMsg({ ok: false, text: `Se aplicaron ${exitos} de ${elegidas.length} -- el resto falló (${ultimoError}). Revisá y reintentá las que falten.` });
+      api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => {});
+    } else {
+      setMsg({ ok: false, text: ultimoError || "No se pudo registrar ningún pago." });
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button type="button" className={`btn small ${modo === "lineas" ? "" : "secondary"}`} onClick={() => setModo("lineas")}>
+          Por línea de cierre
+        </button>
+        <button type="button" className={`btn small ${modo === "suelto" ? "" : "secondary"}`} onClick={() => setModo("suelto")}>
+          Pago suelto (sin atar a una línea)
+        </button>
+      </div>
+
+      <div className="field">
+        <label>Proveedor</label>
+        <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+          <option value="">Elegir...</option>
+          {proveedores.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+
+      {modo === "lineas" ? (
+        <form onSubmit={onSubmitLineas}>
+          {proveedorId && (
+            !lineas ? (
+              <div className="muted">Cargando líneas pendientes...</div>
+            ) : lineas.length === 0 ? (
+              <div className="muted" style={{ marginBottom: 10 }}>
+                Este proveedor no tiene líneas de cierre con saldo pendiente (o son cierres viejos, de antes de este
+                cambio, que nunca trackearon esto -- usá "Pago suelto" para esos).
+              </div>
+            ) : (
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8, marginBottom: 10 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th></th><th>Semana</th><th>Club</th><th>Línea</th><th className="num">Disponible</th><th className="num">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineas.map((l) => {
+                      const sel = seleccion[l.id];
+                      return (
+                        <tr key={l.id}>
+                          <td><input type="checkbox" checked={!!sel?.checked} onChange={() => toggleLinea(l)} /></td>
+                          <td className="muted" style={{ fontSize: 12 }}>{dateShort(l.week_start)} - {dateShort(l.week_end)}</td>
+                          <td>{l.club_name}</td>
+                          <td className="muted" style={{ fontSize: 12 }}>{l.tipo === "AGENTE" ? (l.agent_name ?? "Agente") : "Total club"}</td>
+                          <td className={`num ${Number(l.disponible) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.disponible))}</td>
+                          <td className="num">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              disabled={!sel?.checked}
+                              value={sel?.monto ?? ""}
+                              onChange={(e) => setSeleccion((prev) => ({ ...prev, [l.id]: { checked: true, monto: e.target.value } }))}
+                              style={{ width: 100, textAlign: "right" }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+          <div className="form-grid">
+            <div className="field">
+              <label>Medio (aplica a todas las líneas tildadas)</label>
+              <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
+                <option value="USDT">USDT</option>
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="ZELLE">Zelle</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label>Notas (opcional)</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
+          </div>
+          {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+          <button className="btn" disabled={loading || !lineas || lineas.length === 0}>{loading ? "Guardando..." : "Registrar"}</button>
+        </form>
+      ) : (
+        <form onSubmit={onSubmitSuelto}>
+          <div className="form-grid">
+            <div className="field">
+              <label>Club</label>
+              <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+                <option value="">Elegir...</option>
+                {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Tipo</label>
+              <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
+                <option value="PAGO">Pago (le pagamos)</option>
+                <option value="COBRO">Cobro (nos paga)</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Medio</label>
+              <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
+                <option value="USDT">USDT</option>
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="ZELLE">Zelle</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Monto (USD)</label>
+              <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
+            </div>
+          </div>
+          <div className="field">
+            <label>Notas (opcional)</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
+          </div>
+          {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+          <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// Ajuste manual (30/09/2026, pedido de Leo: "necesitamos hacer varios ajuste manuales sobre los
+// proveedores asi que necesitaria que esos ajuste los podamos hacer desde aca adentro") --
+// misma mecánica que un pago/cobro (mismo endpoint, mismo delta sobre el saldo proveedor+club),
+// pero marcado con origen "AJUSTE" para que se muestre distinto en el historial (nunca como si
+// fuera plata real de tesorería -- medio se fuerza a SIN_TESORERIA del lado del servidor) y sin
+// atar a ninguna línea de cierre (es una corrección suelta, no el cobro de un cierre puntual).
+// Como usa el mismo saldo de proveedor_saldos que ya suma el PDF de Liquidación, el ajuste
+// entra solo al total -- no hace falta tocar nada ahí aparte de mostrarlo desglosado.
+function AjusteForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
+  const [proveedorId, setProveedorId] = useState("");
+  const [clubId, setClubId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [direction, setDirection] = useState<"PAGO" | "COBRO">("PAGO");
+  const [notes, setNotes] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
+    if (!(Number(amount) > 0)) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
+    if (!notes.trim()) return setMsg({ ok: false, text: "Un ajuste manual necesita un motivo en las notas." });
+    setLoading(true);
+    try {
+      await api.registrarPagoProveedor({
+        proveedorId,
+        clubId,
+        amount: Number(amount),
+        medio: "SIN_TESORERIA",
+        direction,
+        notes: notes.trim(),
+        origen: "AJUSTE",
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo registrar el ajuste." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <form onSubmit={onSubmit}>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        Corrección suelta del saldo -- no mueve tesorería de verdad, ni queda atada a ningún cierre puntual. Para
+        pagarle/cobrarle de verdad a un proveedor usá "Pago / cobro".
+      </div>
       <div className="form-grid">
         <div className="field">
           <label>Proveedor</label>
@@ -1075,19 +1354,10 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
           </select>
         </div>
         <div className="field">
-          <label>Tipo</label>
+          <label>Efecto</label>
           <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-            <option value="PAGO">Pago (le pagamos)</option>
-            <option value="COBRO">Cobro (nos paga)</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Medio</label>
-          <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-            <option value="USDT">USDT</option>
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="ZELLE">Zelle</option>
-            <option value="OTRO">Otro</option>
+            <option value="PAGO">Resta del saldo (a favor nuestro)</option>
+            <option value="COBRO">Suma al saldo (a favor del proveedor)</option>
           </select>
         </div>
         <div className="field">
@@ -1096,11 +1366,11 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
         </div>
       </div>
       <div className="field">
-        <label>Notas (opcional)</label>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
+        <label>Motivo (obligatorio)</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Por qué se hace este ajuste" />
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar ajuste"}</button>
     </form>
   );
 }
@@ -1117,6 +1387,9 @@ async function generarLiquidacionPdf(input: {
   weekStart: string;
   weekEnd: string;
   lineasSeleccionadas: any[];
+  // ajustes manuales de esta semana (30/09/2026, ver comentario en onGenerar más arriba) --
+  // ya están adentro de saldoActualTotal, esto es solo para mostrarlos desglosados aparte.
+  ajustes: any[];
   saldoActualTotal: number; // convención interna: positivo = a favor del proveedor
   garantiaVigente: number;
   nota: string;
@@ -1198,6 +1471,30 @@ async function generarLiquidacionPdf(input: {
     footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
   });
   y = (doc as any).lastAutoTable.finalY + 10;
+
+  // Ajustes manuales de esta semana (30/09/2026, pedido de Leo: "en la liquidacion PDF, todo
+  // se deberia sumar y restar de estos ajuste manuales") -- desglosados en su propia tabla,
+  // mismo signo/convención que "Impacto <proveedor>" de la tabla de arriba (-delta interno).
+  if (input.ajustes.length > 0) {
+    const impactoAjuste = (a: any) => (a.direction === "PAGO" ? Number(a.amount) : -Number(a.amount));
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margen, right: margen },
+      head: [["Ajuste manual", "Club", "Fecha", "Motivo", "Impacto"]],
+      body: input.ajustes.map((a: any) => [
+        a.direction === "PAGO" ? "Resta (a favor nuestro)" : "Suma (a favor del proveedor)",
+        a.club_name,
+        dateShort(String(a.occurred_at).slice(0, 10)),
+        a.notes || "—",
+        usd(impactoAjuste(a)),
+      ]),
+      foot: [["TOTAL AJUSTES", "", "", "", usd(input.ajustes.reduce((s: number, a: any) => s + impactoAjuste(a), 0))]],
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [40, 50, 90] },
+      footStyles: { fillColor: [230, 230, 236], textColor: 0, fontStyle: "bold" },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+  }
 
   // Estado de cuenta -- ver comentario de convención arriba: acá SIEMPRE se combinan TODOS los
   // clubes del proveedor (el estado de cuenta completo), no solo las líneas tildadas para el
@@ -1328,11 +1625,24 @@ function LiquidacionProveedorForm({
       const garantiaVigente = garantias
         .filter((g) => g.proveedor_id === proveedorId)
         .reduce((s, g) => s + (Number(g.amount) - Number(g.consumed)), 0);
+      // Ajustes manuales de esta semana (30/09/2026, pedido de Leo: "en la liquidacion PDF,
+      // todo se deberia sumar y restar de estos ajuste manuales") -- ya están adentro de
+      // saldoActualTotal (mismo saldo que ya suma todo), esto es solo para desglosarlos aparte
+      // en el reporte en vez de que queden escondidos dentro del número final.
+      const todosLosPagos: any[] = await api.pagosProveedor(proveedorId);
+      const ajustes = todosLosPagos.filter(
+        (p) =>
+          p.origen === "AJUSTE" &&
+          p.status !== "REVERTIDO" &&
+          String(p.occurred_at).slice(0, 10) >= cierre.week_start &&
+          String(p.occurred_at).slice(0, 10) <= cierre.week_end
+      );
       await generarLiquidacionPdf({
         proveedorName: proveedor.name,
         weekStart: cierre.week_start,
         weekEnd: cierre.week_end,
         lineasSeleccionadas,
+        ajustes,
         saldoActualTotal,
         garantiaVigente,
         nota,

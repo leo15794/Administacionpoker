@@ -413,11 +413,17 @@ export const api = {
     proveedorId: string;
     clubId: string;
     amount: number;
-    medio: "USDT" | "EFECTIVO" | "ZELLE" | "OTRO";
+    medio: "USDT" | "EFECTIVO" | "ZELLE" | "OTRO" | "SIN_TESORERIA";
     direction: "PAGO" | "COBRO";
     notes?: string;
+    // cierreLineaId/origen (30/09/2026): opcionales -- ver comentario largo en
+    // repo/proveedores.ts (PagoProveedorInput).
+    cierreLineaId?: string | null;
+    origen?: "PAGO_COBRO" | "AJUSTE";
   }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
   revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
+  // Líneas con saldo pendiente de un proveedor (30/09/2026) -- para el picker de Pago/Cobro.
+  lineasPendientesProveedor: (proveedorId: string) => request(`/proveedores/${proveedorId}/lineas-pendientes`),
   eliminarPagoProveedorDefinitivo: (id: string) => request(`/proveedores/pagos/${id}/definitivo`, { method: "DELETE" }),
   garantiasProveedores: () => request("/proveedores/garantias"),
   garantiasProveedoresHistorial: (proveedorId?: string) =>

@@ -1209,6 +1209,35 @@ CREATE TABLE IF NOT EXISTS proveedor_garantia_movements (
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Pago atado a línea puntual + Ajustes manuales (30/09/2026, pedido de Leo: "en pago/cobro
+-- deberiamos poder elegir varios clubes y elegir el cierre el cual pago... necesitamos hacer
+-- varios ajuste manuales sobre los proveedores"). Mismo espíritu que rakeback_pendiente para
+-- agentes (ver repo/closings.ts + Liquidaciones.tsx): cada línea de cierre trackea cuánto de
+-- ELLA MISMA ya se pagó/cobró, en vez de solo mover el saldo total del proveedor+club a
+-- ciegas -- así un pago puede repartirse entre varias líneas (de distintos clubes y/o distintas
+-- semanas) en un solo envío, y el formulario puede mostrar "disponible" por línea puntual.
+--
+-- pagado acumula el mismo delta que ya se le aplica al saldo agregado (PAGO resta, COBRO suma
+-- -- ver registrarPagoProveedor) pero DENTRO de esta línea -- disponible = monto_aplicado +
+-- pagado (mismo signo que monto_aplicado: si pagado = -monto_aplicado, disponible = 0).
+ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS pagado NUMERIC(18,4) NOT NULL DEFAULT 0;
+
+-- cierre_linea_id: a qué línea puntual corresponde este pago/cobro -- NULL para pagos viejos
+-- (de antes de este cambio, nunca se les asigna una línea retroactivamente) y para ajustes
+-- manuales (que son correcciones sueltas del saldo proveedor+club, no el cobro de un cierre
+-- puntual).
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS cierre_linea_id TEXT REFERENCES proveedor_cierre_lineas(id);
+-- origen: distingue un pago/cobro real de un ajuste manual (mismo espíritu que el type=AJUSTE
+-- de ledger_movements para agentes) -- puramente para mostrarlo distinto en el historial, la
+-- plata se mueve igual (mismo delta sobre proveedor_saldos) en los dos casos.
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'PAGO_COBRO';
+ALTER TABLE proveedor_pagos DROP CONSTRAINT IF EXISTS proveedor_pagos_origen_check;
+ALTER TABLE proveedor_pagos ADD CONSTRAINT proveedor_pagos_origen_check CHECK (origen IN ('PAGO_COBRO','AJUSTE'));
+-- SIN_TESORERIA: medio de un ajuste manual (no mueve plata de tesorería de verdad, igual que
+-- el mismo valor ya usado para agentes) -- se agrega a la lista existente, no la reemplaza.
+ALTER TABLE proveedor_pagos DROP CONSTRAINT IF EXISTS proveedor_pagos_medio_check;
+ALTER TABLE proveedor_pagos ADD CONSTRAINT proveedor_pagos_medio_check CHECK (medio IN ('USDT','EFECTIVO','ZELLE','OTRO','SIN_TESORERIA'));
+
 -- "Subagentes" (23/09/2026, pedido de Leo): un jugador puntual de un agente puede tener su
 -- propio % de rakeback (distinto al % general del agente), agrupado bajo un nombre propio
 -- (ej. "SG" agrupa a los jugadores "SG DeSueldo" + "Tony The Kid") -- sirve para liquidarle a

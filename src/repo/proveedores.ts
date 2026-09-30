@@ -821,20 +821,38 @@ export interface PagoProveedorInput {
   proveedorId: string;
   clubId: string;
   amount: number; // siempre positivo
-  medio: "USDT" | "EFECTIVO" | "ZELLE" | "OTRO";
+  medio: "USDT" | "EFECTIVO" | "ZELLE" | "OTRO" | "SIN_TESORERIA";
   direction: "PAGO" | "COBRO"; // PAGO = le pagamos (resta saldo a favor del proveedor); COBRO = nos paga (suma)
   notes?: string;
   createdBy?: string;
+  // cierreLineaId (30/09/2026, pedido de Leo: "en pago/cobro deberiamos poder elegir varios
+  // clubes y elegir el cierre el cual pago"): a qué línea de cierre puntual corresponde este
+  // pago -- opcional, un pago "suelto" (sin elegir línea, como funcionaba antes) sigue andando
+  // igual que siempre, solo mueve el saldo agregado sin marcar ninguna línea como pagada. Con
+  // línea, además de mover el saldo agregado (de siempre) también acumula en
+  // proveedor_cierre_lineas.pagado, así el formulario puede mostrar "disponible" por línea y
+  // dejar tildar varias (de distintos clubes/semanas) en una sola tanda.
+  cierreLineaId?: string | null;
+  // origen (30/09/2026, pedido de Leo: "necesitamos hacer varios ajuste manuales sobre los
+  // proveedores"): AJUSTE es una corrección suelta del saldo proveedor+club -- mismo mecanismo
+  // de movimiento que un pago/cobro real (mismo delta sobre proveedor_saldos), pero se guarda
+  // marcado aparte para no mostrarse como si fuera plata que realmente entró/salió por
+  // tesorería (medio se fuerza a SIN_TESORERIA, igual que el AJUSTE de agentes en ledger.ts).
+  // Nunca va atado a una línea (una corrección no es "el pago de tal cierre").
+  origen?: "PAGO_COBRO" | "AJUSTE";
 }
 
 /**
  * Registra un pago/cobro contra el saldo del proveedor, separado del cierre semanal (Leo:
  * "los pagos USDT deben mostrarse por separado y aplicarse al saldo, no modificando la
  * fórmula del cierre semanal"). PAGO resta del saldo a favor del proveedor (ya le dimos esa
- * plata), COBRO lo suma (nos devolvió/pagó algo).
+ * plata), COBRO lo suma (nos devolvió/pagó algo). Con cierreLineaId, el mismo delta también se
+ * acumula en esa línea puntual (ver comentario del campo arriba) para trackear su disponible.
  */
 export async function registrarPagoProveedor(input: PagoProveedorInput) {
   if (input.amount <= 0) throw new Error("El monto tiene que ser mayor a 0.");
+  const origen = input.origen ?? "PAGO_COBRO";
+  const medio = origen === "AJUSTE" ? "SIN_TESORERIA" : input.medio;
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -847,23 +865,29 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     const id = newId("ppag");
     const r = await client.query(
       `INSERT INTO proveedor_pagos
-        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by, cierre_linea_id, origen)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         id,
         input.proveedorId,
         input.clubId,
         Math.abs(input.amount),
-        input.medio,
+        medio,
         input.direction,
         saldoAnterior,
         saldoNuevo,
         input.notes ?? null,
         input.createdBy ?? null,
+        input.cierreLineaId ?? null,
+        origen,
       ]
     );
 
     await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [saldoNuevo, saldo.id]);
+
+    if (input.cierreLineaId) {
+      await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado + $1 WHERE id = $2`, [delta, input.cierreLineaId]);
+    }
 
     await client.query("COMMIT");
     return r.rows[0];
@@ -895,6 +919,14 @@ export async function revertirPagoProveedor(id: string) {
       pago.saldo_anterior,
       saldo.id,
     ]);
+    // Si este pago estaba atado a una línea puntual, devolverle lo acumulado (30/09/2026) --
+    // es una simple resta del mismo delta que se le sumó al aplicar el pago, no depende del
+    // orden de otros pagos sobre la misma línea (a diferencia del saldo agregado de arriba,
+    // que sí es una cadena estricta anterior/nuevo).
+    if (pago.cierre_linea_id) {
+      const delta = pago.direction === "PAGO" ? -Math.abs(Number(pago.amount)) : Math.abs(Number(pago.amount));
+      await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado - $1 WHERE id = $2`, [delta, pago.cierre_linea_id]);
+    }
     await client.query(`UPDATE proveedor_pagos SET status = 'REVERTIDO' WHERE id = $1`, [id]);
 
     await client.query("COMMIT");
@@ -905,6 +937,28 @@ export async function revertirPagoProveedor(id: string) {
   } finally {
     client.release();
   }
+}
+
+// Líneas de cierre con saldo pendiente de un proveedor (30/09/2026, pedido de Leo: "en
+// pago/cobro deberiamos poder elegir varios clubes y elegir el cierre el cual pago") -- todas
+// las líneas de sus cierres APLICADOS (nunca de un cierre revertido) con disponible != 0,
+// de cualquier club/semana, para que el formulario de Pago/Cobro las liste todas juntas y se
+// puedan tildar varias en una sola tanda. disponible = monto_aplicado + pagado (ver comentario
+// de PagoProveedorInput.cierreLineaId más arriba sobre el signo).
+export async function listLineasPendientesProveedor(proveedorId: string) {
+  const r = await pool.query(
+    `SELECT pcl.id, pcl.tipo, pcl.club_id, c.name as club_name, pcl.agent_id, a.name as agent_name,
+            pcl.monto_aplicado, pcl.pagado, (pcl.monto_aplicado + pcl.pagado) as disponible,
+            pc.week_start, pc.week_end
+     FROM proveedor_cierre_lineas pcl
+     JOIN proveedor_cierres pc ON pc.id = pcl.cierre_id
+     JOIN clubs c ON c.id = pcl.club_id
+     LEFT JOIN agents a ON a.id = pcl.agent_id
+     WHERE pc.proveedor_id = $1 AND pc.status = 'APLICADO' AND ABS(pcl.monto_aplicado + pcl.pagado) > 0.004
+     ORDER BY pc.week_start DESC, c.name`,
+    [proveedorId]
+  );
+  return r.rows;
 }
 
 export async function listPagosProveedor(proveedorId?: string) {

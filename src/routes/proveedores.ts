@@ -17,6 +17,7 @@ import {
   registrarPagoProveedor,
   revertirPagoProveedor,
   listPagosProveedor,
+  listLineasPendientesProveedor,
   listGarantiasProveedores,
   listGarantiaProveedorMovements,
   ajustarGarantiaProveedor,
@@ -235,9 +236,14 @@ const pagoSchema = z.object({
   proveedorId: z.string(),
   clubId: z.string(),
   amount: z.number(),
-  medio: z.enum(["USDT", "EFECTIVO", "ZELLE", "OTRO"]),
+  medio: z.enum(["USDT", "EFECTIVO", "ZELLE", "OTRO", "SIN_TESORERIA"]),
   direction: z.enum(["PAGO", "COBRO"]),
   notes: z.string().optional(),
+  // cierreLineaId/origen (30/09/2026, pedido de Leo -- ver comentario largo en
+  // PagoProveedorInput, repo/proveedores.ts): opcionales, un pago sin cierreLineaId sigue
+  // funcionando exactamente como antes (mueve el saldo agregado nomás).
+  cierreLineaId: z.string().nullable().optional(),
+  origen: z.enum(["PAGO_COBRO", "AJUSTE"]).optional(),
 });
 proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = pagoSchema.safeParse(req.body);
@@ -253,6 +259,12 @@ proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRe
 proveedoresRouter.get("/pagos", requireAuth, requireAdmin, async (req, res) => {
   const proveedorId = typeof req.query.proveedorId === "string" && req.query.proveedorId ? req.query.proveedorId : undefined;
   res.json(await listPagosProveedor(proveedorId));
+});
+
+// Líneas con saldo pendiente de un proveedor (30/09/2026, pedido de Leo) -- para el nuevo
+// formulario de Pago/Cobro, que deja elegir varias (de distintos clubes/semanas) en una tanda.
+proveedoresRouter.get("/:id/lineas-pendientes", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listLineasPendientesProveedor(req.params.id));
 });
 
 proveedoresRouter.delete("/pagos/:id", requireAuth, requireAdmin, async (req, res) => {
