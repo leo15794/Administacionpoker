@@ -71,6 +71,11 @@ const icon = {
       <rect x="3" y="7" width="18" height="13" rx="2" /><path d="M3 7l2-4h14l2 4" /><path d="M9 11v3" /><path d="M15 11v3" />
     </svg>
   ),
+  supervisores: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" /><circle cx="19" cy="6" r="2" />
+    </svg>
+  ),
   adelantos: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" />
@@ -190,6 +195,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "finanzas" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "finanzas" },
   { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
+  { key: "supervisores", to: "/dashboard/supervisores", icon: "supervisores", label: "Supervisores", group: "finanzas" },
   { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "finanzas" },
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
   { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },

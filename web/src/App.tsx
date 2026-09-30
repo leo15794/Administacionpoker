@@ -17,6 +17,7 @@ import TeamBackAffiliates from "./pages/TeamBackAffiliates";
 import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Proveedores from "./pages/Proveedores";
+import Supervisores from "./pages/Supervisores";
 import RakebackPendiente from "./pages/RakebackPendiente";
 import CuentasSocios from "./pages/CuentasSocios";
 import GananciasPorPeriodo from "./pages/GananciasPorPeriodo";
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="wallet" element={<Wallet />} />
           <Route path="garantias" element={<Garantias />} />
           <Route path="proveedores" element={<Proveedores />} />
+          <Route path="supervisores" element={<Supervisores />} />
           {/* (29/09/2026, pedido de Leo: "la sección adelantos debería desaparecer") --
               Adelantos.tsx dejó de ser una pantalla propia (se unificó adentro de
               Movimientos.tsx); esto redirige el link/bookmark viejo en vez de 404. */}

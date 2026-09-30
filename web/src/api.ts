@@ -361,6 +361,31 @@ export const api = {
   // auto-creados por error del importador; un agente con historial real se da de baja, no se borra.
   eliminarAgente: (id: string) => request(`/catalog/agents/${id}`, { method: "DELETE" }),
 
+  // Cuentas consolidadas para supervisores (30/09/2026) -- sistema aislado, ver
+  // src/repo/supervisores.ts. supervisorId es el id del agente que tiene usa_cuenta_consolidada.
+  supervisoresConsolidados: () => request("/supervisores"),
+  supervisorConsolidado: (supervisorId: string) => request(`/supervisores/${supervisorId}`),
+  subordinadosSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/subordinados`),
+  movimientosSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/movimientos`),
+  registrarMovimientoSupervisor: (
+    supervisorId: string,
+    data: {
+      clubId: string;
+      agentId?: string | null;
+      type: "CARGA" | "DESCARGA" | "AJUSTE";
+      amount: number;
+      campoAjuste?: "FICHAS" | "CUENTA_CORRIENTE";
+      usdtReal?: boolean;
+      notes?: string | null;
+    }
+  ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
+  revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
+  migracionHistoricaSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/migracion-historica`),
+  registrarMigracionHistoricaSupervisor: (
+    supervisorId: string,
+    data: { lineas: { agentId: string; clubId?: string | null; fichasMigradas: number; pendienteMigrado: number; notes?: string | null }[] }
+  ) => request(`/supervisores/${supervisorId}/migracion-historica`, { method: "POST", body: JSON.stringify(data) }),
+
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),
   garantiasHistorial: (agentId?: string) => request(`/guarantees/historial${agentId ? `?agentId=${agentId}` : ""}`),
