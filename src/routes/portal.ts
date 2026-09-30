@@ -82,11 +82,19 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
   // ni en pantalla ni en los logs). Con esto, cualquier falla real muestra un error claro en vez
   // de tildarse.
   try {
+    // saldo_total (30/09/2026, mismo bug/fix que routes/dashboard.ts GET /agentes -- este
+    // SUM(b.amount) crudo no incluía el resultado de mesas de los cierres PREPAGO, así que no
+    // coincidía con la columna "Fichas" de Resumen -> Saldos por agente y club).
     const agent = await pool.query(
-      `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
-       FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
-       WHERE a.id = $1
-       GROUP BY a.id, a.name, a.account_type`,
+      `SELECT a.id, a.name, a.account_type,
+              COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total
+       FROM agents a
+       LEFT JOIN (SELECT agent_id, SUM(amount) as saldo_balance FROM balances GROUP BY agent_id) bal ON bal.agent_id = a.id
+       LEFT JOIN (
+         SELECT agent_id, SUM(result) as total_mesas FROM weekly_closings
+         WHERE system = 'PREPAGO' AND status <> 'REVERTIDO' GROUP BY agent_id
+       ) mesas ON mesas.agent_id = a.id
+       WHERE a.id = $1`,
       [req.user!.agentId]
     );
     if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
@@ -96,10 +104,15 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     const supervisor = agent.rows[0];
 
     const agentesACargo = await pool.query(
-      `SELECT a.id, a.name, a.account_type, COALESCE(SUM(b.amount), 0) as saldo_total
-       FROM agents a LEFT JOIN balances b ON b.agent_id = a.id
+      `SELECT a.id, a.name, a.account_type,
+              COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total
+       FROM agents a
+       LEFT JOIN (SELECT agent_id, SUM(amount) as saldo_balance FROM balances GROUP BY agent_id) bal ON bal.agent_id = a.id
+       LEFT JOIN (
+         SELECT agent_id, SUM(result) as total_mesas FROM weekly_closings
+         WHERE system = 'PREPAGO' AND status <> 'REVERTIDO' GROUP BY agent_id
+       ) mesas ON mesas.agent_id = a.id
        WHERE a.active = true AND a.supervisor = $1
-       GROUP BY a.id, a.name, a.account_type
        ORDER BY a.name`,
       [supervisor.name]
     );

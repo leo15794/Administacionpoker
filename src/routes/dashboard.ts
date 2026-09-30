@@ -239,14 +239,27 @@ dashboardRouter.get("/cierres", requireAuth, requireAdmin, async (req, res) => {
 // verlo, reactivarlo o borrarlo de verdad si era un duplicado de prueba.
 dashboardRouter.get("/agentes", requireAuth, requireAdmin, async (req, res) => {
   const includeInactive = req.query.includeInactive === "true";
+  // saldo_total (30/09/2026, bug encontrado por Leo: este número no coincidía con la columna
+  // "Fichas" de Resumen -> Saldos por agente y club, ej. E Carlos yba mostraba US$ 1.309,82 acá
+  // pero US$ 0,05 en Resumen) -- este SUM(b.amount) crudo solo cuenta lo que movieron cargas/
+  // descargas/ajustes manuales, y para un agente PREPAGO eso es INCOMPLETO: el resultado de
+  // mesas de sus cierres semanales nunca toca balances.amount (queda aparte a propósito, ver
+  // fichasTotal() en web/src/pages/Resumen.tsx y calcularSaldoFinanciero en repo/ledger.ts), así
+  // que había que sumarlo acá también para que sea EL MISMO número que ya se ve en Resumen, no
+  // uno "parecido". Para WIN_LOSE no cambia nada (el join de mesas da 0, weekly_closings.system
+  // nunca es 'PREPAGO' para esos cierres).
   const r = await pool.query(
-    `SELECT a.*, COALESCE(SUM(b.amount),0) as saldo_total,
+    `SELECT a.*, COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total,
             (SELECT amount FROM guarantees g WHERE g.agent_id = a.id AND g.active = true ORDER BY g.updated_at DESC LIMIT 1) as garantia_monto,
             (SELECT consumed FROM guarantees g WHERE g.agent_id = a.id AND g.active = true ORDER BY g.updated_at DESC LIMIT 1) as garantia_consumida
      FROM agents a
-     LEFT JOIN balances b ON b.agent_id = a.id
+     LEFT JOIN (SELECT agent_id, SUM(amount) as saldo_balance FROM balances GROUP BY agent_id) bal ON bal.agent_id = a.id
+     LEFT JOIN (
+       SELECT agent_id, SUM(result) as total_mesas FROM weekly_closings
+       WHERE system = 'PREPAGO' AND status <> 'REVERTIDO'
+       GROUP BY agent_id
+     ) mesas ON mesas.agent_id = a.id
      ${includeInactive ? "" : "WHERE a.active = true"}
-     GROUP BY a.id
      ORDER BY a.active DESC, a.name`
   );
   res.json(r.rows);
