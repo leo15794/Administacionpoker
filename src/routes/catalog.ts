@@ -307,7 +307,16 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       system: c.system,
     };
   });
-  const total = filas.reduce((s, f) => s + f.rakebackNeto, 0);
+  // total (30/09/2026, bug encontrado por Leo -- "Total a pagar" en Tincho seguía mostrando
+  // 86.96 en vez de 227.76 después de la corrección de closings.ts): este total ANTES sumaba
+  // siempre rakebackNeto (rakeback + rebate), ignorando por completo rakebackPendienteDisponible
+  // -- o sea, ignoraba tanto el resultado de mesas ya incluido en WIN_LOSE como cualquier pago
+  // parcial ya hecho contra el pendiente. Ahora usa el disponible real cuando el cierre ya tiene
+  // su fila en rakeback_pendiente (mismo criterio que ya usaba el footer de la tabla en
+  // Liquidaciones.tsx, línea "TOTAL" de la columna Rakeback Pendiente) -- y cae a rakebackNeto
+  // SOLO para cierres viejísimos que nunca tuvieron fila en rakeback_pendiente (de antes de la
+  // separación stock/pendiente), para no romper esos casos legacy.
+  const total = filas.reduce((s, f) => s + (f.rakebackPendienteId ? Number(f.rakebackPendienteDisponible) : f.rakebackNeto), 0);
 
   // Historial de pagos reales ya registrados para esta liquidación (28/09/2026, pedido de Leo:
   // "un historial ahí mismo de a dónde fueron los pagos y cómo fueron") -- dos fuentes, porque

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db/pool.js";
-import { listAllBalances, getSaldoHistorico } from "../repo/ledger.js";
+import { listAllBalances, listSaldoFinancieroPorAgenteClub, getSaldoHistorico } from "../repo/ledger.js";
 import { getRakebackPendienteEnFechas } from "../repo/rakebackPendiente.js";
 import { getAdelantoRakebackEnFechas } from "../repo/advances.js";
 import { listClosings } from "../repo/closings.js";
@@ -29,8 +29,19 @@ function fichasTotal(b: any): number {
 dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => {
   const balances = await listAllBalances();
 
-  const totalAFavorAgentes = balances.filter((b) => fichasTotal(b) > 0).reduce((s, b) => s + fichasTotal(b), 0);
-  const totalAFavorNuestro = balances.filter((b) => fichasTotal(b) < 0).reduce((s, b) => s + fichasTotal(b), 0);
+  // KPI financiero "Agentes nos deben"/"Debemos a agentes" (30/09/2026, corrección confirmada
+  // por Leo -- ver repo/ledger.ts listSaldoFinancieroPorAgenteClub): YA NO se calcula con
+  // fichasTotal(balances) -- ese cálculo mezclaba fichas operativas de WIN_LOSE (que no son del
+  // agente) con lo que de verdad se le debe. Ahora se arma primero el saldo financiero NETO por
+  // agente+club (PREPAGO: fichas reales + pendiente; WIN_LOSE: solo pendiente) y RECIÉN
+  // DESPUÉS se clasifica en nos deben / debemos -- nunca sumar positivos y negativos por
+  // separado antes de netear. web/src/pages/Resumen.tsx usa el mismo array (saldoFinanciero,
+  // más abajo en la respuesta) para su desglose Win/Lose vs Prepago, así los dos lados
+  // (backend y frontend) muestran siempre el mismo total -- no hay una segunda fórmula del
+  // lado del cliente que se pueda desincronizar.
+  const saldoFinanciero = await listSaldoFinancieroPorAgenteClub();
+  const totalAFavorAgentes = saldoFinanciero.filter((f) => f.saldoFinanciero > 0).reduce((s, f) => s + f.saldoFinanciero, 0);
+  const totalAFavorNuestro = saldoFinanciero.filter((f) => f.saldoFinanciero < 0).reduce((s, f) => s + f.saldoFinanciero, 0);
 
   const porClub = await pool.query(
     `SELECT c.id as club_id, c.name as club, COUNT(DISTINCT b.agent_id) as agentes, COALESCE(SUM(b.amount),0) as saldo_neto
@@ -211,6 +222,10 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
     resultadoPorClub,
     historicoSemanal: historicoSemanal.rows.reverse(),
     balances,
+    // (30/09/2026) Para el desglose Win/Lose vs Prepago de los KPIs financieros en
+    // web/src/pages/Resumen.tsx -- ver comentario más arriba, mismo array usado para el total
+    // grande de arriba (agentesNosDeben/debemosAAgentes).
+    saldoFinanciero,
   });
 });
 

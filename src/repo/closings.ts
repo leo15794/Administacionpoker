@@ -321,23 +321,39 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       }
     }
 
-    // Rakeback pendiente del AGENTE — dos reglas distintas según el sistema (24/09/2026,
-    // pedido de Leo):
-    // - WIN_LOSE: REVERTIDO el reparto que existía desde el 22/09/2026 (solo el resultado de
-    //   mesas al balance, el resto aparte). Leo confirmó que estaba mal ("en base a eso se paga
-    //   o nos pagan a nosotros" -- el Saldo tiene que ser el cierre económico COMPLETO) y pidió
-    //   revertirlo: acá montoStock = montoAgente (el cierre final completo), como antes del
-    //   22/09.
-    // - PREPAGO: un agente prepago solo tiene fichas si las paga por adelantado (carga manual a
-    //   cambio de USDT) o si le cargamos un adelanto de rakeback -- el cierre semanal NUNCA le
-    //   mueve el balance de fichas directo -- acá montoStock = 0, el resultado de mesas nunca
-    //   pasa por acá.
+    // Rakeback pendiente del AGENTE (29/09/2026, versión FINAL confirmada por Leo con un
+    // ejemplo real de la UI -- agente Tincho, TeamBack GG, cierre 14/09-20/09/2026:
+    // Ganancias/Pérdidas US$140.80 + Rakeback Neto US$86.96, y Leo pidió explícitamente
+    // "yo necesito que en total a pagar me de 227.76" -- la SUMA de los dos, no solo el
+    // rakeback). Esto pasó por tres versiones el mismo día antes de asentarse acá:
+    // 1) todo directo al balance (vigente desde el 24/09) -- descartado.
+    // 2) documento "CORRECCIÓN DE LA LÓGICA PARA AGENTES WIN/LOSE": excluir el resultado
+    //    también en WIN_LOSE, mismo criterio que PREPAGO -- descartado: el ejemplo real de
+    //    Tincho mostró que Leo necesita el resultado DENTRO del "Total a pagar".
+    // 3) esta versión, la que queda:
+    // - PREPAGO: el agente compró sus fichas por adelantado, así que el resultado de mesas ya
+    //   es plata suya y se cuenta en la columna "Fichas ganadas en mesas" de Resumen (ver
+    //   listAllBalances/listSaldoFinancieroPorAgenteClub en repo/ledger.ts). Para no contarlo
+    //   dos veces, acá se EXCLUYE del pendiente: pendiente = rakeback + rebate + rodeo +
+    //   ajuste manual (calc.result queda afuera, solo de referencia en weekly_closings.result).
+    // - WIN_LOSE: el agente juega con fichas operativas del club, nunca compró nada por
+    //   adelantado -- el resultado de mesas NO se cuenta en ningún otro lado (no hay "fichas
+    //   del agente" que mostrar en Resumen para este sistema). La única vía por la que ese
+    //   resultado llega al agente (si ganó) o al club (si perdió) es el pendiente/"Total a
+    //   pagar" de Liquidaciones. Por eso acá el pendiente incluye el cierre COMPLETO:
+    //   pendiente = resultado + rakeback + rebate + rodeo + ajuste manual = montoAgente entero.
+    // - Ninguno de los dos sistemas mueve el balance de fichas directo en el cierre -- acá
+    //   montoStock = 0 siempre. Lo que se hace con la plata (fichas o pago real) se decide
+    //   después, en Liquidaciones, al saldar el pendiente (ver repo/rakebackPendiente.ts).
     // Las filas rakeback_pendiente con role='AGENTE' que ya existan de cierres viejos no se
-    // tocan acá -- ver script de corrección histórica (fusionarPendienteAgenteASaldo.ts para
-    // WIN_LOSE, separarPendientePrepago.ts / excluirMesaDePendientePrepago.ts para PREPAGO). El
-    // rebate desviado a un SUPERVISOR (rebateDestino='RAKEBACK_SUPERVISOR', más abajo) es un
+    // tocan acá -- los cierres WIN_LOSE aplicados ANTES de esta corrección quedaron con el
+    // resultado ya mezclado en el balance (algunos con pagos/cruces ya hechos encima); antes de
+    // tocar eso hace falta una auditoría (ver src/scripts/auditoriaCorreccionWinLose.ts) y una
+    // decisión explícita de Leo, igual que se hizo en su momento para PREPAGO con
+    // fusionarPendienteAgenteASaldo.ts / separarPendientePrepago.ts / excluirMesaDePendientePrepago.ts.
+    // El rebate desviado a un SUPERVISOR (rebateDestino='RAKEBACK_SUPERVISOR', más abajo) es un
     // mecanismo distinto y no se toca.
-    const montoStock = input.system === "PREPAGO" ? 0 : montoAgente;
+    const montoStock = 0;
     await client.query(
       `INSERT INTO ledger_movements
         (id, idempotency_key, type, club_id, agent_id, amount, status, occurred_at, observation)
@@ -352,7 +368,9 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         `Cierre semanal ${input.weekStart} al ${input.weekEnd}` +
           (calc.ruleApplied ? ` (regla especial: ${calc.ruleApplied})` : "") +
           (supervisorAgentId ? ` — rebate (${calc.rebate}) desviado a rakeback pendiente de supervisor.` : "") +
-          (input.system === "PREPAGO" ? ` — PREPAGO: no mueve balance. Resultado de mesas (${calc.result}) queda solo de referencia, rakeback+rebate+rodeo+ajuste (${montoAgente - calc.result}) a rakeback pendiente.` : ""),
+          (input.system === "PREPAGO"
+            ? ` — PREPAGO: no mueve balance. Resultado de mesas (${calc.result}) queda solo de referencia (ya contado en fichas del agente), rakeback+rebate+rodeo+ajuste (${montoAgente - calc.result}) a rakeback pendiente.`
+            : ` — WIN_LOSE: no mueve balance. Cierre completo, resultado incluido (${montoAgente}), a rakeback pendiente, a decidir en Liquidaciones.`),
       ]
     );
 
@@ -364,14 +382,14 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       [newId("bal"), input.agentId, input.clubId, montoStock]
     );
 
-    // montoPendienteAgente: 0 para WIN_LOSE (montoStock ya es montoAgente completo). Para
-    // PREPAGO (corregido 24/09/2026, aclaración de Leo: "en pendiente de rakeback debería ser
-    // el mismo que rakeback neto") YA NO incluye el resultado de mesas -- ese resultado queda
-    // solo como referencia (columna "Fichas ganadas en mesas" en Resumen, ver
-    // repo/ledger.ts listAllBalances), nunca genera un pendiente de pago ni mueve el balance.
-    // Lo que SÍ pasa a rakeback_pendiente sigue siendo todo lo demás del cierre (rakeback +
-    // rebate + rodeo + ajuste manual, lo mismo que antes menos calc.result).
-    const montoPendienteAgente = input.system === "PREPAGO" ? montoAgente - montoStock - calc.result : montoAgente - montoStock;
+    // montoPendienteAgente (29/09/2026, ver comentario más arriba): fórmula DISTINTA por
+    // sistema desde esta corrección final --
+    // - PREPAGO: montoAgente - calc.result (excluye el resultado, que ya se cuenta aparte como
+    //   "Fichas ganadas en mesas" en Resumen -- sumarlo acá también sería contarlo dos veces).
+    // - WIN_LOSE: montoAgente completo (el resultado nunca se cuenta en ningún otro lado para
+    //   este sistema, así que tiene que viajar acá para no perderse -- confirmado por Leo con
+    //   el ejemplo real de Tincho, "Total a pagar" = 227.76 = resultado + rakeback neto).
+    const montoPendienteAgente = input.system === "PREPAGO" ? montoAgente - calc.result : montoAgente;
     if (Math.abs(montoPendienteAgente) > 0.004) {
       const pendienteAgenteId = newId("rp");
       await client.query(

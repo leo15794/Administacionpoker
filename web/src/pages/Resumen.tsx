@@ -149,17 +149,19 @@ export default function Resumen() {
     })
     .sort((a: any, b: any) => fichasTotal(b) - fichasTotal(a));
 
-  // Win/Lose vs Prepago para los KPIs "Agentes nos deben"/"Debemos a agentes" (24/09/2026,
-  // pedido de Leo) -- se calcula acá mismo desde data.balances (ya trae `system`, ver
-  // repo/ledger.ts listAllBalances) en vez de pedirle otro campo al backend. Para PREPAGO usa
-  // fichasTotal (balance + fichas ganadas en mesas) -- para WIN_LOSE es lo mismo que antes.
-  // OJO: esto es solo el desglose Win/Lose vs Prepago que se muestra abajo de la KPI -- el total
-  // grande de arriba (data.kpis.agentesNosDeben/debemosAAgentes) sigue viniendo del backend sin
-  // este ajuste, puede no coincidir con la suma de estos dos mientras eso no se actualice.
-  const nosDebenWinLose = data.balances.filter((b: any) => fichasTotal(b) < 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s - fichasTotal(b), 0);
-  const nosDebenPrepago = data.balances.filter((b: any) => fichasTotal(b) < 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s - fichasTotal(b), 0);
-  const debemosWinLose = data.balances.filter((b: any) => fichasTotal(b) > 0 && b.system === "WIN_LOSE").reduce((s: number, b: any) => s + fichasTotal(b), 0);
-  const debemosPrepago = data.balances.filter((b: any) => fichasTotal(b) > 0 && b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0);
+  // Win/Lose vs Prepago para los KPIs "Agentes nos deben"/"Debemos a agentes" (30/09/2026,
+  // corrección confirmada por Leo -- reemplaza el cálculo anterior con fichasTotal(data.balances),
+  // que para WIN_LOSE mezclaba fichas operativas del club (no son del agente) con lo que de
+  // verdad se le debe). Ahora usa data.saldoFinanciero (armado en routes/dashboard.ts desde
+  // repo/ledger.ts listSaldoFinancieroPorAgenteClub -- ver ese archivo para la fórmula completa:
+  // PREPAGO = fichas reales + pendiente; WIN_LOSE = solo pendiente). Acá NO se reimplementa la
+  // fórmula -- se filtra y suma el `saldoFinanciero` que ya viene calculado del backend, así el
+  // desglose de acá abajo SIEMPRE coincide con el total grande de arriba
+  // (data.kpis.agentesNosDeben/debemosAAgentes), que sale del mismo array del lado del servidor.
+  const nosDebenWinLose = data.saldoFinanciero.filter((f: any) => f.saldoFinanciero < 0 && f.system === "WIN_LOSE").reduce((s: number, f: any) => s - f.saldoFinanciero, 0);
+  const nosDebenPrepago = data.saldoFinanciero.filter((f: any) => f.saldoFinanciero < 0 && f.system === "PREPAGO").reduce((s: number, f: any) => s - f.saldoFinanciero, 0);
+  const debemosWinLose = data.saldoFinanciero.filter((f: any) => f.saldoFinanciero > 0 && f.system === "WIN_LOSE").reduce((s: number, f: any) => s + f.saldoFinanciero, 0);
+  const debemosPrepago = data.saldoFinanciero.filter((f: any) => f.saldoFinanciero > 0 && f.system === "PREPAGO").reduce((s: number, f: any) => s + f.saldoFinanciero, 0);
 
   // "Por cobrar" / "Por pagar" (25/09/2026) -- exactamente los mismos totales que ya se
   // mostraban como "Total nos deben (con adelantos)" / "Total debemos (con garantías)", solo

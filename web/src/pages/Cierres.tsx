@@ -500,6 +500,17 @@ function NuevoCierre({
     if (agente?.account_type === "BANCADO" && rebatePct === "0") {
       setRebatePct("50"); // default razonable: reparto 50/50 de la mesa, ajustable
     }
+    // (29/09/2026, pedido de Leo: "recorda de poner lo que se esta liquidando si es prepago o
+    // win/lose al momento de empezar el cierre") -- antes el selector de Sistema arrancaba
+    // siempre en Win/Lose sin importar el agente elegido, y quedaba en manos de quien carga el
+    // cierre acordarse de revisarlo/cambiarlo a mano -- ahora se autocompleta con el sistema
+    // REGISTRADO para ese agente (default_system, ver Agentes) apenas se lo elige. Ahora que
+    // WIN_LOSE también manda todo a rakeback pendiente en vez de tocar el balance directo (ver
+    // repo/closings.ts), elegir mal el sistema acá tiene consecuencias reales -- sigue siendo
+    // editable por si hace falta una excepción puntual, pero el punto de partida es el correcto.
+    if (agente?.default_system) {
+      setSystem(agente.default_system);
+    }
   }
 
   function elegirClub(id: string) {
@@ -675,6 +686,13 @@ function NuevoCierre({
         </div>
       )}
 
+      {agentId && (
+        <div className="muted" style={{ marginBottom: 10 }}>
+          Vas a liquidar este cierre como{" "}
+          <strong>{system === "PREPAGO" ? "Prepago" : "Win/Lose"}</strong>.
+        </div>
+      )}
+
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <div className="field">
@@ -697,6 +715,17 @@ function NuevoCierre({
               <option value="WIN_LOSE">Win/Lose</option>
               <option value="PREPAGO">Prepago</option>
             </select>
+            {/* (29/09/2026, pedido de Leo) -- se autocompleta al elegir agente, pero si se
+                cambia a mano queda bien visible que no coincide con lo registrado, para no
+                liquidar por error el sistema equivocado (ahora con consecuencias reales: ver
+                repo/closings.ts). */}
+            {agenteSeleccionado?.default_system && agenteSeleccionado.default_system !== system && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 4, color: "var(--warn, #b45309)" }}>
+                ⚠ {agenteSeleccionado.name} está registrado como{" "}
+                {agenteSeleccionado.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}, y lo estás por liquidar
+                como {system === "PREPAGO" ? "Prepago" : "Win/Lose"}.
+              </div>
+            )}
           </div>
           <div className="field">
             <label>Semana desde</label>
@@ -1774,7 +1803,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           <table style={{ marginTop: 10 }}>
             <thead>
               <tr>
-                <th></th><th>Club</th><th>Agente</th><th>Jugadores</th><th className="num">Resultado</th><th className="num">Rake</th>
+                <th></th><th>Club</th><th>Agente</th><th>Sistema</th><th>Jugadores</th><th className="num">Resultado</th><th className="num">Rake</th>
                 <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Subagentes</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
               </tr>
             </thead>
@@ -1784,6 +1813,9 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
                   <td><input type="checkbox" checked={f.included} onChange={() => toggleIncluded(f.key)} /></td>
                   <td>{f.clubName}</td>
                   <td>{f.agentName}</td>
+                  {/* (29/09/2026, pedido de Leo: mostrar el sistema al empezar el cierre) --
+                      acá ya viene resuelto por el servidor por agente, solo se muestra. */}
+                  <td className="muted">{f.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
                   <td>{f.jugadores}</td>
                   <td className="num"><Monto value={f.resultado} /></td>
                   <td className="num"><Monto value={f.rakeTotal} /></td>

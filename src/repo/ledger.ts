@@ -285,6 +285,117 @@ export async function listAllBalances() {
   return r.rows;
 }
 
+export type SistemaAgente = "PREPAGO" | "WIN_LOSE";
+
+export interface SaldoFinancieroFila {
+  agentId: string;
+  clubId: string;
+  agentName: string;
+  clubName: string;
+  system: SistemaAgente;
+  balanceAmount: number;
+  totalFichasGanadasMesas: number;
+  fichasReales: number; // solo tiene sentido para PREPAGO -- balanceAmount + totalFichasGanadasMesas
+  pendienteDisponible: number; // rakeback_pendiente activo y no consumido, sumado (cualquier role)
+  saldoFinanciero: number; // el número que va a los KPIs "Agentes nos deben"/"Debemos a agentes"
+}
+
+/**
+ * Calcula el saldo financiero de un agente+club (30/09/2026, corrección confirmada por Leo:
+ * "CORRECCIÓN DE LA LÓGICA PARA AGENTES WIN/LOSE" + KPI financiero). Regla, ya validada contra
+ * los casos de prueba que pidió:
+ *  - PREPAGO: fichas reales (propiedad del agente, balance + resultado acumulado de mesas) +
+ *    cierre pendiente disponible. Las fichas SÍ son plata/activo del agente.
+ *  - WIN_LOSE: SOLO el cierre pendiente disponible. Las fichas operativas del club NUNCA entran
+ *    acá -- no son del agente, no representan una deuda ni un crédito suyo.
+ * Función pura, sin acceso a la base -- así se puede probar con casos fabricados sin necesitar
+ * conexión a la DB (ver src/scripts/testSaldoFinanciero.ts).
+ */
+export function calcularSaldoFinanciero(system: SistemaAgente, fichasReales: number, pendienteDisponible: number): number {
+  return system === "PREPAGO" ? fichasReales + pendienteDisponible : pendienteDisponible;
+}
+
+/**
+ * Lista el saldo financiero por agente+club, para los KPIs "Agentes nos deben"/"Debemos a
+ * agentes" (30/09/2026). Función NUEVA y separada de listAllBalances a propósito (pedido
+ * explícito de Leo) -- listAllBalances sigue significando exactamente lo mismo que siempre para
+ * sus consumidores actuales (routes/dashboard.ts para la tabla de saldos, scripts/diffSaldosVsPlanilla.ts),
+ * ninguno de los dos toca ni necesita esto.
+ *
+ * Por qué no alcanza con partir de `balances` (como hace listAllBalances): un SUPERVISOR puede
+ * tener rakeback_pendiente (role='SUPERVISOR', por rebate centralizado de sus agentes a cargo)
+ * en un club donde el supervisor nunca tuvo su propio cierre -- no tiene fila en `balances` para
+ * ese agente+club. Si el KPI solo mirara filas de `balances`, ese pendiente quedaría afuera del
+ * todo. Acá se arma desde la UNIÓN de las combinaciones agente+club que aparecen en `balances` O
+ * en `rakeback_pendiente` activo y disponible, para no perder ningún caso.
+ *
+ * "Disponible" = activo=true AND amount > consumed (mismo criterio que rakebackPendienteDisponible
+ * en routes/catalog.ts) -- un pendiente totalmente pagado o dado de baja no genera fila propia
+ * acá (aporta 0 si el agente+club ya aparece por tener balance, y no aparece en absoluto si esa
+ * era la única razón para existir).
+ */
+export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancieroFila[]> {
+  const r = await pool.query(
+    `WITH combos AS (
+       SELECT agent_id, club_id FROM balances
+       UNION
+       SELECT agent_id, club_id FROM rakeback_pendiente WHERE active = true AND amount > consumed
+     ),
+     pendiente_agg AS (
+       SELECT agent_id, club_id, COALESCE(SUM(amount - consumed), 0) as disponible
+       FROM rakeback_pendiente
+       WHERE active = true AND amount > consumed
+       GROUP BY agent_id, club_id
+     ),
+     mesas_prepago AS (
+       SELECT agent_id, club_id, COALESCE(SUM(result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings
+       WHERE status <> 'REVERTIDO' AND system = 'PREPAGO'
+       GROUP BY agent_id, club_id
+     )
+     SELECT
+       co.agent_id,
+       co.club_id,
+       a.name as agent_name,
+       c.name as club_name,
+       COALESCE(
+         (SELECT d.system FROM agent_club_deals d
+          WHERE d.agent_id = co.agent_id AND d.club_id = co.club_id AND d.valid_to IS NULL
+          ORDER BY d.valid_from DESC LIMIT 1),
+         a.default_system
+       ) as system,
+       COALESCE(b.amount, 0) as balance_amount,
+       COALESCE(m.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas,
+       COALESCE(p.disponible, 0) as pendiente_disponible
+     FROM combos co
+     JOIN agents a ON a.id = co.agent_id
+     JOIN clubs c ON c.id = co.club_id
+     LEFT JOIN balances b ON b.agent_id = co.agent_id AND b.club_id = co.club_id
+     LEFT JOIN pendiente_agg p ON p.agent_id = co.agent_id AND p.club_id = co.club_id
+     LEFT JOIN mesas_prepago m ON m.agent_id = co.agent_id AND m.club_id = co.club_id
+     ORDER BY a.name, c.name`
+  );
+  return r.rows.map((row) => {
+    const system: SistemaAgente = row.system;
+    const balanceAmount = Number(row.balance_amount);
+    const totalFichasGanadasMesas = Number(row.total_fichas_ganadas_mesas);
+    const pendienteDisponible = Number(row.pendiente_disponible);
+    const fichasReales = balanceAmount + totalFichasGanadasMesas;
+    return {
+      agentId: row.agent_id,
+      clubId: row.club_id,
+      agentName: row.agent_name,
+      clubName: row.club_name,
+      system,
+      balanceAmount,
+      totalFichasGanadasMesas,
+      fichasReales,
+      pendienteDisponible,
+      saldoFinanciero: calcularSaldoFinanciero(system, fichasReales, pendienteDisponible),
+    };
+  });
+}
+
 /**
  * Revierte un movimiento cargado por error. LEDGER INMUTABLE: nunca se borra ni se pisa el
  * movimiento original — queda marcado status=REVERTIDO para siempre, y se genera un
