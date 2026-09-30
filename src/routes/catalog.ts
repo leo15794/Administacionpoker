@@ -309,7 +309,16 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       rebate: Number(c.rebate),
       rakebackNeto: Number(c.rakeback) + Number(c.rebate),
       rakebackPendienteId: pendiente ? pendiente.id : null,
-      rakebackPendienteDisponible: pendiente ? Math.max(0, Number(pendiente.amount) - Number(pendiente.consumed)) : null,
+      // SIN Math.max(0, ...) (30/09/2026, bug encontrado por Leo con El Caimán/TeamBack GG,
+      // semana 14-20/09: "Total a pagar" daba US$0,00 en vez de mostrar que quedó debiendo
+      // US$309,44): un cierre WIN_LOSE con resultado muy negativo puede generar un
+      // rakeback_pendiente con amount NEGATIVO (el agente perdió más de lo que generó en
+      // rakeback -- ver corregirBalanceWinLose.ts / closings.ts, que ya contemplan esto). El
+      // Math.max(0, ...) que había acá (agregado en el fix anterior, pensado solo para el caso
+      // "ya pagado del todo") clampeaba también estos casos negativos a $0, escondiendo la
+      // deuda real. Ahora se deja pasar el signo tal cual -- mismo criterio que ya usa
+      // pendientesAnterioresDetalle en repo/agentesResumen.ts, que nunca clampeó esto.
+      rakebackPendienteDisponible: pendiente ? Number(pendiente.amount) - Number(pendiente.consumed) : null,
       // system (24/09/2026, pedido de Leo): el frontend lo necesita para NO ofrecer/tildar
       // "FICHAS" por defecto al pagar el rakeback pendiente de un agente PREPAGO -- un PREPAGO
       // solo tiene fichas por lo que paga por adelantado, pagarle el pendiente en fichas rompe
