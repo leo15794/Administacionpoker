@@ -126,7 +126,7 @@ export default function Agentes() {
         <button className={tab === "arbol" ? "active" : ""} onClick={() => setTab("arbol")}>Árbol de clubes</button>
       </div>
 
-      {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} />}
+      {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} agentes={agentes} />}
       {tab === "nuevo-club" && <NuevoClub onCreated={refresh} />}
       {tab === "clubes" && <ClubesConfig clubes={clubes} onEdit={setConfigurandoClub} onDarDeBaja={darDeBajaClub} />}
       {tab === "deal" && <NuevoDeal agentes={agentes} clubes={clubes} onCreated={refresh} />}
@@ -303,6 +303,7 @@ export default function Agentes() {
         <Modal title={`Editar agente — ${editando.name}`} onClose={() => setEditando(null)}>
           <EditarAgente
             agente={editando}
+            agentes={agentes}
             onSaved={() => {
               setEditando(null);
               refresh();
@@ -332,7 +333,7 @@ export default function Agentes() {
   );
 }
 
-function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void }) {
+function EditarAgente({ agente, agentes, onSaved }: { agente: any; agentes: any[]; onSaved: () => void }) {
   const [name, setName] = useState(agente.name);
   const [defaultSystem, setDefaultSystem] = useState<"PREPAGO" | "WIN_LOSE">(agente.default_system);
   const [supervisor, setSupervisor] = useState(agente.supervisor ?? "");
@@ -397,7 +398,16 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         </div>
         <div className="field">
           <label>Supervisor (opcional)</label>
-          <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} />
+          <select value={supervisor} onChange={(e) => setSupervisor(e.target.value)}>
+            <option value="">— Ninguno —</option>
+            {agentes
+              .filter((a) => a.id !== agente.id)
+              .map((a) => (
+                <option key={a.id} value={a.name}>
+                  {a.name}{a.usa_cuenta_consolidada ? " (cuenta consolidada)" : ""}
+                </option>
+              ))}
+          </select>
         </div>
         <div className="field">
           <label>ID en la plataforma (opcional)</label>
@@ -500,7 +510,7 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
   );
 }
 
-function NuevoAgente({ onCreated }: { onCreated: () => void }) {
+function NuevoAgente({ onCreated, agentes }: { onCreated: () => void; agentes: any[] }) {
   const [name, setName] = useState("");
   const [defaultSystem, setDefaultSystem] = useState<"PREPAGO" | "WIN_LOSE">("WIN_LOSE");
   const [supervisor, setSupervisor] = useState("");
@@ -557,7 +567,14 @@ function NuevoAgente({ onCreated }: { onCreated: () => void }) {
           </div>
           <div className="field">
             <label>Supervisor (opcional)</label>
-            <input value={supervisor} onChange={(e) => setSupervisor(e.target.value)} />
+            <select value={supervisor} onChange={(e) => setSupervisor(e.target.value)}>
+              <option value="">— Ninguno —</option>
+              {agentes.map((a) => (
+                <option key={a.id} value={a.name}>
+                  {a.name}{a.usa_cuenta_consolidada ? " (cuenta consolidada)" : ""}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
