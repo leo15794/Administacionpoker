@@ -277,9 +277,20 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   // Fichas/USDT/Efectivo/Zelle) en vez de un PAGO genérico que no sabía nada de esto. Un cierre
   // viejo (de antes de esa separación) no tiene fila acá -- rakebackPendienteId queda null y el
   // frontend cae al comportamiento viejo (PAGO/COBRO genérico) para esos casos.
+  //
+  // BUG REAL (30/09/2026, encontrado por Leo con el cierre de Tincho ya pagado en full): ANTES
+  // este SELECT filtraba "amount > consumed", así que un pendiente YA pagado del todo (amount =
+  // consumed) desaparecía de acá -- exactamente el mismo resultado (fila ausente) que un cierre
+  // viejo que NUNCA tuvo fila en rakeback_pendiente. El frontend no podía distinguir "esto ya se
+  // pagó" de "esto nunca se trackeó", y caía al fallback de rakebackNeto (el monto crudo, sin
+  // descontar lo ya pagado) en los dos casos -- por eso "Total a pagar" seguía mostrando 86.96
+  // en vez de 0 en un cierre ya saldado. Ahora se trae la fila SIN el filtro de consumido, para
+  // poder distinguir los dos casos de verdad: si existe fila (aunque esté en $0 disponible) se
+  // usa rakebackPendienteDisponible (puede dar 0, que es lo correcto); si no existe ninguna fila
+  // para ese cierre, recién ahí cae al fallback legacy de rakebackNeto.
   const closingIds = closings.rows.map((c) => c.id);
   const pendientesRes = await pool.query(
-    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = ANY($1::text[]) AND role = 'AGENTE' AND active = true AND amount > consumed`,
+    `SELECT * FROM rakeback_pendiente WHERE weekly_closing_id = ANY($1::text[]) AND role = 'AGENTE' AND active = true`,
     [closingIds]
   );
   const pendientePorCierre = new Map(pendientesRes.rows.map((p) => [p.weekly_closing_id, p]));
@@ -298,7 +309,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       rebate: Number(c.rebate),
       rakebackNeto: Number(c.rakeback) + Number(c.rebate),
       rakebackPendienteId: pendiente ? pendiente.id : null,
-      rakebackPendienteDisponible: pendiente ? Number(pendiente.amount) - Number(pendiente.consumed) : null,
+      rakebackPendienteDisponible: pendiente ? Math.max(0, Number(pendiente.amount) - Number(pendiente.consumed)) : null,
       // system (24/09/2026, pedido de Leo): el frontend lo necesita para NO ofrecer/tildar
       // "FICHAS" por defecto al pagar el rakeback pendiente de un agente PREPAGO -- un PREPAGO
       // solo tiene fichas por lo que paga por adelantado, pagarle el pendiente en fichas rompe
