@@ -393,6 +393,13 @@ export async function updateAgent(
      * existir en Cuentas de socios — ver repo/closings.ts aplicarCierreCompensacionPersonaTx).
      * Se guarda en minúsculas para que el match por nombre en el cierre sea case-insensitive. */
     personKey?: string | null;
+    /** Cuentas consolidadas para supervisores (30/09/2026, "Edwar es un super agente, todo lo
+     * que pase con sus agentes va todo al mismo lugar") — ver src/db/schema.sql y
+     * repo/supervisores.ts. Config que vive en la fila del propio supervisor. */
+    usaCuentaConsolidada?: boolean;
+    modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
+    exigirAgenteEnMovimientos?: boolean;
+    consolidarCierres?: boolean;
   }
 ) {
   const sets: string[] = [];
@@ -405,6 +412,10 @@ export async function updateAgent(
   if (fields.accountType !== undefined) { sets.push(`account_type = $${i++}`); values.push(fields.accountType); }
   if (fields.externalId !== undefined) { sets.push(`external_id = $${i++}`); values.push(fields.externalId); }
   if (fields.personKey !== undefined) { sets.push(`person_key = $${i++}`); values.push(fields.personKey ? fields.personKey.toLowerCase() : null); }
+  if (fields.usaCuentaConsolidada !== undefined) { sets.push(`usa_cuenta_consolidada = $${i++}`); values.push(fields.usaCuentaConsolidada); }
+  if (fields.modeloCuenta !== undefined) { sets.push(`modelo_cuenta = $${i++}`); values.push(fields.modeloCuenta); }
+  if (fields.exigirAgenteEnMovimientos !== undefined) { sets.push(`exigir_agente_en_movimientos = $${i++}`); values.push(fields.exigirAgenteEnMovimientos); }
+  if (fields.consolidarCierres !== undefined) { sets.push(`consolidar_cierres = $${i++}`); values.push(fields.consolidarCierres); }
   if (sets.length === 0) {
     const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
     return r.rows[0] ?? null;

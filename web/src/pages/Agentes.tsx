@@ -339,6 +339,10 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
   const [accountType, setAccountType] = useState<AccountType>((agente.account_type as AccountType) ?? agente.default_system);
   const [personKey, setPersonKey] = useState(agente.person_key ?? "");
   const [externalId, setExternalId] = useState(agente.external_id ?? "");
+  const [usaCuentaConsolidada, setUsaCuentaConsolidada] = useState<boolean>(!!agente.usa_cuenta_consolidada);
+  const [modeloCuenta, setModeloCuenta] = useState<"PREPAGO" | "WIN_LOSE">((agente.modelo_cuenta as any) ?? agente.default_system);
+  const [exigirAgenteEnMovimientos, setExigirAgenteEnMovimientos] = useState<boolean>(agente.exigir_agente_en_movimientos !== false);
+  const [consolidarCierres, setConsolidarCierres] = useState<boolean>(agente.consolidar_cierres !== false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -355,6 +359,10 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
         accountType,
         personKey: personKey.trim() || null,
         externalId: externalId.trim() || null,
+        usaCuentaConsolidada,
+        modeloCuenta: usaCuentaConsolidada ? modeloCuenta : null,
+        exigirAgenteEnMovimientos,
+        consolidarCierres,
       });
       onSaved();
     } catch (err: any) {
@@ -420,6 +428,72 @@ function EditarAgente({ agente, onSaved }: { agente: any; onSaved: () => void })
           </div>
         </div>
       </div>
+
+      <div className="muted" style={{ marginTop: 18, marginBottom: 8, fontWeight: 600 }}>
+        Cuenta consolidada (supervisor)
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              checked={usaCuentaConsolidada}
+              onChange={(e) => setUsaCuentaConsolidada(e.target.checked)}
+              style={{ marginRight: 6 }}
+            />
+            Usa cuenta consolidada
+          </label>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Si se activa, este agente pasa a ser un supervisor con cuenta única: todos los
+            agentes que tengan "Supervisor" = este nombre dejan de acumular saldo/cierre
+            propio, y todo se aplica una sola vez acá.
+          </div>
+        </div>
+        {usaCuentaConsolidada && (
+          <>
+            <div className="field">
+              <label>Modelo de la cuenta</label>
+              <select value={modeloCuenta} onChange={(e) => setModeloCuenta(e.target.value as any)}>
+                <option value="PREPAGO">Prepago</option>
+                <option value="WIN_LOSE">Win/Lose</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={exigirAgenteEnMovimientos}
+                  onChange={(e) => setExigirAgenteEnMovimientos(e.target.checked)}
+                  style={{ marginRight: 6 }}
+                />
+                Exigir agente en Cargas/Descargas
+              </label>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Si está prendido, al cargar una carga/descarga manual sobre esta cuenta hay que
+                elegir cuál de sus agentes la originó (queda solo como dato informativo, nunca
+                genera saldo propio para ese agente). Si está apagado, ese campo es opcional.
+              </div>
+            </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={consolidarCierres}
+                  onChange={(e) => setConsolidarCierres(e.target.checked)}
+                  style={{ marginRight: 6 }}
+                />
+                Consolidar cierres semanales
+              </label>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Si está prendido, el cierre semanal de cada agente a cargo se suma automático al
+                cierre único de esta cuenta. Si está apagado, por ahora esta cuenta solo recibe
+                movimientos manuales (cargas/descargas), sin consolidar cierres todavía.
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Guardar cambios"}</button>
     </form>

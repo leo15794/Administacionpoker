@@ -1563,3 +1563,138 @@ CREATE TABLE IF NOT EXISTS agente_resumenes_guardados (
 );
 CREATE INDEX IF NOT EXISTS agente_resumenes_guardados_created_idx ON agente_resumenes_guardados(created_at DESC);
 CREATE INDEX IF NOT EXISTS agente_resumenes_guardados_week_idx ON agente_resumenes_guardados(week_start DESC);
+
+-- Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
+-- agente, todo lo que pase con sus agentes va todo al mismo lugar"). Generaliza el mecanismo
+-- chico que ya existía (rebate_destino=RAKEBACK_SUPERVISOR, que solo desviaba el REBATE) a
+-- TODO el cierre: los agentes que reportan a un supervisor con usa_cuenta_consolidada=true
+-- (agents.supervisor, resuelto por nombre, mismo criterio que ya usa el rebate) dejan de
+-- acumular saldo/cierre propio -- se conservan solo como desglose de lectura/auditoría -- y
+-- todo se aplica UNA sola vez sobre la cuenta nueva de este archivo, a nombre del supervisor.
+-- Sistema DELIBERADAMENTE separado de agents/balances/weekly_closings/rakeback_pendiente (no
+-- se tocan esas tablas ni closings.ts): mismo espíritu de aislamiento que se usó para
+-- proveedores, para no arriesgar el motor de cierres de todos los demás agentes que NO son
+-- cuenta consolidada.
+--
+-- Config por agente (vive en la fila del propio supervisor, ej. Edwar). Nombres calcados
+-- literal del pedido de Leo:
+--   usa_cuenta_consolidada: prende/apaga todo el mecanismo para este agente como supervisor.
+--   modelo_cuenta: PREPAGO o WIN_LOSE -- motor de cálculo a usar para las líneas de sus
+--     subordinados (independiente del default_system de cada subordinado individual).
+--   exigir_agente_en_movimientos: si en Cargas/Descargas manuales de esta cuenta consolidada
+--     hay que elegir obligatoriamente cuál de sus agentes originó el movimiento (queda
+--     igual como dato informativo, nunca genera saldo propio) o puede quedar vacío.
+--   consolidar_cierres: si los cierres semanales de sus subordinados se consolidan acá (false
+--     = por ahora este supervisor no consolida cierres, solo movimientos manuales, útil para
+--     prender el mecanismo de a partes).
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS usa_cuenta_consolidada BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS modelo_cuenta TEXT CHECK (modelo_cuenta IN ('PREPAGO','WIN_LOSE'));
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS exigir_agente_en_movimientos BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS consolidar_cierres BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Saldo ÚNICO por supervisor (a propósito NO por club, a diferencia de proveedor_saldos --
+-- confirmado por Leo: "todo lo que pase con sus agentes va todo al mismo lugar"). club_id se
+-- graba en cada movimiento/línea (supervisor_movimientos / supervisor_cierre_lineas) solo para
+-- trazabilidad, nunca para partir este saldo.
+-- saldo_total = fichas_reales + cuenta_corriente, se calcula al leer (mismo criterio que
+-- fichasTotal de balances) -- nunca se guarda aparte para no desincronizar.
+CREATE TABLE IF NOT EXISTS supervisor_cuentas (
+  id                  TEXT PRIMARY KEY,
+  supervisor_agent_id TEXT NOT NULL UNIQUE REFERENCES agents(id),
+  fichas_reales       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  cuenta_corriente    NUMERIC(18,4) NOT NULL DEFAULT 0,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Carga/Descarga/Ajuste manual directo sobre la cuenta consolidada (nunca sobre un agente
+-- individual). club_id obligatorio (pedido de Leo, punto 4 del segundo texto); agent_id
+-- opcional e informativo (gateado por agents.exigir_agente_en_movimientos del supervisor) --
+-- JAMÁS genera balances ni ledger_movements para ese agente.
+-- Reclasificación fichas_reales <-> cuenta_corriente (Carga: fichas +=importe, cta -=importe;
+-- Descarga: al revés) -- NO toca Wallet Manos salvo que usdt_real=true (transferencia real).
+CREATE TABLE IF NOT EXISTS supervisor_movimientos (
+  id                      TEXT PRIMARY KEY,
+  supervisor_agent_id     TEXT NOT NULL REFERENCES agents(id),
+  club_id                 TEXT NOT NULL REFERENCES clubs(id),
+  agent_id                TEXT REFERENCES agents(id), -- informativo, nunca genera saldo propio
+  type                    TEXT NOT NULL CHECK (type IN ('CARGA','DESCARGA','AJUSTE')),
+  amount                  NUMERIC(18,4) NOT NULL,
+  fichas_reales_delta     NUMERIC(18,4) NOT NULL DEFAULT 0,
+  cuenta_corriente_delta  NUMERIC(18,4) NOT NULL DEFAULT 0,
+  usdt_real               BOOLEAN NOT NULL DEFAULT FALSE, -- true = además hubo transferencia real -> sí toca Wallet Manos
+  saldo_anterior_fichas   NUMERIC(18,4) NOT NULL,
+  saldo_anterior_cc       NUMERIC(18,4) NOT NULL,
+  saldo_nuevo_fichas      NUMERIC(18,4) NOT NULL,
+  saldo_nuevo_cc          NUMERIC(18,4) NOT NULL,
+  status                  TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  notes                   TEXT,
+  occurred_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by              TEXT
+);
+
+-- Cierre semanal consolidado (cabecera): UNA fila por supervisor+semana, puede abarcar varios
+-- clubes/agentes a la vez como líneas (mismo patrón multi-línea que proveedor_cierres/
+-- proveedor_cierre_lineas -- ver aplicarCierresAutomaticosParaClub en repo/proveedores.ts).
+CREATE TABLE IF NOT EXISTS supervisor_cierres (
+  id                      TEXT PRIMARY KEY,
+  supervisor_agent_id     TEXT NOT NULL REFERENCES agents(id),
+  week_start              DATE NOT NULL,
+  week_end                DATE NOT NULL,
+  resultado_total         NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rake_total              NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rakeback_total          NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rebate_total            NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rodeo_total             NUMERIC(18,4) NOT NULL DEFAULT 0,
+  ajustes_total           NUMERIC(18,4) NOT NULL DEFAULT 0,
+  fichas_reales_antes     NUMERIC(18,4) NOT NULL,
+  cuenta_corriente_antes  NUMERIC(18,4) NOT NULL,
+  fichas_reales_despues   NUMERIC(18,4) NOT NULL,
+  cuenta_corriente_despues NUMERIC(18,4) NOT NULL,
+  status                  TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  notes                   TEXT,
+  created_by              TEXT,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(supervisor_agent_id, week_start)
+);
+
+-- Línea de detalle por agente+club dentro del cierre consolidado. Igual que en Proveedores:
+-- SOLO desglose informativo/auditoría (Leo, punto 5/9: "detalles individuales... únicamente
+-- como desglose informativo") -- esta línea NUNCA crea ni toca weekly_closings, balances ni
+-- rakeback_pendiente del agente. final_closing_calculado usa exactamente la misma fórmula que
+-- calcularCierre() (engine/cierre.ts), solo que el resultado nunca se le aplica a él.
+CREATE TABLE IF NOT EXISTS supervisor_cierre_lineas (
+  id                  TEXT PRIMARY KEY,
+  cierre_id           TEXT NOT NULL REFERENCES supervisor_cierres(id),
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  club_id             TEXT NOT NULL REFERENCES clubs(id),
+  result              NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rake_total          NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rakeback_pct        NUMERIC(6,4) NOT NULL DEFAULT 0,
+  rakeback            NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rebate_pct          NUMERIC(6,4) NOT NULL DEFAULT 0,
+  rebate              NUMERIC(18,4) NOT NULL DEFAULT 0,
+  rodeo               NUMERIC(18,4) NOT NULL DEFAULT 0,
+  ajuste_manual       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  ajuste_manual_nota  TEXT,
+  final_closing_calculado NUMERIC(18,4) NOT NULL DEFAULT 0,
+  weekly_closing_origen_id TEXT, -- trazabilidad: de qué cierre normal (si existió) vino el dato, sin FK dura para no atarse si ese cierre se revierte/borra
+  notes               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(cierre_id, agent_id, club_id)
+);
+
+-- Corrección histórica (una sola vez, por supervisor): cuando se prende usa_cuenta_consolidada
+-- para un supervisor que YA tenía agentes operando con saldo propio (confirmado por Leo para
+-- Edwar), este movimiento deja registrado cuánto se migró de cada agente a la cuenta nueva --
+-- mismo espíritu de trazabilidad que las correcciones WIN_LOSE ya hechas, nunca "silencioso".
+CREATE TABLE IF NOT EXISTS supervisor_migracion_historica (
+  id                  TEXT PRIMARY KEY,
+  supervisor_agent_id TEXT NOT NULL REFERENCES agents(id),
+  agent_id            TEXT NOT NULL REFERENCES agents(id),
+  club_id             TEXT REFERENCES clubs(id),
+  fichas_migradas     NUMERIC(18,4) NOT NULL DEFAULT 0,
+  pendiente_migrado   NUMERIC(18,4) NOT NULL DEFAULT 0,
+  notes               TEXT,
+  created_by          TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -349,6 +349,11 @@ export const api = {
       // Cuenta de socio (caso Juan): nombre de una cuenta en Cuentas de socios. Si se setea,
       // el cierre semanal de este agente deja de tocar su balance y se rutea entero ahí.
       personKey?: string | null;
+      // Cuentas consolidadas para supervisores (30/09/2026) — ver src/db/schema.sql.
+      usaCuentaConsolidada?: boolean;
+      modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
+      exigirAgenteEnMovimientos?: boolean;
+      consolidarCierres?: boolean;
     }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // BORRADO REAL (no "dar de baja") — solo funciona si el agente no tiene ningún rastro

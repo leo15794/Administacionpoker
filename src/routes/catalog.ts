@@ -1055,6 +1055,11 @@ const agentEditSchema = z.object({
   // Cuenta de socio (caso Juan): nombre de una cuenta en Cuentas de socios. Si se setea, el
   // cierre semanal de este agente deja de tocar balances y se rutea entero a esa cuenta.
   personKey: z.string().nullable().optional(),
+  // Cuentas consolidadas para supervisores (30/09/2026) — ver src/db/schema.sql.
+  usaCuentaConsolidada: z.boolean().optional(),
+  modeloCuenta: z.enum(["PREPAGO", "WIN_LOSE"]).nullable().optional(),
+  exigirAgenteEnMovimientos: z.boolean().optional(),
+  consolidarCierres: z.boolean().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -1068,6 +1073,10 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       externalId: parsed.data.externalId === undefined ? undefined : parsed.data.externalId?.trim() || null,
       active: parsed.data.active,
       personKey: parsed.data.personKey === undefined ? undefined : parsed.data.personKey?.trim() || null,
+      usaCuentaConsolidada: parsed.data.usaCuentaConsolidada,
+      modeloCuenta: parsed.data.modeloCuenta,
+      exigirAgenteEnMovimientos: parsed.data.exigirAgenteEnMovimientos,
+      consolidarCierres: parsed.data.consolidarCierres,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);
