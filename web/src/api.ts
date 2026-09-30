@@ -664,6 +664,25 @@ export const api = {
   semanasConResumenAgente: () => request(`/agentes-resumen/semanas`),
   resumenAgentePDF: (agentId: string, weekStart: string, sistema: "WIN_LOSE" | "PREPAGO" = "WIN_LOSE") =>
     request(`/agentes-resumen/${agentId}/${weekStart}?sistema=${sistema}`),
+  // Historial de resúmenes guardados (30/09/2026, pedido de Leo) -- se guarda automático al
+  // bajar el PDF (ver ResumenAgentes.tsx), con filtro de fechas y borrado real para pruebas.
+  guardarResumenHistorial: (data: {
+    nombreGrupo: string;
+    agentIds: string[];
+    weekStart: string;
+    weekEnd: string;
+    sistema: "WIN_LOSE" | "PREPAGO";
+    data: any;
+  }) => request(`/agentes-resumen/historial`, { method: "POST", body: JSON.stringify(data) }),
+  listResumenesHistorial: (desde?: string, hasta?: string) => {
+    const params = new URLSearchParams();
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
+    const qs = params.toString();
+    return request(`/agentes-resumen/historial${qs ? `?${qs}` : ""}`);
+  },
+  getResumenHistorial: (id: string) => request(`/agentes-resumen/historial/${id}`),
+  eliminarResumenHistorial: (id: string) => request(`/agentes-resumen/historial/${id}`, { method: "DELETE" }),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

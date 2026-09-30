@@ -1511,3 +1511,26 @@ ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
 -- esto, ambos quedaban indistinguibles en la tabla (mismo medio='FICHAS'). Default 'RAKEBACK'
 -- para que las filas viejas se comporten exactamente igual que hasta ahora.
 ALTER TABLE rakeback_advances ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'RAKEBACK' CHECK (kind IN ('RAKEBACK','FICHAS_PENDIENTE'));
+
+-- Historial de "Resumen por agente" (30/09/2026, pedido de Leo: "los resumenes le podemos
+-- poner un historial y que queden guardados?"). Guarda una FOTO congelada de un resumen ya
+-- armado (uno o varios agentes combinados, igual que Liquidaciones) -- mismo criterio que
+-- liquidaciones_guardadas: no se recalcula, es un snapshot de lo que se vio/bajó en ese momento.
+-- Se guarda AUTOMÁTICO cada vez que se descarga el PDF (pedido de Leo: "automatico"), no hace
+-- falta un botón manual. `data` guarda el objeto `preview` completo tal cual lo arma
+-- combinarResumen() en el frontend (clubesCombinado, estadoCuentaCombinado, porAgente con el
+-- detalle de cada agente) -- así reabrir un resumen guardado muestra EXACTAMENTE lo mismo que
+-- se vio/bajó en su momento, sin depender de que los datos de hoy sigan dando lo mismo.
+CREATE TABLE IF NOT EXISTS agente_resumenes_guardados (
+  id TEXT PRIMARY KEY,
+  nombre_grupo TEXT NOT NULL,
+  agent_ids TEXT[] NOT NULL,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  sistema TEXT NOT NULL,
+  data JSONB NOT NULL,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agente_resumenes_guardados_created_idx ON agente_resumenes_guardados(created_at DESC);
+CREATE INDEX IF NOT EXISTS agente_resumenes_guardados_week_idx ON agente_resumenes_guardados(week_start DESC);

@@ -410,3 +410,73 @@ export async function listSemanasConResumenAgente(): Promise<string[]> {
   );
   return r.rows.map((row: any) => String(row.week_start).slice(0, 10));
 }
+
+// Historial de resúmenes guardados (30/09/2026, pedido de Leo) -- ver comentario en
+// db/schema.sql (tabla agente_resumenes_guardados). Guarda/lista/borra fotos congeladas del
+// objeto `preview` que arma el frontend (combinarResumen en ResumenAgentes.tsx), igual patrón
+// que liquidaciones_guardadas pero sin nada de lo que ESA tabla necesita para pagos/cruces --
+// un resumen es de solo lectura, guardarlo no tiene ningún efecto en el ledger.
+export interface GuardarResumenInput {
+  nombreGrupo: string;
+  agentIds: string[];
+  weekStart: string;
+  weekEnd: string;
+  sistema: "WIN_LOSE" | "PREPAGO";
+  data: unknown;
+  createdBy?: string | null;
+}
+
+export async function guardarResumenHistorial(input: GuardarResumenInput) {
+  const r = await pool.query(
+    `INSERT INTO agente_resumenes_guardados (id, nombre_grupo, agent_ids, week_start, week_end, sistema, data, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at`,
+    [
+      `arg_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
+      input.nombreGrupo,
+      input.agentIds,
+      input.weekStart,
+      input.weekEnd,
+      input.sistema,
+      JSON.stringify(input.data),
+      input.createdBy ?? null,
+    ]
+  );
+  return r.rows[0];
+}
+
+// Filtro de fechas (pedido de Leo: "asi de ultima no vemos las viejas y evitamos confusiones",
+// mientras se está probando el sistema) -- filtra por created_at (cuándo se guardó la foto, no
+// por week_start/week_end de la semana que describe) porque el objetivo es no ver ruido de
+// pruebas viejas, no filtrar por contenido.
+export async function listResumenesHistorial(desde?: string, hasta?: string) {
+  const condiciones: string[] = [];
+  const params: any[] = [];
+  if (desde) {
+    params.push(desde);
+    condiciones.push(`created_at >= $${params.length}::date`);
+  }
+  if (hasta) {
+    params.push(hasta);
+    condiciones.push(`created_at < ($${params.length}::date + INTERVAL '1 day')`);
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
+  const r = await pool.query(
+    `SELECT id, nombre_grupo, agent_ids, week_start, week_end, sistema, created_by, created_at
+     FROM agente_resumenes_guardados ${where} ORDER BY created_at DESC LIMIT 500`,
+    params
+  );
+  return r.rows;
+}
+
+export async function getResumenHistorialById(id: string) {
+  const r = await pool.query(`SELECT * FROM agente_resumenes_guardados WHERE id = $1`, [id]);
+  return r.rows[0] ?? null;
+}
+
+// Borrado real -- para limpiar pruebas (pedido explícito de Leo, mismo criterio que
+// DELETE /liquidacion/historial/:id). No tiene ningún efecto en el ledger: guardar/borrar un
+// resumen es puramente de archivo, no mueve plata ni pendientes.
+export async function eliminarResumenHistorial(id: string) {
+  const r = await pool.query(`DELETE FROM agente_resumenes_guardados WHERE id = $1 RETURNING id`, [id]);
+  return (r.rowCount ?? 0) > 0;
+}

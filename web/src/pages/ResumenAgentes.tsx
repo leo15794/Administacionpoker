@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
+import { useConfirmDialog } from "../components/ConfirmProvider";
 
 // "Resumen por agente" (23/09/2026, pedido de Leo): réplica del "Estado de cuenta semanal" que
 // ya arma a mano en Excel (PDF de referencia "Cierre El Latigo Loco") -- elegís semana + uno o
@@ -20,6 +21,7 @@ import { usd, pct, dateShort } from "../fmt";
 // jugador y los subagentes siguen apareciendo por separado, cada uno bajo el nombre real del
 // agente al que pertenecen, para no perder de dónde sale cada número.
 export default function ResumenAgentes() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [agentes, setAgentes] = useState<any[] | null>(null);
   const [semanas, setSemanas] = useState<string[] | null>(null);
   const [weekStart, setWeekStart] = useState("");
@@ -37,6 +39,18 @@ export default function ResumenAgentes() {
   const [preview, setPreview] = useState<any>(null);
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState("");
+
+  // Historial de resúmenes guardados (30/09/2026, pedido de Leo: "que queden guardados" +
+  // "automatico, pero con boton de borrar" + "filtro de fechas asi de ultima no vemos las
+  // viejas") -- se guarda solo al bajar el PDF (ver descargarPdf), este bloque es solo para
+  // VER/BORRAR lo ya guardado.
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [historial, setHistorial] = useState<any[] | null>(null);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [filtroDesde, setFiltroDesde] = useState("");
+  const [filtroHasta, setFiltroHasta] = useState("");
+  const [borrandoHistId, setBorrandoHistId] = useState<string | null>(null);
+  const [viendoHistId, setViendoHistId] = useState<string | null>(null);
 
   useEffect(() => {
     api.agentes().then(setAgentes);
@@ -98,10 +112,68 @@ export default function ResumenAgentes() {
     setError("");
     try {
       await generarResumenCombinadoPdf(preview);
+      // Guardado AUTOMÁTICO en el historial al bajar el PDF (30/09/2026, pedido de Leo:
+      // "automatico") -- best-effort: si esto falla, no rompe la descarga en sí, que ya se hizo
+      // arriba -- solo se avisa aparte, sin bloquear nada.
+      try {
+        await api.guardarResumenHistorial({
+          nombreGrupo: preview.nombreGrupo,
+          agentIds: preview.porAgente.map((r: any) => r.agentId),
+          weekStart: preview.weekStart,
+          weekEnd: preview.weekEnd,
+          sistema: preview.sistema,
+          data: preview,
+        });
+        if (mostrarHistorial) cargarHistorial();
+      } catch {
+        setError("El PDF se bajó bien, pero no se pudo guardar en el historial.");
+      }
     } catch (err: any) {
       setError(err.message || "No se pudo generar el PDF.");
     } finally {
       setGenerando(false);
+    }
+  }
+
+  function cargarHistorial() {
+    setCargandoHistorial(true);
+    api
+      .listResumenesHistorial(filtroDesde || undefined, filtroHasta || undefined)
+      .then(setHistorial)
+      .catch(() => setHistorial([]))
+      .finally(() => setCargandoHistorial(false));
+  }
+
+  useEffect(() => {
+    if (mostrarHistorial) cargarHistorial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mostrarHistorial, filtroDesde, filtroHasta]);
+
+  async function verHistorialItem(id: string) {
+    setViendoHistId(id);
+    setError("");
+    try {
+      const r: any = await api.getResumenHistorial(id);
+      setPreview(r.data);
+      setArmando(false);
+      setMostrarHistorial(false);
+    } catch (err: any) {
+      setError(err.message || "No se pudo abrir ese resumen guardado.");
+    } finally {
+      setViendoHistId(null);
+    }
+  }
+
+  async function borrarHistorialItem(id: string) {
+    if (!(await confirmDialog("¿Borrar este resumen guardado? No afecta nada del sistema, solo el historial."))) return;
+    setBorrandoHistId(id);
+    try {
+      await api.eliminarResumenHistorial(id);
+      cargarHistorial();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo borrar.");
+    } finally {
+      setBorrandoHistId(null);
     }
   }
 
@@ -120,9 +192,84 @@ export default function ResumenAgentes() {
 
       {!armando && !preview && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <button type="button" className="btn" onClick={() => setArmando(true)}>
-            + Armar resumen
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" className="btn" onClick={() => setArmando(true)}>
+              + Armar resumen
+            </button>
+            <button type="button" className="btn small" onClick={() => setMostrarHistorial((v) => !v)}>
+              {mostrarHistorial ? "Ocultar historial" : "Ver historial"}
+            </button>
+          </div>
+
+          {mostrarHistorial && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 12 }}>
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Desde</label>
+                  <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
+                </div>
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Hasta</label>
+                  <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
+                </div>
+                {(filtroDesde || filtroHasta) && (
+                  <button
+                    type="button"
+                    className="btn small"
+                    onClick={() => {
+                      setFiltroDesde("");
+                      setFiltroHasta("");
+                    }}
+                  >
+                    Limpiar filtro
+                  </button>
+                )}
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Filtra por cuándo se guardó la foto (no por la semana que describe) -- así no ves pruebas viejas.
+                </div>
+              </div>
+
+              {cargandoHistorial && <div className="muted">Cargando...</div>}
+              {!cargandoHistorial && historial && historial.length === 0 && (
+                <div className="muted">No hay resúmenes guardados {(filtroDesde || filtroHasta) && "en ese rango de fechas"}.</div>
+              )}
+              {!cargandoHistorial && historial && historial.length > 0 && (
+                <table className="tabla">
+                  <thead>
+                    <tr>
+                      <th>Guardado</th>
+                      <th>Nombre</th>
+                      <th>Semana</th>
+                      <th>Sistema</th>
+                      <th>Agentes</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historial.map((h: any) => (
+                      <tr key={h.id}>
+                        <td className="muted">{dateShort(h.created_at)}</td>
+                        <td>{h.nombre_grupo}</td>
+                        <td className="muted">
+                          {dateShort(h.week_start)} - {dateShort(h.week_end)}
+                        </td>
+                        <td className="muted">{h.sistema === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                        <td className="muted">{(h.agent_ids ?? []).length}</td>
+                        <td style={{ display: "flex", gap: 6 }}>
+                          <button type="button" className="btn small" disabled={viendoHistId === h.id} onClick={() => verHistorialItem(h.id)}>
+                            {viendoHistId === h.id ? "Abriendo..." : "Ver"}
+                          </button>
+                          <button type="button" className="btn danger small" disabled={borrandoHistId === h.id} onClick={() => borrarHistorialItem(h.id)}>
+                            {borrandoHistId === h.id ? "Borrando..." : "Borrar"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
 
