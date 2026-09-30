@@ -62,6 +62,13 @@ export default function Resumen() {
   const [filtro, setFiltro] = useState("");
   const [filtroSigno, setFiltroSigno] = useState<FiltroSigno>("todos");
   const [filtroSistema, setFiltroSistema] = useState<FiltroSistema>("todos");
+  // mostrarEnCero (30/09/2026, pedido de Leo: "si tenemos que hacer un ajuste o ver el saldo
+  // que tiene en fichas, no lo podemos ver" -- después de la corrección de WIN_LOSE, varios
+  // agentes quedaron con $0 de fichas de verdad, y como esta tabla ocultaba toda fila en $0 por
+  // default, esos agentes directamente no aparecían ni buscándolos por nombre). Por defecto
+  // sigue OFF para no llenar la tabla de filas vacías en el uso normal -- se prende para buscar
+  // un agente puntual y ver/ajustar su saldo aunque esté en $0.
+  const [mostrarEnCero, setMostrarEnCero] = useState(false);
   const [tabSaldoClub, setTabSaldoClub] = useState<"general" | "win_lose" | "prepago">("general");
   const [tabResultadoClub, setTabResultadoClub] = useState<"general" | "win_lose" | "prepago">("general");
   const [detalle, setDetalle] = useState<{ title: string; agentId?: string; clubId?: string } | null>(null);
@@ -139,7 +146,7 @@ export default function Resumen() {
   }
 
   const balancesFiltrados = data.balances
-    .filter((b: any) => fichasTotal(b) !== 0)
+    .filter((b: any) => mostrarEnCero || fichasTotal(b) !== 0)
     .filter((b: any) => pasaFiltroSigno(fichasTotal(b), filtroSigno))
     .filter((b: any) => filtroSistema === "todos" || b.system === filtroSistema)
     .filter((b: any) => {
@@ -516,6 +523,10 @@ export default function Resumen() {
             Prepago
           </button>
         </div>
+        <label className="muted" style={{ fontSize: 12, marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" checked={mostrarEnCero} onChange={(e) => setMostrarEnCero(e.target.checked)} />
+          Mostrar también saldos en US$ 0,00 (para buscar un agente y hacer un ajuste aunque no tenga fichas)
+        </label>
         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
           {" · "}
