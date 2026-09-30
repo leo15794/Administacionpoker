@@ -114,6 +114,23 @@ export interface ResumenAgentePDF {
     // saldoAnterior/saldoOperativoFinal (ver ADELANTO_FICHAS en deltaParaBalance) -- se muestra
     // aparte solo para que quede explícito cuánto de ese saldo es por esto.
     fichasAdelantadasPendientes: number;
+    // Desglose de "Saldo anterior" (30/09/2026, pedido de Leo: "necesito que me hagas un
+    // desglose de como se compone el saldo anterior y despues que se haga la suma") -- antes
+    // saldoAnterior era un solo número ya sumado, sin forma de ver de dónde salía. Ahora se
+    // exponen los dos componentes que lo forman (saldoFichasAntes + pendientesAnteriores, ver
+    // más abajo en la función) y el detalle ITEMIZADO de cada cierre anterior sin pagar del
+    // todo, para que se pueda auditar el número a mano si algo no cierra.
+    saldoFichasAntes: number;
+    pendientesAnterioresTotal: number;
+    pendientesAnterioresDetalle: {
+      clubId: string;
+      clubName: string;
+      weekStart: string;
+      weekEnd: string;
+      amount: number; // total original del pendiente de ese cierre
+      consumed: number; // ya pagado/cruzado de ese pendiente
+      disponible: number; // amount - consumed, lo que efectivamente entra a la suma
+    }[];
   };
 }
 
@@ -360,14 +377,33 @@ export async function getResumenAgentePDF(
   );
   const fichasAdelantadasPendientes = Number(fichasAdelantadasRes.rows[0]?.total ?? 0);
 
+  // Detalle ITEMIZADO (30/09/2026, pedido de Leo: "desglose de como se compone el saldo
+  // anterior") -- antes esto solo traía el SUM ya sumado (rakebackPendienteAntes). Ahora trae
+  // cada fila de rakeback_pendiente de un cierre anterior sin pagar del todo, para poder mostrar
+  // "esto viene de tal cierre, tal club, tal semana, por tanto" en vez de un número opaco.
   const pendienteAntesRes = await pool.query(
-    `SELECT COALESCE(SUM(rp.amount - rp.consumed), 0) as total
+    // rp.amount <> rp.consumed (no ">" -- amount puede ser negativo, un cierre WIN_LOSE en
+    // pérdida) filtra los ya saldados del todo, para no ensuciar el desglose con cierres
+    // viejos que ya no aportan nada (igual criterio que el fix de catalog.ts de hoy).
+    `SELECT rp.amount, rp.consumed, wc.club_id, c.name as club_name, wc.week_start, wc.week_end
      FROM rakeback_pendiente rp
      JOIN weekly_closings wc ON wc.id = rp.weekly_closing_id
-     WHERE rp.agent_id = $1 AND rp.active = true AND wc.week_end < $2::date AND wc.status <> 'REVERTIDO'`,
+     JOIN clubs c ON c.id = wc.club_id
+     WHERE rp.agent_id = $1 AND rp.active = true AND wc.week_end < $2::date AND wc.status <> 'REVERTIDO'
+       AND rp.amount <> rp.consumed
+     ORDER BY wc.week_start, c.name`,
     [agentId, weekStart]
   );
-  const rakebackPendienteAntes = Number(pendienteAntesRes.rows[0]?.total ?? 0);
+  const pendientesAnterioresDetalle = pendienteAntesRes.rows.map((row: any) => ({
+    clubId: row.club_id,
+    clubName: row.club_name,
+    weekStart: String(row.week_start).slice(0, 10),
+    weekEnd: String(row.week_end).slice(0, 10),
+    amount: Number(row.amount),
+    consumed: Number(row.consumed),
+    disponible: Number(row.amount) - Number(row.consumed),
+  }));
+  const rakebackPendienteAntes = pendientesAnterioresDetalle.reduce((s, r) => s + r.disponible, 0);
 
   const saldoAnterior = saldoFichasAntes + rakebackPendienteAntes;
   // Cierre semanal: en WIN_LOSE es el total club de siempre (resultado + rakeback neto + rodeo +
@@ -398,6 +434,9 @@ export async function getResumenAgentePDF(
       debemos: saldoOperativoFinal > 0 ? saldoOperativoFinal : 0,
       situacion: saldoOperativoFinal < 0 ? "AGENTE ENVÍA" : saldoOperativoFinal > 0 ? "NOSOTROS ENVIAMOS" : "AL DÍA",
       fichasAdelantadasPendientes,
+      saldoFichasAntes,
+      pendientesAnterioresTotal: rakebackPendienteAntes,
+      pendientesAnterioresDetalle,
     },
   };
 }

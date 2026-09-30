@@ -376,6 +376,16 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
   // (ver ADELANTO_FICHAS en deltaParaBalance/repo/agentesResumen.ts) -- esto es solo para
   // mostrarlo aparte, así queda claro cuánto de ese saldo es por fichas adelantadas sin cobrar.
   const fichasAdelantadasPendientes = sum((r) => r.estadoCuenta.fichasAdelantadasPendientes);
+  // Desglose de "Saldo anterior" (30/09/2026, pedido de Leo) -- se combina igual que el resto:
+  // saldoFichasAntes se suma (es un número por agente), y pendientesAnterioresDetalle se
+  // concatena etiquetando cada fila con el agente al que pertenece (necesario acá porque un
+  // resumen combinado junta varios agentes bajo un mismo nombre -- sin la etiqueta no se podría
+  // saber de dónde sale cada línea del detalle).
+  const saldoFichasAntes = sum((r) => r.estadoCuenta.saldoFichasAntes);
+  const pendientesAnterioresTotal = sum((r) => r.estadoCuenta.pendientesAnterioresTotal);
+  const pendientesAnterioresDetalle = datos.flatMap((r: any) =>
+    (r.estadoCuenta.pendientesAnterioresDetalle ?? []).map((d: any) => ({ ...d, agentName: r.agentName }))
+  );
   return {
     nombreGrupo,
     sistema,
@@ -391,6 +401,9 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
       debemos: saldoOperativoFinal > 0 ? saldoOperativoFinal : 0,
       situacion: saldoOperativoFinal < 0 ? "AGENTE ENVÍA" : saldoOperativoFinal > 0 ? "NOSOTROS ENVIAMOS" : "AL DÍA",
       fichasAdelantadasPendientes,
+      saldoFichasAntes,
+      pendientesAnterioresTotal,
+      pendientesAnterioresDetalle,
     },
     porAgente: datos,
   };
@@ -508,9 +521,61 @@ function PreviewResumen({
         </tbody>
       </table>
       <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-        Saldo anterior (solo cargas/descargas de fichas antes de esta semana) y movimientos de la semana reconstruidos
-        del historial de movimientos; no incluye pagos financieros de rakeback pendiente.
+        Saldo anterior = cargas/descargas/adelantos de fichas antes de esta semana ({usd(ec.saldoFichasAntes)}) +
+        pendientes de cierres anteriores todavía sin pagar del todo ({usd(ec.pendientesAnterioresTotal)}).
       </div>
+
+      {/* Desglose de "Saldo anterior" (30/09/2026, pedido de Leo: "necesito que me hagas un
+          desglose de como se compone el saldo anterior y despues que se haga la suma") -- antes
+          era un solo número sin forma de auditar de dónde salía. */}
+      <h4 style={{ marginTop: 16, marginBottom: 6 }}>Desglose del saldo anterior</h4>
+      <table style={{ maxWidth: 620 }}>
+        <tbody>
+          <tr>
+            <td>Cargas / descargas / adelantos de fichas (antes de esta semana)</td>
+            <td className="num money">{usd(ec.saldoFichasAntes)}</td>
+          </tr>
+          <tr>
+            <td>Pendientes de cierres anteriores sin pagar del todo</td>
+            <td className="num money">{usd(ec.pendientesAnterioresTotal)}</td>
+          </tr>
+          <tr>
+            <td><strong>= Saldo anterior</strong></td>
+            <td className="num"><strong>{usd(ec.saldoAnterior)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      {ec.pendientesAnterioresDetalle && ec.pendientesAnterioresDetalle.length > 0 && (
+        <>
+          <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>
+            Detalle de los pendientes de cierres anteriores que componen el {usd(ec.pendientesAnterioresTotal)} de arriba:
+          </div>
+          <table style={{ maxWidth: 620 }}>
+            <thead>
+              <tr>
+                {preview.porAgente.length > 1 && <th>Agente</th>}
+                <th>Club</th>
+                <th>Semana del cierre</th>
+                <th className="num">Monto del pendiente</th>
+                <th className="num">Ya pagado</th>
+                <th className="num">Disponible</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ec.pendientesAnterioresDetalle.map((d: any, i: number) => (
+                <tr key={i}>
+                  {preview.porAgente.length > 1 && <td className="muted">{d.agentName}</td>}
+                  <td>{d.clubName}</td>
+                  <td className="muted">{dateShort(d.weekStart)} - {dateShort(d.weekEnd)}</td>
+                  <td className="num money">{usd(d.amount)}</td>
+                  <td className="num money muted">{usd(d.consumed)}</td>
+                  <td className="num money">{usd(d.disponible)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {preview.porAgente.map((r: any) => (
         <div key={r.agentId}>
@@ -731,8 +796,52 @@ async function generarResumenCombinadoPdf(preview: any) {
   y = (doc as any).lastAutoTable.finalY + 4;
   doc.setFontSize(7.5);
   doc.setTextColor(120);
-  doc.text("Saldo anterior (solo cargas/descargas de fichas antes de esta semana) y movimientos de la semana reconstruidos del historial; no incluye pagos financieros de rakeback pendiente.", margen, y);
+  doc.text(
+    `Saldo anterior = cargas/descargas/adelantos de fichas antes de esta semana (${usd(ec.saldoFichasAntes)}) + pendientes de cierres anteriores sin pagar del todo (${usd(ec.pendientesAnterioresTotal)}).`,
+    margen,
+    y
+  );
   doc.setTextColor(0);
+  y += 8;
+
+  // Desglose de "Saldo anterior" (30/09/2026, pedido de Leo) -- misma tabla que se ve en
+  // pantalla en el preview, ahora también en el PDF.
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margen, right: margen },
+    head: [["Desglose del saldo anterior", "Importe"]],
+    body: [
+      ["Cargas / descargas / adelantos de fichas (antes de esta semana)", usd(ec.saldoFichasAntes)],
+      ["Pendientes de cierres anteriores sin pagar del todo", usd(ec.pendientesAnterioresTotal)],
+      ["= Saldo anterior", usd(ec.saldoAnterior)],
+    ],
+    styles: { fontSize: 8.5 },
+    headStyles: { fillColor: [40, 50, 90] },
+    didParseCell: (data: any) => {
+      if (data.row.section === "body" && data.row.index === 2) data.cell.styles.fontStyle = "bold";
+    },
+  });
+  y = (doc as any).lastAutoTable.finalY + 4;
+
+  if (ec.pendientesAnterioresDetalle && ec.pendientesAnterioresDetalle.length > 0) {
+    const multi = preview.porAgente.length > 1;
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margen, right: margen },
+      head: [[...(multi ? ["Agente"] : []), "Club", "Semana del cierre", "Monto", "Ya pagado", "Disponible"]],
+      body: ec.pendientesAnterioresDetalle.map((d: any) => [
+        ...(multi ? [d.agentName] : []),
+        d.clubName,
+        `${dateShort(d.weekStart)} - ${dateShort(d.weekEnd)}`,
+        usd(d.amount),
+        usd(d.consumed),
+        usd(d.disponible),
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [90, 90, 100] },
+    });
+    y = (doc as any).lastAutoTable.finalY + 4;
+  }
 
   // --- Una página "ESTADO DE CUENTA SEMANAL" por JUGADOR (no una tabla combinada por club) --
   // réplica exacta del PDF de referencia que pasó Leo ("Cierre El Latigo Loco"): cada jugador
