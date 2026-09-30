@@ -272,7 +272,7 @@ function MovimientoForm({
           <label>Tipo</label>
           <select value={type} onChange={(e) => setType(e.target.value as any)}>
             <option value="CARGA">Carga (fichas +, cuenta corriente −)</option>
-            <option value="DESCARGA">Descarga (fichas −, cuenta corriente +)</option>
+            <option value="DESCARGA">Descarga (resta primero de cuenta corriente, después de fichas)</option>
             <option value="AJUSTE">Ajuste manual</option>
           </select>
         </div>
@@ -306,16 +306,18 @@ function MovimientoForm({
           <label>Importe (USD){type === "AJUSTE" ? " -- puede ser negativo" : ""}</label>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={type === "AJUSTE" ? "Ej: -50" : "Ej: 600"} />
         </div>
-        <div className="field">
-          <label>
-            <input type="checkbox" checked={usdtReal} onChange={(e) => setUsdtReal(e.target.checked)} style={{ marginRight: 6 }} />
-            Hubo transferencia real de USDT
-          </label>
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Esto es solo una reclasificación interna entre fichas y cuenta corriente -- NO toca Wallet Manos salvo
-            que tildes esto (además existió una entrada/salida real de USDT).
+        {type !== "AJUSTE" && (
+          <div className="field">
+            <label>
+              <input type="checkbox" checked={usdtReal} onChange={(e) => setUsdtReal(e.target.checked)} style={{ marginRight: 6 }} />
+              Hubo transferencia real de USDT
+            </label>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Esto es solo una reclasificación interna entre fichas y cuenta corriente -- NO toca Wallet Manos salvo
+              que tildes esto (además existió una entrada/salida real de USDT: {type === "CARGA" ? "ingreso" : "egreso"} en Wallet Manos por el mismo importe).
+            </div>
           </div>
-        </div>
+        )}
         <div className="field">
           <label>Observación</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} />

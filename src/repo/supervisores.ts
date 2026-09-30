@@ -6,6 +6,7 @@
 // cada tabla.
 import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
+import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -80,10 +81,16 @@ export interface MovimientoSupervisorInput {
   createdBy?: string | null;
 }
 
-// Carga: fichas_reales += importe, cuenta_corriente -= importe (Leo, texto original). Descarga:
-// al revés. Ajuste: mueve un solo lado a mano, con el signo que se indique (para correcciones
-// puntuales que no son ni una carga ni una descarga real). Nunca toca balances/ledger_movements
-// de ningún agente.
+// Carga: fichas_reales += importe, cuenta_corriente -= importe. Descarga (corregido 30/09/2026,
+// Leo: "primero se descuenta de su cuenta corriente y luego de las fichas reales" -- NO es la
+// reversa simétrica de una carga): come primero de cuenta_corriente hasta un piso de 0 (si ya
+// estaba en negativo, no la empeora -- todo pasa directo a fichas) y el resto lo descuenta de
+// fichas_reales, que si no alcanza queda en negativo (confirmado por Leo: representa deuda,
+// mismo criterio permisivo que ya tienen los balances de agentes comunes). Ajuste: mueve un solo
+// lado a mano, con el signo que se indique (para correcciones puntuales que no son ni una carga
+// ni una descarga real) y NUNCA mueve Wallet Manos, sin importar qué mande el frontend (mismo
+// criterio que ya usa AJUSTE/SIN_TESORERIA en repo/ledger.ts). Nunca toca balances/
+// ledger_movements de ningún agente.
 export async function registrarMovimientoSupervisor(input: MovimientoSupervisorInput) {
   const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [input.supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
@@ -92,22 +99,20 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     throw new Error("Este supervisor exige indicar el agente de origen del movimiento.");
   }
 
-  let fichasDelta = 0;
-  let ccDelta = 0;
+  let amount = 0;
   if (input.type === "CARGA" || input.type === "DESCARGA") {
     if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("El importe debe ser mayor a 0.");
-    const amount = round2(input.amount);
-    if (input.type === "CARGA") { fichasDelta = amount; ccDelta = -amount; }
-    else { fichasDelta = -amount; ccDelta = amount; }
+    amount = round2(input.amount);
   } else if (input.type === "AJUSTE") {
     if (!Number.isFinite(input.amount) || input.amount === 0) throw new Error("El importe del ajuste no puede ser 0.");
     if (!input.campoAjuste) throw new Error("El ajuste necesita indicar a qué campo se aplica (fichas o cuenta corriente).");
-    const amount = round2(input.amount);
-    if (input.campoAjuste === "FICHAS") fichasDelta = amount;
-    else ccDelta = amount;
   } else {
     throw new Error("Tipo de movimiento inválido.");
   }
+
+  // Forzado acá (único punto donde se decide si se abre un asiento de tesorería), no confía en
+  // lo que mande el frontend.
+  const usdtReal = input.type !== "AJUSTE" && !!input.usdtReal;
 
   const client = await pool.connect();
   try {
@@ -115,6 +120,42 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     const cuenta = await getCuentaParaUpdate(client, input.supervisorAgentId);
     const fichasAnterior = Number(cuenta.fichas_reales);
     const ccAnterior = Number(cuenta.cuenta_corriente);
+
+    let fichasDelta = 0;
+    let ccDelta = 0;
+    if (input.type === "CARGA") {
+      fichasDelta = amount;
+      ccDelta = -amount;
+    } else if (input.type === "DESCARGA") {
+      const montoDeCC = Math.min(amount, Math.max(ccAnterior, 0));
+      const restante = round2(amount - montoDeCC);
+      ccDelta = round2(-montoDeCC);
+      fichasDelta = round2(-restante);
+    } else {
+      const ajusteAmount = round2(input.amount);
+      if (input.campoAjuste === "FICHAS") fichasDelta = ajusteAmount;
+      else ccDelta = ajusteAmount;
+    }
+
+    // Transferencia real de USDT además de la reclasificación interna de arriba: Carga = nos
+    // entró plata de verdad (INGRESO a Wallet Manos), Descarga = le mandamos plata de verdad
+    // (EGRESO). No es atómico con esta transacción -- mismo criterio ya usado en
+    // pagarComisionesReferido/pagarCierreBancado (repo/supervisorReferidos.ts,
+    // repo/bancados.ts): si algo falla después, el asiento de Wallet queda igual, auditable, y
+    // se puede revertir a mano.
+    let treasuryAdjustmentId: string | null = null;
+    if (usdtReal) {
+      const direction = input.type === "CARGA" ? "INGRESO" : "EGRESO";
+      const { id: adjId } = await registrarAjusteTesoreria({
+        ledger: "WALLET_MANOS",
+        direction,
+        amount,
+        reason: `Supervisor ${sup.rows[0].name} — ${input.type.toLowerCase()} US$ ${amount.toFixed(2)}`,
+        createdBy: input.createdBy ?? null,
+      });
+      treasuryAdjustmentId = adjId;
+    }
+
     const fichasNuevo = round2(fichasAnterior + fichasDelta);
     const ccNuevo = round2(ccAnterior + ccDelta);
 
@@ -122,11 +163,11 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     await client.query(
       `INSERT INTO supervisor_movimientos
         (id, supervisor_agent_id, club_id, agent_id, type, amount, fichas_reales_delta, cuenta_corriente_delta,
-         usdt_real, saldo_anterior_fichas, saldo_anterior_cc, saldo_nuevo_fichas, saldo_nuevo_cc, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         usdt_real, treasury_adjustment_id, saldo_anterior_fichas, saldo_anterior_cc, saldo_nuevo_fichas, saldo_nuevo_cc, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
         id, input.supervisorAgentId, input.clubId, input.agentId ?? null, input.type, round2(input.amount),
-        fichasDelta, ccDelta, !!input.usdtReal, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo,
+        fichasDelta, ccDelta, usdtReal, treasuryAdjustmentId, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo,
         input.notes ?? null, input.createdBy ?? null,
       ]
     );
@@ -135,7 +176,7 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
       [fichasNuevo, ccNuevo, cuenta.id]
     );
     await client.query("COMMIT");
-    return { id, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo };
+    return { id, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo, treasuryAdjustmentId };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -161,6 +202,7 @@ export async function listMovimientosSupervisor(supervisorAgentId: string) {
 // delta contrario sobre la cuenta y marca REVERTIDO (mismo criterio que revertirPagoProveedor).
 export async function revertirMovimientoSupervisor(movimientoId: string) {
   const client = await pool.connect();
+  let treasuryAdjustmentId: string | null = null;
   try {
     await client.query("BEGIN");
     const movRes = await client.query(`SELECT * FROM supervisor_movimientos WHERE id = $1 FOR UPDATE`, [movimientoId]);
@@ -180,12 +222,20 @@ export async function revertirMovimientoSupervisor(movimientoId: string) {
     );
     await client.query(`UPDATE supervisor_movimientos SET status = 'REVERTIDO' WHERE id = $1`, [movimientoId]);
     await client.query("COMMIT");
+    treasuryAdjustmentId = mov.treasury_adjustment_id ?? null;
     return { id: movimientoId, fichasNuevo, ccNuevo };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
+    // Si el movimiento había tocado Wallet Manos de verdad (usdt_real), revierte también ese
+    // asiento -- no es atómico con lo de arriba (mismo criterio explicado en
+    // registrarMovimientoSupervisor); revertirAjusteTesoreria es segura de llamar dos veces:
+    // si ya estuviera revertido tira error en vez de duplicar la reversa.
+    if (treasuryAdjustmentId) {
+      await revertirAjusteTesoreria(treasuryAdjustmentId, `Reversión de movimiento de supervisor ${movimientoId}`);
+    }
   }
 }
 

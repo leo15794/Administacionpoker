@@ -1709,3 +1709,9 @@ CREATE TABLE IF NOT EXISTS supervisor_migracion_historica (
   created_by          TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Wallet Manos real cuando una carga/descarga de supervisor tiene usdt_real=true (30/09/2026,
+-- pedido de Leo: "si descargamos fichas... tiene que mover la wallet ya que enviamos el dinero
+-- de las fichas") -- guarda a qué treasury_adjustment corresponde para poder revertirlo bien
+-- si el movimiento del supervisor se revierte (ver revertirMovimientoSupervisor).
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS treasury_adjustment_id TEXT REFERENCES treasury_adjustments(id);
