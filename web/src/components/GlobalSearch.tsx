@@ -18,6 +18,14 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "./Modal";
 
+// Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
+// sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
+function saldoNeto(b: any): number {
+  if (b.system === "PREPAGO") return Number(b.amount) + Number(b.total_fichas_ganadas_mesas || 0);
+  return Number(b.amount);
+}
+
+
 export default function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [abierto, setAbierto] = useState(false);
@@ -147,7 +155,7 @@ function FichaAgente({ agentId, onClose }: { agentId: string; onClose: () => voi
       .catch((e: any) => setError(e.message || "No se pudo cargar la cuenta de este agente."));
   }, [agentId]);
 
-  const saldoTotal = data ? data.saldos.reduce((s: number, b: any) => s + Number(b.amount), 0) : 0;
+  const saldoTotal = data ? data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0) : 0;
   const adelantosPendientes = data
     ? data.adelantos.reduce((s: number, a: any) => s + (Number(a.amount) - Number(a.consumed)), 0)
     : 0;
@@ -194,7 +202,7 @@ function FichaAgente({ agentId, onClose }: { agentId: string; onClose: () => voi
               {data.saldos.map((b: any) => (
                 <tr key={b.club_id}>
                   <td>{b.club_name}</td>
-                  <td className={Number(b.amount) >= 0 ? "money pos" : "money neg"}>{usd(b.amount)}</td>
+                  <td className={saldoNeto(b) >= 0 ? "money pos" : "money neg"}>{usd(saldoNeto(b))}</td>
                 </tr>
               ))}
               {data.saldos.length === 0 && (

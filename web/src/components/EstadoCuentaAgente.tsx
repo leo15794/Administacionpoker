@@ -4,6 +4,14 @@ import { usd, pct, dateShort } from "../fmt";
 import MovimientosHistorial from "./MovimientosHistorial";
 import { useConfirmDialog } from "./ConfirmProvider";
 
+// Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
+// sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
+function saldoNeto(b: any): number {
+  if (b.system === "PREPAGO") return Number(b.amount) + Number(b.total_fichas_ganadas_mesas || 0);
+  return Number(b.amount);
+}
+
+
 // Agrupa los cierres (uno por club) en un bloque por semana — mismo criterio que la pestaña
 // "Estado de cuenta del agente" de la planilla vieja: un total de la semana (suma de todos los
 // clubes) y abajo el desglose club por club (Resultado, Rake, % RB, Rebate, Resultado ajustado,
@@ -70,7 +78,7 @@ async function generarPdf(agente: any, saldos: any[], cierres: any[], totalNeto:
       startY: y,
       margin: { left: margen, right: margen },
       head: [["Club", "Saldo"]],
-      body: saldos.map((b: any) => [b.club_name, usd(b.amount)]),
+      body: saldos.map((b: any) => [b.club_name, usd(saldoNeto(b))]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [40, 50, 90] },
     });
@@ -137,7 +145,7 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
   if (error) return <div className="error">No se pudo cargar el estado de cuenta: {error}</div>;
   if (!data) return <div className="muted">Cargando...</div>;
 
-  const totalNeto = data.saldos.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
 
   return (
     <div>
@@ -190,7 +198,7 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
               {data.saldos.map((b: any) => (
                 <tr key={b.id}>
                   <td>{b.club_name}</td>
-                  <td><span className={`badge ${Number(b.amount) > 0 ? "pos" : Number(b.amount) < 0 ? "neg" : "neutral"}`}>{usd(b.amount)}</span></td>
+                  <td><span className={`badge ${saldoNeto(b) > 0 ? "pos" : saldoNeto(b) < 0 ? "neg" : "neutral"}`}>{usd(saldoNeto(b))}</span></td>
                 </tr>
               ))}
             </tbody>

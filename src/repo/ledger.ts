@@ -208,9 +208,32 @@ export async function getBalance(agentId: string, clubId: string) {
   return r.rows[0] ?? null;
 }
 
+// system + total_fichas_ganadas_mesas (01/10/2026, Leo: "cajerouy" mostraba un saldo distinto
+// en el buscador vs. Administración -- mismo bug ya corregido antes en GET /dashboard/agentes y
+// GET /portal/mi-supervision: para un agente PREPAGO, balances.amount SOLO no es el saldo real,
+// falta sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, la fórmula
+// de referencia). Mismo criterio que ya usa listAllBalances -- acá resuelto por agente.
 export async function listBalancesByAgent(agentId: string) {
   const r = await pool.query(
-    `SELECT b.*, c.name as club_name FROM balances b JOIN clubs c ON c.id = b.club_id WHERE agent_id=$1 ORDER BY c.name`,
+    `SELECT b.*, c.name as club_name,
+            COALESCE(
+              (SELECT d.system FROM agent_club_deals d
+               WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
+               ORDER BY d.valid_from DESC LIMIT 1),
+              a.default_system
+            ) as system,
+            COALESCE(mesas.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas
+     FROM balances b
+     JOIN agents a ON a.id = b.agent_id
+     JOIN clubs c ON c.id = b.club_id
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO'
+     ) mesas ON true
+     WHERE b.agent_id=$1
+     ORDER BY c.name`,
     [agentId]
   );
   return r.rows;

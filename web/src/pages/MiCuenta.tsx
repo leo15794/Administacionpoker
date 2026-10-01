@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 
+// Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
+// sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
+function saldoNeto(b: any): number {
+  if (b.system === "PREPAGO") return Number(b.amount) + Number(b.total_fichas_ganadas_mesas || 0);
+  return Number(b.amount);
+}
+
+
 export default function MiCuenta() {
   const [misAgentes, setMisAgentes] = useState<any[]>([]);
   const [agentId, setAgentId] = useState<string>("");
@@ -19,7 +27,7 @@ export default function MiCuenta() {
 
   if (!data) return <div className="muted">Cargando...</div>;
 
-  const totalNeto = data.saldos.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
 
   return (
     <div>
@@ -61,7 +69,7 @@ export default function MiCuenta() {
             {data.saldos.map((b: any) => (
               <tr key={b.id}>
                 <td>{b.club_name}</td>
-                <td><span className={`badge ${Number(b.amount) > 0 ? "pos" : Number(b.amount) < 0 ? "neg" : "neutral"}`}>{usd(b.amount)}</span></td>
+                <td><span className={`badge ${saldoNeto(b) > 0 ? "pos" : saldoNeto(b) < 0 ? "neg" : "neutral"}`}>{usd(saldoNeto(b))}</span></td>
               </tr>
             ))}
           </tbody>
