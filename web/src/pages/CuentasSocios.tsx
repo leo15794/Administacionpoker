@@ -150,14 +150,12 @@ export default function CuentasSocios() {
             {cuentas.map((c) => (
               <div className="cuenta-card" key={c.id}>
                 <div className="cuenta-card-header">
-                  <div>
-                    <div className="cuenta-card-name">{c.name}</div>
-                    {c.description && (
-                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }} title={c.description}>{c.description}</div>
-                    )}
-                  </div>
+                  <div className="cuenta-card-name">{c.name}</div>
                   <div className={`cuenta-card-saldo ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</div>
                 </div>
+                {c.description && (
+                  <div className="cuenta-card-desc" title={c.description}>{c.description}</div>
+                )}
                 <div className="cuenta-card-meta">{c.movimientos} movimiento{c.movimientos === 1 ? "" : "s"}</div>
                 <div className="row-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
                   <button className="btn secondary small" onClick={() => toggleExpandir(c.id)}>
