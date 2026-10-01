@@ -230,7 +230,10 @@ export default function Movimientos() {
   const pasoClubDestino = pasoClub && clubResuelto && type === "TRANSFERENCIA_ENTRE_CLUBES";
   const clubDestinoResuelto = type !== "TRANSFERENCIA_ENTRE_CLUBES" || clubDestinoId !== "";
   const pasoImporte = pasoClub && clubResuelto && clubDestinoResuelto;
-  const importeResuelto = Number(amount) > 0;
+  // Un AJUSTE puede ser negativo (ej. corregir un exceso cargado de mas) -- el resto de los
+  // tipos (CARGA/DESCARGA/COBRO/PAGO/etc.) siempre esperan un monto positivo, el signo ya lo
+  // resuelve el backend segun el tipo (ver deltaParaBalance en repo/ledger.ts).
+  const importeResuelto = type === "AJUSTE" ? amount !== "" && Number(amount) !== 0 : Number(amount) > 0;
   const pasoSiguienteAImporte = pasoImporte && importeResuelto;
 
   return (
