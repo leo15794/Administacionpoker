@@ -190,15 +190,15 @@ export default function Supervisores() {
                 de acá en más el saldo solo cambia con "+ Carga / Descarga / Ajuste" de arriba (ver tabla de abajo).
               </div>
               <table>
-                <thead><tr><th>Agente</th><th>Club</th><th className="num">Fichas migradas</th><th className="num">Pendiente migrado</th><th>Notas</th></tr></thead>
+                <thead><tr><th>Agente</th><th>Club</th><th className="num">Fichas migradas</th><th className="num">Pendiente migrado</th><th>Fecha</th></tr></thead>
                 <tbody>
                   {migracion.map((m) => (
-                    <tr key={m.id}>
+                    <tr key={m.id} title={m.notes || undefined}>
                       <td>{m.agent_name}</td>
                       <td className="muted">{m.club_name ?? "—"}</td>
                       <td className="num">{usd(Number(m.fichas_migradas))}</td>
                       <td className="num">{usd(Number(m.pendiente_migrado))}</td>
-                      <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                      <td className="muted">{dateShort(m.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
