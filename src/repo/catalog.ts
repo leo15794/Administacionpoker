@@ -400,6 +400,9 @@ export async function updateAgent(
     modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
     exigirAgenteEnMovimientos?: boolean;
     consolidarCierres?: boolean;
+    /** Puramente visual (01/10/2026, caso Uriel) -- oculta/muestra al agente en la tabla
+     * "Agentes a cargo" de su supervisor consolidado. No mueve plata ni toca "active". */
+    ocultoEnSupervisor?: boolean;
   }
 ) {
   const sets: string[] = [];
@@ -416,6 +419,7 @@ export async function updateAgent(
   if (fields.modeloCuenta !== undefined) { sets.push(`modelo_cuenta = $${i++}`); values.push(fields.modeloCuenta); }
   if (fields.exigirAgenteEnMovimientos !== undefined) { sets.push(`exigir_agente_en_movimientos = $${i++}`); values.push(fields.exigirAgenteEnMovimientos); }
   if (fields.consolidarCierres !== undefined) { sets.push(`consolidar_cierres = $${i++}`); values.push(fields.consolidarCierres); }
+  if (fields.ocultoEnSupervisor !== undefined) { sets.push(`oculto_en_supervisor = $${i++}`); values.push(fields.ocultoEnSupervisor); }
   if (sets.length === 0) {
     const r = await pool.query(`SELECT * FROM agents WHERE id = $1`, [id]);
     return r.rows[0] ?? null;

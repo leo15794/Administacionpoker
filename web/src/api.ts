@@ -354,6 +354,9 @@ export const api = {
       modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
       exigirAgenteEnMovimientos?: boolean;
       consolidarCierres?: boolean;
+      // Puramente visual (01/10/2026, caso Uriel) -- oculta/muestra en "Agentes a cargo" de su
+      // supervisor consolidado, no mueve plata.
+      ocultoEnSupervisor?: boolean;
     }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // BORRADO REAL (no "dar de baja") — solo funciona si el agente no tiene ningún rastro

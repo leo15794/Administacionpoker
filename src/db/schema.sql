@@ -1603,6 +1603,14 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS modelo_cuenta TEXT CHECK (modelo_cue
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS exigir_agente_en_movimientos BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS consolidar_cierres BOOLEAN NOT NULL DEFAULT TRUE;
 
+-- oculto_en_supervisor (01/10/2026, pedido de Leo, caso Uriel): puramente visual -- permite
+-- sacar a un subordinado de la tabla "Agentes a cargo" de su supervisor consolidado (ej. un
+-- agente que está de licencia/pausado un tiempo) y volver a mostrarlo después, sin tocar
+-- "active" (que es "dar de baja" de verdad, bloquea cierres/movimientos nuevos) ni mover un
+-- centavo de plata -- el agente sigue teniendo su propio balance igual que siempre, esto NUNCA
+-- se mezcla con supervisor_cuentas.
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS oculto_en_supervisor BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- Saldo ÚNICO por supervisor (a propósito NO por club, a diferencia de proveedor_saldos --
 -- confirmado por Leo: "todo lo que pase con sus agentes va todo al mismo lugar"). club_id se
 -- graba en cada movimiento/línea (supervisor_movimientos / supervisor_cierre_lineas) solo para

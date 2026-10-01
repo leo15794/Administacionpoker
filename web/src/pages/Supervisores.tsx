@@ -23,6 +23,11 @@ export default function Supervisores() {
   const [subordinados, setSubordinados] = useState<any[] | null>(null);
   const [movimientos, setMovimientos] = useState<any[] | null>(null);
   const [showMovimiento, setShowMovimiento] = useState(false);
+  // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
+  // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
+  // colapsado (false) para no mostrar de entrada una lista larga de ocultos.
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [ocultando, setOcultando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
@@ -38,8 +43,23 @@ export default function Supervisores() {
     setSeleccionado(s);
     setSubordinados(null);
     setMovimientos(null);
+    setMostrarOcultos(false);
     api.subordinadosSupervisor(s.id).then(setSubordinados);
     api.movimientosSupervisor(s.id).then(setMovimientos);
+  }
+
+  async function toggleOcultoAgente(agentId: string, ocultar: boolean) {
+    if (!seleccionado) return;
+    setOcultando(agentId);
+    try {
+      await api.editarAgente(agentId, { ocultoEnSupervisor: ocultar });
+      const frescos = await api.subordinadosSupervisor(seleccionado.id);
+      setSubordinados(frescos);
+    } catch (err: any) {
+      setError(err.message || "No se pudo actualizar el agente.");
+    } finally {
+      setOcultando(null);
+    }
   }
 
   function refrescarSeleccionado() {
@@ -151,18 +171,71 @@ export default function Supervisores() {
               Ningún agente tiene "Supervisor" = "{seleccionado.name}" todavía -- asignalo desde Administración.
             </div>
           ) : (
-            <table>
-              <thead><tr><th>Nombre</th><th>Sistema</th><th>Activo</th></tr></thead>
-              <tbody>
-                {subordinados.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.name}</td>
-                    <td className="muted">{a.default_system}</td>
-                    <td className="muted">{a.active ? "Sí" : "No"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              {(() => {
+                const visibles = subordinados.filter((a) => !a.oculto_en_supervisor);
+                const ocultos = subordinados.filter((a) => a.oculto_en_supervisor);
+                return (
+                  <>
+                    <table>
+                      <thead><tr><th>Nombre</th><th>Sistema</th><th>Activo</th><th></th></tr></thead>
+                      <tbody>
+                        {visibles.length === 0 && (
+                          <tr><td colSpan={4} className="muted">Todos los agentes están ocultos ahora mismo.</td></tr>
+                        )}
+                        {visibles.map((a) => (
+                          <tr key={a.id}>
+                            <td>{a.name}</td>
+                            <td className="muted">{a.default_system}</td>
+                            <td className="muted">{a.active ? "Sí" : "No"}</td>
+                            <td>
+                              <button
+                                className="btn secondary small"
+                                disabled={ocultando === a.id}
+                                onClick={() => toggleOcultoAgente(a.id, true)}
+                                title="Ocultarlo de esta lista -- no toca su saldo ni lo da de baja, se puede volver a mostrar cuando quieras."
+                              >
+                                {ocultando === a.id ? "..." : "Ocultar"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {ocultos.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <button className="btn secondary small" onClick={() => setMostrarOcultos((v) => !v)}>
+                          {mostrarOcultos ? "Ocultar la lista de ocultos" : `Mostrar ocultos (${ocultos.length})`}
+                        </button>
+                        {mostrarOcultos && (
+                          <table style={{ marginTop: 8 }}>
+                            <thead><tr><th>Nombre</th><th>Sistema</th><th>Activo</th><th></th></tr></thead>
+                            <tbody>
+                              {ocultos.map((a) => (
+                                <tr key={a.id} style={{ opacity: 0.6 }}>
+                                  <td>{a.name}</td>
+                                  <td className="muted">{a.default_system}</td>
+                                  <td className="muted">{a.active ? "Sí" : "No"}</td>
+                                  <td>
+                                    <button
+                                      className="btn secondary small"
+                                      disabled={ocultando === a.id}
+                                      onClick={() => toggleOcultoAgente(a.id, false)}
+                                    >
+                                      {ocultando === a.id ? "..." : "Mostrar"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </>
           )}
 
           <h4>Movimientos manuales</h4>
