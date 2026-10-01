@@ -55,8 +55,11 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
      WHERE s.agent_id = $1 ORDER BY c.name`,
     [agentId]
   );
+  // kind='RAKEBACK' (01/10/2026): mismo criterio que catalog.ts /agents/:id/cuenta -- un
+  // adelanto kind='FICHAS_PENDIENTE' ya está restado del saldo (ver nota ahí), no corresponde
+  // mostrarlo acá como pendiente aparte.
   const adelantos = await pool.query(
-    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY created_at DESC`,
+    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true AND kind = 'RAKEBACK' ORDER BY created_at DESC`,
     [agentId]
   );
 

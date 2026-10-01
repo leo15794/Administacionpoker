@@ -228,7 +228,10 @@ export async function getDeudasConsolidadas() {
     bucket(grupo).garantia += Number(g.amount) - Number(g.consumed);
   }
 
-  const adelantosRes = await pool.query(`SELECT agent_id, amount, consumed FROM rakeback_advances WHERE active = true`);
+  // kind='RAKEBACK' (01/10/2026, caso cajerouy): un adelanto kind='FICHAS_PENDIENTE' ya está
+  // restado del balance de arriba (bucket.debemos/nosDebe, ver deltaParaBalance en
+  // repo/ledger.ts) -- sin este filtro esta columna "Adelantos" lo sumaba de nuevo.
+  const adelantosRes = await pool.query(`SELECT agent_id, amount, consumed FROM rakeback_advances WHERE active = true AND kind = 'RAKEBACK'`);
   for (const ad of adelantosRes.rows) {
     const grupo = grupoDeAgente.get(ad.agent_id);
     if (!grupo) continue;

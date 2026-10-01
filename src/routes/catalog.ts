@@ -189,8 +189,14 @@ catalogRouter.get("/agents/:id/cuenta", requireAuth, requireAdmin, async (req, r
      WHERE s.agent_id = $1 ORDER BY c.name`,
     [agentId]
   );
+  // kind='RAKEBACK' (01/10/2026, caso cajerouy -- la ficha mostraba "Adelantos pendientes:
+  // US$ 1.240,00" para un agente cuyo saldo ya reflejaba esa deuda): un adelanto
+  // kind='FICHAS_PENDIENTE' YA está restado de balances.amount en el momento en que se dio (ver
+  // deltaParaBalance en repo/ledger.ts) -- mostrarlo acá de nuevo como "pendiente" aparte lo
+  // contaba dos veces. Mismo criterio que ya usa Resumen por Agente -> Saldos actuales
+  // (repo/agentesResumen.ts) y getAdelantoRakebackEnFechas (repo/advances.ts).
   const adelantos = await pool.query(
-    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true ORDER BY created_at DESC`,
+    `SELECT * FROM rakeback_advances WHERE agent_id = $1 AND active = true AND kind = 'RAKEBACK' ORDER BY created_at DESC`,
     [agentId]
   );
 

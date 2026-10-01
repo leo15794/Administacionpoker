@@ -86,10 +86,14 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   );
 
   // Adelantos de rakeback: mismo criterio que garantías (separados del saldo operativo,
-  // BIT-034), pero por agente+club — ver repo/advances.ts.
+  // BIT-034), pero por agente+club — ver repo/advances.ts. kind='RAKEBACK' (01/10/2026, caso
+  // cajerouy): un adelanto kind='FICHAS_PENDIENTE' ya está restado de balances.amount (ver
+  // deltaParaBalance en repo/ledger.ts, y la nota en catalog.ts /agents/:id/cuenta) -- sin este
+  // filtro este KPI sumaba esa deuda DE NUEVO sobre "agentesNosDeben" (que ya la trae adentro
+  // del balance negativo), inflando "porCobrar" más abajo.
   const adelantos = await pool.query(
     `SELECT COALESCE(SUM(amount - consumed), 0) as pendiente, COUNT(*)::int as cantidad
-     FROM rakeback_advances WHERE active = true`
+     FROM rakeback_advances WHERE active = true AND kind = 'RAKEBACK'`
   );
 
   // Ganancia / rake de la última semana con cierre REAL cargado (no de los cierres
