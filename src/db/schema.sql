@@ -431,9 +431,11 @@ CREATE TABLE IF NOT EXISTS rakeback_pendiente (
 -- Tipo de movimiento propio (en vez de reusar 'PAGO', que SIEMPRE resta del balance -- ver
 -- deltaParaBalance en repo/ledger.ts) para que quede sin ambigüedad en el ledger, y para que
 -- Revertir/Eliminar funcionen solos sin casos especiales (deltaParaBalance le da delta 0).
-ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
-ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
-  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK'));
+-- (01/10/2026: el ALTER que ensanchaba este constraint hasta acá -- sin ADELANTO_FICHAS --
+-- quedó eliminado. schema.sql se re-ejecuta ENTERO en cada "npm run migrate", así que dejar acá
+-- una versión vieja y más angosta del mismo constraint rompía la migración en cuanto ya existía
+-- algún movimiento ADELANTO_FICHAS real en la tabla -- ver el ALTER final, más abajo, que ya
+-- incluye la lista completa y es el único que queda vigente para este constraint.)
 
 -- Historial de esta rakeback pendiente -- mismo patrón que carga_cruce_movements/
 -- rakeback_advance_movements. ALTA se crea sola al aplicar el cierre (ver repo/closings.ts);
