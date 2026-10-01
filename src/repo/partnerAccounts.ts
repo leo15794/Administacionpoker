@@ -4,6 +4,7 @@
 // acá el usuario pidió explícitamente poder editar y eliminar todo directo — "control 100%".
 // Una cuenta es un nombre con saldo = suma de sus movimientos (monto libre, +/-).
 import { pool, newId } from "../db/pool.js";
+import { getResumenClubSemanal } from "./clubResumen.js";
 
 export type PartnerEntryCategory = "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
 
@@ -124,18 +125,39 @@ export async function eliminarMovimiento(id: string) {
   if (r.rowCount === 0) throw new Error("No se encontró ese movimiento.");
 }
 
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+function toFecha(d: string | Date): string {
+  return new Date(d).toISOString().slice(0, 10);
+}
+
 /**
  * Agregados estilo "CONTROL_GANANCIAS" de la planilla — pero la ganancia operativa sale en vivo
  * de nuestros propios weekly_closings (todas las semanas con cierre real, no solo la última) en
  * vez de un histórico pegado a mano; los retiros/gastos/ajustes SÍ son manuales, cargados como
  * movimientos de cuenta con la categoría correspondiente, sin importar a qué cuenta pertenezcan.
+ *
+ * IMPORTANTE (01/10/2026, bug reportado por Leo: esta pantalla mostraba US$10.948,35 de
+ * "Ganancia operativa histórica" y ese número no coincidía con nada de Resumen financiero):
+ * antes esto sumaba "rake_total - rakeback - rebate" directo de weekly_closings — una cuenta
+ * vieja, propia de esta pantalla, DISTINTA a la que ya usan Resumen ejecutivo / Resumen por
+ * club / Resumen financiero (getResumenClubSemanal: rake*ratio del club - rakeback + ganancia
+ * de rodeo del club + ingreso por ventas + tasa semanal fija, con el override de Tiny). Esa
+ * cuenta vieja ni aplicaba el ratio del club al rake, ni sumaba rodeo/ventas/tasa fija, y de
+ * paso contaba semanas en BORRADOR (no solo aplicadas/corregidas). Ahora reusa
+ * getResumenClubSemanal — la MISMA cuenta que ya usan esas pantallas — para que nunca vuelva a
+ * mostrar un número distinto al de ahí.
  */
 export async function getAgregadosSocios() {
-  const ganancia = await pool.query(
-    `SELECT COALESCE(SUM(rake_total - rakeback - rebate), 0) as ganancia_operativa
-     FROM weekly_closings
-     WHERE status <> 'REVERTIDO' AND rule_applied IS DISTINCT FROM 'RECONSTRUIDO_SIN_DESGLOSE'`
+  const clubesSemana = await pool.query(
+    `SELECT DISTINCT club_id, week_start FROM weekly_closings WHERE status IN ('APLICADO','CORREGIDO')`
   );
+  const resumenes = await Promise.all(
+    clubesSemana.rows.map((r) => getResumenClubSemanal(r.club_id, toFecha(r.week_start)))
+  );
+  const gananciaOperativa = round2(resumenes.reduce((s, r) => s + (r ? Number(r.gananciaNeta) : 0), 0));
+
   const porCategoria = await pool.query(
     `SELECT category, COALESCE(SUM(amount), 0) as total
      FROM partner_account_entries
@@ -145,9 +167,8 @@ export async function getAgregadosSocios() {
   const totales: Record<string, number> = { RETIRO: 0, GASTO: 0, AJUSTE: 0 };
   for (const row of porCategoria.rows) totales[row.category] = Number(row.total);
 
-  const gananciaOperativa = Number(ganancia.rows[0].ganancia_operativa);
-  const gananciaNeta = gananciaOperativa - totales.GASTO + totales.AJUSTE;
-  const saldoDespuesRetiros = gananciaNeta - totales.RETIRO;
+  const gananciaNeta = round2(gananciaOperativa - totales.GASTO + totales.AJUSTE);
+  const saldoDespuesRetiros = round2(gananciaNeta - totales.RETIRO);
 
   return {
     gananciaOperativaHistorica: gananciaOperativa,
