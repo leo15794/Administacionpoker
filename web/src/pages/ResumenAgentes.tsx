@@ -22,6 +22,9 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 // agente al que pertenecen, para no perder de dónde sale cada número.
 export default function ResumenAgentes() {
   const { confirmDialog, alertDialog } = useConfirmDialog();
+  // Tabs (01/10/2026, pedido de Leo: "que aparezcan todos los agentes con el saldo que tienen a
+  // la fecha" -- separado a propósito del flujo de armar resumen semanal, que no cambia).
+  const [vista, setVista] = useState<"armar" | "saldos">("armar");
   const [agentes, setAgentes] = useState<any[] | null>(null);
   const [semanas, setSemanas] = useState<string[] | null>(null);
   const [weekStart, setWeekStart] = useState("");
@@ -190,6 +193,19 @@ export default function ResumenAgentes() {
         </div>
       </div>
 
+      <div className="tabs" style={{ display: "flex", gap: 6, margin: "14px 0" }}>
+        <button type="button" className={`btn small ${vista === "armar" ? "" : "secondary"}`} onClick={() => setVista("armar")}>
+          Armar resumen
+        </button>
+        <button type="button" className={`btn small ${vista === "saldos" ? "" : "secondary"}`} onClick={() => setVista("saldos")}>
+          Saldos actuales
+        </button>
+      </div>
+
+      {vista === "saldos" && <SaldosActuales />}
+
+      {vista === "armar" && (
+      <>
       {!armando && !preview && (
         <div className="panel" style={{ marginTop: 16 }}>
           <div style={{ display: "flex", gap: 10 }}>
@@ -356,6 +372,8 @@ export default function ResumenAgentes() {
           onVolver={() => setPreview(null)}
           onCancelar={cancelarArmado}
         />
+      )}
+      </>
       )}
     </div>
   );
@@ -941,4 +959,270 @@ async function generarResumenCombinadoPdf(preview: any) {
 
   const nombreArchivo = `Cierre_${preview.nombreGrupo.replace(/[^a-z0-9]+/gi, "-")}_${preview.weekStart}_al_${preview.weekEnd}.pdf`;
   doc.save(nombreArchivo);
+}
+
+// "Saldos actuales" (01/10/2026, pedido de Leo: "que aparezcan todos los agentes con el saldo
+// que tienen a la fecha... quiero saber como se constituye el saldo del agente ahi en ese
+// momento" -- ejemplo que dio: "cajerouy" con Saldo neto total US$ 1.528,19 y Adelantos
+// pendientes US$ 620,00, que en realidad tendrían que netearse). Foto de HOY de todos los
+// agentes activos, de solo lectura (ver repo/agentesResumen.ts, listSaldosActualesAgentes) --
+// NO toca la función de armar resumen semanal de arriba, que sigue igual. Confirmado con Leo:
+// esta resta (saldo neto total - adelantos pendientes = saldo real) es SOLO acá, no cambia la
+// definición de "saldo" en ningún otro lugar del sistema.
+type ColumnaOrdenSaldos = "nombre" | "saldoNetoTotal" | "adelantosPendientes" | "saldoReal";
+
+function SaldosActuales() {
+  const [datos, setDatos] = useState<any[] | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [sistemaFiltro, setSistemaFiltro] = useState<"TODOS" | "WIN_LOSE" | "PREPAGO">("TODOS");
+  const [mostrarEnCero, setMostrarEnCero] = useState(false);
+  const [orden, setOrden] = useState<ColumnaOrdenSaldos>("saldoReal");
+  const [ordenAsc, setOrdenAsc] = useState(false);
+  const [expandido, setExpandido] = useState<string | null>(null);
+
+  function cargar() {
+    setCargando(true);
+    setError("");
+    api
+      .saldosActualesAgentes()
+      .then(setDatos)
+      .catch((err: any) => setError(err.message || "No se pudieron cargar los saldos."))
+      .finally(() => setCargando(false));
+  }
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  function ordenarPor(col: ColumnaOrdenSaldos) {
+    if (orden === col) {
+      setOrdenAsc((v) => !v);
+    } else {
+      setOrden(col);
+      setOrdenAsc(col === "nombre");
+    }
+  }
+
+  function flecha(col: ColumnaOrdenSaldos) {
+    if (orden !== col) return "";
+    return ordenAsc ? " ▲" : " ▼";
+  }
+
+  const filtrados = (datos ?? [])
+    .filter((a: any) => !query.trim() || a.agentName.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((a: any) => sistemaFiltro === "TODOS" || a.defaultSystem === sistemaFiltro)
+    .filter((a: any) => mostrarEnCero || a.saldoReal !== 0)
+    .sort((a: any, b: any) => {
+      const cmp = orden === "nombre" ? a.agentName.localeCompare(b.agentName) : a[orden] - b[orden];
+      return ordenAsc ? cmp : -cmp;
+    });
+
+  const totales = filtrados.reduce(
+    (acc: any, a: any) => ({
+      saldoNetoTotal: acc.saldoNetoTotal + a.saldoNetoTotal,
+      adelantosPendientes: acc.adelantosPendientes + a.adelantosPendientes,
+      saldoReal: acc.saldoReal + a.saldoReal,
+    }),
+    { saldoNetoTotal: 0, adelantosPendientes: 0, saldoReal: 0 }
+  );
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="muted" style={{ marginBottom: 12 }}>
+        Foto de HOY de todos los agentes activos -- no afecta nada del sistema. "Saldo real" descuenta del saldo
+        neto total (fichas + resultado de mesas para Prepago) los adelantos de rakeback todavía pendientes de
+        cobrar. Esta resta es solo acá, en esta pantalla -- en el resto del sistema "Saldo neto total" y
+        "Adelantos pendientes" se siguen mostrando por separado, sin netear.
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <input
+          placeholder="Buscar agente..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ maxWidth: 220 }}
+        />
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className={`chip${sistemaFiltro === "TODOS" ? " chip-active" : ""}`} onClick={() => setSistemaFiltro("TODOS")}>
+            Todos
+          </button>
+          <button className={`chip${sistemaFiltro === "PREPAGO" ? " chip-active" : ""}`} onClick={() => setSistemaFiltro("PREPAGO")}>
+            Prepago
+          </button>
+          <button className={`chip${sistemaFiltro === "WIN_LOSE" ? " chip-active" : ""}`} onClick={() => setSistemaFiltro("WIN_LOSE")}>
+            Win/Lose
+          </button>
+        </div>
+        <label className="muted" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+          <input type="checkbox" checked={mostrarEnCero} onChange={(e) => setMostrarEnCero(e.target.checked)} />
+          Mostrar en cero
+        </label>
+        <button type="button" className="btn secondary small" onClick={cargar} disabled={cargando}>
+          {cargando ? "Actualizando..." : "Actualizar"}
+        </button>
+        <div className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>
+          {filtrados.length} agente{filtrados.length === 1 ? "" : "s"}
+        </div>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+      {cargando && !datos && <div className="muted">Cargando...</div>}
+
+      {datos && (
+        <table>
+          <thead>
+            <tr>
+              <th className="row-click" onClick={() => ordenarPor("nombre")}>
+                Agente{flecha("nombre")}
+              </th>
+              <th>Sistema</th>
+              <th className="row-click" onClick={() => ordenarPor("saldoNetoTotal")}>
+                Saldo neto total{flecha("saldoNetoTotal")}
+              </th>
+              <th className="row-click" onClick={() => ordenarPor("adelantosPendientes")}>
+                Adelantos pendientes{flecha("adelantosPendientes")}
+              </th>
+              <th className="row-click" onClick={() => ordenarPor("saldoReal")}>
+                Saldo real{flecha("saldoReal")}
+              </th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtrados.map((a: any) => (
+              <FilaAgenteSaldo
+                key={a.agentId}
+                agente={a}
+                expandido={expandido === a.agentId}
+                onToggle={() => setExpandido((e) => (e === a.agentId ? null : a.agentId))}
+              />
+            ))}
+            {filtrados.length === 0 && (
+              <tr>
+                <td colSpan={6} className="muted">
+                  Sin agentes para este filtro.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {filtrados.length > 0 && (
+            <tfoot>
+              <tr style={{ fontWeight: 600 }}>
+                <td colSpan={2}>Total ({filtrados.length})</td>
+                <td className={totales.saldoNetoTotal >= 0 ? "money pos" : "money neg"}>{usd(totales.saldoNetoTotal)}</td>
+                <td className="money neg">{usd(totales.adelantosPendientes)}</td>
+                <td className={totales.saldoReal >= 0 ? "money pos" : "money neg"}>{usd(totales.saldoReal)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      )}
+    </div>
+  );
+}
+
+// Fila expandible: al hacer click muestra el desglose completo de "cómo se constituye el saldo"
+// (pedido explícito de Leo) -- saldo por club y el detalle itemizado de cada adelanto pendiente.
+function FilaAgenteSaldo({ agente, expandido, onToggle }: { agente: any; expandido: boolean; onToggle: () => void }) {
+  return (
+    <>
+      <tr className="row-click" onClick={onToggle}>
+        <td>
+          {agente.agentName}
+          {agente.supervisor ? (
+            <span className="muted" style={{ fontSize: 11 }}>
+              {" "}
+              · sup: {agente.supervisor}
+            </span>
+          ) : (
+            ""
+          )}
+        </td>
+        <td className="muted">{agente.defaultSystem === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+        <td className={agente.saldoNetoTotal >= 0 ? "money pos" : "money neg"}>{usd(agente.saldoNetoTotal)}</td>
+        <td className={agente.adelantosPendientes !== 0 ? "money neg" : "muted"}>
+          {agente.adelantosPendientes !== 0 ? usd(agente.adelantosPendientes) : "—"}
+        </td>
+        <td className={agente.saldoReal >= 0 ? "money pos" : "money neg"} style={{ fontWeight: 600 }}>
+          {usd(agente.saldoReal)}
+        </td>
+        <td className="muted" style={{ fontSize: 12 }}>
+          {expandido ? "▲ ocultar" : "▼ detalle"}
+        </td>
+      </tr>
+      {expandido && (
+        <tr>
+          <td colSpan={6} style={{ background: "rgba(127,127,127,0.07)", padding: "10px 16px" }}>
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 240 }}>
+                <div className="muted" style={{ fontWeight: 600, marginBottom: 6 }}>
+                  Saldo por club
+                </div>
+                {agente.saldoPorClub.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Sin saldo cargado.
+                  </div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Club</th>
+                        <th>Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agente.saldoPorClub.map((b: any) => (
+                        <tr key={b.clubId}>
+                          <td>{b.clubName}</td>
+                          <td className={b.saldoNeto >= 0 ? "money pos" : "money neg"}>{usd(b.saldoNeto)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div style={{ minWidth: 340 }}>
+                <div className="muted" style={{ fontWeight: 600, marginBottom: 6 }}>
+                  Adelantos pendientes
+                </div>
+                {agente.adelantos.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Sin adelantos pendientes.
+                  </div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Medio</th>
+                        <th>Club origen</th>
+                        <th>Monto</th>
+                        <th>Consumido</th>
+                        <th>Disponible</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agente.adelantos.map((ad: any) => (
+                        <tr key={ad.id}>
+                          <td>{dateShort(ad.createdAt)}</td>
+                          <td className="muted">{ad.medio ?? "—"}</td>
+                          <td className="muted">{ad.clubOrigenName ?? "—"}</td>
+                          <td>{usd(ad.amount)}</td>
+                          <td className="muted">{usd(ad.consumed)}</td>
+                          <td className="money neg">{usd(ad.disponible)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
 }

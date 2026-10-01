@@ -441,6 +441,138 @@ export async function getResumenAgentePDF(
   };
 }
 
+// "Saldos actuales" (01/10/2026, pedido de Leo: "que aparezcan todos los agentes con el saldo
+// que tienen a la fecha... quiero saber como se constituye el saldo del agente ahi en ese
+// momento" -- ejemplo que dio: ficha de agente del buscador mostraba Saldo neto total y
+// Adelantos pendientes como dos números separados, y en realidad el saldo REAL tiene que
+// descontar el adelanto pendiente). A PROPÓSITO separado de getResumenAgentePDF (que es por
+// semana elegida): esto es una FOTO DE HOY, de TODOS los agentes activos a la vez, pensada para
+// la pestaña nueva "Saldos actuales" de Resumen por Agente -- no toca la función de armar
+// resumen semanal, que sigue igual. Confirmado con Leo: esta resta (saldoReal = saldoNetoTotal
+// - adelantosPendientes) es SOLO para esta pantalla -- no se tocó la definición de "saldo neto
+// total" en ningún otro lado del sistema (Administración, Mi Cuenta, ficha del buscador, PDF de
+// estado de cuenta siguen mostrando los dos números por separado, sin restar).
+export interface SaldoActualAgente {
+  agentId: string;
+  agentName: string;
+  defaultSystem: "PREPAGO" | "WIN_LOSE";
+  supervisor: string | null;
+  saldoPorClub: {
+    clubId: string;
+    clubName: string;
+    system: "PREPAGO" | "WIN_LOSE";
+    amount: number;
+    totalFichasGanadasMesas: number;
+    saldoNeto: number; // PREPAGO: amount + mesas. WIN_LOSE: amount tal cual.
+  }[];
+  saldoNetoTotal: number; // suma de saldoNeto de todos los clubes
+  adelantos: {
+    id: string;
+    amount: number;
+    consumed: number;
+    disponible: number; // amount - consumed, lo que todavía no se descontó
+    medio: "FICHAS" | "USDT" | null;
+    clubOrigenName: string | null;
+    notes: string | null;
+    createdAt: string;
+  }[];
+  adelantosPendientes: number; // suma de disponible
+  saldoReal: number; // saldoNetoTotal - adelantosPendientes
+}
+
+export async function listSaldosActualesAgentes(): Promise<SaldoActualAgente[]> {
+  const agentesRes = await pool.query(
+    `SELECT id, name, default_system, supervisor FROM agents WHERE active = true ORDER BY name`
+  );
+
+  const balancesRes = await pool.query(
+    `SELECT b.agent_id, b.club_id, c.name as club_name, b.amount,
+            COALESCE(
+              (SELECT d.system FROM agent_club_deals d
+               WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
+               ORDER BY d.valid_from DESC LIMIT 1),
+              a.default_system
+            ) as system,
+            COALESCE(mesas.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas
+     FROM balances b
+     JOIN agents a ON a.id = b.agent_id
+     JOIN clubs c ON c.id = b.club_id
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO'
+     ) mesas ON true
+     WHERE a.active = true
+     ORDER BY c.name`
+  );
+
+  // amount <> consumed (no ">" -- mismo criterio que pendientesAnterioresDetalle más arriba en
+  // este archivo): filtra los ya saldados del todo, para no ensuciar el desglose.
+  const adelantosRes = await pool.query(
+    `SELECT ra.id, ra.agent_id, ra.amount, ra.consumed, ra.medio, ra.notes, ra.created_at,
+            c.name as club_origen_name
+     FROM rakeback_advances ra
+     LEFT JOIN clubs c ON c.id = ra.club_origen_id
+     WHERE ra.active = true AND ra.amount <> ra.consumed
+     ORDER BY ra.created_at`
+  );
+
+  const balancesPorAgente = new Map<string, any[]>();
+  for (const row of balancesRes.rows) {
+    const lista = balancesPorAgente.get(row.agent_id) ?? [];
+    lista.push(row);
+    balancesPorAgente.set(row.agent_id, lista);
+  }
+  const adelantosPorAgente = new Map<string, any[]>();
+  for (const row of adelantosRes.rows) {
+    const lista = adelantosPorAgente.get(row.agent_id) ?? [];
+    lista.push(row);
+    adelantosPorAgente.set(row.agent_id, lista);
+  }
+
+  return agentesRes.rows.map((a: any) => {
+    const balances = balancesPorAgente.get(a.id) ?? [];
+    const saldoPorClub = balances.map((b: any) => {
+      const saldoNeto = b.system === "PREPAGO" ? Number(b.amount) + Number(b.total_fichas_ganadas_mesas) : Number(b.amount);
+      return {
+        clubId: b.club_id,
+        clubName: b.club_name,
+        system: b.system,
+        amount: Number(b.amount),
+        totalFichasGanadasMesas: Number(b.total_fichas_ganadas_mesas),
+        saldoNeto,
+      };
+    });
+    const saldoNetoTotal = saldoPorClub.reduce((s, b) => s + b.saldoNeto, 0);
+
+    const adelantosRows = adelantosPorAgente.get(a.id) ?? [];
+    const adelantos = adelantosRows.map((r: any) => ({
+      id: r.id,
+      amount: Number(r.amount),
+      consumed: Number(r.consumed),
+      disponible: Number(r.amount) - Number(r.consumed),
+      medio: r.medio ?? null,
+      clubOrigenName: r.club_origen_name ?? null,
+      notes: r.notes ?? null,
+      createdAt: r.created_at,
+    }));
+    const adelantosPendientes = adelantos.reduce((s, r) => s + r.disponible, 0);
+
+    return {
+      agentId: a.id,
+      agentName: a.name,
+      defaultSystem: a.default_system,
+      supervisor: a.supervisor ?? null,
+      saldoPorClub,
+      saldoNetoTotal,
+      adelantos,
+      adelantosPendientes,
+      saldoReal: saldoNetoTotal - adelantosPendientes,
+    };
+  });
+}
+
 // Semanas con al menos un cierre aplicado (para el selector del PDF) -- distinct week_start
 // entre todos los agentes, más reciente primero.
 export async function listSemanasConResumenAgente(): Promise<string[]> {

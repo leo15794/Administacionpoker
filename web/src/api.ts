@@ -705,6 +705,8 @@ export const api = {
   semanasConResumenAgente: () => request(`/agentes-resumen/semanas`),
   resumenAgentePDF: (agentId: string, weekStart: string, sistema: "WIN_LOSE" | "PREPAGO" = "WIN_LOSE") =>
     request(`/agentes-resumen/${agentId}/${weekStart}?sistema=${sistema}`),
+  // Saldos actuales (01/10/2026, pedido de Leo) -- foto de hoy de todos los agentes.
+  saldosActualesAgentes: () => request(`/agentes-resumen/saldos-actuales`),
   // Historial de resúmenes guardados (30/09/2026, pedido de Leo) -- se guarda automático al
   // bajar el PDF (ver ResumenAgentes.tsx), con filtro de fechas y borrado real para pruebas.
   guardarResumenHistorial: (data: {
