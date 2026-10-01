@@ -22,6 +22,11 @@ export default function Supervisores() {
   const [seleccionado, setSeleccionado] = useState<any | null>(null);
   const [subordinados, setSubordinados] = useState<any[] | null>(null);
   const [movimientos, setMovimientos] = useState<any[] | null>(null);
+  // Desglose de "cómo se compone el saldo" (01/10/2026, pedido de Leo): el saldo de la cuenta
+  // consolidada es un pool único (no tiene desglose vivo por agente, ver nota en
+  // repo/supervisores.ts), pero el saldo HISTÓRICO inicial que se migró sí quedó registrado
+  // línea por línea en supervisor_migracion_historica -- esto lo muestra.
+  const [migracion, setMigracion] = useState<any[] | null>(null);
   const [showMovimiento, setShowMovimiento] = useState(false);
   // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
   // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
@@ -44,8 +49,10 @@ export default function Supervisores() {
     setSubordinados(null);
     setMovimientos(null);
     setMostrarOcultos(false);
+    setMigracion(null);
     api.subordinadosSupervisor(s.id).then(setSubordinados);
     api.movimientosSupervisor(s.id).then(setMovimientos);
+    api.migracionHistoricaSupervisor(s.id).then(setMigracion);
   }
 
   async function toggleOcultoAgente(agentId: string, ocultar: boolean) {
@@ -162,6 +169,42 @@ export default function Supervisores() {
               <div className="value">{usd(Number(seleccionado.fichas_reales) + Number(seleccionado.cuenta_corriente))}</div>
             </div>
           </div>
+
+          <h4>Cómo se compone el saldo</h4>
+          {!migracion ? (
+            <div className="muted">Cargando...</div>
+          ) : migracion.length === 0 ? (
+            <div className="muted">Todavía no se migró ningún saldo histórico a esta cuenta.</div>
+          ) : (
+            <>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Saldo histórico que se trajo de cada agente al activar la cuenta consolidada (una sola vez, al arrancar) --
+                de acá en más el saldo solo cambia con "+ Carga / Descarga / Ajuste" de arriba (ver tabla de abajo).
+              </div>
+              <table>
+                <thead><tr><th>Agente</th><th>Club</th><th className="num">Fichas migradas</th><th className="num">Pendiente migrado</th><th>Notas</th></tr></thead>
+                <tbody>
+                  {migracion.map((m) => (
+                    <tr key={m.id}>
+                      <td>{m.agent_name}</td>
+                      <td className="muted">{m.club_name ?? "—"}</td>
+                      <td className="num">{usd(Number(m.fichas_migradas))}</td>
+                      <td className="num">{usd(Number(m.pendiente_migrado))}</td>
+                      <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 600 }}>
+                    <td colSpan={2}>Total</td>
+                    <td className="num">{usd(migracion.reduce((s, m) => s + Number(m.fichas_migradas), 0))}</td>
+                    <td className="num">{usd(migracion.reduce((s, m) => s + Number(m.pendiente_migrado), 0))}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </>
+          )}
 
           <h4>Agentes a cargo (solo lectura -- sin saldo propio)</h4>
           {!subordinados ? (
