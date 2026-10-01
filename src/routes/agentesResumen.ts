@@ -21,8 +21,11 @@ agentesResumenRouter.get("/semanas", requireAuth, requireAdmin, async (_req, res
 
 // Saldos actuales (01/10/2026, pedido de Leo) -- foto de HOY de todos los agentes activos, ver
 // repo/agentesResumen.ts. Separado a propósito del flujo de armar resumen semanal, que no cambia.
-agentesResumenRouter.get("/saldos-actuales", requireAuth, requireAdmin, async (_req, res) => {
-  res.json(await listSaldosActualesAgentes());
+// ?fecha=YYYY-MM-DD (01/10/2026, pedido de Leo: "agregar un filtro por fecha e ir reconstruyendo
+// los saldos") -- opcional, reconstruye el saldo de cada agente tal como estaba ese día.
+agentesResumenRouter.get("/saldos-actuales", requireAuth, requireAdmin, async (req, res) => {
+  const fecha = typeof req.query.fecha === "string" && req.query.fecha ? req.query.fecha : undefined;
+  res.json(await listSaldosActualesAgentes(fecha));
 });
 
 // Resumen completo de un agente para una semana (estado de cuenta + por club + detalle por

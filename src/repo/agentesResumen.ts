@@ -480,46 +480,188 @@ export interface SaldoActualAgente {
   saldoReal: number; // saldoNetoTotal - adelantosPendientes
 }
 
-export async function listSaldosActualesAgentes(): Promise<SaldoActualAgente[]> {
+export async function listSaldosActualesAgentes(fecha?: string): Promise<SaldoActualAgente[]> {
   const agentesRes = await pool.query(
     `SELECT id, name, default_system, supervisor FROM agents WHERE active = true ORDER BY name`
   );
 
-  const balancesRes = await pool.query(
-    `SELECT b.agent_id, b.club_id, c.name as club_name, b.amount,
+  if (!fecha) {
+    // Camino rápido (sin fecha = HOY): lee balances/rakeback_advances directo, mismo costo que
+    // ya tenía esta pantalla desde que se armó. El camino con fecha (abajo) reconstruye todo
+    // desde el historial de movimientos -- más caro, por eso solo se usa cuando Leo realmente
+    // pide "reconstruir a una fecha".
+    const balancesRes = await pool.query(
+      `SELECT b.agent_id, b.club_id, c.name as club_name, b.amount,
+              COALESCE(
+                (SELECT d.system FROM agent_club_deals d
+                 WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
+                 ORDER BY d.valid_from DESC LIMIT 1),
+                a.default_system
+              ) as system,
+              COALESCE(mesas.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas
+       FROM balances b
+       JOIN agents a ON a.id = b.agent_id
+       JOIN clubs c ON c.id = b.club_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+         FROM weekly_closings wc
+         WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+           AND wc.system = 'PREPAGO'
+       ) mesas ON true
+       WHERE a.active = true
+       ORDER BY c.name`
+    );
+
+    // kind = 'RAKEBACK' (01/10/2026, corrección encontrada al armar la reconstrucción por fecha
+    // de abajo): un adelanto kind='FICHAS_PENDIENTE' ya está adentro de balances.amount (mueve
+    // stock YA al darlo, ver ADELANTO_FICHAS en deltaParaBalance) -- sumarlo acá también
+    // restaría dos veces lo mismo. Mismo criterio que ya usa getAdelantoRakebackEnFechas
+    // (repo/advances.ts) para "Evolución del saldo".
+    const adelantosRes = await pool.query(
+      `SELECT ra.id, ra.agent_id, ra.amount, ra.consumed, ra.medio, ra.notes, ra.created_at,
+              c.name as club_origen_name
+       FROM rakeback_advances ra
+       LEFT JOIN clubs c ON c.id = ra.club_origen_id
+       WHERE ra.active = true AND ra.amount <> ra.consumed AND ra.kind = 'RAKEBACK'
+       ORDER BY ra.created_at`
+    );
+
+    const balancesPorAgente = new Map<string, any[]>();
+    for (const row of balancesRes.rows) {
+      const lista = balancesPorAgente.get(row.agent_id) ?? [];
+      lista.push(row);
+      balancesPorAgente.set(row.agent_id, lista);
+    }
+    const adelantosPorAgente = new Map<string, any[]>();
+    for (const row of adelantosRes.rows) {
+      const lista = adelantosPorAgente.get(row.agent_id) ?? [];
+      lista.push(row);
+      adelantosPorAgente.set(row.agent_id, lista);
+    }
+
+    return agentesRes.rows.map((a: any) => {
+      const balances = balancesPorAgente.get(a.id) ?? [];
+      const saldoPorClub = balances.map((b: any) => {
+        const saldoNeto = b.system === "PREPAGO" ? Number(b.amount) + Number(b.total_fichas_ganadas_mesas) : Number(b.amount);
+        return {
+          clubId: b.club_id,
+          clubName: b.club_name,
+          system: b.system,
+          amount: Number(b.amount),
+          totalFichasGanadasMesas: Number(b.total_fichas_ganadas_mesas),
+          saldoNeto,
+        };
+      });
+      const saldoNetoTotal = saldoPorClub.reduce((s, b) => s + b.saldoNeto, 0);
+
+      const adelantosRows = adelantosPorAgente.get(a.id) ?? [];
+      const adelantos = adelantosRows.map((r: any) => ({
+        id: r.id,
+        amount: Number(r.amount),
+        consumed: Number(r.consumed),
+        disponible: Number(r.amount) - Number(r.consumed),
+        medio: r.medio ?? null,
+        clubOrigenName: r.club_origen_name ?? null,
+        notes: r.notes ?? null,
+        createdAt: r.created_at,
+      }));
+      const adelantosPendientes = adelantos.reduce((s, r) => s + r.disponible, 0);
+
+      return {
+        agentId: a.id,
+        agentName: a.name,
+        defaultSystem: a.default_system,
+        supervisor: a.supervisor ?? null,
+        saldoPorClub,
+        saldoNetoTotal,
+        adelantos,
+        adelantosPendientes,
+        saldoReal: saldoNetoTotal - adelantosPendientes,
+      };
+    });
+  }
+
+  // Con fecha (01/10/2026, pedido de Leo: "agregar un filtro por fecha e ir reconstruyendo los
+  // saldos, ya lo habiamos realizado en otra seccion" -- misma máquina que ya usa "Evolución del
+  // saldo" (getSaldoHistorico/getAdelantoRakebackEnFechas), pero acá aplicada a TODOS los
+  // agentes a la vez, cada uno por separado, en vez de una sola selección combinada.
+  //
+  // Saldo por club reconstruido desde ledger_movements (mismo criterio exacto que
+  // deltaParaBalance/SALDO_HISTORICO_DELTA_SQL en repo/ledger.ts -- si algún día se toca esa
+  // función, hay que tocar esta también). TRANSFERENCIA_ENTRE_CLUBES necesita las DOS
+  // perspectivas (resta en el club de origen, suma en el de destino) -- por eso el UNION ALL:
+  // una fila de ledger_movements mueve el saldo de dos clubes distintos a la vez.
+  const deltasRes = await pool.query(
+    `WITH deltas AS (
+       SELECT m.agent_id, m.club_id,
+              CASE m.type
+                WHEN 'CARGA' THEN ABS(m.amount)
+                WHEN 'DESCARGA' THEN -ABS(m.amount)
+                WHEN 'COBRO' THEN -ABS(m.amount)
+                WHEN 'PAGO' THEN -ABS(m.amount)
+                WHEN 'TICKET_PROMOCIONAL' THEN m.amount
+                WHEN 'AJUSTE' THEN m.amount
+                WHEN 'CIERRE_SEMANAL' THEN m.amount
+                WHEN 'PAGO_RAKEBACK' THEN 0
+                WHEN 'ADELANTO_RAKEBACK' THEN 0
+                WHEN 'ADELANTO_FICHAS' THEN -ABS(m.amount)
+                WHEN 'TRANSFERENCIA_ENTRE_CLUBES' THEN -ABS(m.amount)
+                ELSE m.amount
+              END as delta
+       FROM ledger_movements m
+       WHERE m.status <> 'REVERTIDO' AND m.occurred_at::date <= $1::date
+       UNION ALL
+       SELECT m.agent_id, m.club_destino_id as club_id, ABS(m.amount) as delta
+       FROM ledger_movements m
+       WHERE m.status <> 'REVERTIDO' AND m.occurred_at::date <= $1::date
+         AND m.type = 'TRANSFERENCIA_ENTRE_CLUBES' AND m.club_destino_id IS NOT NULL
+     )
+     SELECT d.agent_id, d.club_id, c.name as club_name, SUM(d.delta) as amount,
             COALESCE(
-              (SELECT d.system FROM agent_club_deals d
-               WHERE d.agent_id = b.agent_id AND d.club_id = b.club_id AND d.valid_to IS NULL
-               ORDER BY d.valid_from DESC LIMIT 1),
+              (SELECT dl.system FROM agent_club_deals dl
+               WHERE dl.agent_id = d.agent_id AND dl.club_id = d.club_id AND dl.valid_to IS NULL
+               ORDER BY dl.valid_from DESC LIMIT 1),
               a.default_system
             ) as system,
             COALESCE(mesas.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas
-     FROM balances b
-     JOIN agents a ON a.id = b.agent_id
-     JOIN clubs c ON c.id = b.club_id
+     FROM deltas d
+     JOIN agents a ON a.id = d.agent_id
+     JOIN clubs c ON c.id = d.club_id
      LEFT JOIN LATERAL (
        SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
        FROM weekly_closings wc
-       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
-         AND wc.system = 'PREPAGO'
+       WHERE wc.agent_id = d.agent_id AND wc.club_id = d.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO' AND wc.week_end <= $1::date
      ) mesas ON true
-     WHERE a.active = true
-     ORDER BY c.name`
+     GROUP BY d.agent_id, d.club_id, c.name, a.default_system, mesas.total_fichas_ganadas_mesas
+     ORDER BY c.name`,
+    [fecha]
   );
 
-  // amount <> consumed (no ">" -- mismo criterio que pendientesAnterioresDetalle más arriba en
-  // este archivo): filtra los ya saldados del todo, para no ensuciar el desglose.
+  // Adelantos de rakeback pendientes reconstruidos a la fecha (mismo motor que
+  // getAdelantoRakebackEnFechas en repo/advances.ts, acá agrupado por agente en vez de por
+  // fecha -- la última fila de rakeback_advance_movements de cada adelanto que haya ocurrido
+  // hasta la fecha elegida, BAJA cuenta como 0, kind='RAKEBACK' únicamente -- ver nota arriba
+  // sobre por qué FICHAS_PENDIENTE no entra acá).
   const adelantosRes = await pool.query(
-    `SELECT ra.id, ra.agent_id, ra.amount, ra.consumed, ra.medio, ra.notes, ra.created_at,
-            c.name as club_origen_name
+    `SELECT ra.agent_id, ra.id, latest.resulting_amount, latest.resulting_consumed, latest.type,
+            ra.medio, ra.notes, ra.created_at, c.name as club_origen_name
      FROM rakeback_advances ra
      LEFT JOIN clubs c ON c.id = ra.club_origen_id
-     WHERE ra.active = true AND ra.amount <> ra.consumed
-     ORDER BY ra.created_at`
+     JOIN LATERAL (
+       SELECT ram.type, ram.resulting_amount, ram.resulting_consumed
+       FROM rakeback_advance_movements ram
+       WHERE ram.advance_id = ra.id AND ram.occurred_at::date <= $1::date
+       ORDER BY ram.occurred_at DESC, ram.id DESC
+       LIMIT 1
+     ) latest ON true
+     WHERE ra.kind = 'RAKEBACK' AND latest.type <> 'BAJA'
+       AND latest.resulting_amount <> latest.resulting_consumed`,
+    [fecha]
   );
 
   const balancesPorAgente = new Map<string, any[]>();
-  for (const row of balancesRes.rows) {
+  for (const row of deltasRes.rows) {
     const lista = balancesPorAgente.get(row.agent_id) ?? [];
     lista.push(row);
     balancesPorAgente.set(row.agent_id, lista);
@@ -534,13 +676,15 @@ export async function listSaldosActualesAgentes(): Promise<SaldoActualAgente[]> 
   return agentesRes.rows.map((a: any) => {
     const balances = balancesPorAgente.get(a.id) ?? [];
     const saldoPorClub = balances.map((b: any) => {
-      const saldoNeto = b.system === "PREPAGO" ? Number(b.amount) + Number(b.total_fichas_ganadas_mesas) : Number(b.amount);
+      const amount = Number(b.amount);
+      const totalFichasGanadasMesas = Number(b.total_fichas_ganadas_mesas);
+      const saldoNeto = b.system === "PREPAGO" ? amount + totalFichasGanadasMesas : amount;
       return {
         clubId: b.club_id,
         clubName: b.club_name,
         system: b.system,
-        amount: Number(b.amount),
-        totalFichasGanadasMesas: Number(b.total_fichas_ganadas_mesas),
+        amount,
+        totalFichasGanadasMesas,
         saldoNeto,
       };
     });
@@ -549,9 +693,9 @@ export async function listSaldosActualesAgentes(): Promise<SaldoActualAgente[]> 
     const adelantosRows = adelantosPorAgente.get(a.id) ?? [];
     const adelantos = adelantosRows.map((r: any) => ({
       id: r.id,
-      amount: Number(r.amount),
-      consumed: Number(r.consumed),
-      disponible: Number(r.amount) - Number(r.consumed),
+      amount: Number(r.resulting_amount),
+      consumed: Number(r.resulting_consumed),
+      disponible: Number(r.resulting_amount) - Number(r.resulting_consumed),
       medio: r.medio ?? null,
       clubOrigenName: r.club_origen_name ?? null,
       notes: r.notes ?? null,

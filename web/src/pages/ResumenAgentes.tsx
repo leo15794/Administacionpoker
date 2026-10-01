@@ -981,12 +981,17 @@ function SaldosActuales() {
   const [orden, setOrden] = useState<ColumnaOrdenSaldos>("saldoReal");
   const [ordenAsc, setOrdenAsc] = useState(false);
   const [expandido, setExpandido] = useState<string | null>(null);
+  // Reconstruir a una fecha (01/10/2026, pedido de Leo: "agregar un filtro por fecha e ir
+  // reconstruyendo los saldos, ya lo habiamos realizado en otra seccion" -- misma idea que
+  // "Evolución del saldo"). Vacío = HOY (camino rápido, lee balances directo). Con fecha,
+  // reconstruye cada agente desde el historial de movimientos -- tarda un poco más.
+  const [fecha, setFecha] = useState("");
 
-  function cargar() {
+  function cargar(fechaElegida?: string) {
     setCargando(true);
     setError("");
     api
-      .saldosActualesAgentes()
+      .saldosActualesAgentes(fechaElegida || undefined)
       .then(setDatos)
       .catch((err: any) => setError(err.message || "No se pudieron cargar los saldos."))
       .finally(() => setCargando(false));
@@ -994,7 +999,13 @@ function SaldosActuales() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function onFechaChange(v: string) {
+    setFecha(v);
+    cargar(v);
+  }
 
   function ordenarPor(col: ColumnaOrdenSaldos) {
     if (orden === col) {
@@ -1059,13 +1070,28 @@ function SaldosActuales() {
           <input type="checkbox" checked={mostrarEnCero} onChange={(e) => setMostrarEnCero(e.target.checked)} />
           Mostrar en cero
         </label>
-        <button type="button" className="btn secondary small" onClick={cargar} disabled={cargando}>
+        <div className="field" style={{ margin: 0 }}>
+          <label className="muted" style={{ fontSize: 11, display: "block" }}>Reconstruir a la fecha</label>
+          <input type="date" value={fecha} onChange={(e) => onFechaChange(e.target.value)} />
+        </div>
+        {fecha && (
+          <button type="button" className="btn secondary small" onClick={() => onFechaChange("")}>
+            Volver a hoy
+          </button>
+        )}
+        <button type="button" className="btn secondary small" onClick={() => cargar(fecha)} disabled={cargando}>
           {cargando ? "Actualizando..." : "Actualizar"}
         </button>
         <div className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>
           {filtrados.length} agente{filtrados.length === 1 ? "" : "s"}
         </div>
       </div>
+
+      {fecha && (
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          Mostrando el saldo reconstruido tal como estaba el {dateShort(fecha)} -- no el de hoy.
+        </div>
+      )}
 
       {error && <div className="error">{error}</div>}
       {cargando && !datos && <div className="muted">Cargando...</div>}
