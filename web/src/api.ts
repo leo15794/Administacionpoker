@@ -354,9 +354,6 @@ export const api = {
       modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
       exigirAgenteEnMovimientos?: boolean;
       consolidarCierres?: boolean;
-      // Puramente visual (01/10/2026, caso Uriel) -- oculta/muestra en "Agentes a cargo" de su
-      // supervisor consolidado, no mueve plata.
-      ocultoEnSupervisor?: boolean;
     }
   ) => request(`/catalog/agents/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // BORRADO REAL (no "dar de baja") — solo funciona si el agente no tiene ningún rastro
@@ -384,6 +381,10 @@ export const api = {
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
   migracionHistoricaSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/migracion-historica`),
+  // Ocultar/mostrar un subordinado (01/10/2026, caso Uriel): mueve el pool de Uriel de verdad
+  // (resta/suma el saldo actual del agente), ver repo/supervisores.ts setOcultoSubordinado.
+  ocultarAgenteSupervisor: (supervisorId: string, agentId: string, ocultar: boolean) =>
+    request(`/supervisores/${supervisorId}/agentes/${agentId}/ocultar`, { method: "POST", body: JSON.stringify({ ocultar }) }),
   registrarMigracionHistoricaSupervisor: (
     supervisorId: string,
     data: { lineas: { agentId: string; clubId?: string | null; fichasMigradas: number; pendienteMigrado: number; notes?: string | null }[] }

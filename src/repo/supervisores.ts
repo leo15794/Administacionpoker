@@ -291,6 +291,95 @@ export async function migrarSaldoHistoricoSupervisor(
   }
 }
 
+// Saldo ACTUAL de un subordinado (01/10/2026, pedido de Leo, caso Uriel: "se va actualizando
+// momento a momento" -- al ocultar/mostrar a un agente de la tabla "Agentes a cargo" hay que
+// restarle/sumarle a Uriel EXACTAMENTE lo que ese agente tiene EN ESE MOMENTO, no un valor
+// guardado de otra vez). Mismo cálculo que diagnosticoSaldoSupervisor.ts/
+// migrarSaldoHistoricoUriel.ts: fichas = balance crudo + resultado acumulado de mesas PREPAGO;
+// pendiente = rakeback_pendiente activo (amount-consumed). NUNCA toca el balance del agente --
+// solo lo lee, para calcular cuánto mover del lado del pool de Uriel.
+async function calcularSaldoActualDeSubordinado(agentId: string): Promise<{ fichas: number; pendiente: number; clubId: string | null }> {
+  const bal = await pool.query(`SELECT club_id, amount FROM balances WHERE agent_id = $1 AND amount <> 0`, [agentId]);
+  let balanceTotal = 0;
+  let clubId: string | null = null;
+  for (const b of bal.rows) {
+    balanceTotal += Number(b.amount);
+    if (!clubId) clubId = b.club_id;
+  }
+  const mesas = await pool.query(
+    `SELECT COALESCE(SUM(result), 0) as total_mesas FROM weekly_closings WHERE agent_id = $1 AND system = 'PREPAGO' AND status <> 'REVERTIDO'`,
+    [agentId]
+  );
+  const fichas = round2(balanceTotal + Number(mesas.rows[0].total_mesas));
+
+  const pend = await pool.query(
+    `SELECT club_id, amount, consumed FROM rakeback_pendiente WHERE agent_id = $1 AND active = true AND ABS(amount - consumed) > 0.004`,
+    [agentId]
+  );
+  let pendienteTotal = 0;
+  for (const p of pend.rows) {
+    pendienteTotal += Number(p.amount) - Number(p.consumed);
+    if (!clubId) clubId = p.club_id;
+  }
+  return { fichas, pendiente: round2(pendienteTotal), clubId };
+}
+
+// Ocultar/mostrar un subordinado (01/10/2026, pedido de Leo, caso Uriel): a diferencia de la
+// primera versión (puramente visual, "no mover plata" -- Leo cambió de idea después de probarlo
+// en Uriel), esto SÍ mueve el pool: ocultar resta a Uriel el saldo ACTUAL del agente (fichas y
+// pendiente), mostrar se lo devuelve recalculado en ESE momento (no el que tenía al ocultarlo --
+// confirmado por Leo: "se va actualizando momento a momento"). El agente nunca pierde su propio
+// balance -- esto solo mueve el pool de Uriel, vía un AJUSTE automático normal (reversible desde
+// "Movimientos manuales", igual que cualquier otro).
+export async function setOcultoSubordinado(supervisorAgentId: string, agentId: string, ocultar: boolean, createdBy?: string | null) {
+  const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+  if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
+
+  const ag = await pool.query(`SELECT * FROM agents WHERE id = $1`, [agentId]);
+  if (!ag.rows[0]) throw new Error("Agente no encontrado.");
+  if (ag.rows[0].supervisor !== sup.rows[0].name) throw new Error("Ese agente no está a cargo de este supervisor.");
+  if (!!ag.rows[0].oculto_en_supervisor === ocultar) {
+    throw new Error(ocultar ? `"${ag.rows[0].name}" ya está oculto.` : `"${ag.rows[0].name}" ya está visible.`);
+  }
+
+  const { fichas, pendiente, clubId } = await calcularSaldoActualDeSubordinado(agentId);
+  const signo = ocultar ? -1 : 1;
+  const clubParaMovimiento = clubId ?? (await pool.query(`SELECT id FROM clubs ORDER BY name LIMIT 1`)).rows[0]?.id ?? null;
+  if (!clubParaMovimiento) throw new Error("No hay ningún club cargado todavía -- no se puede registrar el ajuste.");
+
+  const accion = ocultar ? "Ocultar" : "Mostrar";
+  const verbo = ocultar ? "se descuenta" : "se devuelve";
+  if (Math.abs(fichas) > 0.004) {
+    await registrarMovimientoSupervisor({
+      supervisorAgentId,
+      clubId: clubParaMovimiento,
+      agentId,
+      type: "AJUSTE",
+      amount: round2(fichas * signo),
+      campoAjuste: "FICHAS",
+      notes: `${accion} a "${ag.rows[0].name}": ${verbo} su saldo actual en fichas del pool (ajuste automático).`,
+      createdBy: createdBy ?? null,
+    });
+  }
+  if (Math.abs(pendiente) > 0.004) {
+    await registrarMovimientoSupervisor({
+      supervisorAgentId,
+      clubId: clubParaMovimiento,
+      agentId,
+      type: "AJUSTE",
+      amount: round2(pendiente * signo),
+      campoAjuste: "CUENTA_CORRIENTE",
+      notes: `${accion} a "${ag.rows[0].name}": ${verbo} su pendiente de rakeback actual del pool (ajuste automático).`,
+      createdBy: createdBy ?? null,
+    });
+  }
+
+  await pool.query(`UPDATE agents SET oculto_en_supervisor = $1, updated_at = now() WHERE id = $2`, [ocultar, agentId]);
+
+  return { fichasMovidas: fichas, pendienteMovido: pendiente };
+}
+
 export async function listMigracionHistorica(supervisorAgentId: string) {
   const r = await pool.query(
     `SELECT smh.*, a.name as agent_name, c.name as club_name

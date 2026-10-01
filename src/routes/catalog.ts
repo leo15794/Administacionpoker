@@ -1066,8 +1066,6 @@ const agentEditSchema = z.object({
   modeloCuenta: z.enum(["PREPAGO", "WIN_LOSE"]).nullable().optional(),
   exigirAgenteEnMovimientos: z.boolean().optional(),
   consolidarCierres: z.boolean().optional(),
-  // Puramente visual (01/10/2026, caso Uriel) -- ver nota en schema.sql / repo/catalog.ts.
-  ocultoEnSupervisor: z.boolean().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -1085,7 +1083,6 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       modeloCuenta: parsed.data.modeloCuenta,
       exigirAgenteEnMovimientos: parsed.data.exigirAgenteEnMovimientos,
       consolidarCierres: parsed.data.consolidarCierres,
-      ocultoEnSupervisor: parsed.data.ocultoEnSupervisor,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);

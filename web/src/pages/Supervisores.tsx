@@ -55,13 +55,21 @@ export default function Supervisores() {
     api.migracionHistoricaSupervisor(s.id).then(setMigracion);
   }
 
-  async function toggleOcultoAgente(agentId: string, ocultar: boolean) {
+  async function toggleOcultoAgente(agentId: string, agentName: string, ocultar: boolean) {
     if (!seleccionado) return;
+    // Esto mueve plata de verdad (resta/suma el saldo actual del agente al pool de Uriel, ver
+    // repo/supervisores.ts setOcultoSubordinado) -- confirmación antes de aplicar, mismo criterio
+    // que "Revertir" acá abajo.
+    const mensaje = ocultar
+      ? `¿Ocultar a "${agentName}"? Se le va a restar a esta cuenta el saldo ACTUAL de ese agente (fichas + pendiente de rakeback). Se puede deshacer desde "Movimientos manuales" (Revertir) o volviendo a mostrarlo.`
+      : `¿Volver a mostrar a "${agentName}"? Se le va a sumar a esta cuenta el saldo ACTUAL de ese agente en este momento (no el que tenía cuando se ocultó).`;
+    if (!confirm(mensaje)) return;
     setOcultando(agentId);
     try {
-      await api.editarAgente(agentId, { ocultoEnSupervisor: ocultar });
+      await api.ocultarAgenteSupervisor(seleccionado.id, agentId, ocultar);
       const frescos = await api.subordinadosSupervisor(seleccionado.id);
       setSubordinados(frescos);
+      refrescarSeleccionado();
     } catch (err: any) {
       setError(err.message || "No se pudo actualizar el agente.");
     } finally {
@@ -235,8 +243,8 @@ export default function Supervisores() {
                               <button
                                 className="btn secondary small"
                                 disabled={ocultando === a.id}
-                                onClick={() => toggleOcultoAgente(a.id, true)}
-                                title="Ocultarlo de esta lista -- no toca su saldo ni lo da de baja, se puede volver a mostrar cuando quieras."
+                                onClick={() => toggleOcultoAgente(a.id, a.name, true)}
+                                title="Ocultarlo y restarle a Uriel su saldo actual -- no lo da de baja, se puede volver a mostrar cuando quieras."
                               >
                                 {ocultando === a.id ? "..." : "Ocultar"}
                               </button>
@@ -263,7 +271,7 @@ export default function Supervisores() {
                                     <button
                                       className="btn secondary small"
                                       disabled={ocultando === a.id}
-                                      onClick={() => toggleOcultoAgente(a.id, false)}
+                                      onClick={() => toggleOcultoAgente(a.id, a.name, false)}
                                     >
                                       {ocultando === a.id ? "..." : "Mostrar"}
                                     </button>

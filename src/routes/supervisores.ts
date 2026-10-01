@@ -10,6 +10,7 @@ import {
   revertirMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
+  setOcultoSubordinado,
 } from "../repo/supervisores.js";
 
 export const supervisoresRouter = Router();
@@ -30,6 +31,21 @@ supervisoresRouter.get("/:id/subordinados", requireAuth, requireAdmin, async (re
 
 supervisoresRouter.get("/:id/movimientos", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listMovimientosSupervisor(req.params.id));
+});
+
+const ocultarSchema = z.object({ ocultar: z.boolean() });
+// Ocultar/mostrar un subordinado (01/10/2026, caso Uriel): mueve el pool de verdad, ver nota en
+// repo/supervisores.ts setOcultoSubordinado -- reemplaza el intento anterior (puramente visual
+// vía PATCH /agents/:id) que Leo pidió cambiar después de probarlo.
+supervisoresRouter.post("/:id/agentes/:agentId/ocultar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = ocultarSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await setOcultoSubordinado(req.params.id, req.params.agentId, parsed.data.ocultar, req.user?.email);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const movimientoSchema = z.object({
