@@ -548,6 +548,17 @@ export const api = {
   ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
 
+  // Ajuste histórico de "Ganancia operativa histórica" (01/10/2026, caso planilla pre-sistema):
+  // suma un total aparte arriba del cálculo en vivo de los cierres reales -- ver
+  // repo/partnerAccounts.ts para por qué está separado de los movimientos de cuenta normales.
+  gananciaHistoricaAjustes: () => request("/partner-accounts/ganancia-historica"),
+  crearGananciaHistoricaAjuste: (data: { amount: number; concept: string; notes?: string }) =>
+    request("/partner-accounts/ganancia-historica", { method: "POST", body: JSON.stringify(data) }),
+  editarGananciaHistoricaAjuste: (id: string, data: Partial<{ amount: number; concept: string; notes: string }>) =>
+    request(`/partner-accounts/ganancia-historica/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  eliminarGananciaHistoricaAjuste: (id: string) =>
+    request(`/partner-accounts/ganancia-historica/${id}`, { method: "DELETE" }),
+
   // Ganancias por período + Ajustes extraordinarios (recreación de esas dos pestañas de la
   // planilla, 15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre y, al cerrarlo,
   // congela los números y consume una cuota de cada ajuste extraordinario todavía activo.

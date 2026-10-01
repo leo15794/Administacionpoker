@@ -585,6 +585,25 @@ CREATE TABLE IF NOT EXISTS partner_account_entries (
 );
 CREATE INDEX IF NOT EXISTS partner_account_entries_account_idx ON partner_account_entries(account_id);
 
+-- Ajuste histórico de "Ganancia operativa histórica" (01/10/2026, pedido explícito de Leo:
+-- quiere arrancar ese número desde el total de su planilla vieja, de ANTES de cargar cierres en
+-- este sistema -- plata que nunca va a poder estar en weekly_closings). Es una tabla aparte de
+-- partner_account_entries porque esto no es la plata de ningún socio puntual, es una corrección
+-- global al total histórico. getAgregadosSocios() suma esto arriba del cálculo en vivo de los
+-- cierres reales para armar "Ganancia operativa histórica" de Cuentas de socios -- Resumen
+-- ejecutivo, Resumen por club y Resumen financiero NO usan esta tabla, siguen siendo 100% el
+-- cálculo real de cierres (ver repo/partnerAccounts.ts). Editable/eliminable directo, mismo
+-- criterio de "control 100%" que el resto de Cuentas de socios.
+CREATE TABLE IF NOT EXISTS ganancia_operativa_ajustes_historicos (
+  id         TEXT PRIMARY KEY,
+  amount     NUMERIC(18,4) NOT NULL,
+  concept    TEXT NOT NULL,
+  notes      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by TEXT
+);
+
 -- ============ STOCK FÍSICO POR CUENTA (equivalente a "Stock por cuenta (fuente)" de la
 -- planilla "Stock y deudas consolidados") ============
 -- Fichas físicas que tiene cada cuenta (agente) EN CUSTODIA dentro de un club — dato que nadie

@@ -27,6 +27,7 @@ export default function CuentasSocios() {
   const { confirmDialog, alertDialog } = useConfirmDialog();
   const [cuentas, setCuentas] = useState<any[] | null>(null);
   const [agregados, setAgregados] = useState<any | null>(null);
+  const [ajustesHistoricos, setAjustesHistoricos] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   const [expandida, setExpandida] = useState<string | null>(null);
   const [movimientos, setMovimientos] = useState<Record<string, any[]>>({});
@@ -34,12 +35,15 @@ export default function CuentasSocios() {
   const [showEditarCuenta, setShowEditarCuenta] = useState<any | null>(null);
   const [showNuevoMov, setShowNuevoMov] = useState<string | null>(null);
   const [showEditarMov, setShowEditarMov] = useState<any | null>(null);
+  const [showNuevoAjusteHistorico, setShowNuevoAjusteHistorico] = useState(false);
+  const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
     api.cuentasSocios().then(setCuentas).catch((e) => setError(e.message));
     api.cuentasSociosAgregados().then(setAgregados).catch(() => {});
+    api.gananciaHistoricaAjustes().then(setAjustesHistoricos).catch(() => {});
   }
 
   function cargarMovimientos(accountId: string) {
@@ -82,6 +86,19 @@ export default function CuentasSocios() {
     }
   }
 
+  async function eliminarAjusteHistorico(a: any) {
+    if (!(await confirmDialog(`¿Eliminar el ajuste histórico "${a.concept}" (${usd(a.amount)})? No se puede deshacer.`))) return;
+    setBorrando(a.id);
+    try {
+      await api.eliminarGananciaHistoricaAjuste(a.id);
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar el ajuste.");
+    } finally {
+      setBorrando(null);
+    }
+  }
+
   useEffect(() => {
     refresh();
   }, []);
@@ -116,7 +133,10 @@ export default function CuentasSocios() {
           <div className="kpi-card">
             <div className="label">Ganancia operativa histórica</div>
             <div className="value">{usd(agregados.gananciaOperativaHistorica)}</div>
-            <div className="muted" style={{ fontSize: 12 }}>Suma de rake − rakeback − rebate de todos los cierres reales</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Ganancia real de todos los cierres (misma cuenta que Resumen ejecutivo/por club/financiero)
+              {ajustesHistoricos && ajustesHistoricos.length > 0 ? " + ajuste histórico de abajo" : ""}
+            </div>
           </div>
           <div className="kpi-card">
             <div className="label">Retiros de socios</div>
@@ -140,6 +160,49 @@ export default function CuentasSocios() {
           </div>
         </div>
       )}
+
+      <div className="panel">
+        <div className="topbar" style={{ marginBottom: ajustesHistoricos?.length ? 14 : 0 }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Ajuste histórico de ganancia operativa</h3>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              Para arrancar "Ganancia operativa histórica" desde un total viejo (planilla de antes de usar este
+              sistema) sin tocar el cálculo en vivo de los cierres reales. Se suma arriba de ese cálculo — no
+              afecta a Resumen ejecutivo, Resumen por club ni Resumen financiero.
+            </div>
+          </div>
+          <button className="btn secondary" onClick={() => setShowNuevoAjusteHistorico(true)}>+ Ajuste histórico</button>
+        </div>
+        {ajustesHistoricos && ajustesHistoricos.length > 0 && (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Concepto</th><th>Fecha</th><th className="num">Monto</th><th></th></tr>
+              </thead>
+              <tbody>
+                {ajustesHistoricos.map((a) => (
+                  <tr key={a.id} title={a.notes || undefined}>
+                    <td>{a.concept}</td>
+                    <td className="muted">{dateShort(a.created_at)}</td>
+                    <td className={`num ${Number(a.amount) >= 0 ? "pos" : "neg"}`}>{usd(a.amount)}</td>
+                    <td className="row-actions">
+                      <button className="btn secondary small" onClick={() => setShowEditarAjusteHistorico(a)}>Editar</button>
+                      <button
+                        className="btn secondary small"
+                        disabled={borrando === a.id}
+                        onClick={() => eliminarAjusteHistorico(a)}
+                        style={{ color: "var(--red)" }}
+                      >
+                        {borrando === a.id ? "..." : "Eliminar"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="panel">
         <h3>Cuentas</h3>
@@ -280,6 +343,29 @@ export default function CuentasSocios() {
           />
         </Modal>
       )}
+
+      {showNuevoAjusteHistorico && (
+        <Modal title="Ajuste histórico de ganancia operativa" onClose={() => setShowNuevoAjusteHistorico(false)}>
+          <GananciaHistoricaForm
+            onDone={() => {
+              setShowNuevoAjusteHistorico(false);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
+
+      {showEditarAjusteHistorico && (
+        <Modal title="Editar ajuste histórico" onClose={() => setShowEditarAjusteHistorico(null)}>
+          <GananciaHistoricaForm
+            ajuste={showEditarAjusteHistorico}
+            onDone={() => {
+              setShowEditarAjusteHistorico(null);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -399,6 +485,66 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : movimiento ? "Guardar" : "Agregar movimiento"}</button>
+    </form>
+  );
+}
+
+function GananciaHistoricaForm({ ajuste, onDone }: { ajuste?: any; onDone: () => void }) {
+  const [amount, setAmount] = useState(ajuste ? String(ajuste.amount) : "");
+  const [concept, setConcept] = useState(ajuste?.concept ?? "");
+  const [notes, setNotes] = useState(ajuste?.notes ?? "");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!concept.trim()) return setMsg({ ok: false, text: "El concepto es obligatorio." });
+    const monto = Number(amount);
+    if (!monto) return setMsg({ ok: false, text: "El monto no puede ser 0." });
+    setLoading(true);
+    try {
+      if (ajuste) {
+        await api.editarGananciaHistoricaAjuste(ajuste.id, { amount: monto, concept: concept.trim(), notes: notes.trim() });
+      } else {
+        await api.crearGananciaHistoricaAjuste({ amount: monto, concept: concept.trim(), notes: notes.trim() || undefined });
+      }
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar el ajuste." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Esto se suma (o resta, si cargás un monto negativo) directo a "Ganancia operativa histórica" en Cuentas de
+        socios — no toca el cálculo de Resumen ejecutivo, Resumen por club ni Resumen financiero, que siguen siendo
+        100% los cierres reales cargados en el sistema.
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Monto (USD)</label>
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" />
+        </div>
+      </div>
+      <div className="field">
+        <label>Concepto</label>
+        <input
+          value={concept}
+          onChange={(e) => setConcept(e.target.value)}
+          placeholder="Ej: Ganancia histórica de la planilla vieja (previo a cargar cierres acá)"
+        />
+      </div>
+      <div className="field">
+        <label>Notas (opcional)</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : ajuste ? "Guardar" : "Agregar ajuste"}</button>
     </form>
   );
 }

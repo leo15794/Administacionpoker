@@ -132,6 +132,54 @@ function toFecha(d: string | Date): string {
   return new Date(d).toISOString().slice(0, 10);
 }
 
+export interface GananciaHistoricaAjusteInput {
+  amount: number; // libre, +/- -- normalmente positivo (ganancia de antes de usar el sistema)
+  concept: string;
+  notes?: string;
+}
+
+// Ajustes a "Ganancia operativa histórica" (ver comentario en schema.sql) -- para arrancar ese
+// número desde un total viejo (planilla pre-sistema) sin tocar el cálculo en vivo de los cierres
+// reales que comparten Resumen ejecutivo / Resumen por club / Resumen financiero.
+export async function listGananciaHistoricaAjustes() {
+  const r = await pool.query(`SELECT * FROM ganancia_operativa_ajustes_historicos ORDER BY created_at DESC`);
+  return r.rows;
+}
+
+export async function crearGananciaHistoricaAjuste(input: GananciaHistoricaAjusteInput, createdBy?: string) {
+  if (!input.concept.trim()) throw new Error("El concepto es obligatorio.");
+  if (!(input.amount !== 0)) throw new Error("El monto no puede ser 0.");
+  const id = newId("ghaj");
+  const r = await pool.query(
+    `INSERT INTO ganancia_operativa_ajustes_historicos (id, amount, concept, notes, created_by)
+     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [id, input.amount, input.concept.trim(), input.notes?.trim() || null, createdBy || null]
+  );
+  return r.rows[0];
+}
+
+export async function editarGananciaHistoricaAjuste(id: string, input: Partial<GananciaHistoricaAjusteInput>) {
+  if (input.amount !== undefined && input.amount === 0) throw new Error("El monto no puede ser 0.");
+  const r = await pool.query(
+    `UPDATE ganancia_operativa_ajustes_historicos SET
+       amount = COALESCE($1, amount),
+       concept = COALESCE($2, concept),
+       notes = CASE WHEN $3::boolean THEN $4 ELSE notes END,
+       updated_at = now()
+     WHERE id = $5 RETURNING *`,
+    [input.amount ?? null, input.concept?.trim() || null, input.notes !== undefined, input.notes?.trim() || null, id]
+  );
+  if (!r.rows[0]) throw new Error("No se encontró ese ajuste.");
+  return r.rows[0];
+}
+
+// Borrado real -- control 100% pedido explícitamente por el usuario, mismo criterio que el
+// resto de este módulo.
+export async function eliminarGananciaHistoricaAjuste(id: string) {
+  const r = await pool.query(`DELETE FROM ganancia_operativa_ajustes_historicos WHERE id = $1 RETURNING id`, [id]);
+  if (r.rowCount === 0) throw new Error("No se encontró ese ajuste.");
+}
+
 /**
  * Agregados estilo "CONTROL_GANANCIAS" de la planilla — pero la ganancia operativa sale en vivo
  * de nuestros propios weekly_closings (todas las semanas con cierre real, no solo la última) en
@@ -156,7 +204,14 @@ export async function getAgregadosSocios() {
   const resumenes = await Promise.all(
     clubesSemana.rows.map((r) => getResumenClubSemanal(r.club_id, toFecha(r.week_start)))
   );
-  const gananciaOperativa = round2(resumenes.reduce((s, r) => s + (r ? Number(r.gananciaNeta) : 0), 0));
+  const gananciaCierres = resumenes.reduce((s, r) => s + (r ? Number(r.gananciaNeta) : 0), 0);
+
+  // Ajustes históricos (planilla pre-sistema, ver tabla ganancia_operativa_ajustes_historicos) --
+  // se suman arriba del cálculo en vivo SOLO acá, nunca en getResumenClubSemanal.
+  const ajustesHistoricos = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM ganancia_operativa_ajustes_historicos`
+  );
+  const gananciaOperativa = round2(gananciaCierres + Number(ajustesHistoricos.rows[0].total));
 
   const porCategoria = await pool.query(
     `SELECT category, COALESCE(SUM(amount), 0) as total

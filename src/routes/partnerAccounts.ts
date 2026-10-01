@@ -11,6 +11,10 @@ import {
   editarMovimiento,
   eliminarMovimiento,
   getAgregadosSocios,
+  listGananciaHistoricaAjustes,
+  crearGananciaHistoricaAjuste,
+  editarGananciaHistoricaAjuste,
+  eliminarGananciaHistoricaAjuste,
 } from "../repo/partnerAccounts.js";
 
 export const partnerAccountsRouter = Router();
@@ -112,6 +116,53 @@ partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (
 partnerAccountsRouter.delete("/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
     await eliminarMovimiento(req.params.id);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Ajustes a "Ganancia operativa histórica" (planilla pre-sistema) -- ver repo/partnerAccounts.ts.
+partnerAccountsRouter.get("/ganancia-historica", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listGananciaHistoricaAjustes());
+});
+
+const gananciaHistoricaSchema = z.object({
+  amount: z.number().refine((n) => n !== 0, "El monto no puede ser 0."),
+  concept: z.string().min(1, "El concepto es obligatorio."),
+  notes: z.string().optional(),
+});
+
+partnerAccountsRouter.post("/ganancia-historica", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = gananciaHistoricaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.status(201).json(await crearGananciaHistoricaAjuste(parsed.data, req.user?.email));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const gananciaHistoricaUpdateSchema = z.object({
+  amount: z.number().refine((n) => n !== 0, "El monto no puede ser 0.").optional(),
+  concept: z.string().min(1).optional(),
+  notes: z.string().optional(),
+});
+
+partnerAccountsRouter.put("/ganancia-historica/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = gananciaHistoricaUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await editarGananciaHistoricaAjuste(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Borrado real — control 100% pedido explícitamente por el usuario para este módulo.
+partnerAccountsRouter.delete("/ganancia-historica/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    await eliminarGananciaHistoricaAjuste(req.params.id);
     res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
