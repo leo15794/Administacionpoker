@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
@@ -146,89 +146,88 @@ export default function CuentasSocios() {
         {cuentas.length === 0 ? (
           <div className="muted">Todavía no hay ninguna cuenta cargada — creá una con "+ Nueva cuenta" (ej. "Uriel", "Juan").</div>
         ) : (
-          <table>
-            <thead>
-              <tr><th>Cuenta</th><th>Descripción</th><th className="num">Saldo</th><th className="num">Movimientos</th><th></th></tr>
-            </thead>
-            <tbody>
-              {cuentas.map((c) => (
-                <Fragment key={c.id}>
-                  <tr>
-                    <td><strong>{c.name}</strong></td>
-                    <td className="muted" style={{ fontSize: 12 }} title={c.description || undefined}>{c.description || "—"}</td>
-                    <td className="num"><span className={`badge ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</span></td>
-                    <td className="num">{c.movimientos}</td>
-                    <td className="row-actions">
-                      <button className="btn secondary small" onClick={() => toggleExpandir(c.id)}>
-                        {expandida === c.id ? "Ocultar" : "Ver movimientos"}
-                      </button>
-                      <button className="btn secondary small" onClick={() => setShowNuevoMov(c.id)}>
-                        + Movimiento
-                      </button>
-                      <button className="btn secondary small" onClick={() => setShowEditarCuenta(c)}>
-                        Editar
-                      </button>
-                      <button
-                        className="btn secondary small"
-                        disabled={borrando === c.id}
-                        onClick={() => eliminarCuenta(c)}
-                        title="Borrado real — la cuenta y todos sus movimientos."
-                        style={{ color: "var(--red)" }}
-                      >
-                        {borrando === c.id ? "..." : "Eliminar"}
-                      </button>
-                    </td>
-                  </tr>
-                  {expandida === c.id && (
-                    <tr>
-                      <td colSpan={5} style={{ background: "var(--panel-soft, rgba(255,255,255,0.03))" }}>
-                        {!movimientos[c.id] ? (
-                          <div className="muted">Cargando...</div>
-                        ) : movimientos[c.id].length === 0 ? (
-                          <div className="muted">Sin movimientos todavía.</div>
-                        ) : (
-                          <table>
-                            <thead>
-                              <tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th className="num">Monto</th><th>Notas</th><th></th></tr>
-                            </thead>
-                            <tbody>
-                              {movimientos[c.id].map((m) => (
-                                <tr key={m.id}>
-                                  <td>{dateShort(m.entry_date)}</td>
-                                  <td><span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span></td>
-                                  <td>
-                                    {m.concept}
-                                    {m.idempotency_key && (
-                                      <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Generado automáticamente por un cierre semanal — para corregirlo, corregí o revertí el cierre de origen, no este movimiento.">
-                                        Auto
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className={`num ${Number(m.amount) >= 0 ? "pos" : "neg"}`}>{usd(m.amount)}</td>
-                                  <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
-                                  <td className="row-actions">
-                                    <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
-                                    <button
-                                      className="btn secondary small"
-                                      disabled={borrando === m.id}
-                                      onClick={() => eliminarMovimiento(m)}
-                                      style={{ color: "var(--red)" }}
-                                    >
-                                      {borrando === m.id ? "..." : "Eliminar"}
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+          <div className="cuentas-grid">
+            {cuentas.map((c) => (
+              <div className="cuenta-card" key={c.id}>
+                <div className="cuenta-card-header">
+                  <div>
+                    <div className="cuenta-card-name">{c.name}</div>
+                    {c.description && (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }} title={c.description}>{c.description}</div>
+                    )}
+                  </div>
+                  <div className={`cuenta-card-saldo ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</div>
+                </div>
+                <div className="cuenta-card-meta">{c.movimientos} movimiento{c.movimientos === 1 ? "" : "s"}</div>
+                <div className="row-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
+                  <button className="btn secondary small" onClick={() => toggleExpandir(c.id)}>
+                    {expandida === c.id ? "Ocultar" : "Ver movimientos"}
+                  </button>
+                  <button className="btn secondary small" onClick={() => setShowNuevoMov(c.id)}>
+                    + Movimiento
+                  </button>
+                  <button className="btn secondary small" onClick={() => setShowEditarCuenta(c)}>
+                    Editar
+                  </button>
+                  <button
+                    className="btn secondary small"
+                    disabled={borrando === c.id}
+                    onClick={() => eliminarCuenta(c)}
+                    title="Borrado real — la cuenta y todos sus movimientos."
+                    style={{ color: "var(--red)" }}
+                  >
+                    {borrando === c.id ? "..." : "Eliminar"}
+                  </button>
+                </div>
+                {expandida === c.id && (
+                  <div className="cuenta-card-expand">
+                    {!movimientos[c.id] ? (
+                      <div className="muted">Cargando...</div>
+                    ) : movimientos[c.id].length === 0 ? (
+                      <div className="muted">Sin movimientos todavía.</div>
+                    ) : (
+                      <div className="table-scroll">
+                        <table>
+                          <thead>
+                            <tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th className="num">Monto</th><th>Notas</th><th></th></tr>
+                          </thead>
+                          <tbody>
+                            {movimientos[c.id].map((m) => (
+                              <tr key={m.id}>
+                                <td>{dateShort(m.entry_date)}</td>
+                                <td><span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span></td>
+                                <td>
+                                  {m.concept}
+                                  {m.idempotency_key && (
+                                    <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Generado automáticamente por un cierre semanal — para corregirlo, corregí o revertí el cierre de origen, no este movimiento.">
+                                      Auto
+                                    </span>
+                                  )}
+                                </td>
+                                <td className={`num ${Number(m.amount) >= 0 ? "pos" : "neg"}`}>{usd(m.amount)}</td>
+                                <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                                <td className="row-actions">
+                                  <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
+                                  <button
+                                    className="btn secondary small"
+                                    disabled={borrando === m.id}
+                                    onClick={() => eliminarMovimiento(m)}
+                                    style={{ color: "var(--red)" }}
+                                  >
+                                    {borrando === m.id ? "..." : "Eliminar"}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

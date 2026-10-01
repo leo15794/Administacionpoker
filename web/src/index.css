@@ -418,6 +418,50 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
   box-shadow: 0 0 0 1px var(--accent, #2dbe85) inset;
 }
 
+/* ---------- cuentas de socios: una tarjeta por cuenta (en vez de fila de tabla), para ver
+   y editar el saldo de cada una de un vistazo -- ver web/src/pages/CuentasSocios.tsx ---------- */
+.cuentas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.cuenta-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.cuenta-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+.cuenta-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cuenta-card-name { font-size: 15px; font-weight: 700; }
+.cuenta-card-saldo {
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cuenta-card-saldo.pos { color: var(--green); }
+.cuenta-card-saldo.neg { color: var(--red); }
+.cuenta-card-meta { font-size: 12px; color: var(--text-dim); }
+.cuenta-card-expand {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 12px;
+}
+
 /* ---------- chips (filtros rápidos tipo "toggle") ---------- */
 .chip {
   border: 1px solid var(--border);
