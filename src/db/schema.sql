@@ -567,6 +567,19 @@ CREATE TABLE IF NOT EXISTS partner_accounts (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- "SOCIO" = cuenta corriente de una persona puntual (Juan, Fede, Manos): tiene sentido un saldo
+-- debe/favor porque hay alguien del otro lado. "OPERATIVA" = cuenta de gastos o de retiros
+-- (Gastos operativo, Retiros de socios): solo acumula un total, no es una deuda de nadie, así
+-- que la UI no le aplica colores ni texto de "debe/a favor". Default SOCIO para no romper nada
+-- existente; el usuario marca a mano cuáles son operativas desde "Editar cuenta".
+ALTER TABLE partner_accounts ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'SOCIO' CHECK (kind IN ('SOCIO','OPERATIVA'));
+
+-- Backfill de las dos cuentas operativas ya existentes (nombres tal cual los usa el usuario) --
+-- idempotente, no pisa si ya las marcó distinto a mano.
+UPDATE partner_accounts SET kind = 'OPERATIVA'
+WHERE lower(trim(name)) IN ('gastos operativo', 'gastos operativos', 'retiros de socios', 'retiro de socios')
+  AND kind <> 'OPERATIVA';
+
 -- Movimientos de una cuenta: el monto es libre (+/-), quien carga decide el signo — no hay
 -- ALTA/AUMENTO/REDUCCION como en garantías/adelantos, para que editar sea directo (poner el
 -- monto correcto y listo). `category` es solo una etiqueta para poder agregar por tipo en los

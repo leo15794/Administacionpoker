@@ -30,6 +30,7 @@ partnerAccountsRouter.get("/agregados", requireAuth, requireAdmin, async (_req, 
 const cuentaSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
   description: z.string().optional(),
+  kind: z.enum(["SOCIO", "OPERATIVA"]).optional(),
 });
 
 partnerAccountsRouter.post("/", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
@@ -45,6 +46,7 @@ partnerAccountsRouter.post("/", requireAuth, requireAdmin, async (req: AuthedReq
 const cuentaUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
+  kind: z.enum(["SOCIO", "OPERATIVA"]).optional(),
 });
 
 partnerAccountsRouter.put("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {

@@ -8,9 +8,12 @@ import { getResumenClubSemanal } from "./clubResumen.js";
 
 export type PartnerEntryCategory = "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
 
+export type PartnerAccountKind = "SOCIO" | "OPERATIVA";
+
 export interface PartnerAccountInput {
   name: string;
   description?: string;
+  kind?: PartnerAccountKind;
 }
 
 export interface PartnerEntryInput {
@@ -39,8 +42,8 @@ export async function crearCuenta(input: PartnerAccountInput) {
   if (!input.name.trim()) throw new Error("El nombre de la cuenta es obligatorio.");
   const id = newId("pacc");
   const r = await pool.query(
-    `INSERT INTO partner_accounts (id, name, description) VALUES ($1,$2,$3) RETURNING *`,
-    [id, input.name.trim(), input.description?.trim() || null]
+    `INSERT INTO partner_accounts (id, name, description, kind) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, input.name.trim(), input.description?.trim() || null, input.kind || "SOCIO"]
   );
   return r.rows[0];
 }
@@ -50,9 +53,10 @@ export async function editarCuenta(id: string, input: Partial<PartnerAccountInpu
     `UPDATE partner_accounts SET
        name = COALESCE($1, name),
        description = CASE WHEN $2::boolean THEN $3 ELSE description END,
+       kind = COALESCE($4, kind),
        updated_at = now()
-     WHERE id = $4 RETURNING *`,
-    [input.name?.trim() || null, input.description !== undefined, input.description?.trim() || null, id]
+     WHERE id = $5 RETURNING *`,
+    [input.name?.trim() || null, input.description !== undefined, input.description?.trim() || null, input.kind || null, id]
   );
   if (!r.rows[0]) throw new Error("No se encontró esa cuenta.");
   return r.rows[0];

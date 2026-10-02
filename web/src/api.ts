@@ -521,9 +521,9 @@ export const api = {
   // etc.) — plata de los socios, no de agentes. Control total: editar y eliminar directo.
   cuentasSocios: () => request("/partner-accounts"),
   cuentasSociosAgregados: () => request("/partner-accounts/agregados"),
-  crearCuentaSocio: (data: { name: string; description?: string }) =>
+  crearCuentaSocio: (data: { name: string; description?: string; kind?: "SOCIO" | "OPERATIVA" }) =>
     request("/partner-accounts", { method: "POST", body: JSON.stringify(data) }),
-  editarCuentaSocio: (id: string, data: { name?: string; description?: string }) =>
+  editarCuentaSocio: (id: string, data: { name?: string; description?: string; kind?: "SOCIO" | "OPERATIVA" }) =>
     request(`/partner-accounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarCuentaSocio: (id: string) => request(`/partner-accounts/${id}`, { method: "DELETE" }),
   movimientosCuentasSocios: (accountId?: string) =>

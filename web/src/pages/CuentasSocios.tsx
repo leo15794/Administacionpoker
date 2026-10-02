@@ -228,10 +228,26 @@ export default function CuentasSocios() {
             {cuentas.map((c) => (
               <div className="cuenta-card" key={c.id}>
                 <div className="cuenta-card-header">
-                  <div className="cuenta-card-name">{c.name}</div>
+                  <div className="cuenta-card-name">
+                    {c.name}
+                    {c.kind === "OPERATIVA" && (
+                      <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Cuenta operativa: solo un total acumulado, no es una deuda de ni hacia nadie.">
+                        Operativa
+                      </span>
+                    )}
+                  </div>
                   <div style={{ textAlign: "right" }}>
-                    <div className={`cuenta-card-saldo ${claseDebeFavor(c.saldo)}`}>{usd(c.saldo)}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>{labelDebeFavor(c.saldo)}</div>
+                    {c.kind === "OPERATIVA" ? (
+                      <>
+                        <div className="cuenta-card-saldo">{usd(c.saldo)}</div>
+                        <div className="muted" style={{ fontSize: 11 }}>total acumulado</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className={`cuenta-card-saldo ${claseDebeFavor(c.saldo)}`}>{usd(c.saldo)}</div>
+                        <div className="muted" style={{ fontSize: 11 }}>{labelDebeFavor(c.saldo)}</div>
+                      </>
+                    )}
                   </div>
                 </div>
                 {c.description && (
@@ -283,7 +299,7 @@ export default function CuentasSocios() {
                                     </span>
                                   )}
                                 </td>
-                                <td className={`num ${claseDebeFavor(m.amount)}`}>{usd(m.amount)}</td>
+                                <td className={`num ${c.kind === "OPERATIVA" ? "" : claseDebeFavor(m.amount)}`}>{usd(m.amount)}</td>
                                 <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                                 <td className="row-actions">
                                   <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
@@ -391,6 +407,7 @@ export default function CuentasSocios() {
 function CuentaForm({ cuenta, onDone }: { cuenta?: any; onDone: () => void }) {
   const [name, setName] = useState(cuenta?.name ?? "");
   const [description, setDescription] = useState(cuenta?.description ?? "");
+  const [kind, setKind] = useState<"SOCIO" | "OPERATIVA">(cuenta?.kind === "OPERATIVA" ? "OPERATIVA" : "SOCIO");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -400,8 +417,8 @@ function CuentaForm({ cuenta, onDone }: { cuenta?: any; onDone: () => void }) {
     if (!name.trim()) return setMsg({ ok: false, text: "El nombre es obligatorio." });
     setLoading(true);
     try {
-      if (cuenta) await api.editarCuentaSocio(cuenta.id, { name: name.trim(), description: description.trim() });
-      else await api.crearCuentaSocio({ name: name.trim(), description: description.trim() || undefined });
+      if (cuenta) await api.editarCuentaSocio(cuenta.id, { name: name.trim(), description: description.trim(), kind });
+      else await api.crearCuentaSocio({ name: name.trim(), description: description.trim() || undefined, kind });
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo guardar la cuenta." });
@@ -419,6 +436,17 @@ function CuentaForm({ cuenta, onDone }: { cuenta?: any; onDone: () => void }) {
       <div className="field">
         <label>Descripción (opcional)</label>
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej: Comisión por referido Demiurge (10% de su rake)" />
+      </div>
+      <div className="field">
+        <label>Tipo de cuenta</label>
+        <select value={kind} onChange={(e) => setKind(e.target.value as "SOCIO" | "OPERATIVA")}>
+          <option value="SOCIO">Socio (persona) — el saldo es debe/a favor</option>
+          <option value="OPERATIVA">Categoría operativa (gastos, retiros) — solo un total, no es una deuda</option>
+        </select>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          Usá "Categoría operativa" para cuentas como "Gastos operativo" o "Retiros de socios": ahí no hay una persona
+          a la que se le deba o se le deba plata, solo un total acumulado.
+        </div>
       </div>
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
