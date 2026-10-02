@@ -44,7 +44,7 @@ export default function CuentasSocios() {
   const [agregados, setAgregados] = useState<any | null>(null);
   const [ajustesHistoricos, setAjustesHistoricos] = useState<any[] | null>(null);
   const [error, setError] = useState("");
-  const [expandida, setExpandida] = useState<string | null>(null);
+  const [showMovimientosDe, setShowMovimientosDe] = useState<string | null>(null);
   const [movimientos, setMovimientos] = useState<Record<string, any[]>>({});
   const [showNuevaCuenta, setShowNuevaCuenta] = useState(false);
   const [showEditarCuenta, setShowEditarCuenta] = useState<any | null>(null);
@@ -65,12 +65,8 @@ export default function CuentasSocios() {
     api.movimientosCuentasSocios(accountId).then((rows) => setMovimientos((m) => ({ ...m, [accountId]: rows })));
   }
 
-  function toggleExpandir(accountId: string) {
-    if (expandida === accountId) {
-      setExpandida(null);
-      return;
-    }
-    setExpandida(accountId);
+  function abrirMovimientos(accountId: string) {
+    setShowMovimientosDe(accountId);
     if (!movimientos[accountId]) cargarMovimientos(accountId);
   }
 
@@ -129,6 +125,8 @@ export default function CuentasSocios() {
     );
   }
   if (!cuentas) return <div className="muted">Cargando...</div>;
+
+  const cuentaMovimientos = showMovimientosDe ? cuentas.find((c) => c.id === showMovimientosDe) ?? null : null;
 
   return (
     <div>
@@ -255,8 +253,8 @@ export default function CuentasSocios() {
                 )}
                 <div className="cuenta-card-meta">{c.movimientos} movimiento{c.movimientos === 1 ? "" : "s"}</div>
                 <div className="row-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-                  <button className="btn secondary small" onClick={() => toggleExpandir(c.id)}>
-                    {expandida === c.id ? "Ocultar" : "Ver movimientos"}
+                  <button className="btn secondary small" onClick={() => abrirMovimientos(c.id)}>
+                    Ver movimientos
                   </button>
                   <button className="btn secondary small" onClick={() => setShowNuevoMov(c.id)}>
                     + Movimiento
@@ -274,52 +272,6 @@ export default function CuentasSocios() {
                     {borrando === c.id ? "..." : "Eliminar"}
                   </button>
                 </div>
-                {expandida === c.id && (
-                  <div className="cuenta-card-expand">
-                    {!movimientos[c.id] ? (
-                      <div className="muted">Cargando...</div>
-                    ) : movimientos[c.id].length === 0 ? (
-                      <div className="muted">Sin movimientos todavía.</div>
-                    ) : (
-                      <div className="table-scroll">
-                        <table>
-                          <thead>
-                            <tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th className="num">Monto</th><th>Notas</th><th></th></tr>
-                          </thead>
-                          <tbody>
-                            {movimientos[c.id].map((m) => (
-                              <tr key={m.id}>
-                                <td>{dateShort(m.entry_date)}</td>
-                                <td><span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span></td>
-                                <td>
-                                  {m.concept}
-                                  {m.idempotency_key && (
-                                    <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Generado automáticamente por un cierre semanal — para corregirlo, corregí o revertí el cierre de origen, no este movimiento.">
-                                      Auto
-                                    </span>
-                                  )}
-                                </td>
-                                <td className={`num ${c.kind === "OPERATIVA" ? "" : claseDebeFavor(m.amount)}`}>{usd(m.amount)}</td>
-                                <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
-                                <td className="row-actions">
-                                  <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
-                                  <button
-                                    className="btn secondary small"
-                                    disabled={borrando === m.id}
-                                    onClick={() => eliminarMovimiento(m)}
-                                    style={{ color: "var(--red)" }}
-                                  >
-                                    {borrando === m.id ? "..." : "Eliminar"}
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -354,12 +306,77 @@ export default function CuentasSocios() {
           <MovimientoForm
             accountId={showNuevoMov}
             onDone={() => {
+              const accountId = showNuevoMov;
               setShowNuevoMov(null);
               refresh();
-              cargarMovimientos(showNuevoMov);
-              setExpandida(showNuevoMov);
+              cargarMovimientos(accountId);
+              setShowMovimientosDe(accountId);
             }}
           />
+        </Modal>
+      )}
+
+      {cuentaMovimientos && (
+        <Modal title={`Movimientos — ${cuentaMovimientos.name}`} onClose={() => setShowMovimientosDe(null)} wide>
+          <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 13 }} className="muted">
+                {cuentaMovimientos.kind === "OPERATIVA" ? "Total acumulado" : labelDebeFavor(cuentaMovimientos.saldo)}
+              </div>
+              <div
+                className={`cuenta-card-saldo ${cuentaMovimientos.kind === "OPERATIVA" ? "" : claseDebeFavor(cuentaMovimientos.saldo)}`}
+                style={{ fontSize: 26 }}
+              >
+                {usd(cuentaMovimientos.saldo)}
+              </div>
+            </div>
+            <button className="btn secondary small" onClick={() => setShowNuevoMov(cuentaMovimientos.id)}>+ Movimiento</button>
+          </div>
+
+          {!movimientos[cuentaMovimientos.id] ? (
+            <div className="muted">Cargando...</div>
+          ) : movimientos[cuentaMovimientos.id].length === 0 ? (
+            <div className="muted">Sin movimientos todavía.</div>
+          ) : (
+            <div className="movimientos-list">
+              {movimientos[cuentaMovimientos.id].map((m) => (
+                <div className="movimiento-row" key={m.id}>
+                  <div className="movimiento-row-main">
+                    <div className="movimiento-row-top">
+                      <span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span>
+                      {m.idempotency_key && (
+                        <span
+                          className="badge neutral"
+                          title="Generado automáticamente por un cierre semanal — para corregirlo, corregí o revertí el cierre de origen, no este movimiento."
+                        >
+                          Auto
+                        </span>
+                      )}
+                      <span className="muted" style={{ fontSize: 12 }}>{dateShort(m.entry_date)}</span>
+                    </div>
+                    <div className="movimiento-row-concept">{m.concept}</div>
+                    {m.notes && <div className="muted movimiento-row-notes" title={m.notes}>{m.notes}</div>}
+                  </div>
+                  <div className="movimiento-row-side">
+                    <div className={`movimiento-row-amount ${cuentaMovimientos.kind === "OPERATIVA" ? "" : claseDebeFavor(m.amount)}`}>
+                      {usd(m.amount)}
+                    </div>
+                    <div className="row-actions">
+                      <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
+                      <button
+                        className="btn secondary small"
+                        disabled={borrando === m.id}
+                        onClick={() => eliminarMovimiento(m)}
+                        style={{ color: "var(--red)" }}
+                      >
+                        {borrando === m.id ? "..." : "Eliminar"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 
