@@ -352,6 +352,11 @@ export default function CuentasSocios() {
                           Auto
                         </span>
                       )}
+                      {m.treasury_adjustment_id && (
+                        <span className="badge neutral" title="Este movimiento generó un ingreso/egreso real en Tesorería → Wallet.">
+                          Wallet
+                        </span>
+                      )}
                       <span className="muted" style={{ fontSize: 12 }}>{dateShort(m.entry_date)}</span>
                     </div>
                     <div className="movimiento-row-concept">{m.concept}</div>
@@ -478,8 +483,12 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
   const [amount, setAmount] = useState(movimiento ? String(movimiento.amount) : "");
   const [entryDate, setEntryDate] = useState(movimiento?.entry_date ? String(movimiento.entry_date).slice(0, 10) : new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState(movimiento?.notes ?? "");
+  const [moveWallet, setMoveWallet] = useState(!!movimiento?.treasury_adjustment_id);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const montoPreview = Number(amount);
+  const yaEstabaVinculado = !!movimiento?.treasury_adjustment_id;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -496,6 +505,7 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
           amount: monto,
           entryDate,
           notes: notes.trim(),
+          moveWallet,
         });
       } else {
         await api.crearMovimientoCuentaSocio({
@@ -505,6 +515,7 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
           amount: monto,
           entryDate,
           notes: notes.trim() || undefined,
+          moveWallet,
         });
       }
       onDone();
@@ -544,6 +555,29 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
       <div className="field">
         <label>Notas (opcional)</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <div className="field">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
+          <input type="checkbox" checked={moveWallet} onChange={(e) => setMoveWallet(e.target.checked)} style={{ width: "auto" }} />
+          Esto también mueve la Wallet (USDT real)
+        </label>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {moveWallet ? (
+            montoPreview ? (
+              <>
+                Al guardar se va a registrar en Tesorería → Wallet un{" "}
+                <strong>{montoPreview > 0 ? "EGRESO" : "INGRESO"}</strong> real de {usd(Math.abs(montoPreview))}.
+                {yaEstabaVinculado && " Si cambiás el monto, se corrige también el movimiento de Wallet (se revierte el viejo y se crea uno nuevo)."}
+              </>
+            ) : (
+              "Al guardar se va a registrar un movimiento real en Tesorería → Wallet por el monto de arriba."
+            )
+          ) : yaEstabaVinculado ? (
+            "Este movimiento tiene un ingreso/egreso real en Wallet vinculado — si destildás esto, se revierte."
+          ) : (
+            'Tildalo solo si esta plata de verdad entró o salió de la Wallet (no todo lo que cargás acá lo hace).'
+          )}
+        </div>
       </div>
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}

@@ -84,13 +84,14 @@ const entrySchema = z.object({
   amount: z.number().refine((n) => n !== 0, "El monto no puede ser 0."),
   entryDate: z.string().optional(),
   notes: z.string().optional(),
+  moveWallet: z.boolean().optional(),
 });
 
 partnerAccountsRouter.post("/movimientos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = entrySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    res.status(201).json(await crearMovimiento(parsed.data));
+    res.status(201).json(await crearMovimiento(parsed.data, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -102,13 +103,14 @@ const entryUpdateSchema = z.object({
   amount: z.number().refine((n) => n !== 0, "El monto no puede ser 0.").optional(),
   entryDate: z.string().optional(),
   notes: z.string().optional(),
+  moveWallet: z.boolean().optional(),
 });
 
 partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = entryUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    res.json(await editarMovimiento(req.params.id, parsed.data));
+    res.json(await editarMovimiento(req.params.id, parsed.data, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -117,7 +119,7 @@ partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (
 // Borrado real — control 100% pedido explícitamente por el usuario para este módulo.
 partnerAccountsRouter.delete("/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
-    await eliminarMovimiento(req.params.id);
+    await eliminarMovimiento(req.params.id, req.user?.email);
     res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

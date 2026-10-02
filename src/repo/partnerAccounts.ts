@@ -5,6 +5,7 @@
 // Una cuenta es un nombre con saldo = suma de sus movimientos (monto libre, +/-).
 import { pool, newId } from "../db/pool.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
+import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
 export type PartnerEntryCategory = "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
 
@@ -23,6 +24,7 @@ export interface PartnerEntryInput {
   amount: number; // libre, +/- — quien carga decide el signo
   entryDate?: string; // YYYY-MM-DD, default hoy
   notes?: string;
+  moveWallet?: boolean; // si true, además genera/actualiza un ingreso o egreso real en Wallet (USDT)
 }
 
 // Todas las cuentas activas con su saldo (suma de movimientos) y cantidad de movimientos.
@@ -84,7 +86,7 @@ export async function listPartnerEntries(accountId?: string) {
   return r.rows;
 }
 
-export async function crearMovimiento(input: PartnerEntryInput) {
+export async function crearMovimiento(input: PartnerEntryInput, createdBy?: string | null) {
   if (!input.concept.trim()) throw new Error("El concepto es obligatorio.");
   if (!(input.amount !== 0)) throw new Error("El monto no puede ser 0.");
   const id = newId("pentry");
@@ -93,14 +95,68 @@ export async function crearMovimiento(input: PartnerEntryInput) {
      VALUES ($1,$2,$3,$4,$5,COALESCE($6, CURRENT_DATE),$7) RETURNING *`,
     [id, input.accountId, input.category, input.concept.trim(), input.amount, input.entryDate || null, input.notes?.trim() || null]
   );
-  return r.rows[0];
+  let entry = r.rows[0];
+
+  // "Mueve Wallet": además de quedar registrado acá, genera un ingreso/egreso real en Wallet
+  // (WALLET_MANOS) por el mismo monto -- positivo = salió (EGRESO), negativo = entró (INGRESO),
+  // mismo criterio que ya se usa para cargar "cuanto salió" en Gastos operativo/Retiros.
+  if (input.moveWallet) {
+    const { id: treasuryId } = await registrarAjusteTesoreria({
+      ledger: "WALLET_MANOS",
+      direction: input.amount > 0 ? "EGRESO" : "INGRESO",
+      amount: Math.abs(input.amount),
+      reason: `Cuentas de socios — ${input.concept.trim()}`,
+      occurredAt: input.entryDate ? new Date(input.entryDate) : new Date(),
+      createdBy: createdBy ?? null,
+    });
+    const r2 = await pool.query(
+      `UPDATE partner_account_entries SET treasury_adjustment_id = $1 WHERE id = $2 RETURNING *`,
+      [treasuryId, id]
+    );
+    entry = r2.rows[0];
+  }
+
+  return entry;
 }
 
-export async function editarMovimiento(id: string, input: Partial<PartnerEntryInput>) {
+export async function editarMovimiento(id: string, input: Partial<PartnerEntryInput>, createdBy?: string | null) {
   const existing = await pool.query(`SELECT * FROM partner_account_entries WHERE id = $1`, [id]);
   const actual = existing.rows[0];
   if (!actual) throw new Error("No se encontró ese movimiento.");
   if (input.amount !== undefined && input.amount === 0) throw new Error("El monto no puede ser 0.");
+
+  // Si este movimiento ya tenía un ingreso/egreso real en Wallet linkeado, y ahora se destilda
+  // "Mueve Wallet" o cambia el monto, hay que corregir ESE lado también -- revertir el ajuste
+  // viejo (ledger inmutable, nunca se borra) y, si sigue queriendo mover Wallet, crear uno nuevo
+  // con el monto correcto. Si no cambia nada de esto, no se toca Wallet para nada.
+  const nextAmount = input.amount ?? Number(actual.amount);
+  const nextConcept = input.concept?.trim() || actual.concept;
+  const wantsWallet = input.moveWallet !== undefined ? input.moveWallet : actual.treasury_adjustment_id != null;
+  const montoCambio = nextAmount !== Number(actual.amount);
+
+  let treasuryAdjustmentId: string | null = actual.treasury_adjustment_id;
+
+  if (treasuryAdjustmentId && (!wantsWallet || montoCambio)) {
+    await revertirAjusteTesoreria(
+      treasuryAdjustmentId,
+      `Corrección del movimiento "${actual.concept}" en Cuentas de socios.`,
+      createdBy ?? null
+    );
+    treasuryAdjustmentId = null;
+  }
+
+  if (wantsWallet && !treasuryAdjustmentId) {
+    const { id: nuevoId } = await registrarAjusteTesoreria({
+      ledger: "WALLET_MANOS",
+      direction: nextAmount > 0 ? "EGRESO" : "INGRESO",
+      amount: Math.abs(nextAmount),
+      reason: `Cuentas de socios — ${nextConcept}`,
+      occurredAt: input.entryDate ? new Date(input.entryDate) : actual.entry_date,
+      createdBy: createdBy ?? null,
+    });
+    treasuryAdjustmentId = nuevoId;
+  }
+
   const r = await pool.query(
     `UPDATE partner_account_entries SET
        category = COALESCE($1, category),
@@ -108,8 +164,9 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
        amount = COALESCE($3, amount),
        entry_date = COALESCE($4, entry_date),
        notes = CASE WHEN $5::boolean THEN $6 ELSE notes END,
+       treasury_adjustment_id = $7,
        updated_at = now()
-     WHERE id = $7 RETURNING *`,
+     WHERE id = $8 RETURNING *`,
     [
       input.category ?? null,
       input.concept?.trim() || null,
@@ -117,6 +174,7 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
       input.entryDate || null,
       input.notes !== undefined,
       input.notes?.trim() || null,
+      treasuryAdjustmentId,
       id,
     ]
   );
@@ -124,9 +182,18 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
 }
 
 // Borrado real — control 100% pedido explícitamente por el usuario.
-export async function eliminarMovimiento(id: string) {
-  const r = await pool.query(`DELETE FROM partner_account_entries WHERE id = $1 RETURNING id`, [id]);
-  if (r.rowCount === 0) throw new Error("No se encontró ese movimiento.");
+export async function eliminarMovimiento(id: string, createdBy?: string | null) {
+  const existing = await pool.query(`SELECT * FROM partner_account_entries WHERE id = $1`, [id]);
+  const actual = existing.rows[0];
+  if (!actual) throw new Error("No se encontró ese movimiento.");
+  if (actual.treasury_adjustment_id) {
+    await revertirAjusteTesoreria(
+      actual.treasury_adjustment_id,
+      `Se eliminó el movimiento "${actual.concept}" en Cuentas de socios.`,
+      createdBy ?? null
+    );
+  }
+  await pool.query(`DELETE FROM partner_account_entries WHERE id = $1`, [id]);
 }
 
 function round2(n: number): number {

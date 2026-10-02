@@ -810,6 +810,14 @@ ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS idempotency_key TEX
 ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_agent_id TEXT REFERENCES agents(id);
 ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_club_id TEXT REFERENCES clubs(id);
 ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS source_week_start DATE;
+
+-- "Mueve Wallet" (02/10/2026, pedido de Leo: cruzar Gastos operativo con la Wallet real): si un
+-- movimiento de cuenta de socio representa plata que de verdad entró/salió de la Wallet USDT
+-- (WALLET_MANOS), al cargarlo se puede generar también un treasury_adjustment real y queda
+-- linkeado acá -- así se puede ver a simple vista cuáles de estos movimientos tienen un
+-- respaldo real en Tesorería y cuáles son solo un registro contable aparte. Ver
+-- crearMovimiento/editarMovimiento/eliminarMovimiento en repo/partnerAccounts.ts.
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS treasury_adjustment_id TEXT REFERENCES treasury_adjustments(id);
 CREATE UNIQUE INDEX IF NOT EXISTS partner_account_entries_idempotency_key
   ON partner_account_entries(idempotency_key) WHERE idempotency_key IS NOT NULL;
 

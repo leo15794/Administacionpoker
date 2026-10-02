@@ -535,6 +535,7 @@ export const api = {
     amount: number;
     entryDate?: string;
     notes?: string;
+    moveWallet?: boolean;
   }) => request("/partner-accounts/movimientos", { method: "POST", body: JSON.stringify(data) }),
   editarMovimientoCuentaSocio: (
     id: string,
@@ -544,6 +545,7 @@ export const api = {
       amount: number;
       entryDate: string;
       notes: string;
+      moveWallet: boolean;
     }>
   ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
