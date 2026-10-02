@@ -1953,3 +1953,62 @@ CREATE TABLE IF NOT EXISTS bancado_contrato_costos_fijos (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(contrato_id, anio, mes)
 );
+
+-- CORRECCIÓN (02/10/2026): "RMF" tenía que ser el motor de capital/makeup de "Jugadores
+-- bancados" clásico (engine/bancados.ts, bancado_config/bancado_historial) -- NO el de
+-- reparto 50/50 + memoria de agents.account_type=BANCADO (engine/cierre.ts). Se reemplazan los
+-- parámetros RMF por los del motor correcto; nunca se guarda un "capital/makeup actual" mutable
+-- -- se deriva siempre del último cierre real (mismo patrón que getEstadoBancado en
+-- repo/bancados.ts: "el estado vigente siempre se lee del último historial").
+ALTER TABLE bancado_contratos DROP COLUMN IF EXISTS rmf_agent_share_pct;
+ALTER TABLE bancado_contratos DROP COLUMN IF EXISTS rmf_memoria_actual;
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_pct_jugador NUMERIC(6,4);
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_pct_banca NUMERIC(6,4);
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_rakeback_banca_pct NUMERIC(6,4) DEFAULT 0;
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_union_share_pct NUMERIC(6,4) DEFAULT 0;
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_capital_inicial NUMERIC(18,4) DEFAULT 0;
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_makeup_inicial NUMERIC(18,4) DEFAULT 0;
+
+-- bancado_contrato_liquidaciones queda SOLO para REGLA_BANCADO_V1 (MENSUAL/EXTRAORDINARIO) --
+-- RMF ahora tiene su propia tabla de historial abajo, con la forma real de bancado_historial.
+ALTER TABLE bancado_contrato_liquidaciones DROP CONSTRAINT IF EXISTS bancado_contrato_liquidaciones_tipo_check;
+ALTER TABLE bancado_contrato_liquidaciones ADD CONSTRAINT bancado_contrato_liquidaciones_tipo_check
+  CHECK (tipo IN ('MENSUAL','EXTRAORDINARIO'));
+
+-- Historial de cierres RMF por contrato -- misma forma que bancado_historial (ver ahí para el
+-- detalle de cada campo), reutilizando calcularCierreBancado de engine/bancados.ts tal cual.
+-- "status" REVERTIDO (nunca se borra) en vez de recalcular nada -- el estado vigente
+-- (capital/makeup) siempre se lee del último APLICADO, igual que el sistema viejo.
+CREATE TABLE IF NOT EXISTS bancado_contrato_rmf_cierres (
+  id                           TEXT PRIMARY KEY,
+  contrato_id                   TEXT NOT NULL REFERENCES bancado_contratos(id),
+  desde                         DATE NOT NULL,
+  hasta                         DATE NOT NULL,
+  resultado_mesas               NUMERIC(18,4) NOT NULL,
+  rake_total                    NUMERIC(18,4) NOT NULL,
+  ticket_promocional            NUMERIC(18,4) NOT NULL DEFAULT 0,
+  ticket_promocional_nota       TEXT,
+  rakeback_total                NUMERIC(18,4) NOT NULL,
+  makeup_anterior                NUMERIC(18,4) NOT NULL,
+  perdida_agrega_makeup         NUMERIC(18,4) NOT NULL,
+  rakeback_a_makeup             NUMERIC(18,4) NOT NULL,
+  rakeback_excedente_jugador    NUMERIC(18,4) NOT NULL,
+  ganancia_mesas_jugador_bruta  NUMERIC(18,4) NOT NULL,
+  ganancia_mesas_a_makeup       NUMERIC(18,4) NOT NULL,
+  makeup_nuevo                   NUMERIC(18,4) NOT NULL,
+  pago_jugador_mesas             NUMERIC(18,4) NOT NULL,
+  pago_jugador_total             NUMERIC(18,4) NOT NULL,
+  ganancia_banca_mesas           NUMERIC(18,4) NOT NULL,
+  rakeback_banca_total           NUMERIC(18,4) NOT NULL DEFAULT 0,
+  union_share_total              NUMERIC(18,4) NOT NULL DEFAULT 0,
+  capital_anterior                NUMERIC(18,4) NOT NULL,
+  capital_despues                 NUMERIC(18,4) NOT NULL,
+  pago_real_jugador               NUMERIC(18,4),
+  credito_pendiente_jugador       NUMERIC(18,4) NOT NULL DEFAULT 0,
+  observaciones                   TEXT,
+  status                          TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  motivo_reversion                 TEXT,
+  created_by                      TEXT,
+  created_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_bancado_contrato_rmf_cierres_contrato ON bancado_contrato_rmf_cierres(contrato_id, hasta DESC);

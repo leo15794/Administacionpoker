@@ -17,6 +17,8 @@ import {
   ejecutarSplitExtraordinario,
   ejecutarCierreMensual,
   registrarCierreRmf,
+  listHistorialRmf,
+  revertirCierreRmf,
   listLiquidaciones,
   crearAjuste,
   resolverAjuste,
@@ -34,9 +36,13 @@ const contratoSchema = z.object({
   moneda: z.string().optional(),
   reglaKey: z.enum(["RMF", "REGLA_BANCADO_V1"]),
   observaciones: z.string().nullable().optional(),
-  rmfAgentSharePct: z.number().min(0).max(1).optional(),
+  rmfPctJugador: z.number().min(0).max(1).optional(),
+  rmfPctBanca: z.number().min(0).max(1).optional(),
   rmfRakebackPct: z.number().min(0).max(1).optional(),
-  rmfMemoriaInicial: z.number().min(0).optional(),
+  rmfRakebackBancaPct: z.number().min(0).max(1).optional(),
+  rmfUnionSharePct: z.number().min(0).max(1).optional(),
+  rmfCapitalInicial: z.number().optional(),
+  rmfMakeupInicial: z.number().min(0).optional(),
   v1RakeDealPct: z.number().min(0).max(1).optional(),
   v1RakeTeambackDirectoPct: z.number().min(0).max(1).optional(),
   v1SplitJugadorPct: z.number().min(0).max(1).optional(),
@@ -191,6 +197,8 @@ const rmfSchema = z.object({
   hasta: z.string().min(1),
   resultadoMesas: z.number(),
   rakeBruto: z.number(),
+  ticketPromocional: z.number().optional(),
+  ticketPromocionalNota: z.string().nullable().optional(),
   observaciones: z.string().nullable().optional(),
   pagoReal: z.number().optional(),
 });
@@ -200,6 +208,19 @@ bancadoContratosRouter.post("/:id/cierre-rmf", requireAuth, requireAdmin, async 
   try {
     const r = await registrarCierreRmf({ contratoId: req.params.id, ...parsed.data }, req.user?.email ?? null);
     res.status(201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+bancadoContratosRouter.get("/:id/historial-rmf", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listHistorialRmf(req.params.id));
+});
+
+bancadoContratosRouter.delete("/historial-rmf/:cierreId", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo : undefined;
+  try {
+    res.json(await revertirCierreRmf(req.params.cierreId, motivo, req.user?.email ?? null));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

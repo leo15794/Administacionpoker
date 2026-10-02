@@ -5,7 +5,7 @@
 // función de acá los toca ni los lee.
 import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
-import { calcularCierreBancado } from "../engine/cierre.js";
+import { calcularCierreBancado as calcularCierreBancadoRmf, type BancadoConfig as BancadoConfigRmf, type BancadoEstado as BancadoEstadoRmf } from "../engine/bancados.js";
 import {
   calcularParcialSemanal,
   calcularRecuperacionYSplit,
@@ -32,9 +32,13 @@ export interface CrearContratoInput {
   reglaKey: ReglaKey;
   observaciones?: string | null;
   // RMF
-  rmfAgentSharePct?: number;
+  rmfPctJugador?: number;
+  rmfPctBanca?: number;
   rmfRakebackPct?: number;
-  rmfMemoriaInicial?: number;
+  rmfRakebackBancaPct?: number;
+  rmfUnionSharePct?: number;
+  rmfCapitalInicial?: number;
+  rmfMakeupInicial?: number;
   // REGLA_BANCADO_V1
   v1RakeDealPct?: number;
   v1RakeTeambackDirectoPct?: number;
@@ -48,8 +52,8 @@ function validarParametrosContrato(input: CrearContratoInput) {
     throw new Error("Hay que elegir exactamente un jugador O un agente de la lista -- no ambos, no ninguno.");
   }
   if (input.reglaKey === "RMF") {
-    if (input.rmfAgentSharePct === undefined || input.rmfRakebackPct === undefined) {
-      throw new Error("La regla RMF necesita rmfAgentSharePct y rmfRakebackPct -- no hay valores default.");
+    if (input.rmfPctJugador === undefined || input.rmfPctBanca === undefined || input.rmfRakebackPct === undefined) {
+      throw new Error("La regla RMF necesita rmfPctJugador, rmfPctBanca y rmfRakebackPct -- no hay valores default.");
     }
   } else {
     if (
@@ -83,9 +87,10 @@ export async function crearContrato(input: CrearContratoInput, createdBy?: strin
   const r = await pool.query(
     `INSERT INTO bancado_contratos
       (id, player_id, agent_id, club_id, moneda, regla_key, observaciones, created_by,
-       rmf_agent_share_pct, rmf_rakeback_pct, rmf_memoria_actual,
+       rmf_pct_jugador, rmf_pct_banca, rmf_rakeback_pct, rmf_rakeback_banca_pct, rmf_union_share_pct,
+       rmf_capital_inicial, rmf_makeup_inicial,
        v1_rake_deal_pct, v1_rake_teamback_directo_pct, v1_split_jugador_pct, v1_split_teamback_pct, v1_modo_memoria_default)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
      RETURNING *`,
     [
       id,
@@ -96,9 +101,13 @@ export async function crearContrato(input: CrearContratoInput, createdBy?: strin
       input.reglaKey,
       input.observaciones ?? null,
       createdBy ?? null,
-      input.reglaKey === "RMF" ? input.rmfAgentSharePct : null,
+      input.reglaKey === "RMF" ? input.rmfPctJugador : null,
+      input.reglaKey === "RMF" ? input.rmfPctBanca : null,
       input.reglaKey === "RMF" ? input.rmfRakebackPct : null,
-      input.reglaKey === "RMF" ? input.rmfMemoriaInicial ?? 0 : 0,
+      input.reglaKey === "RMF" ? input.rmfRakebackBancaPct ?? 0 : null,
+      input.reglaKey === "RMF" ? input.rmfUnionSharePct ?? 0 : null,
+      input.reglaKey === "RMF" ? input.rmfCapitalInicial ?? 0 : null,
+      input.reglaKey === "RMF" ? input.rmfMakeupInicial ?? 0 : null,
       input.reglaKey === "REGLA_BANCADO_V1" ? input.v1RakeDealPct : null,
       input.reglaKey === "REGLA_BANCADO_V1" ? input.v1RakeTeambackDirectoPct : null,
       input.reglaKey === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct : null,
@@ -113,8 +122,11 @@ export interface EditarContratoInput {
   clubId?: string | null;
   observaciones?: string | null;
   activo?: boolean;
-  rmfAgentSharePct?: number;
+  rmfPctJugador?: number;
+  rmfPctBanca?: number;
   rmfRakebackPct?: number;
+  rmfRakebackBancaPct?: number;
+  rmfUnionSharePct?: number;
   v1RakeDealPct?: number;
   v1RakeTeambackDirectoPct?: number;
   v1SplitJugadorPct?: number;
@@ -132,17 +144,20 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
   await pool.query(
     `UPDATE bancado_contratos SET
        club_id = $1, observaciones = $2, activo = $3,
-       rmf_agent_share_pct = $4, rmf_rakeback_pct = $5,
-       v1_rake_deal_pct = $6, v1_rake_teamback_directo_pct = $7,
-       v1_split_jugador_pct = $8, v1_split_teamback_pct = $9, v1_modo_memoria_default = $10,
+       rmf_pct_jugador = $4, rmf_pct_banca = $5, rmf_rakeback_pct = $6, rmf_rakeback_banca_pct = $7, rmf_union_share_pct = $8,
+       v1_rake_deal_pct = $9, v1_rake_teamback_directo_pct = $10,
+       v1_split_jugador_pct = $11, v1_split_teamback_pct = $12, v1_modo_memoria_default = $13,
        updated_at = now()
-     WHERE id = $11`,
+     WHERE id = $14`,
     [
       input.clubId !== undefined ? input.clubId : actual.club_id,
       input.observaciones !== undefined ? input.observaciones : actual.observaciones,
       input.activo !== undefined ? input.activo : actual.activo,
-      actual.regla_key === "RMF" ? input.rmfAgentSharePct ?? actual.rmf_agent_share_pct : null,
+      actual.regla_key === "RMF" ? input.rmfPctJugador ?? actual.rmf_pct_jugador : null,
+      actual.regla_key === "RMF" ? input.rmfPctBanca ?? actual.rmf_pct_banca : null,
       actual.regla_key === "RMF" ? input.rmfRakebackPct ?? actual.rmf_rakeback_pct : null,
+      actual.regla_key === "RMF" ? input.rmfRakebackBancaPct ?? actual.rmf_rakeback_banca_pct : null,
+      actual.regla_key === "RMF" ? input.rmfUnionSharePct ?? actual.rmf_union_share_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeDealPct ?? actual.v1_rake_deal_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeTeambackDirectoPct ?? actual.v1_rake_teamback_directo_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct ?? actual.v1_split_jugador_pct : null,
@@ -625,16 +640,44 @@ export async function ejecutarCierreMensual(input: CierreMensualInput, createdBy
 }
 
 // ---------------------------------------------------------------------------------------------
-// Regla RMF -- liquidación semanal definitiva (reutiliza calcularCierreBancado tal cual, sin
-// duplicar la fórmula -- ver engine/cierre.ts). No hay período ni mes: cada semana se liquida
-// sola, y la memoria vive directo en el contrato (rmf_memoria_actual).
+// Regla RMF -- motor de CAPITAL + MAKEUP de "Jugadores bancados" clásico (engine/bancados.ts),
+// reutilizado tal cual, sin duplicar la fórmula. CORRECCIÓN 02/10/2026: esta es la regla que
+// Leo pedía como "RMF" -- no la de reparto 50/50 + memoria de agentes. No hay período ni mes:
+// cada semana se liquida sola. Nunca se guarda un capital/makeup "actual" mutable -- se deriva
+// siempre del último cierre APLICADO de este contrato (mismo patrón que getEstadoBancado en
+// repo/bancados.ts), así un cierre nunca puede quedar desincronizado de su propio historial.
 // ---------------------------------------------------------------------------------------------
+function cfgRmf(contrato: any): BancadoConfigRmf {
+  return {
+    pctJugador: Number(contrato.rmf_pct_jugador),
+    pctBanca: Number(contrato.rmf_pct_banca),
+    rakebackPct: Number(contrato.rmf_rakeback_pct),
+    rakebackBancaPct: Number(contrato.rmf_rakeback_banca_pct ?? 0),
+    unionSharePct: Number(contrato.rmf_union_share_pct ?? 0),
+    capitalInicial: Number(contrato.rmf_capital_inicial ?? 0),
+    makeupInicial: Number(contrato.rmf_makeup_inicial ?? 0),
+  };
+}
+
+async function getEstadoRmf(contratoId: string, cfg: BancadoConfigRmf, client?: PoolClient): Promise<BancadoEstadoRmf> {
+  const q = client ? client.query.bind(client) : pool.query.bind(pool);
+  const r = await q(
+    `SELECT capital_despues, makeup_nuevo FROM bancado_contrato_rmf_cierres
+     WHERE contrato_id = $1 AND status = 'APLICADO' ORDER BY hasta DESC, created_at DESC LIMIT 1`,
+    [contratoId]
+  );
+  if (r.rows.length === 0) return { capitalActual: cfg.capitalInicial, makeupActual: cfg.makeupInicial };
+  return { capitalActual: Number(r.rows[0].capital_despues), makeupActual: Number(r.rows[0].makeup_nuevo) };
+}
+
 export interface RegistrarCierreRmfInput {
   contratoId: string;
   desde: string;
   hasta: string;
   resultadoMesas: number;
   rakeBruto: number;
+  ticketPromocional?: number;
+  ticketPromocionalNota?: string | null;
   observaciones?: string | null;
   pagoReal?: number;
 }
@@ -643,49 +686,58 @@ export async function registrarCierreRmf(input: RegistrarCierreRmfInput, created
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // FOR UPDATE sobre el contrato: dos cierres de la misma semana no se pueden pisar el
+    // capital/makeup, igual criterio que bancado_debts en el otro motor.
     const contratoRes = await client.query(`SELECT * FROM bancado_contratos WHERE id = $1 FOR UPDATE`, [input.contratoId]);
     const contrato = contratoRes.rows[0];
     if (!contrato) throw new Error("Contrato no encontrado.");
     if (contrato.regla_key !== "RMF") throw new Error("Este contrato no usa la regla RMF.");
 
-    const calc = calcularCierreBancado({
-      mesaResult: input.resultadoMesas,
+    const cfg = cfgRmf(contrato);
+    const estado = await getEstadoRmf(input.contratoId, cfg, client);
+    const calc = calcularCierreBancadoRmf(cfg, estado, {
+      resultadoMesas: input.resultadoMesas,
       rakeTotal: input.rakeBruto,
-      rakebackPct: Number(contrato.rmf_rakeback_pct),
-      agentSharePct: Number(contrato.rmf_agent_share_pct),
-      deudaAnterior: Number(contrato.rmf_memoria_actual),
+      ticketPromocional: input.ticketPromocional,
     });
 
-    const pagoTeorico = calc.finalClosing;
+    const pagoTeorico = calc.pagoJugadorTotal;
     const pagoReal = input.pagoReal ?? pagoTeorico;
     const creditoPendiente = calcularCreditoPendiente(pagoTeorico, pagoReal);
-    const memoriaAplicada = Math.max(0, calc.deudaAnterior - calc.deudaNueva);
 
-    const liqId = newId("bliq");
+    const cierreId = newId("brmf");
     await client.query(
-      `INSERT INTO bancado_contrato_liquidaciones
-         (id, contrato_id, tipo, desde, hasta, resultado_mesas, rake_bruto, resultado_acumulado,
-          memoria_anterior, memoria_aplicada, memoria_final, base_liberada_split, split_jugador, split_teamback,
-          digiplayers_share, ganancia_teamback_total, pago_teorico_jugador, pago_real_jugador, credito_pendiente_jugador,
-          observaciones, created_by)
-       VALUES ($1,$2,'RMF_SEMANAL',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      `INSERT INTO bancado_contrato_rmf_cierres
+         (id, contrato_id, desde, hasta, resultado_mesas, rake_total, ticket_promocional, ticket_promocional_nota,
+          rakeback_total, makeup_anterior, perdida_agrega_makeup, rakeback_a_makeup, rakeback_excedente_jugador,
+          ganancia_mesas_jugador_bruta, ganancia_mesas_a_makeup, makeup_nuevo, pago_jugador_mesas, pago_jugador_total,
+          ganancia_banca_mesas, rakeback_banca_total, union_share_total, capital_anterior, capital_despues,
+          pago_real_jugador, credito_pendiente_jugador, observaciones, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
-        liqId,
+        cierreId,
         input.contratoId,
         input.desde,
         input.hasta,
-        calc.mesaResult,
+        calc.resultadoMesas,
         calc.rakeTotal,
-        calc.bancadoOwnAmount,
-        calc.deudaAnterior,
-        memoriaAplicada,
-        calc.deudaNueva,
-        pagoTeorico,
-        pagoTeorico,
-        0,
-        calc.digiplayersShare,
-        0,
-        pagoTeorico,
+        calc.ticketPromocional,
+        input.ticketPromocionalNota ?? null,
+        calc.rakebackTotal,
+        calc.makeupAnterior,
+        calc.perdidaAgregaMakeup,
+        calc.rakebackAMakeup,
+        calc.rakebackExcedenteJugador,
+        calc.gananciaMesasJugadorBruta,
+        calc.gananciaMesasAMakeup,
+        calc.makeupNuevo,
+        calc.pagoJugadorMesas,
+        calc.pagoJugadorTotal,
+        calc.gananciaBancaMesas,
+        calc.rakebackBancaTotal,
+        calc.unionShareTotal,
+        calc.capitalAnterior,
+        calc.capitalDespues,
         pagoReal,
         creditoPendiente,
         input.observaciones ?? null,
@@ -693,18 +745,15 @@ export async function registrarCierreRmf(input: RegistrarCierreRmfInput, created
       ]
     );
 
-    await client.query(`UPDATE bancado_contratos SET rmf_memoria_actual = $1, updated_at = now() WHERE id = $2`, [calc.deudaNueva, input.contratoId]);
-
     if (creditoPendiente !== 0) {
       await client.query(
-        `INSERT INTO bancado_contrato_ajustes (id, contrato_id, tipo, importe, signo, liquidacion_origen_id, usuario, motivo)
-         VALUES ($1,$2,'PAGO_PENDIENTE',$3,$4,$5,$6,$7)`,
+        `INSERT INTO bancado_contrato_ajustes (id, contrato_id, tipo, importe, signo, usuario, motivo)
+         VALUES ($1,$2,'PAGO_PENDIENTE',$3,$4,$5,$6)`,
         [
           newId("baj"),
           input.contratoId,
           Math.abs(creditoPendiente),
           creditoPendiente > 0 ? "POSITIVO" : "NEGATIVO",
-          liqId,
           createdBy ?? "sistema",
           "Diferencia entre pago teórico y pago real del cierre semanal RMF.",
         ]
@@ -712,13 +761,30 @@ export async function registrarCierreRmf(input: RegistrarCierreRmfInput, created
     }
 
     await client.query("COMMIT");
-    return { liquidacionId: liqId, ...calc, pagoReal, creditoPendiente };
+    return { cierreId, ...calc, pagoReal, creditoPendiente };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+export async function listHistorialRmf(contratoId: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contrato_rmf_cierres WHERE contrato_id = $1 ORDER BY hasta DESC, created_at DESC`, [contratoId]);
+  return r.rows;
+}
+
+// Revertir (nunca se borra, mismo patrón que weekly_closings/bancado_historial): marca el
+// cierre como REVERTIDO -- el próximo cierre que se cargue va a derivar el capital/makeup del
+// último APLICADO anterior a este, como si nunca hubiera pasado.
+export async function revertirCierreRmf(id: string, motivo: string | undefined, revertidoPor?: string | null) {
+  const r = await pool.query(
+    `UPDATE bancado_contrato_rmf_cierres SET status = 'REVERTIDO', motivo_reversion = $1 WHERE id = $2 AND status = 'APLICADO' RETURNING *`,
+    [motivo ?? null, id]
+  );
+  if (r.rows.length === 0) throw new Error("Cierre no encontrado o ya estaba revertido.");
+  return r.rows[0];
 }
 
 // ---------------------------------------------------------------------------------------------

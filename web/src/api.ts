@@ -1007,9 +1007,13 @@ export const api = {
       moneda?: string;
       reglaKey: "RMF" | "REGLA_BANCADO_V1";
       observaciones?: string | null;
-      rmfAgentSharePct?: number;
+      rmfPctJugador?: number;
+      rmfPctBanca?: number;
       rmfRakebackPct?: number;
-      rmfMemoriaInicial?: number;
+      rmfRakebackBancaPct?: number;
+      rmfUnionSharePct?: number;
+      rmfCapitalInicial?: number;
+      rmfMakeupInicial?: number;
       v1RakeDealPct?: number;
       v1RakeTeambackDirectoPct?: number;
       v1SplitJugadorPct?: number;
@@ -1042,8 +1046,21 @@ export const api = {
 
     cierreRmf: (
       contratoId: string,
-      data: { desde: string; hasta: string; resultadoMesas: number; rakeBruto: number; observaciones?: string | null; pagoReal?: number }
+      data: {
+        desde: string;
+        hasta: string;
+        resultadoMesas: number;
+        rakeBruto: number;
+        ticketPromocional?: number;
+        ticketPromocionalNota?: string | null;
+        observaciones?: string | null;
+        pagoReal?: number;
+      }
     ) => request(`/bancado-contratos/${contratoId}/cierre-rmf`, { method: "POST", body: JSON.stringify(data) }),
+
+    historialRmf: (contratoId: string) => request(`/bancado-contratos/${contratoId}/historial-rmf`),
+    revertirCierreRmf: (cierreId: string, motivo?: string) =>
+      request(`/bancado-contratos/historial-rmf/${cierreId}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
 
     liquidaciones: (contratoId: string, periodoId?: string) =>
       request(`/bancado-contratos/${contratoId}/liquidaciones${periodoId ? `?periodoId=${periodoId}` : ""}`),

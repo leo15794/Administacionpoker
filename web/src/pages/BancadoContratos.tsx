@@ -101,9 +101,13 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   const [seleccion, setSeleccion] = useState(""); // "PLAYER:<id>" o "AGENT:<id>"
   const [reglaKey, setReglaKey] = useState<"RMF" | "REGLA_BANCADO_V1" | "">("");
   useEffect(() => { api.bancadoContratos.candidatos().then(setCandidatos).catch(() => setCandidatos([])); }, []);
-  const [rmfAgentSharePct, setRmfAgentSharePct] = useState("50");
-  const [rmfRakebackPct, setRmfRakebackPct] = useState("100");
-  const [rmfMemoriaInicial, setRmfMemoriaInicial] = useState("0");
+  const [rmfPctJugador, setRmfPctJugador] = useState("50");
+  const [rmfPctBanca, setRmfPctBanca] = useState("50");
+  const [rmfRakebackPct, setRmfRakebackPct] = useState("0");
+  const [rmfRakebackBancaPct, setRmfRakebackBancaPct] = useState("0");
+  const [rmfUnionSharePct, setRmfUnionSharePct] = useState("80");
+  const [rmfCapitalInicial, setRmfCapitalInicial] = useState("0");
+  const [rmfMakeupInicial, setRmfMakeupInicial] = useState("0");
   const [v1RakeDealPct, setV1RakeDealPct] = useState("60");
   const [v1RakeTeambackDirectoPct, setV1RakeTeambackDirectoPct] = useState("20");
   const [v1SplitJugadorPct, setV1SplitJugadorPct] = useState("50");
@@ -125,9 +129,13 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
         agentId: tipo === "AGENT" ? id : undefined,
         reglaKey,
         observaciones: observaciones.trim() || undefined,
-        rmfAgentSharePct: reglaKey === "RMF" ? Number(rmfAgentSharePct) / 100 : undefined,
+        rmfPctJugador: reglaKey === "RMF" ? Number(rmfPctJugador) / 100 : undefined,
+        rmfPctBanca: reglaKey === "RMF" ? Number(rmfPctBanca) / 100 : undefined,
         rmfRakebackPct: reglaKey === "RMF" ? Number(rmfRakebackPct) / 100 : undefined,
-        rmfMemoriaInicial: reglaKey === "RMF" ? Number(rmfMemoriaInicial) : undefined,
+        rmfRakebackBancaPct: reglaKey === "RMF" ? Number(rmfRakebackBancaPct) / 100 : undefined,
+        rmfUnionSharePct: reglaKey === "RMF" ? Number(rmfUnionSharePct) / 100 : undefined,
+        rmfCapitalInicial: reglaKey === "RMF" ? Number(rmfCapitalInicial) : undefined,
+        rmfMakeupInicial: reglaKey === "RMF" ? Number(rmfMakeupInicial) : undefined,
         v1RakeDealPct: reglaKey === "REGLA_BANCADO_V1" ? Number(v1RakeDealPct) / 100 : undefined,
         v1RakeTeambackDirectoPct: reglaKey === "REGLA_BANCADO_V1" ? Number(v1RakeTeambackDirectoPct) / 100 : undefined,
         v1SplitJugadorPct: reglaKey === "REGLA_BANCADO_V1" ? Number(v1SplitJugadorPct) / 100 : undefined,
@@ -169,17 +177,36 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
         <>
           <div className="form-grid">
             <div className="field">
-              <label>% de la mesa para el bancado (si gana)</label>
-              <input type="number" value={rmfAgentSharePct} onChange={(e) => setRmfAgentSharePct(e.target.value)} />
+              <label>% Jugador</label>
+              <input type="number" step="0.01" value={rmfPctJugador} onChange={(e) => setRmfPctJugador(e.target.value)} />
             </div>
             <div className="field">
-              <label>% de rakeback (100% del bancado)</label>
-              <input type="number" value={rmfRakebackPct} onChange={(e) => setRmfRakebackPct(e.target.value)} />
+              <label>% Banca</label>
+              <input type="number" step="0.01" value={rmfPctBanca} onChange={(e) => setRmfPctBanca(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Rakeback Jugador (%)</label>
+              <input type="number" step="0.01" value={rmfRakebackPct} onChange={(e) => setRmfRakebackPct(e.target.value)} />
+            </div>
+            <div className="field">
+              <label title="% independiente sobre el rake total que vuelve a la banca en vez de al jugador -- no tiene que sumar 100% con el rakeback del jugador.">Rakeback Banca (%)</label>
+              <input type="number" step="0.01" value={rmfRakebackBancaPct} onChange={(e) => setRmfRakebackBancaPct(e.target.value)} />
+            </div>
+            <div className="field">
+              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total -- solo informativo, no genera ningún movimiento de Wallet/Tesorería.">% Unión sobre rake total (informativo)</label>
+              <input type="number" step="0.01" value={rmfUnionSharePct} onChange={(e) => setRmfUnionSharePct(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Capital inicial (USD)</label>
+              <input type="number" step="0.01" value={rmfCapitalInicial} onChange={(e) => setRmfCapitalInicial(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Makeup inicial (USD)</label>
+              <input type="number" step="0.01" value={rmfMakeupInicial} onChange={(e) => setRmfMakeupInicial(e.target.value)} />
             </div>
           </div>
-          <div className="field">
-            <label>Memoria inicial (USD)</label>
-            <input type="number" value={rmfMemoriaInicial} onChange={(e) => setRmfMemoriaInicial(e.target.value)} />
+          <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+            Mismo motor de cálculo (capital/makeup) que "Jugadores bancados" clásico -- es la misma fórmula, aplicada a este contrato.
           </div>
         </>
       )}
@@ -230,36 +257,50 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
 }
 
 // ------------------------------------------------------------------------------------------
-// Regla RMF -- cierre semanal definitivo
+// Regla RMF -- mismo motor de capital/makeup que "Jugadores bancados" clásico
+// (engine/bancados.ts), aplicado a este contrato. Nunca se guarda un capital/makeup "actual"
+// mutable -- se deriva siempre del último cierre APLICADO (repo/bancadoContratos.ts).
 // ------------------------------------------------------------------------------------------
 function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => void }) {
+  const { promptDialog, alertDialog } = useConfirmDialog();
   const [historial, setHistorial] = useState<any[] | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [resultadoMesas, setResultadoMesas] = useState("");
-  const [rakeBruto, setRakeBruto] = useState("");
+  const [resultadoMesas, setResultadoMesas] = useState("0");
+  const [rakeBruto, setRakeBruto] = useState("0");
+  const [ticketPromocional, setTicketPromocional] = useState("0");
+  const [ticketPromocionalNota, setTicketPromocionalNota] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function refresh() {
-    api.bancadoContratos.liquidaciones(contrato.id).then(setHistorial).catch(() => {});
+    api.bancadoContratos.historialRmf(contrato.id).then(setHistorial).catch(() => {});
   }
   useEffect(() => { refresh(); }, [contrato.id]);
 
+  const ultimoAplicado = historial?.find((h) => h.status !== "REVERTIDO") ?? null;
+  const capitalActual = ultimoAplicado ? Number(ultimoAplicado.capital_despues) : Number(contrato.rmf_capital_inicial ?? 0);
+  const makeupActual = ultimoAplicado ? Number(ultimoAplicado.makeup_nuevo) : Number(contrato.rmf_makeup_inicial ?? 0);
+
   async function cerrarSemana() {
     if (!desde || !hasta) return setMsg({ ok: false, text: "Faltan las fechas." });
+    if ((Number(ticketPromocional) || 0) !== 0 && !ticketPromocionalNota.trim()) {
+      return setMsg({ ok: false, text: "Si hay ticket promocional hay que anotar por qué." });
+    }
     setGuardando(true);
     setMsg(null);
     try {
       await api.bancadoContratos.cierreRmf(contrato.id, {
         desde,
         hasta,
-        resultadoMesas: Number(resultadoMesas),
-        rakeBruto: Number(rakeBruto),
+        resultadoMesas: Number(resultadoMesas) || 0,
+        rakeBruto: Number(rakeBruto) || 0,
+        ticketPromocional: Number(ticketPromocional) || undefined,
+        ticketPromocionalNota: ticketPromocionalNota.trim() || undefined,
         observaciones: observaciones.trim() || undefined,
       });
-      setDesde(""); setHasta(""); setResultadoMesas(""); setRakeBruto(""); setObservaciones("");
+      setDesde(""); setHasta(""); setResultadoMesas("0"); setRakeBruto("0"); setTicketPromocional("0"); setTicketPromocionalNota(""); setObservaciones("");
       refresh();
       onChanged();
     } catch (err: any) {
@@ -269,20 +310,36 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
     }
   }
 
+  async function revertir(h: any) {
+    const motivo = await promptDialog("¿Por qué se revierte este cierre RMF? (queda en el historial, no se borra nada)");
+    if (motivo === null) return;
+    try {
+      await api.bancadoContratos.revertirCierreRmf(h.id, motivo || undefined);
+      refresh();
+      onChanged();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo revertir.");
+    }
+  }
+
   return (
     <div>
       <div className="kpi-grid">
         <div className="kpi-card">
-          <div className="muted">Memoria actual</div>
-          <div className="value">{usd(contrato.rmf_memoria_actual)}</div>
+          <div className="muted">Capital actual</div>
+          <div className="value">{usd(capitalActual)}</div>
         </div>
         <div className="kpi-card">
-          <div className="muted">% mesa del bancado</div>
-          <div className="value">{(Number(contrato.rmf_agent_share_pct) * 100).toFixed(0)}%</div>
+          <div className="muted">Makeup actual</div>
+          <div className="value">{usd(makeupActual)}</div>
         </div>
         <div className="kpi-card">
-          <div className="muted">% rakeback</div>
-          <div className="value">{(Number(contrato.rmf_rakeback_pct) * 100).toFixed(0)}%</div>
+          <div className="muted">% Jugador / % Banca</div>
+          <div className="value">{(Number(contrato.rmf_pct_jugador) * 100).toFixed(0)}% / {(Number(contrato.rmf_pct_banca) * 100).toFixed(0)}%</div>
+        </div>
+        <div className="kpi-card">
+          <div className="muted">Rakeback jugador / banca</div>
+          <div className="value">{(Number(contrato.rmf_rakeback_pct) * 100).toFixed(0)}% / {(Number(contrato.rmf_rakeback_banca_pct ?? 0) * 100).toFixed(0)}%</div>
         </div>
       </div>
 
@@ -293,9 +350,13 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
           <div className="field"><label>Hasta</label><input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></div>
         </div>
         <div className="form-grid">
-          <div className="field"><label>Resultado de mesas</label><input type="number" value={resultadoMesas} onChange={(e) => setResultadoMesas(e.target.value)} /></div>
-          <div className="field"><label>Rake bruto</label><input type="number" value={rakeBruto} onChange={(e) => setRakeBruto(e.target.value)} /></div>
+          <div className="field"><label>Resultado de mesas</label><input type="number" step="0.01" value={resultadoMesas} onChange={(e) => setResultadoMesas(e.target.value)} /></div>
+          <div className="field"><label>Rake total</label><input type="number" step="0.01" value={rakeBruto} onChange={(e) => setRakeBruto(e.target.value)} /></div>
         </div>
+        <div className="field"><label>Ticket promocional (a nuestro cargo)</label><input type="number" step="0.01" value={ticketPromocional} onChange={(e) => setTicketPromocional(e.target.value)} /></div>
+        {(Number(ticketPromocional) || 0) !== 0 && (
+          <div className="field"><label>Motivo del ticket promocional</label><input value={ticketPromocionalNota} onChange={(e) => setTicketPromocionalNota(e.target.value)} placeholder="Ej: ticket promocional torneo X" /></div>
+        )}
         <div className="field"><label>Observaciones</label><input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} /></div>
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
         <button className="btn" disabled={guardando} onClick={cerrarSemana}>{guardando ? "Cerrando..." : "Cerrar semana"}</button>
@@ -305,16 +366,41 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
         <h3 style={{ marginTop: 0 }}>Historial</h3>
         {!historial ? <div className="muted">Cargando...</div> : historial.length === 0 ? <div className="muted">Todavía no hay cierres.</div> : (
           <table>
-            <thead><tr><th>Semana</th><th className="num">Mesa</th><th className="num">Rake</th><th className="num">Final</th><th className="num">Memoria antes</th><th className="num">Memoria después</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Semana</th>
+                <th className="num">Mesa</th>
+                <th className="num">Rake</th>
+                <th className="num">Rakeback</th>
+                <th className="num">Pago jugador</th>
+                <th className="num">Ganancia banca</th>
+                <th className="num">Makeup antes</th>
+                <th className="num">Makeup después</th>
+                <th className="num">Capital antes</th>
+                <th className="num">Capital después</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {historial.map((h) => (
-                <tr key={h.id}>
+                <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
                   <td className="muted">{dateShort(h.desde)} - {dateShort(h.hasta)}</td>
                   <td className="num">{usd(h.resultado_mesas)}</td>
-                  <td className="num">{usd(h.rake_bruto)}</td>
-                  <td className="num money">{usd(h.pago_teorico_jugador)}</td>
-                  <td className="num muted">{usd(h.memoria_anterior)}</td>
-                  <td className="num muted">{usd(h.memoria_final)}</td>
+                  <td className="num">{usd(h.rake_total)}</td>
+                  <td className="num muted">{usd(h.rakeback_total)}</td>
+                  <td className="num money">{usd(h.pago_jugador_total)}</td>
+                  <td className="num money">{usd(h.ganancia_banca_mesas)}</td>
+                  <td className="num muted">{usd(h.makeup_anterior)}</td>
+                  <td className="num muted">{usd(h.makeup_nuevo)}</td>
+                  <td className="num muted">{usd(h.capital_anterior)}</td>
+                  <td className="num muted">{usd(h.capital_despues)}</td>
+                  <td className="muted">{h.status === "REVERTIDO" ? "Revertido" : "Aplicado"}</td>
+                  <td>
+                    {h.status !== "REVERTIDO" && (
+                      <button className="btn secondary small" onClick={() => revertir(h)}>Revertir</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
