@@ -1,0 +1,778 @@
+// Repo de "Bancado — Contratos" (pedido Leo 02/10/2026). Dos reglas 100% configurables por
+// contrato, nunca un default implícito -- ver comentario grande en db/schema.sql y en
+// engine/bancadoContrato.ts. Este módulo es independiente de los dos sistemas de bancado que ya
+// existían (agents.account_type='BANCADO' y "Jugadores bancados" / bancado_config) -- ninguna
+// función de acá los toca ni los lee.
+import type { PoolClient } from "pg";
+import { pool, newId } from "../db/pool.js";
+import { calcularCierreBancado } from "../engine/cierre.js";
+import {
+  calcularParcialSemanal,
+  calcularRecuperacionYSplit,
+  calcularSplitExtraordinario,
+  calcularGananciaTeamback,
+  calcularCreditoPendiente,
+  type BancadoV1Config,
+  type ModoMemoria,
+} from "../engine/bancadoContrato.js";
+
+export type ReglaKey = "RMF" | "REGLA_BANCADO_V1";
+
+// ---------------------------------------------------------------------------------------------
+// Contratos
+// ---------------------------------------------------------------------------------------------
+export interface CrearContratoInput {
+  nombre: string;
+  clubId?: string | null;
+  moneda?: string;
+  reglaKey: ReglaKey;
+  observaciones?: string | null;
+  // RMF
+  rmfAgentSharePct?: number;
+  rmfRakebackPct?: number;
+  rmfMemoriaInicial?: number;
+  // REGLA_BANCADO_V1
+  v1RakeDealPct?: number;
+  v1RakeTeambackDirectoPct?: number;
+  v1SplitJugadorPct?: number;
+  v1SplitTeambackPct?: number;
+  v1ModoMemoriaDefault?: ModoMemoria;
+}
+
+function validarParametrosContrato(input: CrearContratoInput) {
+  if (input.reglaKey === "RMF") {
+    if (input.rmfAgentSharePct === undefined || input.rmfRakebackPct === undefined) {
+      throw new Error("La regla RMF necesita rmfAgentSharePct y rmfRakebackPct -- no hay valores default.");
+    }
+  } else {
+    if (
+      input.v1RakeDealPct === undefined ||
+      input.v1RakeTeambackDirectoPct === undefined ||
+      input.v1SplitJugadorPct === undefined ||
+      input.v1SplitTeambackPct === undefined
+    ) {
+      throw new Error(
+        "REGLA_BANCADO_V1 necesita v1RakeDealPct, v1RakeTeambackDirectoPct, v1SplitJugadorPct y v1SplitTeambackPct -- no hay valores default (sección 1 del documento)."
+      );
+    }
+  }
+}
+
+export async function crearContrato(input: CrearContratoInput, createdBy?: string | null) {
+  validarParametrosContrato(input);
+  const id = newId("bct");
+  const r = await pool.query(
+    `INSERT INTO bancado_contratos
+      (id, nombre, club_id, moneda, regla_key, observaciones, created_by,
+       rmf_agent_share_pct, rmf_rakeback_pct, rmf_memoria_actual,
+       v1_rake_deal_pct, v1_rake_teamback_directo_pct, v1_split_jugador_pct, v1_split_teamback_pct, v1_modo_memoria_default)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     RETURNING *`,
+    [
+      id,
+      input.nombre,
+      input.clubId ?? null,
+      input.moneda ?? "USD",
+      input.reglaKey,
+      input.observaciones ?? null,
+      createdBy ?? null,
+      input.reglaKey === "RMF" ? input.rmfAgentSharePct : null,
+      input.reglaKey === "RMF" ? input.rmfRakebackPct : null,
+      input.reglaKey === "RMF" ? input.rmfMemoriaInicial ?? 0 : 0,
+      input.reglaKey === "REGLA_BANCADO_V1" ? input.v1RakeDealPct : null,
+      input.reglaKey === "REGLA_BANCADO_V1" ? input.v1RakeTeambackDirectoPct : null,
+      input.reglaKey === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct : null,
+      input.reglaKey === "REGLA_BANCADO_V1" ? input.v1SplitTeambackPct : null,
+      input.reglaKey === "REGLA_BANCADO_V1" ? input.v1ModoMemoriaDefault ?? "AUTOMATICO" : null,
+    ]
+  );
+  return r.rows[0];
+}
+
+export interface EditarContratoInput {
+  nombre?: string;
+  clubId?: string | null;
+  observaciones?: string | null;
+  activo?: boolean;
+  rmfAgentSharePct?: number;
+  rmfRakebackPct?: number;
+  v1RakeDealPct?: number;
+  v1RakeTeambackDirectoPct?: number;
+  v1SplitJugadorPct?: number;
+  v1SplitTeambackPct?: number;
+  v1ModoMemoriaDefault?: ModoMemoria;
+}
+
+// No se puede cambiar regla_key de un contrato ya creado -- si cambia el contrato de verdad
+// (como el caso de Matías), se crea un contrato nuevo (así queda clarísimo en el historial cuál
+// liquidación corresponde a qué reglas, y nunca se mezclan parámetros de una regla con la otra).
+export async function editarContrato(id: string, input: EditarContratoInput) {
+  const actual = await getContrato(id);
+  if (!actual) throw new Error("Contrato no encontrado.");
+  const r = await pool.query(
+    `UPDATE bancado_contratos SET
+       nombre = $1, club_id = $2, observaciones = $3, activo = $4,
+       rmf_agent_share_pct = $5, rmf_rakeback_pct = $6,
+       v1_rake_deal_pct = $7, v1_rake_teamback_directo_pct = $8,
+       v1_split_jugador_pct = $9, v1_split_teamback_pct = $10, v1_modo_memoria_default = $11,
+       updated_at = now()
+     WHERE id = $12
+     RETURNING *`,
+    [
+      input.nombre ?? actual.nombre,
+      input.clubId !== undefined ? input.clubId : actual.club_id,
+      input.observaciones !== undefined ? input.observaciones : actual.observaciones,
+      input.activo !== undefined ? input.activo : actual.activo,
+      actual.regla_key === "RMF" ? input.rmfAgentSharePct ?? actual.rmf_agent_share_pct : null,
+      actual.regla_key === "RMF" ? input.rmfRakebackPct ?? actual.rmf_rakeback_pct : null,
+      actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeDealPct ?? actual.v1_rake_deal_pct : null,
+      actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeTeambackDirectoPct ?? actual.v1_rake_teamback_directo_pct : null,
+      actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct ?? actual.v1_split_jugador_pct : null,
+      actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitTeambackPct ?? actual.v1_split_teamback_pct : null,
+      actual.regla_key === "REGLA_BANCADO_V1" ? input.v1ModoMemoriaDefault ?? actual.v1_modo_memoria_default : null,
+      id,
+    ]
+  );
+  return r.rows[0];
+}
+
+export async function listContratos() {
+  const r = await pool.query(`SELECT * FROM bancado_contratos ORDER BY activo DESC, nombre ASC`);
+  return r.rows;
+}
+
+export async function getContrato(id: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contratos WHERE id = $1`, [id]);
+  return r.rows[0] ?? null;
+}
+
+function cfgV1(contrato: any): BancadoV1Config {
+  return {
+    rakeDealPct: Number(contrato.v1_rake_deal_pct),
+    rakeTeambackDirectoPct: Number(contrato.v1_rake_teamback_directo_pct),
+    splitJugadorPct: Number(contrato.v1_split_jugador_pct),
+    splitTeambackPct: Number(contrato.v1_split_teamback_pct),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Períodos (solo REGLA_BANCADO_V1) -- secciones 9, 10, 27, 28
+// ---------------------------------------------------------------------------------------------
+export async function listPeriodos(contratoId: string) {
+  const r = await pool.query(
+    `SELECT * FROM bancado_contrato_periodos WHERE contrato_id = $1 ORDER BY anio DESC, mes DESC`,
+    [contratoId]
+  );
+  return r.rows;
+}
+
+export async function getPeriodo(id: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1`, [id]);
+  return r.rows[0] ?? null;
+}
+
+export interface AbrirPeriodoInput {
+  contratoId: string;
+  anio: number;
+  mes: number;
+  memoriaInicial?: number; // obligatorio si es el primer período del contrato
+  modoMemoria?: ModoMemoria; // default = contrato.v1_modo_memoria_default
+}
+
+export async function abrirPeriodo(input: AbrirPeriodoInput) {
+  const contrato = await getContrato(input.contratoId);
+  if (!contrato) throw new Error("Contrato no encontrado.");
+  if (contrato.regla_key !== "REGLA_BANCADO_V1") {
+    throw new Error("Este contrato usa la regla RMF -- RMF liquida semana a semana, no tiene períodos mensuales.");
+  }
+  const existing = await pool.query(
+    `SELECT id FROM bancado_contrato_periodos WHERE contrato_id = $1 AND anio = $2 AND mes = $3`,
+    [input.contratoId, input.anio, input.mes]
+  );
+  if (existing.rows.length > 0) throw new Error("Ya existe un período para ese mes de este contrato.");
+
+  // Sección 28: el período nuevo arranca con la memoria final del anterior (si hay uno
+  // cerrado) -- nunca se recalcula desde cero. Si es el primer período del contrato, la
+  // memoria inicial la tiene que dar quien abre el período a mano (ej. los USD 344,75 de
+  // Matías migrados del acuerdo viejo) -- no hay forma de inventarla sola.
+  let memoriaInicial = input.memoriaInicial;
+  const previoRes = await pool.query(
+    `SELECT * FROM bancado_contrato_periodos WHERE contrato_id = $1 AND (anio < $2 OR (anio = $2 AND mes < $3))
+     ORDER BY anio DESC, mes DESC LIMIT 1`,
+    [input.contratoId, input.anio, input.mes]
+  );
+  const previo = previoRes.rows[0] ?? null;
+  if (memoriaInicial === undefined) {
+    if (!previo) {
+      throw new Error("Es el primer período de este contrato -- hay que indicar la memoria inicial a mano.");
+    }
+    if (previo.estado !== "CERRADO") {
+      throw new Error(`El período anterior (${previo.anio}-${previo.mes}) todavía está ABIERTO -- cerralo antes de abrir uno nuevo.`);
+    }
+    memoriaInicial = Number(previo.memoria_final);
+  }
+
+  const id = newId("bper");
+  const r = await pool.query(
+    `INSERT INTO bancado_contrato_periodos (id, contrato_id, anio, mes, memoria_inicial, memoria_actual, modo_memoria)
+     VALUES ($1,$2,$3,$4,$5,$5,$6) RETURNING *`,
+    [id, input.contratoId, input.anio, input.mes, memoriaInicial, input.modoMemoria ?? contrato.v1_modo_memoria_default ?? "AUTOMATICO"]
+  );
+  return r.rows[0];
+}
+
+export interface ReabrirPeriodoInput {
+  periodoId: string;
+  motivo: string;
+  reabiertoPor: string;
+}
+
+// Sección 28: reapertura ADMINISTRATIVA AUDITADA -- nunca silenciosa. No se puede reabrir si ya
+// existe un período más nuevo de este contrato (ese ya puede haber heredado la memoria_final de
+// este, reabrir desordenado puede desincronizar la cadena de memoria).
+export async function reabrirPeriodo(input: ReabrirPeriodoInput) {
+  const periodo = await getPeriodo(input.periodoId);
+  if (!periodo) throw new Error("Período no encontrado.");
+  if (periodo.estado !== "CERRADO") throw new Error("El período ya está abierto.");
+  const siguiente = await pool.query(
+    `SELECT id FROM bancado_contrato_periodos WHERE contrato_id = $1 AND (anio > $2 OR (anio = $2 AND mes > $3)) LIMIT 1`,
+    [periodo.contrato_id, periodo.anio, periodo.mes]
+  );
+  if (siguiente.rows.length > 0) {
+    throw new Error("Ya existe un período posterior de este contrato -- cerralo (o revisá la cadena de memoria) antes de reabrir este.");
+  }
+  const r = await pool.query(
+    `UPDATE bancado_contrato_periodos SET estado = 'ABIERTO', reabierto_en = now(), reabierto_por = $1, reabierto_motivo = $2 WHERE id = $3 RETURNING *`,
+    [input.reabiertoPor, input.motivo, input.periodoId]
+  );
+  return r.rows[0];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Parciales semanales (sección 7/8) -- nunca liquidan, nunca tocan memoria
+// ---------------------------------------------------------------------------------------------
+export interface RegistrarParcialInput {
+  periodoId: string;
+  desde: string;
+  hasta: string;
+  resultadoMesas: number;
+  rakeBruto: number;
+  ajuste?: number;
+  ajusteNota?: string | null;
+  observaciones?: string | null;
+}
+
+export async function registrarParcial(input: RegistrarParcialInput, createdBy?: string | null) {
+  const periodo = await getPeriodo(input.periodoId);
+  if (!periodo) throw new Error("Período no encontrado.");
+  if (periodo.estado !== "ABIERTO") throw new Error("El período está CERRADO -- no se pueden cargar más parciales (reabrilo si hace falta corregir algo).");
+  const contrato = await getContrato(periodo.contrato_id);
+  const calc = calcularParcialSemanal(cfgV1(contrato), {
+    resultadoMesas: input.resultadoMesas,
+    rakeBruto: input.rakeBruto,
+    ajuste: input.ajuste,
+  });
+  const id = newId("bpar");
+  const r = await pool.query(
+    `INSERT INTO bancado_contrato_parciales
+       (id, periodo_id, contrato_id, desde, hasta, resultado_mesas, rake_bruto, ajuste, ajuste_nota,
+        rake_deal_semana, resultado_deal_semana, rake_teamback_semana, observaciones, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    [
+      id,
+      input.periodoId,
+      periodo.contrato_id,
+      input.desde,
+      input.hasta,
+      input.resultadoMesas,
+      input.rakeBruto,
+      input.ajuste ?? 0,
+      input.ajusteNota ?? null,
+      calc.rakeDealSemana,
+      calc.resultadoDealSemana,
+      calc.rakeTeambackSemana,
+      input.observaciones ?? null,
+      createdBy ?? null,
+    ]
+  );
+  return r.rows[0];
+}
+
+export async function listParciales(periodoId: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contrato_parciales WHERE periodo_id = $1 ORDER BY desde ASC`, [periodoId]);
+  return r.rows;
+}
+
+// Acumulados del período (sección 9) -- siempre desde los parciales guardados, nunca
+// recalculado "a mano" en el cliente.
+async function acumuladosPeriodo(periodoId: string, client?: PoolClient) {
+  const q = client ? client.query.bind(client) : pool.query.bind(pool);
+  const r = await q(
+    `SELECT
+       COALESCE(SUM(resultado_mesas),0) AS resultado_mesas_acumulado,
+       COALESCE(SUM(rake_bruto),0) AS rake_bruto_acumulado,
+       COALESCE(SUM(rake_deal_semana),0) AS rake_deal_acumulado,
+       COALESCE(SUM(resultado_deal_semana),0) AS resultado_deal_acumulado,
+       COALESCE(SUM(rake_teamback_semana),0) AS rake_teamback_acumulado
+     FROM bancado_contrato_parciales WHERE periodo_id = $1`,
+    [periodoId]
+  );
+  const row = r.rows[0];
+  return {
+    resultadoMesasAcumulado: Number(row.resultado_mesas_acumulado),
+    rakeBrutoAcumulado: Number(row.rake_bruto_acumulado),
+    rakeDealAcumulado: Number(row.rake_deal_acumulado),
+    resultadoDealAcumulado: Number(row.resultado_deal_acumulado),
+    rakeTeambackAcumulado: Number(row.rake_teamback_acumulado),
+  };
+}
+
+// "pendiente a procesar" (ver comentario grande en engine/bancadoContrato.ts): neto de lo que
+// ya se haya resuelto en eventos previos del período (extraordinarios).
+function calcularPendiente(periodo: any, resultadoDealAcumulado: number): number {
+  const memoriaYaAplicada = Number(periodo.memoria_inicial) - Number(periodo.memoria_actual);
+  return resultadoDealAcumulado - memoriaYaAplicada - Number(periodo.resultado_ya_distribuido);
+}
+
+// Pantalla del período mensual (sección 31) -- memoria, producción, TeamBack, split y pagos,
+// todo PROYECTADO mientras el período esté abierto (nunca es la liquidación definitiva).
+export async function getEstadoPeriodo(periodoId: string) {
+  const periodo = await getPeriodo(periodoId);
+  if (!periodo) throw new Error("Período no encontrado.");
+  const contrato = await getContrato(periodo.contrato_id);
+  const acumulados = await acumuladosPeriodo(periodoId);
+  const pendiente = calcularPendiente(periodo, acumulados.resultadoDealAcumulado);
+
+  // La proyección siempre asume recuperación automática al máximo posible -- PARCIAL_MANUAL
+  // solo tiene sentido como decisión deliberada al momento de cerrar (sección 15), no como
+  // supuesto de una pantalla informativa.
+  const proyeccion = calcularRecuperacionYSplit({
+    pendiente,
+    memoriaActual: Number(periodo.memoria_actual),
+    modoMemoria: "AUTOMATICO",
+    splitCfg: cfgV1(contrato),
+  });
+
+  const liquidacionesExtra = await pool.query(
+    `SELECT COALESCE(SUM(split_teamback),0) AS teamback_split_realizado
+     FROM bancado_contrato_liquidaciones WHERE periodo_id = $1 AND status = 'APLICADO'`,
+    [periodoId]
+  );
+  const gananciaTeambackRealizada = Number(liquidacionesExtra.rows[0].teamback_split_realizado);
+
+  return {
+    periodo,
+    contrato,
+    acumulados,
+    pendiente,
+    memoriaProyectada: pendiente <= 0 ? proyeccion.memoriaFinal : proyeccion.memoriaFinal,
+    resultadoProyectadoParaSplit: proyeccion.resultadoParaSplit,
+    splitJugadorProyectado: proyeccion.splitJugador,
+    splitTeambackProyectado: proyeccion.splitTeamback,
+    gananciaTeambackAcumuladaRake: acumulados.rakeTeambackAcumulado,
+    gananciaTeambackRealizada,
+    gananciaTeambackProyectada: acumulados.rakeTeambackAcumulado + proyeccion.splitTeamback + gananciaTeambackRealizada,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Split extraordinario (sección 17/18) -- operación manual autorizada
+// ---------------------------------------------------------------------------------------------
+export interface SplitExtraordinarioInput {
+  periodoId: string;
+  gananciaDisponible?: number; // si no se manda, se sugiere el "pendiente" calculado ahora
+  memoriaAplicada: number;
+  autorizadoPor: string;
+  motivo: string;
+  observaciones?: string | null;
+  pagoReal?: number;
+}
+
+export async function ejecutarSplitExtraordinario(input: SplitExtraordinarioInput, createdBy?: string | null) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const periodoRes = await client.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1 FOR UPDATE`, [input.periodoId]);
+    const periodo = periodoRes.rows[0];
+    if (!periodo) throw new Error("Período no encontrado.");
+    if (periodo.estado !== "ABIERTO") throw new Error("El período ya está CERRADO.");
+    const contrato = await getContrato(periodo.contrato_id);
+
+    const acumulados = await acumuladosPeriodo(input.periodoId, client);
+    const pendiente = calcularPendiente(periodo, acumulados.resultadoDealAcumulado);
+    const gananciaDisponible = input.gananciaDisponible ?? Math.max(0, pendiente);
+
+    const calc = calcularSplitExtraordinario({
+      memoriaActual: Number(periodo.memoria_actual),
+      gananciaDisponible,
+      memoriaAplicada: input.memoriaAplicada,
+      splitCfg: cfgV1(contrato),
+    });
+
+    const gananciaTeambackTotal = calcularGananciaTeamback(0, calc.splitTeamback);
+    const pagoTeorico = calc.splitJugador;
+    const pagoReal = input.pagoReal ?? pagoTeorico;
+    const creditoPendiente = calcularCreditoPendiente(pagoTeorico, pagoReal);
+
+    const liqId = newId("bliq");
+    await client.query(
+      `INSERT INTO bancado_contrato_liquidaciones
+         (id, contrato_id, periodo_id, tipo, resultado_acumulado, memoria_anterior, memoria_aplicada, memoria_final,
+          base_liberada_split, split_jugador_pct, split_jugador, split_teamback_pct, split_teamback,
+          ganancia_teamback_total, pago_teorico_jugador, pago_real_jugador, credito_pendiente_jugador,
+          autorizado_por, motivo, observaciones, created_by)
+       VALUES ($1,$2,$3,'EXTRAORDINARIO',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        liqId,
+        periodo.contrato_id,
+        input.periodoId,
+        gananciaDisponible,
+        periodo.memoria_actual,
+        calc.memoriaAplicada,
+        calc.memoriaFinal,
+        calc.resultadoLiberado,
+        contrato.v1_split_jugador_pct,
+        calc.splitJugador,
+        contrato.v1_split_teamback_pct,
+        calc.splitTeamback,
+        gananciaTeambackTotal,
+        pagoTeorico,
+        pagoReal,
+        creditoPendiente,
+        input.autorizadoPor,
+        input.motivo,
+        input.observaciones ?? null,
+        createdBy ?? null,
+      ]
+    );
+
+    await client.query(
+      `UPDATE bancado_contrato_periodos SET memoria_actual = $1, resultado_ya_distribuido = resultado_ya_distribuido + $2 WHERE id = $3`,
+      [calc.memoriaFinal, calc.resultadoLiberado, input.periodoId]
+    );
+
+    if (creditoPendiente !== 0) {
+      await client.query(
+        `INSERT INTO bancado_contrato_ajustes (id, contrato_id, periodo_id, tipo, importe, signo, liquidacion_origen_id, usuario, motivo)
+         VALUES ($1,$2,$3,'PAGO_PENDIENTE',$4,$5,$6,$7,$8)`,
+        [
+          newId("baj"),
+          periodo.contrato_id,
+          input.periodoId,
+          Math.abs(creditoPendiente),
+          creditoPendiente > 0 ? "POSITIVO" : "NEGATIVO",
+          liqId,
+          input.autorizadoPor,
+          "Diferencia entre pago teórico y pago real de un split extraordinario.",
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { liquidacionId: liqId, ...calc, gananciaDisponible };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Cierre mensual (secciones 12-16, 19-22, 27)
+// ---------------------------------------------------------------------------------------------
+export interface CierreMensualInput {
+  periodoId: string;
+  modoMemoria?: ModoMemoria; // override puntual del modo del período, si hiciera falta
+  memoriaAplicadaManual?: number; // obligatorio si el modo (del período o el override) es PARCIAL_MANUAL
+  pagoReal?: number; // si no se manda, se asume que se pagó el teórico completo
+  autorizadoPor: string;
+}
+
+export async function ejecutarCierreMensual(input: CierreMensualInput, createdBy?: string | null) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const periodoRes = await client.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1 FOR UPDATE`, [input.periodoId]);
+    const periodo = periodoRes.rows[0];
+    if (!periodo) throw new Error("Período no encontrado.");
+    if (periodo.estado !== "ABIERTO") throw new Error("El período ya está CERRADO.");
+    const contrato = await getContrato(periodo.contrato_id);
+
+    const acumulados = await acumuladosPeriodo(input.periodoId, client);
+    const pendiente = calcularPendiente(periodo, acumulados.resultadoDealAcumulado);
+    const modoMemoria = input.modoMemoria ?? periodo.modo_memoria;
+
+    const calc = calcularRecuperacionYSplit({
+      pendiente,
+      memoriaActual: Number(periodo.memoria_actual),
+      modoMemoria,
+      memoriaAplicadaManual: input.memoriaAplicadaManual,
+      splitCfg: cfgV1(contrato),
+    });
+
+    // Sección 22: la ganancia TeamBack del mes = TODO el rake directo acumulado de los
+    // parciales (nunca se reparte, se cuenta una sola vez acá) + el split TeamBack de este
+    // cierre definitivo. Los splits extraordinarios del mes YA quedaron contabilizados en sus
+    // propias filas de liquidación -- no se vuelven a sumar acá (sección 18: "nunca duplicar").
+    const gananciaTeambackTotal = calcularGananciaTeamback(acumulados.rakeTeambackAcumulado, calc.splitTeamback);
+    const pagoTeorico = calc.splitJugador;
+    const pagoReal = input.pagoReal ?? pagoTeorico;
+    const creditoPendiente = calcularCreditoPendiente(pagoTeorico, pagoReal);
+
+    const liqId = newId("bliq");
+    await client.query(
+      `INSERT INTO bancado_contrato_liquidaciones
+         (id, contrato_id, periodo_id, tipo, desde, hasta, resultado_mesas, rake_bruto,
+          resultado_acumulado, memoria_anterior, modo_memoria, recuperacion_maxima, memoria_aplicada, memoria_final,
+          base_liberada_split, split_jugador_pct, split_jugador, split_teamback_pct, split_teamback,
+          rake_teamback_directo, ganancia_teamback_total, pago_teorico_jugador, pago_real_jugador, credito_pendiente_jugador,
+          autorizado_por, created_by)
+       VALUES ($1,$2,$3,'MENSUAL',
+               (SELECT MIN(desde) FROM bancado_contrato_parciales WHERE periodo_id = $3),
+               (SELECT MAX(hasta) FROM bancado_contrato_parciales WHERE periodo_id = $3),
+               $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+      [
+        liqId,
+        periodo.contrato_id,
+        input.periodoId,
+        acumulados.resultadoMesasAcumulado,
+        acumulados.rakeBrutoAcumulado,
+        pendiente,
+        periodo.memoria_actual,
+        modoMemoria,
+        calc.recuperacionMaxima,
+        calc.memoriaAplicada,
+        calc.memoriaFinal,
+        calc.resultadoParaSplit,
+        contrato.v1_split_jugador_pct,
+        calc.splitJugador,
+        contrato.v1_split_teamback_pct,
+        calc.splitTeamback,
+        acumulados.rakeTeambackAcumulado,
+        gananciaTeambackTotal,
+        pagoTeorico,
+        pagoReal,
+        creditoPendiente,
+        input.autorizadoPor,
+        createdBy ?? null,
+      ]
+    );
+
+    await client.query(
+      `UPDATE bancado_contrato_periodos
+         SET estado = 'CERRADO', memoria_actual = $1, memoria_final = $1, cerrado_en = now(), cerrado_por = $2
+       WHERE id = $3`,
+      [calc.memoriaFinal, input.autorizadoPor, input.periodoId]
+    );
+
+    if (creditoPendiente !== 0) {
+      await client.query(
+        `INSERT INTO bancado_contrato_ajustes (id, contrato_id, periodo_id, tipo, importe, signo, liquidacion_origen_id, usuario, motivo)
+         VALUES ($1,$2,$3,'PAGO_PENDIENTE',$4,$5,$6,$7,$8)`,
+        [
+          newId("baj"),
+          periodo.contrato_id,
+          input.periodoId,
+          Math.abs(creditoPendiente),
+          creditoPendiente > 0 ? "POSITIVO" : "NEGATIVO",
+          liqId,
+          input.autorizadoPor,
+          "Diferencia entre pago teórico y pago real del cierre mensual.",
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { liquidacionId: liqId, ...calc, gananciaTeambackTotal, pagoTeorico, pagoReal, creditoPendiente };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Regla RMF -- liquidación semanal definitiva (reutiliza calcularCierreBancado tal cual, sin
+// duplicar la fórmula -- ver engine/cierre.ts). No hay período ni mes: cada semana se liquida
+// sola, y la memoria vive directo en el contrato (rmf_memoria_actual).
+// ---------------------------------------------------------------------------------------------
+export interface RegistrarCierreRmfInput {
+  contratoId: string;
+  desde: string;
+  hasta: string;
+  resultadoMesas: number;
+  rakeBruto: number;
+  observaciones?: string | null;
+  pagoReal?: number;
+}
+
+export async function registrarCierreRmf(input: RegistrarCierreRmfInput, createdBy?: string | null) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const contratoRes = await client.query(`SELECT * FROM bancado_contratos WHERE id = $1 FOR UPDATE`, [input.contratoId]);
+    const contrato = contratoRes.rows[0];
+    if (!contrato) throw new Error("Contrato no encontrado.");
+    if (contrato.regla_key !== "RMF") throw new Error("Este contrato no usa la regla RMF.");
+
+    const calc = calcularCierreBancado({
+      mesaResult: input.resultadoMesas,
+      rakeTotal: input.rakeBruto,
+      rakebackPct: Number(contrato.rmf_rakeback_pct),
+      agentSharePct: Number(contrato.rmf_agent_share_pct),
+      deudaAnterior: Number(contrato.rmf_memoria_actual),
+    });
+
+    const pagoTeorico = calc.finalClosing;
+    const pagoReal = input.pagoReal ?? pagoTeorico;
+    const creditoPendiente = calcularCreditoPendiente(pagoTeorico, pagoReal);
+    const memoriaAplicada = Math.max(0, calc.deudaAnterior - calc.deudaNueva);
+
+    const liqId = newId("bliq");
+    await client.query(
+      `INSERT INTO bancado_contrato_liquidaciones
+         (id, contrato_id, tipo, desde, hasta, resultado_mesas, rake_bruto, resultado_acumulado,
+          memoria_anterior, memoria_aplicada, memoria_final, base_liberada_split, split_jugador, split_teamback,
+          digiplayers_share, ganancia_teamback_total, pago_teorico_jugador, pago_real_jugador, credito_pendiente_jugador,
+          observaciones, created_by)
+       VALUES ($1,$2,'RMF_SEMANAL',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        liqId,
+        input.contratoId,
+        input.desde,
+        input.hasta,
+        calc.mesaResult,
+        calc.rakeTotal,
+        calc.bancadoOwnAmount,
+        calc.deudaAnterior,
+        memoriaAplicada,
+        calc.deudaNueva,
+        pagoTeorico,
+        pagoTeorico,
+        0,
+        calc.digiplayersShare,
+        0,
+        pagoTeorico,
+        pagoReal,
+        creditoPendiente,
+        input.observaciones ?? null,
+        createdBy ?? null,
+      ]
+    );
+
+    await client.query(`UPDATE bancado_contratos SET rmf_memoria_actual = $1, updated_at = now() WHERE id = $2`, [calc.deudaNueva, input.contratoId]);
+
+    if (creditoPendiente !== 0) {
+      await client.query(
+        `INSERT INTO bancado_contrato_ajustes (id, contrato_id, tipo, importe, signo, liquidacion_origen_id, usuario, motivo)
+         VALUES ($1,$2,'PAGO_PENDIENTE',$3,$4,$5,$6,$7)`,
+        [
+          newId("baj"),
+          input.contratoId,
+          Math.abs(creditoPendiente),
+          creditoPendiente > 0 ? "POSITIVO" : "NEGATIVO",
+          liqId,
+          createdBy ?? "sistema",
+          "Diferencia entre pago teórico y pago real del cierre semanal RMF.",
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { liquidacionId: liqId, ...calc, pagoReal, creditoPendiente };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Historiales (sección 25/26) -- nunca se sobrescriben, se consultan nomás
+// ---------------------------------------------------------------------------------------------
+export async function listLiquidaciones(contratoId: string, periodoId?: string) {
+  const r = periodoId
+    ? await pool.query(`SELECT * FROM bancado_contrato_liquidaciones WHERE contrato_id = $1 AND periodo_id = $2 ORDER BY created_at DESC`, [contratoId, periodoId])
+    : await pool.query(`SELECT * FROM bancado_contrato_liquidaciones WHERE contrato_id = $1 ORDER BY created_at DESC`, [contratoId]);
+  return r.rows;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ajustes (sección 23)
+// ---------------------------------------------------------------------------------------------
+export type AjusteTipo =
+  | "CREDITO_JUGADOR"
+  | "DEBITO_JUGADOR"
+  | "AJUSTE_MEMORIA"
+  | "CORRECCION_CIERRE"
+  | "PAGO_PENDIENTE"
+  | "COMPENSACION"
+  | "ADMINISTRATIVO";
+
+export interface CrearAjusteInput {
+  contratoId: string;
+  periodoId?: string | null;
+  tipo: AjusteTipo;
+  importe: number;
+  signo: "POSITIVO" | "NEGATIVO";
+  fecha?: string;
+  usuario: string;
+  motivo: string;
+  observaciones?: string | null;
+}
+
+export async function crearAjuste(input: CrearAjusteInput) {
+  const id = newId("baj");
+  const r = await pool.query(
+    `INSERT INTO bancado_contrato_ajustes (id, contrato_id, periodo_id, tipo, importe, signo, fecha, usuario, motivo, observaciones)
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10) RETURNING *`,
+    [id, input.contratoId, input.periodoId ?? null, input.tipo, input.importe, input.signo, input.fecha ?? null, input.usuario, input.motivo, input.observaciones ?? null]
+  );
+  return r.rows[0];
+}
+
+export async function resolverAjuste(id: string, resueltoPor: string, nuevoEstado: "APLICADO" | "REVERTIDO") {
+  const r = await pool.query(
+    `UPDATE bancado_contrato_ajustes SET estado = $1, resuelto_en = now(), resuelto_por = $2 WHERE id = $3 AND estado = 'PENDIENTE' RETURNING *`,
+    [nuevoEstado, resueltoPor, id]
+  );
+  if (r.rows.length === 0) throw new Error("Ajuste no encontrado o ya estaba resuelto.");
+  return r.rows[0];
+}
+
+export async function listAjustes(contratoId: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contrato_ajustes WHERE contrato_id = $1 ORDER BY created_at DESC`, [contratoId]);
+  return r.rows;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fijo (sección 29) -- COSTO_FIJO, completamente aparte del deal
+// ---------------------------------------------------------------------------------------------
+export interface RegistrarCostoFijoInput {
+  contratoId: string;
+  anio: number;
+  mes: number;
+  monto: number;
+  moneda?: string;
+  observaciones?: string | null;
+}
+
+export async function registrarCostoFijo(input: RegistrarCostoFijoInput, createdBy?: string | null) {
+  const id = newId("bfix");
+  const r = await pool.query(
+    `INSERT INTO bancado_contrato_costos_fijos (id, contrato_id, anio, mes, monto, moneda, observaciones, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (contrato_id, anio, mes) DO UPDATE SET monto = EXCLUDED.monto, moneda = EXCLUDED.moneda, observaciones = EXCLUDED.observaciones
+     RETURNING *`,
+    [id, input.contratoId, input.anio, input.mes, input.monto, input.moneda ?? "ARS", input.observaciones ?? null, createdBy ?? null]
+  );
+  return r.rows[0];
+}
+
+export async function listCostosFijos(contratoId: string) {
+  const r = await pool.query(`SELECT * FROM bancado_contrato_costos_fijos WHERE contrato_id = $1 ORDER BY anio DESC, mes DESC`, [contratoId]);
+  return r.rows;
+}

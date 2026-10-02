@@ -190,6 +190,7 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento", group: "operacion" },
   { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales", group: "operacion" },
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
+  { key: "bancadoContratos", to: "/dashboard/bancado-contratos", icon: "jugadoresBancados", label: "Bancado — Contratos", group: "operacion" },
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "operacion" },
   { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "finanzas" },
   { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "finanzas" },

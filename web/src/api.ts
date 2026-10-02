@@ -995,6 +995,78 @@ export const api = {
     },
   },
 
+  // "Bancado — Contratos" (pedido Leo 02/10/2026) -- regla 100% elegida por contrato, ver
+  // routes/bancadoContratos.ts. Independiente de api.bancados (el de "Jugadores bancados").
+  bancadoContratos: {
+    listar: () => request("/bancado-contratos"),
+    crear: (data: {
+      nombre: string;
+      clubId?: string | null;
+      moneda?: string;
+      reglaKey: "RMF" | "REGLA_BANCADO_V1";
+      observaciones?: string | null;
+      rmfAgentSharePct?: number;
+      rmfRakebackPct?: number;
+      rmfMemoriaInicial?: number;
+      v1RakeDealPct?: number;
+      v1RakeTeambackDirectoPct?: number;
+      v1SplitJugadorPct?: number;
+      v1SplitTeambackPct?: number;
+      v1ModoMemoriaDefault?: "AUTOMATICO" | "PARCIAL_MANUAL";
+    }) => request("/bancado-contratos", { method: "POST", body: JSON.stringify(data) }),
+    obtener: (id: string) => request(`/bancado-contratos/${id}`),
+    editar: (id: string, data: Record<string, unknown>) => request(`/bancado-contratos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+    periodos: (contratoId: string) => request(`/bancado-contratos/${contratoId}/periodos`),
+    abrirPeriodo: (contratoId: string, data: { anio: number; mes: number; memoriaInicial?: number; modoMemoria?: "AUTOMATICO" | "PARCIAL_MANUAL" }) =>
+      request(`/bancado-contratos/${contratoId}/periodos`, { method: "POST", body: JSON.stringify(data) }),
+    estadoPeriodo: (periodoId: string) => request(`/bancado-contratos/periodos/${periodoId}/estado`),
+    reabrirPeriodo: (periodoId: string, motivo: string) =>
+      request(`/bancado-contratos/periodos/${periodoId}/reabrir`, { method: "POST", body: JSON.stringify({ motivo }) }),
+
+    parciales: (periodoId: string) => request(`/bancado-contratos/periodos/${periodoId}/parciales`),
+    registrarParcial: (
+      periodoId: string,
+      data: { desde: string; hasta: string; resultadoMesas: number; rakeBruto: number; ajuste?: number; ajusteNota?: string | null; observaciones?: string | null }
+    ) => request(`/bancado-contratos/periodos/${periodoId}/parciales`, { method: "POST", body: JSON.stringify(data) }),
+
+    splitExtraordinario: (
+      periodoId: string,
+      data: { gananciaDisponible?: number; memoriaAplicada: number; motivo: string; observaciones?: string | null; pagoReal?: number }
+    ) => request(`/bancado-contratos/periodos/${periodoId}/split-extraordinario`, { method: "POST", body: JSON.stringify(data) }),
+
+    cerrarMes: (periodoId: string, data: { modoMemoria?: "AUTOMATICO" | "PARCIAL_MANUAL"; memoriaAplicadaManual?: number; pagoReal?: number }) =>
+      request(`/bancado-contratos/periodos/${periodoId}/cerrar-mes`, { method: "POST", body: JSON.stringify(data) }),
+
+    cierreRmf: (
+      contratoId: string,
+      data: { desde: string; hasta: string; resultadoMesas: number; rakeBruto: number; observaciones?: string | null; pagoReal?: number }
+    ) => request(`/bancado-contratos/${contratoId}/cierre-rmf`, { method: "POST", body: JSON.stringify(data) }),
+
+    liquidaciones: (contratoId: string, periodoId?: string) =>
+      request(`/bancado-contratos/${contratoId}/liquidaciones${periodoId ? `?periodoId=${periodoId}` : ""}`),
+
+    ajustes: (contratoId: string) => request(`/bancado-contratos/${contratoId}/ajustes`),
+    crearAjuste: (
+      contratoId: string,
+      data: {
+        periodoId?: string | null;
+        tipo: string;
+        importe: number;
+        signo: "POSITIVO" | "NEGATIVO";
+        fecha?: string;
+        motivo: string;
+        observaciones?: string | null;
+      }
+    ) => request(`/bancado-contratos/${contratoId}/ajustes`, { method: "POST", body: JSON.stringify(data) }),
+    resolverAjuste: (ajusteId: string, estado: "APLICADO" | "REVERTIDO") =>
+      request(`/bancado-contratos/ajustes/${ajusteId}/resolver`, { method: "POST", body: JSON.stringify({ estado }) }),
+
+    costosFijos: (contratoId: string) => request(`/bancado-contratos/${contratoId}/costos-fijos`),
+    registrarCostoFijo: (contratoId: string, data: { anio: number; mes: number; monto: number; moneda?: string; observaciones?: string | null }) =>
+      request(`/bancado-contratos/${contratoId}/costos-fijos`, { method: "POST", body: JSON.stringify(data) }),
+  },
+
   teamback: {
     getConfig: () => requestTb("/teamback/config"),
     updateConfig: (data: {

@@ -25,6 +25,7 @@ import Liquidaciones from "./pages/Liquidaciones";
 import StockDeudas from "./pages/StockDeudas";
 import ResumenClub from "./pages/ResumenClub";
 import JugadoresBancados from "./pages/JugadoresBancados";
+import BancadoContratos from "./pages/BancadoContratos";
 import Rodeo from "./pages/Rodeo";
 import ResumenAgentes from "./pages/ResumenAgentes";
 import Wallet from "./pages/Wallet";
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="resumen-club" element={<ResumenClub />} />
           <Route path="jugadores-bancados" element={<JugadoresBancados />} />
+          <Route path="bancado-contratos" element={<BancadoContratos />} />
           <Route path="rodeo" element={<Rodeo />} />
           <Route path="resumen-agentes" element={<ResumenAgentes />} />
           <Route path="usuarios" element={<Usuarios />} />

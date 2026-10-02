@@ -1765,3 +1765,180 @@ CREATE TABLE IF NOT EXISTS supervisor_migracion_historica (
 -- de las fichas") -- guarda a qué treasury_adjustment corresponde para poder revertirlo bien
 -- si el movimiento del supervisor se revierte (ver revertirMovimientoSupervisor).
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS treasury_adjustment_id TEXT REFERENCES treasury_adjustments(id);
+
+
+-- ============================================================================
+-- MÓDULO "Bancado — Contratos" (pedido Leo 02/10/2026): sistema nuevo e independiente para
+-- liquidar bancados por CONTRATO, con la regla de cálculo 100% elegida por contrato (nunca un
+-- default implícito -- "no dejemos nada default"). Dos reglas registradas hoy:
+--   RMF  = la fórmula vieja ya probada (reparto 50/50 de mesa + rakeback 100% bancado + memoria
+--          que nunca prescribe -- ver calcularCierreBancado en engine/cierre.ts, reutilizada tal
+--          cual, NO se duplica el código). Cada semana liquida definitivo, no hay mes.
+--   REGLA_BANCADO_V1 = el motor nuevo completo (ver engine/bancadoContrato.ts): parciales
+--          semanales que NO liquidan nada + cierre mensual que consolida + memoria con dos modos
+--          de recuperación + splits extraordinarios + pago teórico/real + auditoría completa.
+-- Esto es TOTALMENTE independiente de los dos sistemas de bancado que ya existían (agents con
+-- account_type='BANCADO' + bancado_debts, y el de "Jugadores bancados" con capital/makeup en
+-- bancado_config/bancados) -- esos quedan EXACTAMENTE como están, pedido explícito de Leo
+-- ("dejar el otro como está"). El contrato de Matías, con su regla nueva, es independiente de
+-- cualquier agente o jugador que ya exista en el sistema -- no hay FK a agents ni a players.
+CREATE TABLE IF NOT EXISTS bancado_contratos (
+  id                            TEXT PRIMARY KEY,
+  nombre                        TEXT NOT NULL,                 -- ej "Matías" -- solo para mostrar, no es una FK a agents/players
+  club_id                       TEXT REFERENCES clubs(id),     -- opcional: a qué club pertenece la mesa, solo informativo/filtro
+  moneda                        TEXT NOT NULL DEFAULT 'USD',
+  regla_key                     TEXT NOT NULL CHECK (regla_key IN ('RMF','REGLA_BANCADO_V1')),
+  activo                        BOOLEAN NOT NULL DEFAULT TRUE,
+
+  -- Parámetros de la regla RMF (NULL si regla_key='REGLA_BANCADO_V1')
+  rmf_agent_share_pct           NUMERIC(6,4),   -- % de la mesa (si ganó) que le toca al bancado; el resto es DigiPlayers
+  rmf_rakeback_pct              NUMERIC(6,4),   -- % de rakeback, 100% del bancado
+  rmf_memoria_actual            NUMERIC(18,4) NOT NULL DEFAULT 0,  -- deuda eterna corriente (solo RMF; nunca negativa)
+
+  -- Parámetros de la regla REGLA_BANCADO_V1 (NULL si regla_key='RMF') -- ver sección 1 del
+  -- documento de Leo. Siguen 100% configurables, pensado para futuros bancados con % distintos.
+  v1_rake_deal_pct              NUMERIC(6,4),   -- ej 0.60 -- % del rake que entra al deal
+  v1_rake_teamback_directo_pct  NUMERIC(6,4),   -- ej 0.20 -- % del rake que es siempre de TeamBack, nunca se reparte ni entra a memoria
+  v1_split_jugador_pct          NUMERIC(6,4),   -- ej 0.50
+  v1_split_teamback_pct         NUMERIC(6,4),   -- ej 0.50
+  v1_periodicidad_liquidacion   TEXT DEFAULT 'MENSUAL' CHECK (v1_periodicidad_liquidacion IS NULL OR v1_periodicidad_liquidacion IN ('MENSUAL')),
+  v1_modo_memoria_default       TEXT DEFAULT 'AUTOMATICO' CHECK (v1_modo_memoria_default IS NULL OR v1_modo_memoria_default IN ('AUTOMATICO','PARCIAL_MANUAL')),
+
+  observaciones                 TEXT,
+  created_by                    TEXT,
+  created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Período mensual de un contrato REGLA_BANCADO_V1 (secciones 9, 10, 27, 28). memoria_actual
+-- arranca en memoria_inicial y SOLO se mueve en eventos definitivos (split extraordinario o
+-- cierre mensual) -- nunca con un parcial semanal (sección 8: "no debe... cerrar definitivamente
+-- la memoria"). resultado_ya_distribuido acumula lo que ya se repartió en extraordinarios de
+-- este período, para que el cierre mensual nunca lo vuelva a repartir (sección 18).
+CREATE TABLE IF NOT EXISTS bancado_contrato_periodos (
+  id                         TEXT PRIMARY KEY,
+  contrato_id                TEXT NOT NULL REFERENCES bancado_contratos(id),
+  anio                       INT NOT NULL,
+  mes                        INT NOT NULL CHECK (mes BETWEEN 1 AND 12),
+  memoria_inicial            NUMERIC(18,4) NOT NULL,
+  memoria_actual             NUMERIC(18,4) NOT NULL,
+  modo_memoria               TEXT NOT NULL DEFAULT 'AUTOMATICO' CHECK (modo_memoria IN ('AUTOMATICO','PARCIAL_MANUAL')),
+  resultado_ya_distribuido   NUMERIC(18,4) NOT NULL DEFAULT 0,
+  estado                     TEXT NOT NULL DEFAULT 'ABIERTO' CHECK (estado IN ('ABIERTO','CERRADO')),
+  memoria_final              NUMERIC(18,4),
+  cerrado_en                 TIMESTAMPTZ,
+  cerrado_por                TEXT,
+  reabierto_en               TIMESTAMPTZ,
+  reabierto_por              TEXT,
+  reabierto_motivo           TEXT,
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(contrato_id, anio, mes)
+);
+
+-- Cierre parcial semanal (secciones 7-8): registra producción, NUNCA liquida nada ni toca
+-- memoria. Nunca se sobrescribe -- cada semana es una fila propia e inmutable.
+CREATE TABLE IF NOT EXISTS bancado_contrato_parciales (
+  id                      TEXT PRIMARY KEY,
+  periodo_id               TEXT NOT NULL REFERENCES bancado_contrato_periodos(id),
+  contrato_id              TEXT NOT NULL REFERENCES bancado_contratos(id),
+  desde                    DATE NOT NULL,
+  hasta                    DATE NOT NULL,
+  resultado_mesas          NUMERIC(18,4) NOT NULL,
+  rake_bruto               NUMERIC(18,4) NOT NULL,
+  ajuste                   NUMERIC(18,4) NOT NULL DEFAULT 0,  -- se suma directo al resultado deal de la semana (sección 7: "ajustes si existieran")
+  ajuste_nota              TEXT,
+  rake_deal_semana         NUMERIC(18,4) NOT NULL,            -- snapshot ya calculado (rake_bruto * v1_rake_deal_pct)
+  resultado_deal_semana    NUMERIC(18,4) NOT NULL,            -- resultado_mesas + rake_deal_semana + ajuste
+  rake_teamback_semana     NUMERIC(18,4) NOT NULL,            -- rake_bruto * v1_rake_teamback_directo_pct (siempre de TeamBack, nunca se reparte)
+  observaciones            TEXT,
+  created_by               TEXT,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Historial de liquidaciones (sección 26) -- UNIFICADO: cubre tanto las liquidaciones semanales
+-- de la regla RMF (tipo='RMF_SEMANAL', periodo_id NULL porque RMF no tiene concepto de mes) como
+-- los cierres mensuales (tipo='MENSUAL') y splits extraordinarios (tipo='EXTRAORDINARIO') de
+-- REGLA_BANCADO_V1. Nunca se sobrescribe una fila -- ledger inmutable, igual que weekly_closings
+-- y treasury_adjustments. Columnas de más quedan NULL según el tipo (mismo patrón ya usado en
+-- weekly_closings con las columnas bancado_*).
+CREATE TABLE IF NOT EXISTS bancado_contrato_liquidaciones (
+  id                        TEXT PRIMARY KEY,
+  contrato_id                TEXT NOT NULL REFERENCES bancado_contratos(id),
+  periodo_id                 TEXT REFERENCES bancado_contrato_periodos(id),  -- NULL para RMF_SEMANAL
+  tipo                       TEXT NOT NULL CHECK (tipo IN ('RMF_SEMANAL','MENSUAL','EXTRAORDINARIO')),
+  desde                      DATE,
+  hasta                      DATE,
+
+  -- Crudos de origen (RMF_SEMANAL: mesa+rake de esa semana puntual; MENSUAL: totales del mes
+  -- tomados de los parciales; EXTRAORDINARIO: NULL, no tiene datos crudos propios)
+  resultado_mesas            NUMERIC(18,4),
+  rake_bruto                 NUMERIC(18,4),
+
+  resultado_acumulado        NUMERIC(18,4) NOT NULL,     -- "pendiente a procesar" en este evento (ver engine/bancadoContrato.ts)
+  memoria_anterior            NUMERIC(18,4) NOT NULL,
+  modo_memoria                TEXT CHECK (modo_memoria IS NULL OR modo_memoria IN ('AUTOMATICO','PARCIAL_MANUAL')),
+  recuperacion_maxima          NUMERIC(18,4) NOT NULL DEFAULT 0,
+  memoria_aplicada             NUMERIC(18,4) NOT NULL DEFAULT 0,
+  memoria_final                NUMERIC(18,4) NOT NULL,
+
+  base_liberada_split          NUMERIC(18,4) NOT NULL DEFAULT 0,
+  split_jugador_pct            NUMERIC(6,4),
+  split_jugador                NUMERIC(18,4) NOT NULL DEFAULT 0,
+  split_teamback_pct           NUMERIC(6,4),
+  split_teamback                NUMERIC(18,4) NOT NULL DEFAULT 0,
+
+  rake_teamback_directo         NUMERIC(18,4) NOT NULL DEFAULT 0,  -- solo MENSUAL (suma de los parciales del mes); 0 en EXTRAORDINARIO/RMF
+  digiplayers_share              NUMERIC(18,4) NOT NULL DEFAULT 0,  -- solo RMF_SEMANAL (informativo, fichas que quedan en el club -- ver calcularCierreBancado)
+  ganancia_teamback_total        NUMERIC(18,4) NOT NULL DEFAULT 0,
+
+  pago_teorico_jugador           NUMERIC(18,4) NOT NULL DEFAULT 0,
+  pago_real_jugador              NUMERIC(18,4),
+  credito_pendiente_jugador      NUMERIC(18,4) NOT NULL DEFAULT 0,
+
+  autorizado_por                 TEXT,          -- obligatorio para EXTRAORDINARIO
+  motivo                         TEXT,          -- obligatorio para EXTRAORDINARIO
+  observaciones                  TEXT,
+  status                         TEXT NOT NULL DEFAULT 'APLICADO' CHECK (status IN ('APLICADO','REVERTIDO')),
+  created_by                     TEXT,
+  created_at                     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ajustes (sección 23) -- nunca modifica memoria/pagos en silencio, siempre queda una fila. Los
+-- créditos pendientes del jugador (sección 19, cuando pago_real < pago_teorico) se cargan acá
+-- con tipo='PAGO_PENDIENTE', liquidacion_origen_id apuntando a la liquidación que lo generó, y
+-- quedan en estado PENDIENTE hasta que se paguen/compensen/ajusten explícitamente.
+CREATE TABLE IF NOT EXISTS bancado_contrato_ajustes (
+  id                       TEXT PRIMARY KEY,
+  contrato_id               TEXT NOT NULL REFERENCES bancado_contratos(id),
+  periodo_id                TEXT REFERENCES bancado_contrato_periodos(id),
+  tipo                      TEXT NOT NULL CHECK (tipo IN (
+                               'CREDITO_JUGADOR','DEBITO_JUGADOR','AJUSTE_MEMORIA','CORRECCION_CIERRE',
+                               'PAGO_PENDIENTE','COMPENSACION','ADMINISTRATIVO'
+                             )),
+  importe                   NUMERIC(18,4) NOT NULL,
+  signo                     TEXT NOT NULL CHECK (signo IN ('POSITIVO','NEGATIVO')),
+  estado                    TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','APLICADO','REVERTIDO')),
+  liquidacion_origen_id      TEXT REFERENCES bancado_contrato_liquidaciones(id),
+  fecha                      DATE NOT NULL DEFAULT CURRENT_DATE,
+  usuario                    TEXT NOT NULL,
+  motivo                     TEXT NOT NULL,
+  observaciones              TEXT,
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resuelto_en                 TIMESTAMPTZ,
+  resuelto_por                TEXT
+);
+
+-- Fijo (sección 29) -- COSTO_FIJO, completamente aparte del deal: nunca toca resultado deal,
+-- memoria, rake, split ni ganancia TeamBack de poker.
+CREATE TABLE IF NOT EXISTS bancado_contrato_costos_fijos (
+  id              TEXT PRIMARY KEY,
+  contrato_id      TEXT NOT NULL REFERENCES bancado_contratos(id),
+  anio             INT NOT NULL,
+  mes              INT NOT NULL CHECK (mes BETWEEN 1 AND 12),
+  monto            NUMERIC(18,4) NOT NULL,
+  moneda           TEXT NOT NULL DEFAULT 'ARS',
+  observaciones    TEXT,
+  created_by       TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(contrato_id, anio, mes)
+);
