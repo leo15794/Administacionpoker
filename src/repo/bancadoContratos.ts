@@ -72,10 +72,16 @@ function validarParametrosContrato(input: CrearContratoInput) {
 // Lista combinada para el selector (pedido Leo 02/10/2026) -- jugadores Y agentes ya cargados
 // en el sistema, cada uno marcado con su "tipo" para no confundirlos en el combo.
 export async function listCandidatosBancado() {
+  // "players" esta scopeado por club (UNIQUE(club_id, external_id)) -- el mismo jugador real que
+  // juega en varios clubes tiene una fila distinta por cada club, todas con el mismo nombre. Sin
+  // el club al lado, el selector los muestra repetidos sin forma de distinguir cual es cual
+  // (bug reportado por Leo 02/10/2026) -- por eso acá se trae club_name para poder desambiguar.
   const r = await pool.query(
-    `SELECT id, 'PLAYER' AS tipo, COALESCE(display_name, external_id) AS nombre, club_id FROM players
+    `SELECT p.id, 'PLAYER' AS tipo, COALESCE(p.display_name, p.external_id) AS nombre, p.club_id, c.name AS club_name
+       FROM players p JOIN clubs c ON c.id = p.club_id
      UNION ALL
-     SELECT id, 'AGENT' AS tipo, name AS nombre, NULL::text AS club_id FROM agents WHERE active
+     SELECT a.id, 'AGENT' AS tipo, a.name AS nombre, NULL::text AS club_id, NULL::text AS club_name
+       FROM agents a WHERE a.active
      ORDER BY nombre ASC`
   );
   return r.rows;

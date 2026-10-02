@@ -159,7 +159,7 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
           {candidatos === null && <option disabled>Cargando...</option>}
           {candidatos?.map((c) => (
             <option key={`${c.tipo}:${c.id}`} value={`${c.tipo}:${c.id}`}>
-              [{c.tipo === "AGENT" ? "Agente" : "Jugador"}] {c.nombre}
+              [{c.tipo === "AGENT" ? "Agente" : "Jugador"}] {c.nombre}{c.club_name ? ` -- ${c.club_name}` : ""}
             </option>
           ))}
         </select>
