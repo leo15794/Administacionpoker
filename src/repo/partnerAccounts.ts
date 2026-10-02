@@ -7,6 +7,22 @@ import { pool, newId } from "../db/pool.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
+// "YYYY-MM-DD" (o una fecha DATE de la base, que pg devuelve como medianoche UTC) interpretada
+// tal cual en una zona con offset negativo (Argentina, UTC-3) aparece un día antes al mostrarla
+// -- se re-ancla al mediodía para que el día de calendario se mantenga sin importar la zona del
+// servidor ni la del que mira la pantalla.
+function fechaSinCorrimiento(fecha: string | Date): Date {
+  let y: number, m: number, d: number;
+  if (typeof fecha === "string") {
+    [y, m, d] = fecha.slice(0, 10).split("-").map(Number);
+  } else {
+    y = fecha.getUTCFullYear();
+    m = fecha.getUTCMonth() + 1;
+    d = fecha.getUTCDate();
+  }
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
 export type PartnerEntryCategory = "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
 
 export type PartnerAccountKind = "SOCIO" | "OPERATIVA";
@@ -106,7 +122,7 @@ export async function crearMovimiento(input: PartnerEntryInput, createdBy?: stri
       direction: input.amount > 0 ? "EGRESO" : "INGRESO",
       amount: Math.abs(input.amount),
       reason: `Cuentas de socios — ${input.concept.trim()}`,
-      occurredAt: input.entryDate ? new Date(input.entryDate) : new Date(),
+      occurredAt: input.entryDate ? fechaSinCorrimiento(input.entryDate) : new Date(),
       createdBy: createdBy ?? null,
     });
     const r2 = await pool.query(
@@ -151,7 +167,7 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
       direction: nextAmount > 0 ? "EGRESO" : "INGRESO",
       amount: Math.abs(nextAmount),
       reason: `Cuentas de socios — ${nextConcept}`,
-      occurredAt: input.entryDate ? new Date(input.entryDate) : actual.entry_date,
+      occurredAt: fechaSinCorrimiento(input.entryDate ?? actual.entry_date),
       createdBy: createdBy ?? null,
     });
     treasuryAdjustmentId = nuevoId;

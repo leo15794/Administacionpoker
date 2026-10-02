@@ -44,18 +44,18 @@ async function main() {
 
   console.log("\n######## Últimos 10 ajustes de Tesorería en WALLET_MANOS (todos, linkeados o no) ########\n");
   const ajustes = await pool.query(
-    `SELECT a.id, a.direction, a.amount, a.status, a.reason, a.occurred_at, a.created_at, a.created_by,
+    `SELECT a.id, a.direction, a.amount, a.status, a.reason, a.occurred_at, a.created_by,
             e.id as entry_id, e.concept as entry_concept
      FROM treasury_adjustments a
      LEFT JOIN partner_account_entries e ON e.treasury_adjustment_id = a.id
      WHERE a.ledger = 'WALLET_MANOS'
-     ORDER BY a.created_at DESC
+     ORDER BY a.occurred_at DESC
      LIMIT 10`
   );
   for (const a of ajustes.rows) {
     console.log(`--- [${a.id}] ${a.direction} ${fmt(Number(a.amount))} (status=${a.status}) ---`);
     console.log(`    reason: "${a.reason}"`);
-    console.log(`    ocurrido=${a.occurred_at} | cargado=${a.created_at} | created_by=${a.created_by ?? "(nadie)"}`);
+    console.log(`    ocurrido=${a.occurred_at} | created_by=${a.created_by ?? "(nadie)"}`);
     console.log(`    vinculado a movimiento de Cuentas de socios: ${a.entry_id ? `${a.entry_id} ("${a.entry_concept}")` : "NO -- huérfano, ningún movimiento apunta a este ajuste"}`);
     console.log("");
   }
