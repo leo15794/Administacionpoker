@@ -166,7 +166,9 @@ const SELECT_CONTRATO = `
 `;
 
 export async function listContratos() {
-  const r = await pool.query(`${SELECT_CONTRATO} ORDER BY bc.activo DESC, nombre ASC`);
+  const r = await pool.query(
+    `${SELECT_CONTRATO} ORDER BY bc.activo DESC, COALESCE(pl.display_name, pl.external_id, ag.name, bc.nombre, 'Sin nombre') ASC`
+  );
   return r.rows;
 }
 
