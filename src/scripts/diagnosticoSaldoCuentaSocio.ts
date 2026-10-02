@@ -68,7 +68,7 @@ async function main() {
     }
 
     let totalFichasReales = 0;
-    const lineas: { agentId: string; agentName: string; fichasReales: number }[] = [];
+    const lineas: { agentId: string; agentName: string; fichasReales: number; totalHistorico: number; cantidadCierres: number }[] = [];
 
     for (const ag of agentesRes.rows) {
       console.log(`\n  --- ${ag.name} (id=${ag.id}, active=${ag.active}, default_system=${ag.default_system}) ---`);
@@ -96,10 +96,28 @@ async function main() {
       const fichasReales = balanceAgente + totalMesas;
       console.log(`    resultado acumulado de mesas (PREPAGO): ${fmt(totalMesas)}`);
       console.log(`    FICHAS REALES (balance + mesas, a favor del agente si es positivo) = ${fmt(fichasReales)}`);
-      console.log(`    --> catch-up a cargar en Cuentas de socios (signo invertido) = ${fmt(-fichasReales)}`);
+      console.log(`    --> catch-up si se usa el balance actual (signo invertido) = ${fmt(-fichasReales)}`);
+
+      // OJO (02/10/2026, caso Fede/patoruzit0): el balance actual puede estar en 0 aunque haya
+      // historia real -- si cada semana se carga y se descarga, el balance se resetea solo. Para
+      // saber cuánto ganó/perdió ese agente EN TOTAL desde que juega (sin importar si ya se le
+      // cargó/descargó físicamente), hay que sumar final_closing de TODOS sus cierres, no mirar
+      // el balance. Esta es la misma cantidad que usa el enganche automático en vivo (ver
+      // aplicarCierreCompensacionPersonaTx: amount = -finalClosing, por eso el mismo signo acá).
+      const historico = await pool.query(
+        `SELECT COALESCE(SUM(final_closing), 0) as total, COUNT(*)::int as cantidad,
+                MIN(week_start) as desde, MAX(week_start) as hasta
+         FROM weekly_closings WHERE agent_id = $1 AND status <> 'REVERTIDO'`,
+        [ag.id]
+      );
+      const h = historico.rows[0];
+      const totalHistorico = Number(h.total);
+      console.log(`    resultado acumulado HISTÓRICO de TODOS los cierres (final_closing, ${h.cantidad} cierre(s)${h.desde ? `, ${h.desde}..${h.hasta}` : ""}) = ${fmt(totalHistorico)}`);
+      console.log(`    --> catch-up si se usa el histórico completo (signo invertido) = ${fmt(-totalHistorico)}  <-- probablemente este es el que corresponde`);
+
       totalFichasReales += fichasReales;
 
-      lineas.push({ agentId: ag.id, agentName: ag.name, fichasReales: round2(fichasReales) });
+      lineas.push({ agentId: ag.id, agentName: ag.name, fichasReales: round2(fichasReales), totalHistorico: round2(totalHistorico), cantidadCierres: h.cantidad });
     }
 
     console.log(`\n  === TOTAL a migrar para "${personKey}" ===`);
@@ -108,7 +126,7 @@ async function main() {
 
     console.log(`\n  === LINEAS (para pegarle a Claude) ===`);
     for (const l of lineas) {
-      console.log(`    ${l.agentId} | ${l.agentName} | fichasReales=${l.fichasReales}`);
+      console.log(`    ${l.agentId} | ${l.agentName} | fichasReales=${l.fichasReales} | historico(${l.cantidadCierres} cierres)=${l.totalHistorico} | catchUpHistorico=${round2(-l.totalHistorico)}`);
     }
   }
 
