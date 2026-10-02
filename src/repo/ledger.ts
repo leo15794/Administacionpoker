@@ -454,6 +454,30 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
       throw new Error("Este movimiento ya fue revertido antes — no se puede revertir dos veces.");
     }
 
+    // Caso real (02/10/2026, agente "TB prodigio25"): revertir acá la Carga/Descarga que dio de
+    // alta o aumentó un adelanto de rakeback corregía el ledger pero dejaba el adelanto
+    // (rakeback_advances) activo y "colgado" -- esta función no tiene forma de tocar esa tabla,
+    // así que el pendiente seguía contando de más sin que nadie se diera cuenta. En vez de
+    // intentar sincronizar las dos tablas acá (quedaría frágil), se bloquea y se manda al panel
+    // de Adelantos, que con "Eliminar" ya deshace el movimiento de ledger Y el adelanto juntos
+    // (ver eliminarAdelanto en repo/advances.ts) -- mismo criterio que ya existe más abajo en
+    // eliminarMovimiento para una carga cruzada en una liquidación.
+    const adelantoLigado = await client.query(
+      `SELECT ra.id, ra.amount, ra.consumed
+       FROM rakeback_advance_movements ram
+       JOIN rakeback_advances ra ON ra.id = ram.advance_id
+       WHERE ram.movement_id = $1 AND ra.active = true`,
+      [id]
+    );
+    if (adelantoLigado.rows.length > 0) {
+      const adv = adelantoLigado.rows[0];
+      const pendiente = Number(adv.amount) - Number(adv.consumed);
+      await client.query("ROLLBACK");
+      throw new Error(
+        `Este movimiento es el alta/aumento de un adelanto de rakeback todavía activo (pendiente ${pendiente.toFixed(2)}) -- revertirlo acá dejaría ese adelanto colgado, sin nadie que avise que ya no corresponde. Andá al panel de Adelantos de rakeback y usá "Eliminar" sobre ese adelanto (si no tiene nada consumido) o "Ajustar -> Baja" (si ya tiene consumo) -- esos sí corrigen el ledger y el adelanto juntos.`
+      );
+    }
+
     const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
     await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaOrigen);
     let deltaDestino: number | null = null;
