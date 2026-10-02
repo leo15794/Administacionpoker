@@ -204,7 +204,6 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "reportes" },
   { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "reportes" },
   { key: "resumenAgentes", to: "/dashboard/resumen-agentes", icon: "resumenAgentes", label: "Resumen por agente", group: "reportes" },
-  { key: "gananciasPeriodo", to: "/dashboard/ganancias-por-periodo", icon: "gananciasPeriodo", label: "Ganancias por período", group: "reportes" },
   { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "reportes" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);

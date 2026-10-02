@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usd } from "../fmt";
 import { exportCsv } from "../csv";
+import GananciasPorPeriodo from "./GananciasPorPeriodo";
 
 // Resumen financiero (18/09/2026, pedido explícito de Leo): "un resumen de todas las
 // ganancias, cada ingreso y cada egreso que se contabiliza, filtrable por día/semana/mes, para
@@ -56,6 +57,12 @@ function labelPeriodo(periodo: string, gran: Granularidad) {
 
 export default function ResumenFinanciero() {
   const nav = useNavigate();
+  // Unificado con "Ganancias por período" (02/10/2026, pedido de Leo: "que quede todo adentro
+  // de resumen financiero") -- antes era un ítem de menú aparte con su propia cuenta de
+  // "ganancia operativa" que podía no coincidir con esta pantalla; ahora vive acá como una
+  // segunda pestaña, y su cálculo reusa literalmente esta misma cuenta (ver
+  // computeGananciaCierresYBancadosPorSemanas en repo/resumenFinanciero.ts).
+  const [tab, setTab] = useState<"resumen" | "periodos">("resumen");
   const [desde, setDesde] = useState(inicioDeMes());
   const [hasta, setHasta] = useState(hoyIso());
   const [granularidad, setGranularidad] = useState<Granularidad>("dia");
@@ -116,6 +123,19 @@ export default function ResumenFinanciero() {
         </div>
       </div>
 
+      <div className="tabs" style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        <button className={`btn small ${tab === "resumen" ? "" : "secondary"}`} onClick={() => setTab("resumen")}>
+          Resumen
+        </button>
+        <button className={`btn small ${tab === "periodos" ? "" : "secondary"}`} onClick={() => setTab("periodos")}>
+          Ganancias por período
+        </button>
+      </div>
+
+      {tab === "periodos" && <GananciasPorPeriodo />}
+
+      {tab === "resumen" && (
+      <>
       <div className="panel" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="field">
@@ -377,6 +397,8 @@ export default function ResumenFinanciero() {
           </div>
         </>
       ) : null}
+      </>
+      )}
     </div>
   );
 }

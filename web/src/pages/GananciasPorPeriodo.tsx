@@ -97,14 +97,14 @@ export default function GananciasPorPeriodo() {
   if (!periodos || !ajustes) return <div className="muted">Cargando...</div>;
 
   return (
-    <div>
+    <div style={{ marginTop: 16 }}>
       <div className="topbar">
         <div>
-          <h2>Ganancias por período</h2>
           <div className="muted">
-            Agrupá semanas ya cerradas bajo un nombre (ej. "Agosto 2026") para ver la ganancia neta de ese tramo — descontando
-            retiros, gastos y las cuotas de ajustes extraordinarios pendientes. Al cerrar un período, los números quedan
-            congelados como foto histórica.
+            Agrupá semanas ya cerradas bajo un nombre (ej. "Agosto 2026") para ver la ganancia neta de ese tramo --
+            descontando retiros, gastos y las cuotas de ajustes extraordinarios pendientes. "Ganancia operativa" acá
+            es exactamente la misma cuenta (cierres + bancados) que ya ves en la pestaña "Resumen" de arriba, para
+            esas mismas semanas. Al cerrar un período, los números quedan congelados como foto histórica.
           </div>
         </div>
         <button className="btn" onClick={() => setShowNuevoPeriodo(true)}>+ Nuevo período</button>
@@ -242,7 +242,15 @@ function ResumenPreview({ preview }: { preview: any }) {
   return (
     <div className="kpi-grid" style={{ marginTop: 12 }}>
       <div className="kpi-card">
-        <div className="label">Ganancia operativa</div>
+        <div className="label">Ganancia cierres</div>
+        <div className="value">{usd(preview.gananciaCierres)}</div>
+      </div>
+      <div className="kpi-card">
+        <div className="label">Ganancia bancados</div>
+        <div className="value">{usd(preview.gananciaBancados)}</div>
+      </div>
+      <div className="kpi-card">
+        <div className="label">Ganancia operativa (cierres + bancados)</div>
         <div className="value">{usd(preview.gananciaOperativa)}</div>
       </div>
       <div className="kpi-card">
@@ -415,6 +423,8 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
   const numeros = cerrado
     ? {
         gananciaOperativa: periodo.ganancia_operativa,
+        gananciaCierres: periodo.ganancia_cierres,
+        gananciaBancados: periodo.ganancia_bancados,
         retiros: periodo.retiros,
         gastos: periodo.gastos,
         ingresosAjustes: periodo.ingresos_ajustes,
@@ -446,12 +456,13 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
         <div className="muted">Sin cierres en las semanas elegidas.</div>
       ) : (
         <table>
-          <thead><tr><th>Semana</th><th>Club</th><th className="num">Ganancia</th></tr></thead>
+          <thead><tr><th>Semana</th><th>Club</th><th>Tipo</th><th className="num">Ganancia</th></tr></thead>
           <tbody>
             {periodo.detalle?.map((d: any, i: number) => (
               <tr key={i}>
                 <td>{dateShort(d.week_start)} al {dateShort(d.week_end)}</td>
                 <td>{d.club_name}</td>
+                <td className="muted">{d.tipo === "BANCADO" ? "Bancado" : "Cierre"}</td>
                 <td className="num money">{usd(d.ganancia)}</td>
               </tr>
             ))}

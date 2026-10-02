@@ -340,3 +340,37 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
 
   return { desde, hasta, totales, eventos, porDia, porSemana, porMes, desgloseCierres, porClub };
 }
+
+// Reutilizable por "Ganancias por período" (repo/profitPeriods.ts), pedido explícito de Leo
+// (02/10/2026): "que ganancia por período tome la información tal cual como está en resumen
+// financiero" -- antes profitPeriods.computeGananciaOperativa tenía su propia cuenta aparte
+// (SUM(rake_total - rakeback - rebate) directo de weekly_closings, sin bancados), que podía no
+// coincidir con lo que esta pantalla ya mostraba para las mismas semanas. Esto reusa EXACTAMENTE
+// el mismo camino que getResumenFinanciero de arriba (getResumenClubSemanal por club+semana +
+// ganancia_banca_mesas de bancado_historial), pero filtrado por un conjunto puntual de
+// week_start (no necesariamente contiguos, a diferencia de un rango desde/hasta) -- por eso no
+// se puede llamar a getResumenFinanciero directo.
+export async function computeGananciaCierresYBancadosPorSemanas(weekStarts: string[]) {
+  const [clubesSemana, bancados] = await Promise.all([
+    pool.query(
+      `SELECT DISTINCT club_id, week_start FROM weekly_closings
+       WHERE status IN ('APLICADO','CORREGIDO') AND week_start = ANY($1::date[])
+       ORDER BY week_start`,
+      [weekStarts]
+    ),
+    pool.query(
+      `SELECT ganancia_banca_mesas FROM bancado_historial
+       WHERE status <> 'REVERTIDO' AND tipo = 'CIERRE_SEMANAL' AND week_start = ANY($1::date[])`,
+      [weekStarts]
+    ),
+  ]);
+
+  const resumenesClubSemana = await Promise.all(
+    clubesSemana.rows.map((r) => getResumenClubSemanal(r.club_id, toFecha(r.week_start)))
+  );
+
+  const gananciaCierres = round2(resumenesClubSemana.reduce((acc, r) => acc + (r ? Number(r.gananciaNeta) : 0), 0));
+  const gananciaBancados = round2(bancados.rows.reduce((acc, row) => acc + Number(row.ganancia_banca_mesas), 0));
+
+  return { gananciaCierres, gananciaBancados, gananciaOperativa: round2(gananciaCierres + gananciaBancados) };
+}

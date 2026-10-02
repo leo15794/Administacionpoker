@@ -1,5 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
+import { computeGananciaCierresYBancadosPorSemanas } from "./resumenFinanciero.js";
+import { getResumenClubSemanal } from "./clubResumen.js";
 
 // ============================================================
 // AJUSTES EXTRAORDINARIOS
@@ -145,14 +147,16 @@ export async function eliminarAjusteExtraordinario(id: string) {
 // PERÍODOS DE GANANCIAS
 // ============================================================
 
+// Corregido 02/10/2026 (pedido de Leo: "que ganancia por período tome la información tal cual
+// como está en resumen financiero"): antes esto sumaba rake_total - rakeback - rebate directo
+// de weekly_closings (sin bancados, y sin pasar por getResumenClubSemanal) -- una cuenta propia
+// que podía no coincidir con lo que ya mostraba Resumen financiero para esas mismas semanas.
+// Ahora llama a la MISMA función que usa esa pantalla, así "ganancia operativa" de un período es
+// exactamente gananciaCierres + gananciaBancados de Resumen financiero para esas semanas, nunca
+// un número distinto. client no se usa (el helper lee de pool) porque getResumenClubSemanal ya
+// hace lo mismo -- son filas ya commiteadas de antes de que el período las referencie.
 async function computeGananciaOperativa(client: PoolClient, weekStarts: string[]) {
-  const r = await client.query(
-    `SELECT COALESCE(SUM(rake_total - rakeback - rebate), 0) as total
-     FROM weekly_closings
-     WHERE week_start = ANY($1::date[]) AND status <> 'REVERTIDO' AND rule_applied IS DISTINCT FROM 'RECONSTRUIDO_SIN_DESGLOSE'`,
-    [weekStarts]
-  );
-  return Number(r.rows[0].total);
+  return computeGananciaCierresYBancadosPorSemanas(weekStarts);
 }
 
 async function computeRangoFechas(client: PoolClient, weekStarts: string[]) {
@@ -198,7 +202,7 @@ async function computeAjustesExtraordinariosPendientes(client: PoolClient) {
 export async function previewPeriodo(weekStarts: string[]) {
   const client = await pool.connect();
   try {
-    const gananciaOperativa = await computeGananciaOperativa(client, weekStarts);
+    const { gananciaOperativa, gananciaCierres, gananciaBancados } = await computeGananciaOperativa(client, weekStarts);
     const { desde, hasta } = await computeRangoFechas(client, weekStarts);
     const { retiros, gastos, ingresosAjustes } = await computeCategoriasSocios(client, desde, hasta);
     const gananciaAntesAjustesDp = gananciaOperativa - gastos + ingresosAjustes;
@@ -206,6 +210,8 @@ export async function previewPeriodo(weekStarts: string[]) {
     const gananciaNetaFinal = gananciaAntesAjustesDp - ajustes.total;
     return {
       gananciaOperativa,
+      gananciaCierres,
+      gananciaBancados,
       retiros,
       gastos,
       ingresosAjustes,
@@ -242,26 +248,74 @@ export async function listPeriodos() {
   return periodos.map((p) => ({ ...p, semanas: semanasPorPeriodo[p.id] ?? [] }));
 }
 
+function toFechaStr(d: string | Date): string {
+  return new Date(d).toISOString().slice(0, 10);
+}
+function sumarDias(fechaIso: string, dias: number): string {
+  const d = new Date(fechaIso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function getPeriodoDetalle(id: string) {
   const periodoRes = await pool.query(`SELECT * FROM profit_periods WHERE id = $1`, [id]);
   const periodo = periodoRes.rows[0];
   if (!periodo) return null;
   const semanasRes = await pool.query(`SELECT week_start FROM profit_period_weeks WHERE period_id = $1 ORDER BY week_start`, [id]);
   const semanas = semanasRes.rows.map((r) => r.week_start);
-  const detalleRes = await pool.query(
-    `SELECT wc.week_start, wc.week_end, c.name as club_name, (wc.rake_total - wc.rakeback - wc.rebate) as ganancia, wc.status
-     FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
-     WHERE wc.week_start = ANY($1::date[]) AND wc.status <> 'REVERTIDO'
-     ORDER BY wc.week_start, c.name`,
+
+  // Detalle por semana y club (corregido 02/10/2026, mismo motivo que computeGananciaOperativa
+  // más arriba): antes mostraba (rake_total - rakeback - rebate) por cierre individual de
+  // agente -- una cuenta vieja que no coincidía con "Ganancia cierres" de Resumen financiero.
+  // Ahora muestra la MISMA Ganancia Neta por club+semana (getResumenClubSemanal) que ya se ve
+  // ahí, más una fila aparte por cada ganancia de banca -- la suma de esta tabla ahora sí cierra
+  // con ganancia_cierres + ganancia_bancados de arriba.
+  const clubesSemanaRes = await pool.query(
+    `SELECT DISTINCT club_id, week_start FROM weekly_closings
+     WHERE status IN ('APLICADO','CORREGIDO') AND week_start = ANY($1::date[])
+     ORDER BY week_start`,
     [semanas]
   );
+  const resumenesClubSemana = await Promise.all(
+    clubesSemanaRes.rows.map((r) => getResumenClubSemanal(r.club_id, toFechaStr(r.week_start)))
+  );
+  const detalleCierres = resumenesClubSemana
+    .filter((r): r is NonNullable<typeof r> => !!r)
+    .map((r) => ({
+      week_start: r.weekStart,
+      week_end: sumarDias(r.weekStart, 6),
+      club_name: r.clubName,
+      ganancia: r.gananciaNeta,
+      tipo: "CIERRE" as const,
+    }));
+
+  const bancadosRes = await pool.query(
+    `SELECT h.week_start, c.name as club_name, h.ganancia_banca_mesas, p.display_name as player_name
+     FROM bancado_historial h JOIN clubs c ON c.id = h.club_id JOIN players p ON p.id = h.player_id
+     WHERE h.status <> 'REVERTIDO' AND h.tipo = 'CIERRE_SEMANAL' AND h.week_start = ANY($1::date[])
+     ORDER BY h.week_start`,
+    [semanas]
+  );
+  const detalleBancados = bancadosRes.rows.map((row) => {
+    const weekStart = toFechaStr(row.week_start);
+    return {
+      week_start: weekStart,
+      week_end: sumarDias(weekStart, 6),
+      club_name: `${row.club_name} — banca (${row.player_name})`,
+      ganancia: Number(row.ganancia_banca_mesas),
+      tipo: "BANCADO" as const,
+    };
+  });
+
+  const detalle = [...detalleCierres, ...detalleBancados].sort((a, b) => (a.week_start < b.week_start ? -1 : a.week_start > b.week_start ? 1 : 0));
+
   const aplicacionesRes = await pool.query(
     `SELECT a.id, a.amount, e.descripcion, e.tipo
      FROM extraordinary_adjustment_applications a JOIN extraordinary_adjustments e ON e.id = a.adjustment_id
      WHERE a.period_id = $1 ORDER BY a.applied_at`,
     [id]
   );
-  return { ...periodo, semanas, detalle: detalleRes.rows, ajustesAplicados: aplicacionesRes.rows };
+  return { ...periodo, semanas, detalle, ajustesAplicados: aplicacionesRes.rows };
 }
 
 export async function crearPeriodo(name: string, weekStarts: string[]) {
@@ -337,7 +391,7 @@ export async function cerrarPeriodo(id: string) {
     const weekStarts: string[] = semanasRes.rows.map((r) => r.week_start);
     if (!weekStarts.length) throw new Error("Este período no tiene semanas cargadas.");
 
-    const gananciaOperativa = await computeGananciaOperativa(client, weekStarts);
+    const { gananciaOperativa, gananciaCierres, gananciaBancados } = await computeGananciaOperativa(client, weekStarts);
     const { desde, hasta } = await computeRangoFechas(client, weekStarts);
     const { retiros, gastos, ingresosAjustes } = await computeCategoriasSocios(client, desde, hasta);
     const gananciaAntesAjustesDp = gananciaOperativa - gastos + ingresosAjustes;
@@ -369,10 +423,10 @@ export async function cerrarPeriodo(id: string) {
     await client.query(
       `UPDATE profit_periods SET
         status = 'CERRADO', closed_at = now(),
-        ganancia_operativa = $1, retiros = $2, gastos = $3, ingresos_ajustes = $4,
-        ganancia_antes_ajustes_dp = $5, ajustes_extraordinarios_dp = $6, ganancia_neta_final = $7
-       WHERE id = $8`,
-      [gananciaOperativa, retiros, gastos, ingresosAjustes, gananciaAntesAjustesDp, ajustesExtraordinariosDp, gananciaNetaFinal, id]
+        ganancia_operativa = $1, ganancia_cierres = $2, ganancia_bancados = $3, retiros = $4, gastos = $5,
+        ingresos_ajustes = $6, ganancia_antes_ajustes_dp = $7, ajustes_extraordinarios_dp = $8, ganancia_neta_final = $9
+       WHERE id = $10`,
+      [gananciaOperativa, gananciaCierres, gananciaBancados, retiros, gastos, ingresosAjustes, gananciaAntesAjustesDp, ajustesExtraordinariosDp, gananciaNetaFinal, id]
     );
 
     await client.query("COMMIT");

@@ -20,7 +20,6 @@ import Proveedores from "./pages/Proveedores";
 import Supervisores from "./pages/Supervisores";
 import RakebackPendiente from "./pages/RakebackPendiente";
 import CuentasSocios from "./pages/CuentasSocios";
-import GananciasPorPeriodo from "./pages/GananciasPorPeriodo";
 import Liquidaciones from "./pages/Liquidaciones";
 import StockDeudas from "./pages/StockDeudas";
 import ResumenClub from "./pages/ResumenClub";
@@ -68,7 +67,6 @@ export default function App() {
           <Route path="adelantos" element={<Navigate to="/dashboard/movimientos" replace />} />
           <Route path="rakeback-pendiente" element={<RakebackPendiente />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />
-          <Route path="ganancias-por-periodo" element={<GananciasPorPeriodo />} />
           <Route path="liquidaciones" element={<Liquidaciones />} />
           <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="resumen-club" element={<ResumenClub />} />

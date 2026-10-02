@@ -2012,3 +2012,10 @@ CREATE TABLE IF NOT EXISTS bancado_contrato_rmf_cierres (
   created_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_bancado_contrato_rmf_cierres_contrato ON bancado_contrato_rmf_cierres(contrato_id, hasta DESC);
+
+-- "Ganancia por período" ahora reusa la misma cuenta de Resumen financiero (02/10/2026, pedido
+-- de Leo) -- se guarda el desglose cierres/bancados además del total ya existente
+-- (ganancia_operativa = gananciaCierres + gananciaBancados), para que el período cerrado
+-- muestre el mismo desglose que ya se ve en Resumen financiero, no solo el número sumado.
+ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_cierres NUMERIC(18,4);
+ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_bancados NUMERIC(18,4);
