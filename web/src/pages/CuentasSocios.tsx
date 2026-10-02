@@ -15,6 +15,21 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 const CATEGORIES = Object.keys(CATEGORY_LABEL) as (keyof typeof CATEGORY_LABEL)[];
 
+// Convención de signo de esta pantalla (partner_account_entries.amount, ver
+// aplicarCierreCompensacionPersonaTx en repo/closings.ts): POSITIVO = el socio le debe a la
+// empresa, NEGATIVO = a favor del socio (la empresa le debe a él). Es la convención INVERSA a
+// balances.amount del resto de la app. Para que el color no confunda (verde = bueno/a favor,
+// rojo = debe), acá pintamos en rojo lo positivo (debe) y en verde lo negativo (a favor).
+function claseDebeFavor(amount: number): "pos" | "neg" {
+  return Number(amount) >= 0 ? "neg" : "pos";
+}
+
+function labelDebeFavor(amount: number): string {
+  const n = Number(amount);
+  if (n === 0) return "sin saldo pendiente";
+  return n > 0 ? "le debe a la empresa" : "a favor del socio";
+}
+
 // Cuentas de socios — equivalente a "Cuentas y memorias" de la planilla (Saldo Uriel,
 // Compensación Juan, etc.): plata de los SOCIOS de la empresa, sin relación con agentes ni
 // clubes (para eso está el resto del sistema). A pedido explícito del usuario, acá se puede
@@ -214,7 +229,10 @@ export default function CuentasSocios() {
               <div className="cuenta-card" key={c.id}>
                 <div className="cuenta-card-header">
                   <div className="cuenta-card-name">{c.name}</div>
-                  <div className={`cuenta-card-saldo ${Number(c.saldo) >= 0 ? "pos" : "neg"}`}>{usd(c.saldo)}</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className={`cuenta-card-saldo ${claseDebeFavor(c.saldo)}`}>{usd(c.saldo)}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{labelDebeFavor(c.saldo)}</div>
+                  </div>
                 </div>
                 {c.description && (
                   <div className="cuenta-card-desc" title={c.description}>{c.description}</div>
@@ -265,7 +283,7 @@ export default function CuentasSocios() {
                                     </span>
                                   )}
                                 </td>
-                                <td className={`num ${Number(m.amount) >= 0 ? "pos" : "neg"}`}>{usd(m.amount)}</td>
+                                <td className={`num ${claseDebeFavor(m.amount)}`}>{usd(m.amount)}</td>
                                 <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
                                 <td className="row-actions">
                                   <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
