@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import BancadoContratosEmbed from "./BancadoContratos";
 
 /**
  * "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que hay que excluir
@@ -36,6 +37,10 @@ export default function JugadoresBancados() {
   const [filtroWeekEnd, setFiltroWeekEnd] = useState("");
   const [filtroPlayerIds, setFiltroPlayerIds] = useState<Set<string>>(new Set());
   const [selectorJugadoresAbierto, setSelectorJugadoresAbierto] = useState(false);
+
+  // Pestaña nueva (pedido Leo 02/10/2026): "Contratos" vive ACÁ adentro, no en un menú propio --
+  // reutiliza esta misma pantalla de "Jugadores bancados" en vez de abrir una nueva.
+  const [tab, setTab] = useState<"clasico" | "contratos">("clasico");
 
   function filtroActivo() {
     return { weekStart: filtroWeekStart || undefined, weekEnd: filtroWeekEnd || undefined, playerIds: filtroPlayerIds.size > 0 ? Array.from(filtroPlayerIds) : undefined };
@@ -192,6 +197,15 @@ export default function JugadoresBancados() {
         </div>
       </div>
 
+      <div className="tabs" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        <button className={`btn small ${tab === "clasico" ? "" : "secondary"}`} onClick={() => setTab("clasico")}>Jugadores bancados (capital/makeup)</button>
+        <button className={`btn small ${tab === "contratos" ? "" : "secondary"}`} onClick={() => setTab("contratos")}>Contratos (regla nueva)</button>
+      </div>
+
+      {tab === "contratos" && <BancadoContratosEmbed />}
+
+      {tab === "clasico" && (
+      <>
       <div className="panel">
         <h3>Buscar y marcar un jugador</h3>
         <input
@@ -489,6 +503,8 @@ export default function JugadoresBancados() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

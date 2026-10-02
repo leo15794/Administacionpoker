@@ -999,8 +999,10 @@ export const api = {
   // routes/bancadoContratos.ts. Independiente de api.bancados (el de "Jugadores bancados").
   bancadoContratos: {
     listar: () => request("/bancado-contratos"),
+    candidatos: () => request("/bancado-contratos/candidatos"),
     crear: (data: {
-      nombre: string;
+      playerId?: string | null;
+      agentId?: string | null;
       clubId?: string | null;
       moneda?: string;
       reglaKey: "RMF" | "REGLA_BANCADO_V1";

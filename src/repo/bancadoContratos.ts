@@ -22,7 +22,11 @@ export type ReglaKey = "RMF" | "REGLA_BANCADO_V1";
 // Contratos
 // ---------------------------------------------------------------------------------------------
 export interface CrearContratoInput {
-  nombre: string;
+  // Exactamente uno de los dos (pedido Leo 02/10/2026: elegir de la lista de jugadores/agentes
+  // que ya existen en el sistema, nunca escribir el nombre a mano) -- ver bancado_contratos_
+  // jugador_o_agente_check en db/schema.sql.
+  playerId?: string | null;
+  agentId?: string | null;
   clubId?: string | null;
   moneda?: string;
   reglaKey: ReglaKey;
@@ -40,6 +44,9 @@ export interface CrearContratoInput {
 }
 
 function validarParametrosContrato(input: CrearContratoInput) {
+  if (!!input.playerId === !!input.agentId) {
+    throw new Error("Hay que elegir exactamente un jugador O un agente de la lista -- no ambos, no ninguno.");
+  }
   if (input.reglaKey === "RMF") {
     if (input.rmfAgentSharePct === undefined || input.rmfRakebackPct === undefined) {
       throw new Error("La regla RMF necesita rmfAgentSharePct y rmfRakebackPct -- no hay valores default.");
@@ -58,19 +65,32 @@ function validarParametrosContrato(input: CrearContratoInput) {
   }
 }
 
+// Lista combinada para el selector (pedido Leo 02/10/2026) -- jugadores Y agentes ya cargados
+// en el sistema, cada uno marcado con su "tipo" para no confundirlos en el combo.
+export async function listCandidatosBancado() {
+  const r = await pool.query(
+    `SELECT id, 'PLAYER' AS tipo, COALESCE(display_name, external_id) AS nombre, club_id FROM players
+     UNION ALL
+     SELECT id, 'AGENT' AS tipo, name AS nombre, NULL::text AS club_id FROM agents WHERE active
+     ORDER BY nombre ASC`
+  );
+  return r.rows;
+}
+
 export async function crearContrato(input: CrearContratoInput, createdBy?: string | null) {
   validarParametrosContrato(input);
   const id = newId("bct");
   const r = await pool.query(
     `INSERT INTO bancado_contratos
-      (id, nombre, club_id, moneda, regla_key, observaciones, created_by,
+      (id, player_id, agent_id, club_id, moneda, regla_key, observaciones, created_by,
        rmf_agent_share_pct, rmf_rakeback_pct, rmf_memoria_actual,
        v1_rake_deal_pct, v1_rake_teamback_directo_pct, v1_split_jugador_pct, v1_split_teamback_pct, v1_modo_memoria_default)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING *`,
     [
       id,
-      input.nombre,
+      input.playerId ?? null,
+      input.agentId ?? null,
       input.clubId ?? null,
       input.moneda ?? "USD",
       input.reglaKey,
@@ -86,11 +106,10 @@ export async function crearContrato(input: CrearContratoInput, createdBy?: strin
       input.reglaKey === "REGLA_BANCADO_V1" ? input.v1ModoMemoriaDefault ?? "AUTOMATICO" : null,
     ]
   );
-  return r.rows[0];
+  return getContrato(id);
 }
 
 export interface EditarContratoInput {
-  nombre?: string;
   clubId?: string | null;
   observaciones?: string | null;
   activo?: boolean;
@@ -103,23 +122,22 @@ export interface EditarContratoInput {
   v1ModoMemoriaDefault?: ModoMemoria;
 }
 
-// No se puede cambiar regla_key de un contrato ya creado -- si cambia el contrato de verdad
-// (como el caso de Matías), se crea un contrato nuevo (así queda clarísimo en el historial cuál
-// liquidación corresponde a qué reglas, y nunca se mezclan parámetros de una regla con la otra).
+// No se puede cambiar regla_key NI el jugador/agente vinculado de un contrato ya creado -- si
+// cambia el contrato de verdad (como el caso de Matías), se crea un contrato nuevo (así queda
+// clarísimo en el historial cuál liquidación corresponde a qué reglas, y nunca se mezclan
+// parámetros de una regla con la otra).
 export async function editarContrato(id: string, input: EditarContratoInput) {
   const actual = await getContrato(id);
   if (!actual) throw new Error("Contrato no encontrado.");
-  const r = await pool.query(
+  await pool.query(
     `UPDATE bancado_contratos SET
-       nombre = $1, club_id = $2, observaciones = $3, activo = $4,
-       rmf_agent_share_pct = $5, rmf_rakeback_pct = $6,
-       v1_rake_deal_pct = $7, v1_rake_teamback_directo_pct = $8,
-       v1_split_jugador_pct = $9, v1_split_teamback_pct = $10, v1_modo_memoria_default = $11,
+       club_id = $1, observaciones = $2, activo = $3,
+       rmf_agent_share_pct = $4, rmf_rakeback_pct = $5,
+       v1_rake_deal_pct = $6, v1_rake_teamback_directo_pct = $7,
+       v1_split_jugador_pct = $8, v1_split_teamback_pct = $9, v1_modo_memoria_default = $10,
        updated_at = now()
-     WHERE id = $12
-     RETURNING *`,
+     WHERE id = $11`,
     [
-      input.nombre ?? actual.nombre,
       input.clubId !== undefined ? input.clubId : actual.club_id,
       input.observaciones !== undefined ? input.observaciones : actual.observaciones,
       input.activo !== undefined ? input.activo : actual.activo,
@@ -133,16 +151,27 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
       id,
     ]
   );
-  return r.rows[0];
+  return getContrato(id);
 }
 
+// El nombre a mostrar sale del jugador/agente vinculado, nunca de un campo de texto cargado a
+// mano -- bc.nombre queda solo como respaldo si algún día ese vínculo se pierde.
+const SELECT_CONTRATO = `
+  SELECT bc.*,
+         COALESCE(pl.display_name, pl.external_id, ag.name, bc.nombre, 'Sin nombre') AS nombre,
+         CASE WHEN bc.player_id IS NOT NULL THEN 'PLAYER' WHEN bc.agent_id IS NOT NULL THEN 'AGENT' END AS tipo_vinculo
+  FROM bancado_contratos bc
+  LEFT JOIN players pl ON pl.id = bc.player_id
+  LEFT JOIN agents ag ON ag.id = bc.agent_id
+`;
+
 export async function listContratos() {
-  const r = await pool.query(`SELECT * FROM bancado_contratos ORDER BY activo DESC, nombre ASC`);
+  const r = await pool.query(`${SELECT_CONTRATO} ORDER BY bc.activo DESC, nombre ASC`);
   return r.rows;
 }
 
 export async function getContrato(id: string) {
-  const r = await pool.query(`SELECT * FROM bancado_contratos WHERE id = $1`, [id]);
+  const r = await pool.query(`${SELECT_CONTRATO} WHERE bc.id = $1`, [id]);
   return r.rows[0] ?? null;
 }
 

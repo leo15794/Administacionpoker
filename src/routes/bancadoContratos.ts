@@ -5,6 +5,7 @@ import {
   crearContrato,
   editarContrato,
   listContratos,
+  listCandidatosBancado,
   getContrato,
   listPeriodos,
   getPeriodo,
@@ -27,7 +28,8 @@ import {
 export const bancadoContratosRouter = Router();
 
 const contratoSchema = z.object({
-  nombre: z.string().min(1),
+  playerId: z.string().nullable().optional(),
+  agentId: z.string().nullable().optional(),
   clubId: z.string().nullable().optional(),
   moneda: z.string().optional(),
   reglaKey: z.enum(["RMF", "REGLA_BANCADO_V1"]),
@@ -46,6 +48,10 @@ bancadoContratosRouter.get("/", requireAuth, requireAdmin, async (_req, res) => 
   res.json(await listContratos());
 });
 
+bancadoContratosRouter.get("/candidatos", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listCandidatosBancado());
+});
+
 bancadoContratosRouter.post("/", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = contratoSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -62,7 +68,7 @@ bancadoContratosRouter.get("/:id", requireAuth, requireAdmin, async (req, res) =
   res.json(contrato);
 });
 
-const editarSchema = contratoSchema.partial().omit({ reglaKey: true });
+const editarSchema = contratoSchema.partial().omit({ reglaKey: true, playerId: true, agentId: true });
 bancadoContratosRouter.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = editarSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

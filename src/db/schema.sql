@@ -1815,6 +1815,17 @@ CREATE TABLE IF NOT EXISTS bancado_contratos (
 -- cierre mensual) -- nunca con un parcial semanal (sección 8: "no debe... cerrar definitivamente
 -- la memoria"). resultado_ya_distribuido acumula lo que ya se repartió en extraordinarios de
 -- este período, para que el cierre mensual nunca lo vuelva a repartir (sección 18).
+-- Elegir el jugador/agente desde el selector (pedido Leo 02/10/2026: "no tener que escribir
+-- el nombre si no elegir a los jugadores/agentes que ya tenemos dentro de nuestro sistema") --
+-- exactamente uno de los dos, nunca ambos ni ninguno. "nombre" queda nullable, solo como
+-- respaldo para mostrar algo si algún día el jugador/agente referenciado se borra.
+ALTER TABLE bancado_contratos ALTER COLUMN nombre DROP NOT NULL;
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS player_id TEXT REFERENCES players(id);
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS agent_id TEXT REFERENCES agents(id);
+ALTER TABLE bancado_contratos DROP CONSTRAINT IF EXISTS bancado_contratos_jugador_o_agente_check;
+ALTER TABLE bancado_contratos ADD CONSTRAINT bancado_contratos_jugador_o_agente_check
+  CHECK ((player_id IS NOT NULL)::int + (agent_id IS NOT NULL)::int = 1);
+
 CREATE TABLE IF NOT EXISTS bancado_contrato_periodos (
   id                         TEXT PRIMARY KEY,
   contrato_id                TEXT NOT NULL REFERENCES bancado_contratos(id),

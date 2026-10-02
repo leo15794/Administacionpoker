@@ -26,12 +26,9 @@ export default function BancadoContratos() {
   return (
     <div>
       <div className="topbar">
-        <div>
-          <h2>Bancado — Contratos</h2>
-          <div className="muted">
-            Cada contrato elige su regla de cálculo de forma explícita (RMF o REGLA_BANCADO_V1) -- no hay una regla por
-            default. Esto es independiente de "Jugadores bancados".
-          </div>
+        <div className="muted">
+          Cada contrato elige, de la lista de jugadores/agentes que ya existen en el sistema, su regla de cálculo de
+          forma explícita (RMF o REGLA_BANCADO_V1) -- no hay una regla por default.
         </div>
         <button className="btn secondary small" onClick={() => setShowForm((v) => !v)}>{showForm ? "Cerrar" : "+ Nuevo contrato"}</button>
       </div>
@@ -56,6 +53,7 @@ export default function BancadoContratos() {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th>Tipo</th>
                 <th>Regla</th>
                 <th>Club</th>
                 <th>Estado</th>
@@ -66,6 +64,7 @@ export default function BancadoContratos() {
               {contratos.map((c) => (
                 <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => setSeleccionado(c.id)}>
                   <td><strong>{c.nombre}</strong></td>
+                  <td className="muted">{c.tipo_vinculo === "AGENT" ? "Agente" : "Jugador"}</td>
                   <td><span className="badge neutral">{c.regla_key}</span></td>
                   <td className="muted">{c.club_id ?? "—"}</td>
                   <td className="muted">{c.activo ? "Activo" : "Inactivo"}</td>
@@ -98,8 +97,10 @@ export default function BancadoContratos() {
 // Alta de contrato
 // ------------------------------------------------------------------------------------------
 function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
-  const [nombre, setNombre] = useState("");
+  const [candidatos, setCandidatos] = useState<any[] | null>(null);
+  const [seleccion, setSeleccion] = useState(""); // "PLAYER:<id>" o "AGENT:<id>"
   const [reglaKey, setReglaKey] = useState<"RMF" | "REGLA_BANCADO_V1" | "">("");
+  useEffect(() => { api.bancadoContratos.candidatos().then(setCandidatos).catch(() => setCandidatos([])); }, []);
   const [rmfAgentSharePct, setRmfAgentSharePct] = useState("50");
   const [rmfRakebackPct, setRmfRakebackPct] = useState("100");
   const [rmfMemoriaInicial, setRmfMemoriaInicial] = useState("0");
@@ -113,13 +114,15 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function guardar() {
-    if (!nombre.trim()) return setMsg({ ok: false, text: "Falta el nombre." });
+    if (!seleccion) return setMsg({ ok: false, text: "Elegí a qué jugador o agente de la lista corresponde este contrato." });
     if (!reglaKey) return setMsg({ ok: false, text: "Elegí explícitamente la regla -- no hay una por default." });
+    const [tipo, id] = seleccion.split(":");
     setGuardando(true);
     setMsg(null);
     try {
       await api.bancadoContratos.crear({
-        nombre: nombre.trim(),
+        playerId: tipo === "PLAYER" ? id : undefined,
+        agentId: tipo === "AGENT" ? id : undefined,
         reglaKey,
         observaciones: observaciones.trim() || undefined,
         rmfAgentSharePct: reglaKey === "RMF" ? Number(rmfAgentSharePct) / 100 : undefined,
@@ -142,8 +145,16 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   return (
     <div>
       <div className="field">
-        <label>Nombre</label>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="ej. Matías" />
+        <label>Jugador o agente (de los que ya existen en el sistema)</label>
+        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)}>
+          <option value="">-- elegir --</option>
+          {candidatos === null && <option disabled>Cargando...</option>}
+          {candidatos?.map((c) => (
+            <option key={`${c.tipo}:${c.id}`} value={`${c.tipo}:${c.id}`}>
+              [{c.tipo === "AGENT" ? "Agente" : "Jugador"}] {c.nombre}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="field">
         <label>Regla (obligatorio elegir una)</label>
