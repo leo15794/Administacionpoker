@@ -23,3 +23,14 @@ export function dateShort(s: string) {
   // a huso horario local es la correcta.
   return new Date(s).toLocaleDateString("es-AR");
 }
+
+// Igual que dateShort, pero mostrando también la hora -- para pantallas donde varios
+// movimientos pueden caer el mismo día y sin la hora no se distinguen uno de otro (pedido de
+// Leo, 02/10/2026, caso Wallet: "se mezclan los movimientos"). Solo tiene sentido con un
+// timestamp real (occurred_at), nunca con una fecha "pura" tipo entry_date/week_start.
+export function dateTime(s: string) {
+  const d = new Date(s);
+  const fecha = d.toLocaleDateString("es-AR");
+  const hora = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  return `${fecha} ${hora}`;
+}

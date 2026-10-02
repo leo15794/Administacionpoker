@@ -9,8 +9,11 @@ import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js
 
 // "YYYY-MM-DD" (o una fecha DATE de la base, que pg devuelve como medianoche UTC) interpretada
 // tal cual en una zona con offset negativo (Argentina, UTC-3) aparece un día antes al mostrarla
-// -- se re-ancla al mediodía para que el día de calendario se mantenga sin importar la zona del
-// servidor ni la del que mira la pantalla.
+// -- se re-ancla para que el día de calendario se mantenga sin importar la zona del servidor.
+// Si la fecha elegida es HOY, usa el momento real (así dos movimientos "mueve Wallet" cargados
+// el mismo día se distinguen por hora de verdad en el historial de Wallet, pedido de Leo
+// 02/10/2026: "se mezclan los movimientos"). Si es una fecha pasada/futura (carga con fecha
+// distinta a hoy), usa el mediodía de ese día -- no hay una hora real que inventar ahí.
 function fechaSinCorrimiento(fecha: string | Date): Date {
   let y: number, m: number, d: number;
   if (typeof fecha === "string") {
@@ -20,6 +23,9 @@ function fechaSinCorrimiento(fecha: string | Date): Date {
     m = fecha.getUTCMonth() + 1;
     d = fecha.getUTCDate();
   }
+  const ahora = new Date();
+  const esHoy = y === ahora.getFullYear() && m === ahora.getMonth() + 1 && d === ahora.getDate();
+  if (esHoy) return ahora;
   return new Date(y, m - 1, d, 12, 0, 0);
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd, dateShort } from "../fmt";
+import { usd, dateTime } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -104,11 +104,11 @@ export default function Wallet() {
           <div className="muted">Sin movimientos todavía.</div>
         ) : (
           <table>
-            <thead><tr><th>Fecha</th><th>Dirección</th><th className="num">Monto</th><th>Detalle</th><th></th></tr></thead>
+            <thead><tr><th>Fecha y hora</th><th>Dirección</th><th className="num">Monto</th><th>Detalle</th><th></th></tr></thead>
             <tbody>
               {data.ultimosMovimientos.map((m: any) => (
                 <tr key={m.id} style={estaRevertido(m) ? { opacity: 0.55 } : undefined}>
-                  <td>{dateShort(m.occurred_at)}</td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{dateTime(m.occurred_at)}</td>
                   <td className="muted">{m.direction === "INGRESO" ? "Ingreso" : "Egreso"}</td>
                   <td className="num"><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
                   <td>
