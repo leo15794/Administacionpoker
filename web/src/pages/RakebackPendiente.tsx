@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -15,6 +15,14 @@ export default function RakebackPendiente() {
   const { confirmDialog, alertDialog } = useConfirmDialog();
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState("");
+
+  // Filtro + agrupado por agente (05/10/2026, pedido de Leo: "poner filtro" + "poder agrupar
+  // entre agentes") -- todo client-side, son las filas que ya trae /rakeback-pendiente, no hay
+  // necesidad de ir de nuevo al backend por esto.
+  const [filtro, setFiltro] = useState("");
+  const [filtroClub, setFiltroClub] = useState("");
+  const [agrupar, setAgrupar] = useState(true);
+  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
 
   const [abierto, setAbierto] = useState<string | null>(null);
   const [monto, setMonto] = useState("");
@@ -92,6 +100,115 @@ export default function RakebackPendiente() {
     }
   }
 
+  function toggleColapsado(agentName: string) {
+    setColapsados((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentName)) next.delete(agentName);
+      else next.add(agentName);
+      return next;
+    });
+  }
+
+  // Clubes distintos presentes en los datos, para el select de filtro -- se arma solo, no hay
+  // que mantenerlo a mano en ningún lado.
+  const clubesDisponibles = Array.from(new Set((rows ?? []).map((p: any) => p.club_name as string))).sort();
+
+  const filtroNorm = filtro.trim().toLowerCase();
+  const filasFiltradas = (rows ?? []).filter((p: any) => {
+    if (filtroClub && p.club_name !== filtroClub) return false;
+    if (filtroNorm && !p.agent_name.toLowerCase().includes(filtroNorm) && !p.club_name.toLowerCase().includes(filtroNorm)) return false;
+    return true;
+  });
+
+  // Grupos por agente (05/10/2026, pedido de Leo) -- orden por mayor pendiente total primero,
+  // así los agentes que de verdad importan quedan arriba en vez de perderse en orden alfabético.
+  const gruposPorAgente = (() => {
+    const mapa = new Map<string, any[]>();
+    for (const p of filasFiltradas) {
+      const lista = mapa.get(p.agent_name) ?? [];
+      lista.push(p);
+      mapa.set(p.agent_name, lista);
+    }
+    return Array.from(mapa.entries())
+      .map(([agentName, filas]) => ({
+        agentName,
+        filas,
+        totalPendiente: filas.reduce((s, p) => s + (Number(p.amount) - Number(p.consumed)), 0),
+      }))
+      .sort((a, b) => Math.abs(b.totalPendiente) - Math.abs(a.totalPendiente));
+  })();
+
+  // Fila de la tabla (misma, se use agrupado o no) -- factoreada para no duplicar el JSX de
+  // acciones/popup de pago entre las dos vistas.
+  function filaTabla(p: any, mostrarAgente: boolean) {
+    const pendiente = Number(p.amount) - Number(p.consumed);
+    return (
+      <Fragment key={p.id}>
+        <tr>
+          <td className="muted">{dateShort(p.week_start)} - {dateShort(p.week_end)}</td>
+          {mostrarAgente && <td>{p.agent_name}</td>}
+          <td>{p.club_name}</td>
+          <td className="muted">{p.role === "SUPERVISOR" ? "Supervisor" : "Agente"}</td>
+          <td className="num money">{usd(p.amount)}</td>
+          <td className="num muted">{usd(p.consumed)}</td>
+          <td className="num"><strong className={pendiente >= 0 ? "pos" : "neg"}>{usd(pendiente)}</strong></td>
+          <td style={{ display: "flex", gap: 6 }}>
+            <button className="btn secondary small" onClick={() => abrir(p)}>Pagar</button>
+            <button className="btn secondary small" onClick={() => darDeBaja(p)}>Dar de baja</button>
+            {Number(p.consumed) === 0 && (
+              <button
+                className="btn secondary small"
+                disabled={borrando === p.id}
+                onClick={() => eliminar(p)}
+                style={{ color: "var(--red)" }}
+              >
+                {borrando === p.id ? "..." : "Eliminar"}
+              </button>
+            )}
+          </td>
+        </tr>
+        {abierto === p.id && (
+          <tr>
+            <td colSpan={mostrarAgente ? 8 : 7}>
+              <div className="panel" style={{ margin: "8px 0", maxWidth: 460 }}>
+                <div className="field">
+                  <label>Medio de pago</label>
+                  <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
+                    <option value="FICHAS">Fichas (mueve el stock físico)</option>
+                    <option value="USDT">USDT</option>
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="ZELLE">Zelle</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Importe (USD)</label>
+                  <input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} style={{ width: 150 }} />
+                </div>
+                {medio === "EFECTIVO" && (
+                  <div className="field">
+                    <label>Custodio del efectivo</label>
+                    <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+                  </div>
+                )}
+                <div className="field">
+                  <label>Observación (opcional)</label>
+                  <input value={nota} onChange={(e) => setNota(e.target.value)} />
+                </div>
+                {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn" disabled={pagando} onClick={() => pagar(p)}>
+                    {pagando ? "Registrando..." : "Confirmar pago"}
+                  </button>
+                  <button className="btn secondary" onClick={() => setAbierto(null)}>Cancelar</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  }
+
   return (
     <div>
       <div className="topbar">
@@ -106,11 +223,77 @@ export default function RakebackPendiente() {
 
       {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
 
-      <div className="panel" style={{ marginTop: 16 }}>
+      {/* Filtro + agrupado por agente (05/10/2026, pedido de Leo: "poner filtro" + "poder
+          agrupar entre agentes") -- todo client-side sobre lo que ya trajo /rakeback-pendiente. */}
+      <div className="panel" style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          placeholder="Buscar agente o club..."
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          style={{ minWidth: 220 }}
+        />
+        <select value={filtroClub} onChange={(e) => setFiltroClub(e.target.value)}>
+          <option value="">Todos los clubes</option>
+          {clubesDisponibles.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+          <input type="checkbox" checked={agrupar} onChange={(e) => setAgrupar(e.target.checked)} />
+          Agrupar por agente
+        </label>
+      </div>
+
+      <div className="panel" style={{ marginTop: 10 }}>
         {!rows ? (
           <div className="muted">Cargando...</div>
         ) : rows.length === 0 ? (
           <div className="muted">No hay rakeback pendiente por pagar.</div>
+        ) : filasFiltradas.length === 0 ? (
+          <div className="muted">Ningún resultado con ese filtro.</div>
+        ) : agrupar ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {gruposPorAgente.map((g) => {
+              const colapsado = colapsados.has(g.agentName);
+              return (
+                <div key={g.agentName} className="panel" style={{ padding: 0 }}>
+                  <div
+                    onClick={() => toggleColapsado(g.agentName)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="muted">{colapsado ? "▸" : "▾"}</span>
+                      <strong>{g.agentName}</strong>
+                      <span className="muted">({g.filas.length} {g.filas.length === 1 ? "fila" : "filas"})</span>
+                    </div>
+                    <strong className={g.totalPendiente >= 0 ? "pos" : "neg"}>{usd(g.totalPendiente)}</strong>
+                  </div>
+                  {!colapsado && (
+                    <table style={{ borderTop: "1px solid var(--border)" }}>
+                      <thead>
+                        <tr>
+                          <th>Semana</th>
+                          <th>Club</th>
+                          <th>Rol</th>
+                          <th className="num">Monto</th>
+                          <th className="num">Pagado</th>
+                          <th className="num">Pendiente</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>{g.filas.map((p: any) => filaTabla(p, false))}</tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <table>
             <thead>
@@ -125,76 +308,7 @@ export default function RakebackPendiente() {
                 <th></th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((p: any) => {
-                const pendiente = Number(p.amount) - Number(p.consumed);
-                return (
-                  <>
-                    <tr key={p.id}>
-                      <td className="muted">{dateShort(p.week_start)} - {dateShort(p.week_end)}</td>
-                      <td>{p.agent_name}</td>
-                      <td>{p.club_name}</td>
-                      <td className="muted">{p.role === "SUPERVISOR" ? "Supervisor" : "Agente"}</td>
-                      <td className="num money">{usd(p.amount)}</td>
-                      <td className="num muted">{usd(p.consumed)}</td>
-                      <td className="num"><strong className={pendiente >= 0 ? "pos" : "neg"}>{usd(pendiente)}</strong></td>
-                      <td style={{ display: "flex", gap: 6 }}>
-                        <button className="btn secondary small" onClick={() => abrir(p)}>Pagar</button>
-                        <button className="btn secondary small" onClick={() => darDeBaja(p)}>Dar de baja</button>
-                        {Number(p.consumed) === 0 && (
-                          <button
-                            className="btn secondary small"
-                            disabled={borrando === p.id}
-                            onClick={() => eliminar(p)}
-                            style={{ color: "var(--red)" }}
-                          >
-                            {borrando === p.id ? "..." : "Eliminar"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {abierto === p.id && (
-                      <tr>
-                        <td colSpan={8}>
-                          <div className="panel" style={{ margin: "8px 0", maxWidth: 460 }}>
-                            <div className="field">
-                              <label>Medio de pago</label>
-                              <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-                                <option value="FICHAS">Fichas (mueve el stock físico)</option>
-                                <option value="USDT">USDT</option>
-                                <option value="EFECTIVO">Efectivo</option>
-                                <option value="ZELLE">Zelle</option>
-                              </select>
-                            </div>
-                            <div className="field">
-                              <label>Importe (USD)</label>
-                              <input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} style={{ width: 150 }} />
-                            </div>
-                            {medio === "EFECTIVO" && (
-                              <div className="field">
-                                <label>Custodio del efectivo</label>
-                                <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
-                              </div>
-                            )}
-                            <div className="field">
-                              <label>Observación (opcional)</label>
-                              <input value={nota} onChange={(e) => setNota(e.target.value)} />
-                            </div>
-                            {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-                            <div style={{ display: "flex", gap: 8 }}>
-                              <button className="btn" disabled={pagando} onClick={() => pagar(p)}>
-                                {pagando ? "Registrando..." : "Confirmar pago"}
-                              </button>
-                              <button className="btn secondary" onClick={() => setAbierto(null)}>Cancelar</button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })}
-            </tbody>
+            <tbody>{filasFiltradas.map((p: any) => filaTabla(p, true))}</tbody>
           </table>
         )}
       </div>
