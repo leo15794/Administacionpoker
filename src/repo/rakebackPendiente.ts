@@ -142,28 +142,46 @@ export interface SaldarPendienteConCruceInput {
 export async function saldarPendienteConCruce(input: SaldarPendienteConCruceInput) {
   if (!(input.amount > 0)) throw new Error("El monto tiene que ser mayor a 0.");
 
-  const existing = await pool.query(`SELECT * FROM rakeback_pendiente WHERE id = $1 AND active = true`, [input.pendienteId]);
-  const actual = existing.rows[0];
-  if (!actual) throw new Error("No se encontró ese rakeback pendiente (o ya está dado de baja).");
+  // FIX 05/10/2026 (mismo bug de arriba en schema.sql): antes el UPDATE y el INSERT eran dos
+  // pool.query() sueltos, cada uno confirmándose solo -- si el INSERT fallaba (como pasaba
+  // SIEMPRE acá por el CHECK que le faltaba a 'CRUCE_ADELANTO'), el UPDATE ya había quedado
+  // aplicado de todas formas, dejando el pendiente consumido sin ningún movimiento que lo
+  // explique. Ahora las dos van en una sola transacción -- si algo falla, no se aplica nada.
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT * FROM rakeback_pendiente WHERE id = $1 AND active = true FOR UPDATE`,
+      [input.pendienteId]
+    );
+    const actual = existing.rows[0];
+    if (!actual) throw new Error("No se encontró ese rakeback pendiente (o ya está dado de baja).");
 
-  const pendienteDisponible = Number(actual.amount) - Number(actual.consumed);
-  if (input.amount > pendienteDisponible + 0.005) {
-    throw new Error("El cruce no puede superar el monto pendiente disponible.");
+    const pendienteDisponible = Number(actual.amount) - Number(actual.consumed);
+    if (input.amount > pendienteDisponible + 0.005) {
+      throw new Error("El cruce no puede superar el monto pendiente disponible.");
+    }
+
+    const nuevoConsumed = Number(actual.consumed) + input.amount;
+    const r = await client.query(
+      `UPDATE rakeback_pendiente SET consumed = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+      [nuevoConsumed, actual.id]
+    );
+    const pendiente = r.rows[0];
+    const rpmId = newId("rpm");
+    await client.query(
+      `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, movement_id, notes, created_by)
+       VALUES ($1,$2,$3,'CRUCE_ADELANTO',$4,$5,$6,$7,$8,$9)`,
+      [rpmId, pendiente.id, pendiente.agent_id, input.amount, pendiente.amount, pendiente.consumed, null, input.notes ?? null, input.createdBy ?? null]
+    );
+    await client.query("COMMIT");
+    return { ...pendiente, movementRowId: rpmId };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const nuevoConsumed = Number(actual.consumed) + input.amount;
-  const r = await pool.query(
-    `UPDATE rakeback_pendiente SET consumed = $1, updated_at = now() WHERE id = $2 RETURNING *`,
-    [nuevoConsumed, actual.id]
-  );
-  const pendiente = r.rows[0];
-  const rpmId = newId("rpm");
-  await pool.query(
-    `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, movement_id, notes, created_by)
-     VALUES ($1,$2,$3,'CRUCE_ADELANTO',$4,$5,$6,$7,$8,$9)`,
-    [rpmId, pendiente.id, pendiente.agent_id, input.amount, pendiente.amount, pendiente.consumed, null, input.notes ?? null, input.createdBy ?? null]
-  );
-  return { ...pendiente, movementRowId: rpmId };
 }
 
 // Recalcula la cadena resulting_amount/resulting_consumed de UN pendiente entero, en orden

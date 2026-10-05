@@ -455,6 +455,18 @@ CREATE TABLE IF NOT EXISTS rakeback_pendiente_movements (
   created_by          TEXT,
   occurred_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- FIX 05/10/2026 (bug real encontrado, pedido de Leo "no podemos ver a quién le cobró el
+-- rakeback pendiente"): saldarPendienteConCruce (repo/rakebackPendiente.ts, agregado
+-- 29/09/2026 para cruzar un adelanto contra el rakeback pendiente desde Liquidaciones) inserta
+-- un movimiento tipo 'CRUCE_ADELANTO' -- pero esa palabra nunca se agregó a este CHECK, así que
+-- cada cruce de este tipo VIOLABA la restricción y el INSERT fallaba. Como el UPDATE de
+-- rakeback_pendiente.consumed se hacía en una consulta separada (ya corregido más abajo para
+-- que sea una sola transacción), ese UPDATE quedaba aplicado igual -- resultado: el pendiente
+-- bajaba (o llegaba a 0) sin que quedara NINGÚN registro de por qué ni con qué adelanto se
+-- saldó. Mismo patrón que ya se usó acá mismo para 'CORRECCION' en rakeback_advance_movements.
+ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
+ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
+  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO'));
 
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
