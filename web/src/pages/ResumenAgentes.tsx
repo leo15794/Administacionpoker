@@ -371,6 +371,7 @@ export default function ResumenAgentes() {
           onDescargar={descargarPdf}
           onVolver={() => setPreview(null)}
           onCancelar={cancelarArmado}
+          onRefrescar={verPreview}
         />
       )}
       </>
@@ -404,6 +405,17 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
   const pendientesAnterioresDetalle = datos.flatMap((r: any) =>
     (r.estadoCuenta.pendientesAnterioresDetalle ?? []).map((d: any) => ({ ...d, agentName: r.agentName }))
   );
+  // ajustesPendientesTotal/Detalle + movimientosAjustables (05/10/2026, pedido de Leo: "que un
+  // ajuste pendiente se arrastre semana a semana en Saldo anterior hasta que se pague") -- se
+  // combinan con el mismo criterio que pendientesAnterioresDetalle arriba: se suman, y el
+  // detalle se concatena etiquetado con el agente al que pertenece.
+  const ajustesPendientesTotal = sum((r) => r.estadoCuenta.ajustesPendientesTotal ?? 0);
+  const ajustesPendientesDetalle = datos.flatMap((r: any) =>
+    (r.estadoCuenta.ajustesPendientesDetalle ?? []).map((d: any) => ({ ...d, agentName: r.agentName }))
+  );
+  const movimientosAjustables = datos.flatMap((r: any) =>
+    (r.estadoCuenta.movimientosAjustables ?? []).map((m: any) => ({ ...m, agentName: r.agentName, agentId: r.agentId }))
+  );
   return {
     nombreGrupo,
     sistema,
@@ -422,6 +434,9 @@ function combinarResumen(datos: any[], nombreGrupo: string, sistema: "WIN_LOSE" 
       saldoFichasAntes,
       pendientesAnterioresTotal,
       pendientesAnterioresDetalle,
+      ajustesPendientesTotal,
+      ajustesPendientesDetalle,
+      movimientosAjustables,
     },
     porAgente: datos,
   };
@@ -436,6 +451,7 @@ function PreviewResumen({
   onDescargar,
   onVolver,
   onCancelar,
+  onRefrescar,
 }: {
   preview: any;
   generando: boolean;
@@ -443,7 +459,39 @@ function PreviewResumen({
   onDescargar: () => void;
   onVolver: () => void;
   onCancelar: () => void;
+  onRefrescar: () => void;
 }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
+  const [marcandoId, setMarcandoId] = useState<string | null>(null);
+  // marcarPendiente (05/10/2026, pedido de Leo: "que un ajuste pendiente se arrastre semana a
+  // semana en Saldo anterior hasta que se pague, con posibilidad de volver todo para atras") --
+  // toggle reversible: no mueve plata ni genera ningún movimiento, solo prende/apaga la bandera
+  // que decide si ESTE AJUSTE/COBRO/PAGO puntual sigue arrastrándose en "Saldo anterior" la
+  // semana que viene (ver marcarSaldoPendiente en repo/agentesResumen.ts). Se puede volver para
+  // atrás en cualquier momento con el mismo botón.
+  async function marcarPendiente(m: any, pendiente: boolean) {
+    const verbo = pendiente ? "marcar" : "desmarcar";
+    if (
+      !(await confirmDialog(
+        `¿${pendiente ? "Marcar" : "Desmarcar"} este ${m.type.toLowerCase()} de ${usd(m.amount)} (${m.agentName}) como pendiente? ${
+          pendiente
+            ? "Va a seguir sumando en \"Saldo anterior\" semana a semana hasta que lo desmarques."
+            : "Deja de arrastrarse de acá en adelante -- se puede volver a marcar cuando quieras."
+        }`
+      ))
+    ) {
+      return;
+    }
+    setMarcandoId(m.id);
+    try {
+      await api.marcarSaldoPendiente(m.id, pendiente);
+      onRefrescar();
+    } catch (err: any) {
+      await alertDialog(err.message || `No se pudo ${verbo} como pendiente.`);
+    } finally {
+      setMarcandoId(null);
+    }
+  }
   const mostrarRodeo = preview.clubesCombinado.some((c: any) => Number(c.rodeo) !== 0);
   const mostrarAjuste = preview.clubesCombinado.some((c: any) => Number(c.ajusteManual) !== 0);
   const sumClub = (fn: (c: any) => number) => preview.clubesCombinado.reduce((s: number, c: any) => s + fn(c), 0);
@@ -540,7 +588,8 @@ function PreviewResumen({
       </table>
       <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
         Saldo anterior = cargas/descargas/adelantos de fichas antes de esta semana ({usd(ec.saldoFichasAntes)}) +
-        pendientes de cierres anteriores todavía sin pagar del todo ({usd(ec.pendientesAnterioresTotal)}).
+        pendientes de cierres anteriores todavía sin pagar del todo ({usd(ec.pendientesAnterioresTotal)}) +
+        ajustes marcados como pendientes ({usd(ec.ajustesPendientesTotal ?? 0)}).
       </div>
 
       {/* Desglose de "Saldo anterior" (30/09/2026, pedido de Leo: "necesito que me hagas un
@@ -558,11 +607,92 @@ function PreviewResumen({
             <td className="num money">{usd(ec.pendientesAnterioresTotal)}</td>
           </tr>
           <tr>
+            <td>Ajustes/cobros/pagos marcados como pendientes</td>
+            <td className="num money">{usd(ec.ajustesPendientesTotal ?? 0)}</td>
+          </tr>
+          <tr>
             <td><strong>= Saldo anterior</strong></td>
             <td className="num"><strong>{usd(ec.saldoAnterior)}</strong></td>
           </tr>
         </tbody>
       </table>
+      {ec.ajustesPendientesDetalle && ec.ajustesPendientesDetalle.length > 0 && (
+        <>
+          <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>
+            Detalle de los ajustes marcados como pendientes que componen el {usd(ec.ajustesPendientesTotal ?? 0)} de arriba:
+          </div>
+          <table style={{ maxWidth: 620 }}>
+            <thead>
+              <tr>
+                {preview.porAgente.length > 1 && <th>Agente</th>}
+                <th>Club</th>
+                <th>Fecha</th>
+                <th>Nota</th>
+                <th className="num">Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ec.ajustesPendientesDetalle.map((d: any, i: number) => (
+                <tr key={i}>
+                  {preview.porAgente.length > 1 && <td className="muted">{d.agentName}</td>}
+                  <td>{d.clubName}</td>
+                  <td className="muted">{dateShort(d.occurredAt)}</td>
+                  <td className="muted">{d.observation || "—"}</td>
+                  <td className="num money">{usd(d.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {/* Marcar/desmarcar manual (05/10/2026, pedido de Leo) -- lista los últimos AJUSTE/COBRO/
+          PAGO/TICKET_PROMOCIONAL del agente hasta el fin de esta semana, para poder decidir cuál
+          sigue siendo una deuda real (se marca "pendiente", se arrastra) y cuál ya se resolvió
+          (queda sin marcar, desaparece la semana que viene como hasta ahora). */}
+      {ec.movimientosAjustables && ec.movimientosAjustables.length > 0 && (
+        <>
+          <h4 style={{ marginTop: 16, marginBottom: 6 }}>Ajustes / cobros / pagos — marcar como pendiente</h4>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+            Marcado como pendiente = sigue sumando en "Saldo anterior" semana a semana hasta que lo desmarques. Reversible en cualquier momento.
+          </div>
+          <table style={{ maxWidth: 760 }}>
+            <thead>
+              <tr>
+                {preview.porAgente.length > 1 && <th>Agente</th>}
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Club</th>
+                <th>Nota</th>
+                <th className="num">Monto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ec.movimientosAjustables.map((m: any) => (
+                <tr key={m.id}>
+                  {preview.porAgente.length > 1 && <td className="muted">{m.agentName}</td>}
+                  <td className="muted">{dateShort(m.occurredAt)}</td>
+                  <td>{m.type}</td>
+                  <td>{m.clubName}</td>
+                  <td className="muted">{m.observation || "—"}</td>
+                  <td className="num money">{usd(m.amount)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn secondary small"
+                      disabled={marcandoId === m.id}
+                      onClick={() => marcarPendiente(m, !m.saldoPendiente)}
+                    >
+                      {marcandoId === m.id ? "..." : m.saldoPendiente ? "Pendiente ✓ (desmarcar)" : "Marcar pendiente"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
       {ec.pendientesAnterioresDetalle && ec.pendientesAnterioresDetalle.length > 0 && (
         <>
           <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>

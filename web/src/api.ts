@@ -759,6 +759,14 @@ export const api = {
   },
   getResumenHistorial: (id: string) => request(`/agentes-resumen/historial/${id}`),
   eliminarResumenHistorial: (id: string) => request(`/agentes-resumen/historial/${id}`, { method: "DELETE" }),
+  // Marcar/desmarcar un AJUSTE/COBRO/PAGO como "pendiente" (05/10/2026, pedido de Leo) -- se
+  // arrastra en "Saldo anterior" hasta que se desmarque, toggle reversible, ver
+  // marcarSaldoPendiente en repo/agentesResumen.ts.
+  marcarSaldoPendiente: (movementId: string, pendiente: boolean) =>
+    request(`/agentes-resumen/movimiento/${movementId}/saldo-pendiente`, {
+      method: "POST",
+      body: JSON.stringify({ pendiente }),
+    }),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),

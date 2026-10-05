@@ -2066,3 +2066,15 @@ CREATE INDEX IF NOT EXISTS idx_bancado_contrato_rmf_cierres_contrato ON bancado_
 -- muestre el mismo desglose que ya se ve en Resumen financiero, no solo el número sumado.
 ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_cierres NUMERIC(18,4);
 ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_bancados NUMERIC(18,4);
+
+-- saldo_pendiente (05/10/2026, pedido de Leo: "que un ajuste pendiente se arrastre semana a
+-- semana en Saldo anterior hasta que se pague, con posibilidad de volver todo para atras").
+-- Por diseño (ver repo/agentesResumen.ts, redefinición del 30/09/2026), "Saldo anterior" solo
+-- arrastra CARGA/DESCARGA/ADELANTO_FICHAS -- un AJUSTE se trata como "ya resuelto esa semana" y
+-- desaparece la semana siguiente, aunque sea una deuda real todavía sin cobrar/pagar (caso real
+-- "El Latigo Loco", AJUSTE "Deudas" -769.83). Esta columna, default false (no cambia NADA de lo
+-- que ya existe), marca un movimiento puntual como "todavía pendiente, seguir arrastrando" --
+-- se prende/apaga a mano desde Resumen por agente (nunca se setea solo), así que es un toggle
+-- reversible en cualquier momento, no una migración de datos.
+ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS saldo_pendiente BOOLEAN NOT NULL DEFAULT false;
+

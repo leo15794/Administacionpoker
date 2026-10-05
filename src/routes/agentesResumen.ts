@@ -9,6 +9,7 @@ import {
   listResumenesHistorial,
   getResumenHistorialById,
   eliminarResumenHistorial,
+  marcarSaldoPendiente,
 } from "../repo/agentesResumen.js";
 import type { AuthedRequest } from "../lib/auth.js";
 
@@ -36,6 +37,18 @@ agentesResumenRouter.get("/:agentId/:weekStart", requireAuth, requireAdmin, asyn
   const r = await getResumenAgentePDF(req.params.agentId, req.params.weekStart, sistema);
   if (!r) return res.status(404).json({ error: "Este agente no tiene ningún cierre aplicado en esa semana." });
   res.json(r);
+});
+
+// Marcar/desmarcar un AJUSTE/COBRO/PAGO como "pendiente" (05/10/2026, pedido de Leo) -- toggle
+// reversible, ver marcarSaldoPendiente en repo/agentesResumen.ts. No mueve plata ni balances.
+const saldoPendienteSchema = z.object({ pendiente: z.boolean() });
+agentesResumenRouter.post("/movimiento/:movementId/saldo-pendiente", requireAuth, requireAdmin, async (req, res) => {
+  const body = saldoPendienteSchema.parse(req.body);
+  try {
+    res.json(await marcarSaldoPendiente(req.params.movementId, body.pendiente));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo actualizar." });
+  }
 });
 
 // Historial de resúmenes guardados (30/09/2026, pedido de Leo) -- ver repo/agentesResumen.ts.
