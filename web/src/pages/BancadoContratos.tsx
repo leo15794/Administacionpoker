@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -10,6 +10,7 @@ const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "O
 // No tiene relación con "Jugadores bancados" (api.bancados) ni con agentes account_type=BANCADO
 // -- esos quedan intactos, este módulo es aparte.
 export default function BancadoContratos() {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
   const [contratos, setContratos] = useState<any[] | null>(null);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -22,6 +23,28 @@ export default function BancadoContratos() {
   useEffect(() => { refresh(); }, []);
 
   const contrato = contratos?.find((c) => c.id === seleccionado) ?? null;
+
+  async function eliminar(c: any, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!(await confirmDialog(`¿Borrar el contrato de ${c.nombre}? Esto solo funciona si todavía no tiene ningún período, cierre, ajuste o costo fijo cargado.`))) return;
+    try {
+      await api.bancadoContratos.eliminar(c.id);
+      if (seleccionado === c.id) setSeleccionado(null);
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo borrar el contrato.");
+    }
+  }
+
+  async function toggleActivo(c: any, e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await api.bancadoContratos.editar(c.id, { activo: !c.activo });
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo cambiar el estado.");
+    }
+  }
 
   return (
     <div>
@@ -68,9 +91,15 @@ export default function BancadoContratos() {
                   <td><span className="badge neutral">{c.regla_key}</span></td>
                   <td className="muted">{c.club_id ?? "—"}</td>
                   <td className="muted">{c.activo ? "Activo" : "Inactivo"}</td>
-                  <td>
+                  <td style={{ display: "flex", gap: 6 }}>
                     <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); setSeleccionado(c.id); }}>
                       Abrir
+                    </button>
+                    <button className="btn secondary small" onClick={(e) => toggleActivo(c, e)}>
+                      {c.activo ? "Desactivar" : "Activar"}
+                    </button>
+                    <button className="btn secondary small" onClick={(e) => eliminar(c, e)}>
+                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -96,6 +125,43 @@ export default function BancadoContratos() {
 // ------------------------------------------------------------------------------------------
 // Alta de contrato
 // ------------------------------------------------------------------------------------------
+// Etiqueta única de cada candidato en el picker -- incluye el club para desambiguar jugadores
+// con el mismo nombre en clubes distintos (bug reportado por Leo 02/10/2026).
+function labelCandidato(c: any) {
+  return `[${c.tipo === "AGENT" ? "Agente" : "Jugador"}] ${c.nombre}${c.club_name ? ` -- ${c.club_name}` : ""}`;
+}
+
+// Buscador para tipear en vez de scrollear un <select> con cientos de jugadores (pedido Leo
+// 05/10/2026, "se hace mucho quilombo") -- input + <datalist> nativo: el usuario tipea
+// cualquier parte del nombre, el navegador filtra solo, y acá solo hace falta mapear el texto
+// elegido de vuelta a "TIPO:id" buscando el candidato cuya etiqueta coincide exacto.
+function CandidatoPicker({ candidatos, value, onChange }: { candidatos: any[] | null; value: string; onChange: (v: string) => void }) {
+  const seleccionado = useMemo(() => candidatos?.find((c) => `${c.tipo}:${c.id}` === value) ?? null, [candidatos, value]);
+  const [texto, setTexto] = useState("");
+  useEffect(() => { setTexto(seleccionado ? labelCandidato(seleccionado) : ""); }, [seleccionado]);
+
+  return (
+    <div>
+      <input
+        list="candidatos-bancado-contrato"
+        value={texto}
+        placeholder="Escribí el nombre para buscar..."
+        onChange={(e) => {
+          const t = e.target.value;
+          setTexto(t);
+          const match = candidatos?.find((c) => labelCandidato(c) === t);
+          onChange(match ? `${match.tipo}:${match.id}` : "");
+        }}
+      />
+      <datalist id="candidatos-bancado-contrato">
+        {candidatos === null && <option>Cargando...</option>}
+        {candidatos?.map((c) => <option key={`${c.tipo}:${c.id}`} value={labelCandidato(c)} />)}
+      </datalist>
+      {texto && !seleccionado && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Elegí una opción de la lista (no quedó ninguna seleccionada todavía).</div>}
+    </div>
+  );
+}
+
 function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   const [candidatos, setCandidatos] = useState<any[] | null>(null);
   const [seleccion, setSeleccion] = useState(""); // "PLAYER:<id>" o "AGENT:<id>"
@@ -154,15 +220,7 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
     <div>
       <div className="field">
         <label>Jugador o agente (de los que ya existen en el sistema)</label>
-        <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)}>
-          <option value="">-- elegir --</option>
-          {candidatos === null && <option disabled>Cargando...</option>}
-          {candidatos?.map((c) => (
-            <option key={`${c.tipo}:${c.id}`} value={`${c.tipo}:${c.id}`}>
-              [{c.tipo === "AGENT" ? "Agente" : "Jugador"}] {c.nombre}{c.club_name ? ` -- ${c.club_name}` : ""}
-            </option>
-          ))}
-        </select>
+        <CandidatoPicker candidatos={candidatos} value={seleccion} onChange={setSeleccion} />
       </div>
       <div className="field">
         <label>Regla (obligatorio elegir una)</label>
@@ -256,6 +314,148 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+// Carga por archivo (pedido Leo 05/10/2026, "como en la otra sección") -- reusa tal cual los
+// mismos endpoints de importación que "Jugadores bancados" clásico (previsualizarImportacion*),
+// sin ningún endpoint nuevo: esas previas YA traen, por club, tanto los jugadores marcados
+// "bancado" (array `bancados`) como el detalle de CADA jugador dentro del agregado de su agente
+// (`agentes[].jugadoresDetalle`) y el agregado del agente en sí (`agentes[].resultado/rakeTotal`)
+// -- entre esos tres lugares está el resultado/rake de cualquier jugador o agente del sistema,
+// tenga o no tenga marcado el flag clásico de bancado. Si el contrato tiene club_id cargado se
+// filtra a ese club; si no, se suma lo que aparezca en todos los clubes del archivo (caso de un
+// agente que opera en más de un club).
+function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; onEncontrado: (resultado: number, rake: number, detalle: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [plataforma, setPlataforma] = useState<"suprema" | "teamback-gg" | "tiny-gg">("suprema");
+  const [weekEnd, setWeekEnd] = useState("");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [error, setError] = useState("");
+  const [resultado, setResultado] = useState<{ resultado: number; rake: number; detalle: string } | null>(null);
+
+  async function subirArchivo(): Promise<any> {
+    if (plataforma === "suprema") {
+      if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+      return api.previsualizarImportacion(archivo, weekEnd);
+    }
+    if (plataforma === "teamback-gg") {
+      if (!archivo) throw new Error("Subí el archivo (.xlsx).");
+      return api.previsualizarImportacionTeamBackGG(archivo, weekEnd);
+    }
+    if (archivos.length === 0) throw new Error("Subí los archivos (uno por super agente).");
+    return api.previsualizarImportacionTinyGG(archivos, weekEnd);
+  }
+
+  async function buscar() {
+    setError("");
+    setResultado(null);
+    if (!weekEnd) return setError("Indicá la fecha (semana hasta) antes de analizar el archivo.");
+    setBuscando(true);
+    try {
+      const result = await subirArchivo();
+      let totalResultado = 0;
+      let totalRake = 0;
+      const partes: string[] = [];
+      for (const c of result.clubes ?? []) {
+        if (contrato.club_id && c.clubId !== contrato.club_id) continue;
+        if (contrato.tipo_vinculo === "AGENT") {
+          const ag = (c.agentes ?? []).find((a: any) => a.agentId === contrato.agent_id);
+          if (ag) {
+            totalResultado += Number(ag.resultado) || 0;
+            totalRake += Number(ag.rakeTotal) || 0;
+            partes.push(`${c.clubName}: ${usd(Number(ag.resultado) || 0)}`);
+          }
+        } else {
+          const b = (c.bancados ?? []).find((x: any) => x.playerId === contrato.player_id);
+          if (b) {
+            totalResultado += Number(b.resultado) || 0;
+            totalRake += Number(b.rake) || 0;
+            partes.push(`${c.clubName}: ${usd(Number(b.resultado) || 0)}`);
+            continue;
+          }
+          for (const ag of c.agentes ?? []) {
+            const det = (ag.jugadoresDetalle ?? []).find((j: any) => j.playerId === contrato.player_id);
+            if (det) {
+              totalResultado += Number(det.resultado) || 0;
+              totalRake += Number(det.rake) || 0;
+              partes.push(`${c.clubName}: ${usd(Number(det.resultado) || 0)}`);
+            }
+          }
+        }
+      }
+      if (partes.length === 0) {
+        setError(`No se encontró a ${contrato.nombre} en el archivo para esa semana -- revisá la plataforma, el archivo, o cargá los valores a mano.`);
+        return;
+      }
+      setResultado({
+        resultado: Math.round(totalResultado * 100) / 100,
+        rake: Math.round(totalRake * 100) / 100,
+        detalle: partes.join(" + "),
+      });
+    } catch (err: any) {
+      setError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="topbar">
+        <strong style={{ fontSize: 13 }}>Cargar desde archivo semanal (opcional)</strong>
+        <button type="button" className="btn secondary small" onClick={() => setAbierto((v) => !v)}>{abierto ? "Cerrar" : "Usar archivo"}</button>
+      </div>
+      {abierto && (
+        <div style={{ marginTop: 10 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Subí el mismo archivo semanal que usás en Cierres -- se busca automáticamente el resultado y el rake de{" "}
+            <strong>{contrato.nombre}</strong> en ese archivo, para esta semana.
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Plataforma</label>
+              <select value={plataforma} onChange={(e) => { setPlataforma(e.target.value as any); setArchivo(null); setArchivos([]); setResultado(null); }}>
+                <option value="suprema">SupremaPoker (Fénix/TeamBack Suprema)</option>
+                <option value="teamback-gg">GG Poker / TeamBack GG</option>
+                <option value="tiny-gg">Tiny GG</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Semana hasta</label>
+              <input type="date" value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); setResultado(null); }} />
+            </div>
+          </div>
+          <div className="field">
+            <label>{plataforma === "tiny-gg" ? "Archivos (uno por super agente)" : "Archivo"}</label>
+            {plataforma === "tiny-gg" ? (
+              <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => { setArchivos(Array.from(e.target.files ?? [])); setResultado(null); }} />
+            ) : (
+              <input type="file" accept=".xlsx,.xls" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); setResultado(null); }} />
+            )}
+          </div>
+          {error && <div className="error">{error}</div>}
+          <button type="button" className="btn secondary small" disabled={buscando} onClick={buscar}>{buscando ? "Buscando..." : "Buscar en el archivo"}</button>
+          {resultado && (
+            <div style={{ marginTop: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Encontrado ({resultado.detalle}) -- resultado total {usd(resultado.resultado)}, rake total {usd(resultado.rake)}.
+              </div>
+              <button
+                type="button"
+                className="btn small"
+                style={{ marginTop: 6 }}
+                onClick={() => onEncontrado(resultado.resultado, resultado.rake, resultado.detalle)}
+              >
+                Usar estos valores
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------------------------------
 // Regla RMF -- mismo motor de capital/makeup que "Jugadores bancados" clásico
 // (engine/bancados.ts), aplicado a este contrato. Nunca se guarda un capital/makeup "actual"
@@ -345,6 +545,10 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
 
       <div className="panel" style={{ marginTop: 16, maxWidth: 560 }}>
         <h3 style={{ marginTop: 0 }}>Cerrar semana (RMF)</h3>
+        <ImportarResultadoContrato
+          contrato={contrato}
+          onEncontrado={(r, rk) => { setResultadoMesas(String(r)); setRakeBruto(String(rk)); }}
+        />
         <div className="form-grid">
           <div className="field"><label>Desde</label><input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></div>
           <div className="field"><label>Hasta</label><input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></div>
@@ -591,7 +795,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
 
       {showParcial && (
         <div className="panel" style={{ marginTop: 12, maxWidth: 480 }}>
-          <ParcialForm periodoId={periodoId} onCreated={() => { setShowParcial(false); refresh(); }} />
+          <ParcialForm contrato={contrato} periodoId={periodoId} onCreated={() => { setShowParcial(false); refresh(); }} />
         </div>
       )}
       {showExtra && (
@@ -688,7 +892,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
   );
 }
 
-function ParcialForm({ periodoId, onCreated }: { periodoId: string; onCreated: () => void }) {
+function ParcialForm({ contrato, periodoId, onCreated }: { contrato: any; periodoId: string; onCreated: () => void }) {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [resultadoMesas, setResultadoMesas] = useState("");
@@ -724,6 +928,10 @@ function ParcialForm({ periodoId, onCreated }: { periodoId: string; onCreated: (
 
   return (
     <div>
+      <ImportarResultadoContrato
+        contrato={contrato}
+        onEncontrado={(r, rk) => { setResultadoMesas(String(r)); setRakeBruto(String(rk)); }}
+      />
       <div className="form-grid">
         <div className="field"><label>Desde</label><input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></div>
         <div className="field"><label>Hasta</label><input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></div>

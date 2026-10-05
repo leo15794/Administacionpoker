@@ -1062,6 +1062,8 @@ export const api = {
     revertirCierreRmf: (cierreId: string, motivo?: string) =>
       request(`/bancado-contratos/historial-rmf/${cierreId}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
 
+    eliminar: (id: string) => request(`/bancado-contratos/${id}`, { method: "DELETE" }),
+
     liquidaciones: (contratoId: string, periodoId?: string) =>
       request(`/bancado-contratos/${contratoId}/liquidaciones${periodoId ? `?periodoId=${periodoId}` : ""}`),
 

@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import {
   crearContrato,
   editarContrato,
+  eliminarContrato,
   listContratos,
   listCandidatosBancado,
   getContrato,
@@ -80,6 +81,15 @@ bancadoContratosRouter.put("/:id", requireAuth, requireAdmin, async (req, res) =
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await editarContrato(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+bancadoContratosRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await eliminarContrato(req.params.id);
+    res.status(204).end();
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
