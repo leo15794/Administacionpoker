@@ -347,6 +347,7 @@ export default function Agentes() {
           <EditarAgente
             agente={editando}
             agentes={agentes}
+            dealsDelAgente={dealsPorAgente[editando.id] ?? []}
             onSaved={() => {
               setEditando(null);
               refresh();
@@ -376,7 +377,23 @@ export default function Agentes() {
   );
 }
 
-function EditarAgente({ agente, agentes, onSaved }: { agente: any; agentes: any[]; onSaved: () => void }) {
+function EditarAgente({
+  agente,
+  agentes,
+  dealsDelAgente,
+  onSaved,
+}: {
+  agente: any;
+  agentes: any[];
+  // AGREGADO 05/10/2026 (pedido de Leo, item 5 del análisis de Administración): el "Sistema por
+  // defecto" acá abajo es solo un dato de encabezado -- en TODOS los cálculos reales (cierres,
+  // saldos, Resumen) siempre gana el sistema del deal vigente de cada club si existe (ver
+  // resolverConfigVigente). O sea que si no coinciden no se rompe ni se calcula mal nada, pero
+  // puede confundir ver acá "Win/Lose" en un agente que en la práctica se liquida como Prepago
+  // en algún club. Es solo un aviso informativo, nunca bloquea guardar.
+  dealsDelAgente: any[];
+  onSaved: () => void;
+}) {
   const [name, setName] = useState(agente.name);
   const [defaultSystem, setDefaultSystem] = useState<"PREPAGO" | "WIN_LOSE">(agente.default_system);
   const [supervisor, setSupervisor] = useState(agente.supervisor ?? "");
@@ -389,6 +406,11 @@ function EditarAgente({ agente, agentes, onSaved }: { agente: any; agentes: any[
   const [consolidarCierres, setConsolidarCierres] = useState<boolean>(agente.consolidar_cierres !== false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Deals vigentes cuyo sistema NO coincide con el "Sistema por defecto" elegido acá -- se
+  // recalcula en cada cambio de defaultSystem, así el aviso desaparece solo si el admin lo
+  // corrige para que coincida. Puramente informativo (ver comentario del prop arriba).
+  const dealsConOtroSistema = dealsDelAgente.filter((d) => d.system !== defaultSystem);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -432,6 +454,12 @@ function EditarAgente({ agente, agentes, onSaved }: { agente: any; agentes: any[
             <option value="WIN_LOSE">Win/Lose</option>
             <option value="PREPAGO">Prepago</option>
           </select>
+          {dealsConOtroSistema.length > 0 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "#b26a00" }}>
+              ⚠ No coincide con el deal vigente en {dealsConOtroSistema.map((d) => `${d.club_name} (${d.system === "PREPAGO" ? "Prepago" : "Win/Lose"})`).join(", ")}.
+              Es solo un dato de referencia -- los cierres y saldos de ese club siguen usando el sistema del deal, no este campo.
+            </div>
+          )}
         </div>
         <div className="field">
           <label>Tipo de cuenta</label>
