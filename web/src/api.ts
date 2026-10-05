@@ -148,7 +148,8 @@ export const api = {
   resumen: () => request("/dashboard/resumen"),
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
   agentes: (includeInactive?: boolean) => request(`/dashboard/agentes${includeInactive ? "?includeInactive=true" : ""}`),
-  agentDeals: (id: string) => request(`/dashboard/agentes/${id}/deals`),
+  agentDeals: (id: string, incluirHistorial?: boolean) =>
+    request(`/dashboard/agentes/${id}/deals${incluirHistorial ? "?incluirHistorial=true" : ""}`),
   supervisores: () => request("/dashboard/supervisores"),
   comisionesReferidos: () => request("/dashboard/comisiones-referidos"),
   pagarComisionesReferido: (userId: string) => request(`/dashboard/comisiones-referidos/${userId}/pagar`, { method: "POST" }),

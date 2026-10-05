@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { api, type AccountType } from "../api";
-import { usd, pct } from "../fmt";
+import { usd, pct, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
@@ -26,6 +26,12 @@ export default function Agentes() {
   const [dealsPorAgente, setDealsPorAgente] = useState<Record<string, any[]>>({});
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
+  // AGREGADO 05/10/2026 (pedido de Leo, item 4 del análisis de Administración): el backend ya
+  // versiona los deals (upsertDeal cierra el anterior con valid_to en vez de pisarlo), pero
+  // hasta ahora no había forma de verlo acá -- esta pantalla solo mostraba el vigente. Se pide
+  // aparte (no junto a "deals") para no traer de arranque filas extra que casi nunca se
+  // necesitan ver.
+  const [historialDeals, setHistorialDeals] = useState<any[] | null>(null);
   const [editandoDeal, setEditandoDeal] = useState<any | "new" | null>(null);
   const [tab, setTab] = useState<"lista" | "nuevo-agente" | "nuevo-club" | "clubes" | "deal" | "reglas" | "arbol">("lista");
   const [filtro, setFiltro] = useState("");
@@ -79,8 +85,14 @@ export default function Agentes() {
   async function open(agent: any) {
     setSelected(agent);
     setEditandoDeal(null);
+    setHistorialDeals(null);
     setDeals(await api.agentDeals(agent.id));
     setTab("lista");
+  }
+
+  async function verHistorialDeals() {
+    if (!selected) return;
+    setHistorialDeals(await api.agentDeals(selected.id, true));
   }
 
   // Dar de baja: NUNCA borra nada — el agente/club deja de listarse como activo (no puede
@@ -255,7 +267,14 @@ export default function Agentes() {
             <div className="panel" style={{ width: 420 }}>
               <div className="topbar" style={{ marginBottom: 10 }}>
                 <h3 style={{ margin: 0 }}>Deals de {selected.name}</h3>
-                <button className="btn secondary small" onClick={() => setEditandoDeal("new")}>+ Agregar deal</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {historialDeals === null ? (
+                    <button className="btn secondary small" onClick={verHistorialDeals}>Ver historial completo</button>
+                  ) : (
+                    <button className="btn secondary small" onClick={() => setHistorialDeals(null)}>Ocultar historial</button>
+                  )}
+                  <button className="btn secondary small" onClick={() => setEditandoDeal("new")}>+ Agregar deal</button>
+                </div>
               </div>
               {editandoDeal && (
                 <div style={{ marginBottom: 14 }}>
@@ -286,6 +305,30 @@ export default function Agentes() {
               {deals.some((d) => d.notes) && (
                 <div className="muted" style={{ marginTop: 10, fontSize: 12.5 }}>
                   {deals.filter((d) => d.notes).map((d) => <div key={d.id}>{d.club_name}: {d.notes}</div>)}
+                </div>
+              )}
+              {historialDeals !== null && (
+                <div style={{ marginTop: 16 }}>
+                  <h4 style={{ margin: "0 0 6px" }}>Historial completo</h4>
+                  {historialDeals.filter((d) => d.valid_to).length === 0 ? (
+                    <div className="muted" style={{ fontSize: 12.5 }}>Este agente no tiene deals cerrados anteriores -- el de arriba es el único que tuvo.</div>
+                  ) : (
+                    <table>
+                      <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th>Vigente desde</th><th>Vigente hasta</th></tr></thead>
+                      <tbody>
+                        {historialDeals.map((d) => (
+                          <tr key={d.id} style={d.valid_to ? { opacity: 0.6 } : undefined}>
+                            <td>{d.club_name}</td>
+                            <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                            <td>{pct(d.rakeback_pct)}</td>
+                            <td>{pct(d.rebate_pct)}</td>
+                            <td>{dateShort(d.valid_from)}</td>
+                            <td>{d.valid_to ? dateShort(d.valid_to) : <span className="muted">Vigente</span>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
             </div>

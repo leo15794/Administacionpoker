@@ -389,9 +389,18 @@ dashboardRouter.post("/comisiones-referidos/:userId/pagar", requireAuth, require
 });
 
 dashboardRouter.get("/agentes/:id/deals", requireAuth, requireAdmin, async (req, res) => {
+  // FIX 05/10/2026 (pedido de Leo, item 4 del análisis de Administración): el versionado de
+  // deals ya existía en el backend (upsertDeal cierra el deal anterior con valid_to en vez de
+  // pisarlo), pero esta pantalla solo mostraba el vigente -- no había forma de ver qué % tenía
+  // un agente antes. Con ?incluirHistorial=true se devuelven también los cerrados, del más
+  // nuevo al más viejo; sin el parámetro el comportamiento queda idéntico al de siempre.
+  const incluirHistorial = req.query.incluirHistorial === "true";
   const r = await pool.query(
-    `SELECT d.*, c.name as club_name FROM agent_club_deals d JOIN clubs c ON c.id = d.club_id
-     WHERE d.agent_id = $1 AND d.valid_to IS NULL ORDER BY c.name`,
+    incluirHistorial
+      ? `SELECT d.*, c.name as club_name FROM agent_club_deals d JOIN clubs c ON c.id = d.club_id
+         WHERE d.agent_id = $1 ORDER BY c.name, d.valid_from DESC`
+      : `SELECT d.*, c.name as club_name FROM agent_club_deals d JOIN clubs c ON c.id = d.club_id
+         WHERE d.agent_id = $1 AND d.valid_to IS NULL ORDER BY c.name`,
     [req.params.id]
   );
   res.json(r.rows);

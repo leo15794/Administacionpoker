@@ -510,6 +510,23 @@ export async function upsertDeal(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // FIX 05/10/2026 (bug encontrado en análisis de Administración, confirmado por Leo): antes
+    // de este chequeo, backdatear un deal con una fecha ANTERIOR (o igual) al valid_from del
+    // deal vigente actual dejaba a ese deal vigente con valid_from > valid_to -- un rango
+    // invertido que resolverConfigVigente nunca vuelve a matchear para ninguna fecha. Resultado:
+    // si se recalculaba un cierre de esas semanas intermedias, el agente aparecía "sin
+    // configurar" en vez del % real que tenía. Se rechaza también el caso de la misma fecha
+    // exacta, para no colapsar el intervalo del deal vigente a cero.
+    const vigente = await client.query(
+      `SELECT valid_from FROM agent_club_deals WHERE agent_id=$1 AND club_id=$2 AND valid_to IS NULL`,
+      [agentId, clubId]
+    );
+    if (vigente.rows.length > 0 && desde <= new Date(vigente.rows[0].valid_from)) {
+      const fechaVigente = new Date(vigente.rows[0].valid_from).toISOString().slice(0, 10);
+      throw new Error(
+        `Ya existe un deal vigente desde el ${fechaVigente}, igual o posterior a la fecha que elegiste. No se puede backdatear un deal antes de (o en el mismo día que) uno ya cargado -- si es una corrección, cargá primero la fecha correcta del deal que está vigente ahora.`
+      );
+    }
     await client.query(
       `UPDATE agent_club_deals SET valid_to = $3 WHERE agent_id=$1 AND club_id=$2 AND valid_to IS NULL`,
       [agentId, clubId, desde]
