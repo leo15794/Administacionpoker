@@ -1035,6 +1035,7 @@ export const api = {
       periodoId: string,
       data: { desde: string; hasta: string; resultadoMesas: number; rakeBruto: number; ajuste?: number; ajusteNota?: string | null; observaciones?: string | null }
     ) => request(`/bancado-contratos/periodos/${periodoId}/parciales`, { method: "POST", body: JSON.stringify(data) }),
+    eliminarParcial: (parcialId: string) => request(`/bancado-contratos/parciales/${parcialId}`, { method: "DELETE" }),
 
     splitExtraordinario: (
       periodoId: string,

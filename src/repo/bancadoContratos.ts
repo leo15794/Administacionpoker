@@ -150,7 +150,7 @@ export interface EditarContratoInput {
 // cambia el contrato de verdad (como el caso de Matías), se crea un contrato nuevo (así queda
 // clarísimo en el historial cuál liquidación corresponde a qué reglas, y nunca se mezclan
 // parámetros de una regla con la otra).
-export async function editarContrato(id: string, input: EditarContratoInput) {
+export async function editarContrato(id: string, input: EditarContratoInput, editadoPor?: string | null) {
   const actual = await getContrato(id);
   if (!actual) throw new Error("Contrato no encontrado.");
   let rmfCapitalInicial = actual.rmf_capital_inicial;
@@ -170,8 +170,8 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
        rmf_capital_inicial = $9, rmf_makeup_inicial = $10,
        v1_rake_deal_pct = $11, v1_rake_teamback_directo_pct = $12,
        v1_split_jugador_pct = $13, v1_split_teamback_pct = $14, v1_modo_memoria_default = $15,
-       updated_at = now()
-     WHERE id = $16`,
+       updated_at = now(), updated_by = COALESCE($16, updated_by)
+     WHERE id = $17`,
     [
       input.clubId !== undefined ? input.clubId : actual.club_id,
       input.observaciones !== undefined ? input.observaciones : actual.observaciones,
@@ -188,6 +188,7 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct ?? actual.v1_split_jugador_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitTeambackPct ?? actual.v1_split_teamback_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1ModoMemoriaDefault ?? actual.v1_modo_memoria_default : null,
+      editadoPor ?? null,
       id,
     ]
   );
@@ -332,22 +333,70 @@ export interface ReabrirPeriodoInput {
 // Sección 28: reapertura ADMINISTRATIVA AUDITADA -- nunca silenciosa. No se puede reabrir si ya
 // existe un período más nuevo de este contrato (ese ya puede haber heredado la memoria_final de
 // este, reabrir desordenado puede desincronizar la cadena de memoria).
+// FIX 05/10/2026 (bug encontrado en análisis, confirmado por Leo "sí, dejame ver la semana
+// cerrada"): antes, reabrir un período CERRADO solo cambiaba el estado -- no deshacía nada del
+// cierre mensual que lo generó. El cierre mensual (ejecutarCierreMensual) NUNCA incrementa
+// resultado_ya_distribuido (a propósito: un período CERRADO es terminal, nada vuelve a leer ese
+// campo). Pero si se reabre, se carga un parcial nuevo y se vuelve a cerrar, calcularPendiente
+// vuelve a contar TODO el resultado acumulado del período como si nada se hubiera repartido
+// todavía -- repartiendo (pagando) dos veces el split que ya se había pagado en el primer
+// cierre. Acá es donde se corrige: al reabrir, la liquidación MENSUAL todavía activa de este
+// período se revierte (status='REVERTIDO', nunca se borra) y su base_liberada_split (lo que ya
+// se repartió) se suma a resultado_ya_distribuido -- así un cierre posterior solo reparte la
+// plata NUEVA que entró después de la reapertura. memoria_actual NO se toca: ya refleja
+// correctamente toda la recuperación acumulada hasta ahora (mismo mecanismo que la proyección
+// en vivo), así que no hay nada que revertir ahí. El ajuste PAGO_PENDIENTE que haya generado
+// ese cierre (si hubo diferencia entre pago teórico y real) también se marca revertido, porque
+// queda ligado a un cierre que ya no existe como tal.
 export async function reabrirPeriodo(input: ReabrirPeriodoInput) {
-  const periodo = await getPeriodo(input.periodoId);
-  if (!periodo) throw new Error("Período no encontrado.");
-  if (periodo.estado !== "CERRADO") throw new Error("El período ya está abierto.");
-  const siguiente = await pool.query(
-    `SELECT id FROM bancado_contrato_periodos WHERE contrato_id = $1 AND (anio > $2 OR (anio = $2 AND mes > $3)) LIMIT 1`,
-    [periodo.contrato_id, periodo.anio, periodo.mes]
-  );
-  if (siguiente.rows.length > 0) {
-    throw new Error("Ya existe un período posterior de este contrato -- cerralo (o revisá la cadena de memoria) antes de reabrir este.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const periodoRes = await client.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1 FOR UPDATE`, [input.periodoId]);
+    const periodo = periodoRes.rows[0];
+    if (!periodo) throw new Error("Período no encontrado.");
+    if (periodo.estado !== "CERRADO") throw new Error("El período ya está abierto.");
+    const siguiente = await client.query(
+      `SELECT id FROM bancado_contrato_periodos WHERE contrato_id = $1 AND (anio > $2 OR (anio = $2 AND mes > $3)) LIMIT 1`,
+      [periodo.contrato_id, periodo.anio, periodo.mes]
+    );
+    if (siguiente.rows.length > 0) {
+      throw new Error("Ya existe un período posterior de este contrato -- cerralo (o revisá la cadena de memoria) antes de reabrir este.");
+    }
+
+    const liqRes = await client.query(
+      `SELECT * FROM bancado_contrato_liquidaciones
+       WHERE periodo_id = $1 AND tipo = 'MENSUAL' AND status = 'APLICADO'
+       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+      [input.periodoId]
+    );
+    const liquidacion = liqRes.rows[0] ?? null;
+
+    if (liquidacion) {
+      await client.query(
+        `UPDATE bancado_contrato_periodos SET resultado_ya_distribuido = resultado_ya_distribuido + $1 WHERE id = $2`,
+        [liquidacion.base_liberada_split, input.periodoId]
+      );
+      await client.query(`UPDATE bancado_contrato_liquidaciones SET status = 'REVERTIDO' WHERE id = $1`, [liquidacion.id]);
+      await client.query(
+        `UPDATE bancado_contrato_ajustes SET estado = 'REVERTIDO', resuelto_en = now(), resuelto_por = $1
+         WHERE liquidacion_origen_id = $2 AND tipo = 'PAGO_PENDIENTE' AND estado <> 'REVERTIDO'`,
+        [input.reabiertoPor, liquidacion.id]
+      );
+    }
+
+    const r = await client.query(
+      `UPDATE bancado_contrato_periodos SET estado = 'ABIERTO', reabierto_en = now(), reabierto_por = $1, reabierto_motivo = $2 WHERE id = $3 RETURNING *`,
+      [input.reabiertoPor, input.motivo, input.periodoId]
+    );
+    await client.query("COMMIT");
+    return r.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  const r = await pool.query(
-    `UPDATE bancado_contrato_periodos SET estado = 'ABIERTO', reabierto_en = now(), reabierto_por = $1, reabierto_motivo = $2 WHERE id = $3 RETURNING *`,
-    [input.reabiertoPor, input.motivo, input.periodoId]
-  );
-  return r.rows[0];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -368,6 +417,17 @@ export async function registrarParcial(input: RegistrarParcialInput, createdBy?:
   const periodo = await getPeriodo(input.periodoId);
   if (!periodo) throw new Error("Período no encontrado.");
   if (periodo.estado !== "ABIERTO") throw new Error("El período está CERRADO -- no se pueden cargar más parciales (reabrilo si hace falta corregir algo).");
+  if (input.hasta < input.desde) throw new Error("La fecha \"hasta\" no puede ser anterior a \"desde\".");
+  // Pedido Leo 05/10/2026: evitar cargar la misma semana dos veces por error, que duplicaba en
+  // silencio el resultado y el rake acumulado del período.
+  const solapado = await pool.query(
+    `SELECT id, desde, hasta FROM bancado_contrato_parciales WHERE periodo_id = $1 AND desde <= $3 AND hasta >= $2 LIMIT 1`,
+    [input.periodoId, input.desde, input.hasta]
+  );
+  if (solapado.rows.length > 0) {
+    const ex = solapado.rows[0];
+    throw new Error(`Ya existe un parcial que se superpone con esas fechas (${ex.desde} a ${ex.hasta}) -- borralo primero si hay que corregirlo.`);
+  }
   const contrato = await getContrato(periodo.contrato_id);
   const calc = calcularParcialSemanal(cfgV1(contrato), {
     resultadoMesas: input.resultadoMesas,
@@ -403,6 +463,24 @@ export async function registrarParcial(input: RegistrarParcialInput, createdBy?:
 export async function listParciales(periodoId: string) {
   const r = await pool.query(`SELECT * FROM bancado_contrato_parciales WHERE periodo_id = $1 ORDER BY desde ASC`, [periodoId]);
   return r.rows;
+}
+
+// Borrado de un parcial mal cargado (pedido Leo 05/10/2026): a diferencia de un cierre
+// (liquidación), un parcial NUNCA liquida ni toca memoria (sección 7/8) -- es solo el dato
+// crudo de producción de esa semana, todavía no consolidado en nada. Por eso, mientras el
+// período siga ABIERTO, borrarlo de verdad es seguro (no deja ningún rastro de un pago o un
+// movimiento de memoria huérfano, porque nunca generó ninguno). Si el período ya está CERRADO
+// no se puede -- hay que reabrirlo primero (reabrirPeriodo ya revierte lo que corresponda).
+export async function eliminarParcial(parcialId: string) {
+  const r = await pool.query(
+    `SELECT p.id, per.estado FROM bancado_contrato_parciales p
+     JOIN bancado_contrato_periodos per ON per.id = p.periodo_id
+     WHERE p.id = $1`,
+    [parcialId]
+  );
+  if (r.rows.length === 0) throw new Error("Parcial no encontrado.");
+  if (r.rows[0].estado !== "ABIERTO") throw new Error("El período ya está CERRADO -- reabrilo primero para poder borrar un parcial.");
+  await pool.query(`DELETE FROM bancado_contrato_parciales WHERE id = $1`, [parcialId]);
 }
 
 // Acumulados del período (sección 9) -- siempre desde los parciales guardados, nunca
@@ -467,7 +545,7 @@ export async function getEstadoPeriodo(periodoId: string) {
     contrato,
     acumulados,
     pendiente,
-    memoriaProyectada: pendiente <= 0 ? proyeccion.memoriaFinal : proyeccion.memoriaFinal,
+    memoriaProyectada: proyeccion.memoriaFinal,
     resultadoProyectadoParaSplit: proyeccion.resultadoParaSplit,
     splitJugadorProyectado: proyeccion.splitJugador,
     splitTeambackProyectado: proyeccion.splitTeamback,
@@ -748,6 +826,19 @@ export async function registrarCierreRmf(input: RegistrarCierreRmfInput, created
     const contrato = contratoRes.rows[0];
     if (!contrato) throw new Error("Contrato no encontrado.");
     if (contrato.regla_key !== "RMF") throw new Error("Este contrato no usa la regla RMF.");
+    if (input.hasta < input.desde) throw new Error("La fecha \"hasta\" no puede ser anterior a \"desde\".");
+
+    // Pedido Leo 05/10/2026: evitar cerrar la misma semana dos veces por error (duplicaría el
+    // rakeback, el pago al jugador y el movimiento de capital/makeup).
+    const solapado = await client.query(
+      `SELECT id, desde, hasta FROM bancado_contrato_rmf_cierres
+       WHERE contrato_id = $1 AND status = 'APLICADO' AND desde <= $3 AND hasta >= $2 LIMIT 1`,
+      [input.contratoId, input.desde, input.hasta]
+    );
+    if (solapado.rows.length > 0) {
+      const ex = solapado.rows[0];
+      throw new Error(`Ya existe un cierre RMF que se superpone con esas fechas (${ex.desde} a ${ex.hasta}) -- revertilo primero si hay que corregirlo.`);
+    }
 
     const cfg = cfgRmf(contrato);
     const estado = await getEstadoRmf(input.contratoId, cfg, client);

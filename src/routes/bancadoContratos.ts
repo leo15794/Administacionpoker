@@ -14,6 +14,7 @@ import {
   reabrirPeriodo,
   registrarParcial,
   listParciales,
+  eliminarParcial,
   getEstadoPeriodo,
   ejecutarSplitExtraordinario,
   ejecutarCierreMensual,
@@ -76,11 +77,11 @@ bancadoContratosRouter.get("/:id", requireAuth, requireAdmin, async (req, res) =
 });
 
 const editarSchema = contratoSchema.partial().omit({ reglaKey: true, playerId: true, agentId: true });
-bancadoContratosRouter.put("/:id", requireAuth, requireAdmin, async (req, res) => {
+bancadoContratosRouter.put("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = editarSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    res.json(await editarContrato(req.params.id, parsed.data));
+    res.json(await editarContrato(req.params.id, parsed.data, req.user?.email ?? null));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -157,6 +158,15 @@ bancadoContratosRouter.post("/periodos/:periodoId/parciales", requireAuth, requi
 
 bancadoContratosRouter.get("/periodos/:periodoId/parciales", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listParciales(req.params.periodoId));
+});
+
+bancadoContratosRouter.delete("/parciales/:parcialId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await eliminarParcial(req.params.parcialId);
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ---- Split extraordinario ----

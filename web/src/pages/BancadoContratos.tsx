@@ -117,6 +117,11 @@ export default function BancadoContratos() {
             <h3 style={{ margin: 0 }}>{contrato.nombre} <span className="badge neutral">{contrato.regla_key}</span></h3>
             <button className="btn secondary small" onClick={() => setEditando((v) => !v)}>{editando ? "Cerrar" : "Editar"}</button>
           </div>
+          {contrato.updated_by && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Última edición: {contrato.updated_by} ({dateShort(contrato.updated_at)})
+            </div>
+          )}
           {editando && (
             <EditarContratoForm
               contrato={contrato}
@@ -177,9 +182,12 @@ function CandidatoPicker({ candidatos, value, onChange }: { candidatos: any[] | 
 
 function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
   const [candidatos, setCandidatos] = useState<any[] | null>(null);
+  const [clubes, setClubes] = useState<{ id: string; name: string }[] | null>(null);
+  const [clubId, setClubId] = useState("");
   const [seleccion, setSeleccion] = useState(""); // "PLAYER:<id>" o "AGENT:<id>"
   const [reglaKey, setReglaKey] = useState<"RMF" | "REGLA_BANCADO_V1" | "">("");
   useEffect(() => { api.bancadoContratos.candidatos().then(setCandidatos).catch(() => setCandidatos([])); }, []);
+  useEffect(() => { api.clubes().then(setClubes).catch(() => setClubes([])); }, []);
   const [rmfPctJugador, setRmfPctJugador] = useState("50");
   const [rmfPctBanca, setRmfPctBanca] = useState("50");
   const [rmfRakebackPct, setRmfRakebackPct] = useState("0");
@@ -206,6 +214,7 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
       await api.bancadoContratos.crear({
         playerId: tipo === "PLAYER" ? id : undefined,
         agentId: tipo === "AGENT" ? id : undefined,
+        clubId: clubId || undefined,
         reglaKey,
         observaciones: observaciones.trim() || undefined,
         rmfPctJugador: reglaKey === "RMF" ? Number(rmfPctJugador) / 100 : undefined,
@@ -234,6 +243,13 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
       <div className="field">
         <label>Jugador o agente (de los que ya existen en el sistema)</label>
         <CandidatoPicker candidatos={candidatos} value={seleccion} onChange={setSeleccion} />
+      </div>
+      <div className="field">
+        <label title="Opcional, pero mejora el matcheo automático del buscador por archivo cuando hay nombres repetidos entre clubes.">Club (opcional)</label>
+        <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+          <option value="">Sin club asignado</option>
+          {clubes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
       </div>
       <div className="field">
         <label>Regla (obligatorio elegir una)</label>
@@ -612,9 +628,12 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
   const [observaciones, setObservaciones] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [ajustes, setAjustes] = useState<any[] | null>(null);
+  const [showAjuste, setShowAjuste] = useState(false);
 
   function refresh() {
     api.bancadoContratos.historialRmf(contrato.id).then(setHistorial).catch(() => {});
+    api.bancadoContratos.ajustes(contrato.id).then(setAjustes).catch(() => {});
   }
   useEffect(() => { refresh(); }, [contrato.id]);
 
@@ -624,6 +643,7 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
 
   async function cerrarSemana() {
     if (!desde || !hasta) return setMsg({ ok: false, text: "Faltan las fechas." });
+    if (hasta < desde) return setMsg({ ok: false, text: "La fecha \"hasta\" no puede ser anterior a \"desde\"." });
     if ((Number(ticketPromocional) || 0) !== 0 && !ticketPromocionalNota.trim()) {
       return setMsg({ ok: false, text: "Si hay ticket promocional hay que anotar por qué." });
     }
@@ -750,6 +770,41 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
           </table>
         )}
       </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <div className="topbar">
+          <h3 style={{ margin: 0 }}>Ajustes y créditos pendientes</h3>
+          <button className="btn secondary small" onClick={() => setShowAjuste((v) => !v)}>{showAjuste ? "Cerrar" : "+ Ajuste manual"}</button>
+        </div>
+        {showAjuste && (
+          <AjusteManualForm contrato={contrato} onCreated={() => { setShowAjuste(false); refresh(); }} />
+        )}
+        {!ajustes ? <div className="muted">Cargando...</div> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
+          <table>
+            <thead><tr><th>Tipo</th><th className="num">Importe</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
+            <tbody>
+              {ajustes.map((a) => (
+                <tr key={a.id}>
+                  <td className="muted">{a.tipo}</td>
+                  <td className="num"><strong className={a.signo === "POSITIVO" ? "pos" : "neg"}>{usd(a.importe)}</strong></td>
+                  <td><span className={`badge ${a.estado === "PENDIENTE" ? "neutral" : a.estado === "APLICADO" ? "pos" : "neg"}`}>{a.estado}</span></td>
+                  <td className="muted">{a.motivo}</td>
+                  <td>
+                    {a.estado === "PENDIENTE" && (
+                      <button className="btn secondary small" onClick={async () => {
+                        await api.bancadoContratos.resolverAjuste(a.id, "APLICADO");
+                        refresh();
+                      }}>Marcar pagado</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <CostosFijosPanel contrato={contrato} />
     </div>
   );
 }
@@ -878,6 +933,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
   const [showParcial, setShowParcial] = useState(false);
   const [showExtra, setShowExtra] = useState(false);
   const [showCerrar, setShowCerrar] = useState(false);
+  const [showAjuste, setShowAjuste] = useState(false);
   const [reabriendo, setReabriendo] = useState(false);
 
   function refresh() {
@@ -963,7 +1019,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
         <h3 style={{ marginTop: 0 }}>Parciales semanales</h3>
         {!parciales ? <div className="muted">Cargando...</div> : parciales.length === 0 ? <div className="muted">Sin parciales todavía.</div> : (
           <table>
-            <thead><tr><th>Semana</th><th className="num">Mesa</th><th className="num">Rake</th><th className="num">Deal</th><th className="num">TeamBack</th></tr></thead>
+            <thead><tr><th>Semana</th><th className="num">Mesa</th><th className="num">Rake</th><th className="num">Deal</th><th className="num">TeamBack</th><th></th></tr></thead>
             <tbody>
               {parciales.map((p) => (
                 <tr key={p.id}>
@@ -972,6 +1028,24 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
                   <td className="num">{usd(p.rake_bruto)}</td>
                   <td className="num"><strong className={Number(p.resultado_deal_semana) >= 0 ? "pos" : "neg"}>{usd(p.resultado_deal_semana)}</strong></td>
                   <td className="num muted">{usd(p.rake_teamback_semana)}</td>
+                  <td>
+                    {!cerrado && (
+                      <button
+                        className="btn secondary small"
+                        onClick={async () => {
+                          if (!(await confirmDialog(`¿Borrar el parcial de la semana ${dateShort(p.desde)} - ${dateShort(p.hasta)}? No se puede deshacer.`))) return;
+                          try {
+                            await api.bancadoContratos.eliminarParcial(p.id);
+                            refresh();
+                          } catch (err: any) {
+                            await alertDialog(err.message || "No se pudo borrar el parcial.");
+                          }
+                        }}
+                      >
+                        Borrar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -983,17 +1057,19 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
         <h3 style={{ marginTop: 0 }}>Liquidaciones de este período</h3>
         {!liquidaciones ? <div className="muted">Cargando...</div> : liquidaciones.length === 0 ? <div className="muted">Ninguna todavía.</div> : (
           <table>
-            <thead><tr><th>Tipo</th><th className="num">Memoria antes</th><th className="num">Aplicada</th><th className="num">Memoria después</th><th className="num">Split jugador</th><th className="num">Split TeamBack</th><th>Fecha</th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Semana</th><th className="num">Memoria antes</th><th className="num">Aplicada</th><th className="num">Memoria después</th><th className="num">Split jugador</th><th className="num">Split TeamBack</th><th>Fecha</th><th>Estado</th></tr></thead>
             <tbody>
               {liquidaciones.map((l) => (
-                <tr key={l.id}>
+                <tr key={l.id} style={l.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
                   <td><span className="badge neutral">{l.tipo}</span></td>
+                  <td className="muted">{l.desde ? `${dateShort(l.desde)} - ${dateShort(l.hasta)}` : "—"}</td>
                   <td className="num muted">{usd(l.memoria_anterior)}</td>
                   <td className="num muted">{usd(l.memoria_aplicada)}</td>
                   <td className="num muted">{usd(l.memoria_final)}</td>
                   <td className="num money">{usd(l.split_jugador)}</td>
                   <td className="num">{usd(l.split_teamback)}</td>
                   <td className="muted">{dateShort(l.created_at)}</td>
+                  <td className="muted">{l.status === "REVERTIDO" ? "Revertido (reabierto)" : "Aplicado"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1002,7 +1078,17 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
       </div>
 
       <div className="panel" style={{ marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Ajustes y créditos pendientes</h3>
+        <div className="topbar">
+          <h3 style={{ margin: 0 }}>Ajustes y créditos pendientes</h3>
+          <button className="btn secondary small" onClick={() => setShowAjuste((v) => !v)}>{showAjuste ? "Cerrar" : "+ Ajuste manual"}</button>
+        </div>
+        {showAjuste && (
+          <AjusteManualForm
+            contrato={contrato}
+            periodoId={periodoId}
+            onCreated={() => { setShowAjuste(false); refresh(); }}
+          />
+        )}
         {!ajustes ? <div className="muted">Cargando...</div> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
           <table>
             <thead><tr><th>Tipo</th><th className="num">Importe</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
@@ -1027,6 +1113,171 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
           </table>
         )}
       </div>
+
+      <CostosFijosPanel contrato={contrato} />
+    </div>
+  );
+}
+
+// Ajuste manual (pedido Leo 05/10/2026): el backend (crearAjuste) ya existía pero no tenía
+// ninguna pantalla -- solo se veían los que el sistema generaba solo (PAGO_PENDIENTE de un
+// cierre/split). Esto es para cargar un crédito/débito/corrección a mano, con motivo
+// obligatorio (sección 23: "nunca modifica memoria/pagos en silencio, siempre queda una fila").
+// Importante: este ajuste queda solo como registro/nota -- no mueve memoria ni genera ningún
+// pago por sí mismo, eso sigue siendo manual (ver "Marcar pagado").
+const TIPOS_AJUSTE = [
+  { value: "CREDITO_JUGADOR", label: "Crédito a favor del jugador" },
+  { value: "DEBITO_JUGADOR", label: "Débito contra el jugador" },
+  { value: "AJUSTE_MEMORIA", label: "Ajuste de memoria (informativo)" },
+  { value: "CORRECCION_CIERRE", label: "Corrección de un cierre" },
+  { value: "PAGO_PENDIENTE", label: "Pago pendiente" },
+  { value: "COMPENSACION", label: "Compensación" },
+  { value: "ADMINISTRATIVO", label: "Administrativo" },
+];
+function AjusteManualForm({ contrato, periodoId, onCreated }: { contrato: any; periodoId?: string | null; onCreated: () => void }) {
+  const [tipo, setTipo] = useState("CREDITO_JUGADOR");
+  const [importe, setImporte] = useState("");
+  const [signo, setSigno] = useState<"POSITIVO" | "NEGATIVO">("POSITIVO");
+  const [motivo, setMotivo] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function guardar() {
+    if (!motivo.trim()) return setMsg({ ok: false, text: "El motivo es obligatorio -- nunca se carga un ajuste sin dejar por qué." });
+    if (!importe.trim() || Number(importe) <= 0) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0 (el signo ya lo indica aparte)." });
+    setGuardando(true);
+    setMsg(null);
+    try {
+      await api.bancadoContratos.crearAjuste(contrato.id, {
+        periodoId: periodoId ?? undefined,
+        tipo,
+        importe: Number(importe),
+        signo,
+        motivo: motivo.trim(),
+        observaciones: observaciones.trim() || undefined,
+      });
+      onCreated();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo cargar el ajuste." });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 10, marginBottom: 14, maxWidth: 480 }}>
+      <div className="form-grid">
+        <div className="field">
+          <label>Tipo</label>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {TIPOS_AJUSTE.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Signo</label>
+          <select value={signo} onChange={(e) => setSigno(e.target.value as any)}>
+            <option value="POSITIVO">A favor (positivo)</option>
+            <option value="NEGATIVO">En contra (negativo)</option>
+          </select>
+        </div>
+      </div>
+      <div className="field"><label>Importe (USD)</label><input type="number" step="0.01" value={importe} onChange={(e) => setImporte(e.target.value)} /></div>
+      <div className="field"><label>Motivo (obligatorio)</label><input value={motivo} onChange={(e) => setMotivo(e.target.value)} /></div>
+      <div className="field"><label>Observaciones</label><input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} /></div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Cargar ajuste"}</button>
+    </div>
+  );
+}
+
+// Costos fijos (sección 29, pedido Leo 05/10/2026): "completamente aparte del deal" -- nunca
+// toca resultado deal, memoria, rake, split ni ganancia TeamBack. Es por contrato (no por
+// período), un valor por mes -- registrarCostoFijo hace upsert por (contrato_id, anio, mes), así
+// que volver a cargar el mismo mes directamente lo corrige.
+function CostosFijosPanel({ contrato }: { contrato: any }) {
+  const [costos, setCostos] = useState<any[] | null>(null);
+  const [mostrar, setMostrar] = useState(false);
+  const hoy = new Date();
+  const [anio, setAnio] = useState(String(hoy.getFullYear()));
+  const [mes, setMes] = useState(String(hoy.getMonth() + 1));
+  const [monto, setMonto] = useState("");
+  const [moneda, setMoneda] = useState(contrato.moneda || "USD");
+  const [observaciones, setObservaciones] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  function refresh() {
+    api.bancadoContratos.costosFijos(contrato.id).then(setCostos).catch(() => {});
+  }
+  useEffect(() => { refresh(); }, [contrato.id]);
+
+  async function guardar() {
+    if (!monto.trim()) return setMsg({ ok: false, text: "Falta el monto." });
+    setGuardando(true);
+    setMsg(null);
+    try {
+      await api.bancadoContratos.registrarCostoFijo(contrato.id, {
+        anio: Number(anio),
+        mes: Number(mes),
+        monto: Number(monto),
+        moneda,
+        observaciones: observaciones.trim() || undefined,
+      });
+      setMonto("");
+      setObservaciones("");
+      refresh();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar el costo fijo." });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="topbar">
+        <h3 style={{ margin: 0 }}>Costos fijos (aparte del deal)</h3>
+        <button className="btn secondary small" onClick={() => setMostrar((v) => !v)}>{mostrar ? "Cerrar" : "+ Cargar costo fijo"}</button>
+      </div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+        Nunca afecta el resultado del deal, la memoria, el rake ni el split -- es un gasto aparte, por mes. Cargar el mismo
+        mes de nuevo corrige el monto anterior (no duplica).
+      </div>
+      {mostrar && (
+        <div style={{ marginTop: 10, maxWidth: 480 }}>
+          <div className="form-grid">
+            <div className="field"><label>Año</label><input type="number" value={anio} onChange={(e) => setAnio(e.target.value)} /></div>
+            <div className="field">
+              <label>Mes</label>
+              <select value={mes} onChange={(e) => setMes(e.target.value)}>
+                {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-grid">
+            <div className="field"><label>Monto</label><input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} /></div>
+            <div className="field"><label>Moneda</label><input value={moneda} onChange={(e) => setMoneda(e.target.value)} /></div>
+          </div>
+          <div className="field"><label>Observaciones</label><input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} /></div>
+          {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+          <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Guardar"}</button>
+        </div>
+      )}
+      {!costos ? <div className="muted" style={{ marginTop: 10 }}>Cargando...</div> : costos.length === 0 ? <div className="muted" style={{ marginTop: 10 }}>Sin costos fijos cargados.</div> : (
+        <table style={{ marginTop: 10 }}>
+          <thead><tr><th>Mes</th><th className="num">Monto</th><th>Observaciones</th></tr></thead>
+          <tbody>
+            {costos.map((c) => (
+              <tr key={c.id}>
+                <td className="muted">{MESES[c.mes - 1]} {c.anio}</td>
+                <td className="num">{usd(c.monto)} {c.moneda !== "USD" ? c.moneda : ""}</td>
+                <td className="muted">{c.observaciones ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -1044,6 +1295,7 @@ function ParcialForm({ contrato, periodoId, onCreated }: { contrato: any; period
 
   async function guardar() {
     if (!desde || !hasta) return setMsg({ ok: false, text: "Faltan las fechas." });
+    if (hasta < desde) return setMsg({ ok: false, text: "La fecha \"hasta\" no puede ser anterior a \"desde\"." });
     if (Number(ajuste) !== 0 && !ajusteNota.trim()) return setMsg({ ok: false, text: "Un ajuste distinto de 0 necesita una nota." });
     setGuardando(true);
     setMsg(null);

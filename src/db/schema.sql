@@ -1969,6 +1969,11 @@ ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_union_share_pct NUMER
 ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_capital_inicial NUMERIC(18,4) DEFAULT 0;
 ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS rmf_makeup_inicial NUMERIC(18,4) DEFAULT 0;
 
+-- Auditoría de edición (pedido Leo 05/10/2026): ahora que editar/borrar un contrato quedó bastante
+-- más permisivo (capital/makeup inicial, %, borrado en cascada), por lo menos que quede quién
+-- tocó qué por última vez -- no es un historial completo campo por campo, pero es mejor que nada.
+ALTER TABLE bancado_contratos ADD COLUMN IF NOT EXISTS updated_by TEXT;
+
 -- bancado_contrato_liquidaciones queda SOLO para REGLA_BANCADO_V1 (MENSUAL/EXTRAORDINARIO) --
 -- RMF ahora tiene su propia tabla de historial abajo, con la forma real de bancado_historial.
 ALTER TABLE bancado_contrato_liquidaciones DROP CONSTRAINT IF EXISTS bancado_contrato_liquidaciones_tipo_check;
