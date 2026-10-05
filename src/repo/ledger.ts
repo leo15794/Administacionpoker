@@ -454,16 +454,25 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
       throw new Error("Este movimiento ya fue revertido antes — no se puede revertir dos veces.");
     }
 
-    // Caso real (02/10/2026, agente "TB prodigio25"): revertir acá la Carga/Descarga que dio de
-    // alta o aumentó un adelanto de rakeback corregía el ledger pero dejaba el adelanto
-    // (rakeback_advances) activo y "colgado" -- esta función no tiene forma de tocar esa tabla,
-    // así que el pendiente seguía contando de más sin que nadie se diera cuenta. En vez de
-    // intentar sincronizar las dos tablas acá (quedaría frágil), se bloquea y se manda al panel
-    // de Adelantos, que con "Eliminar" ya deshace el movimiento de ledger Y el adelanto juntos
-    // (ver eliminarAdelanto en repo/advances.ts) -- mismo criterio que ya existe más abajo en
-    // eliminarMovimiento para una carga cruzada en una liquidación.
+    // FIX 05/10/2026 (pedido de Leo): antes esto bloqueaba SIEMPRE que el movimiento fuera el
+    // alta/aumento de un adelanto de rakeback todavía activo, mandando a mano al panel de
+    // Adelantos (ver "Caso real 02/10/2026, agente TB prodigio25" que motivó el bloqueo
+    // original). Ahora "Revertir" sincroniza las dos tablas en la misma transacción -- mismo
+    // resultado final que Eliminar/Ajustar desde el panel de Adelantos, pero en un solo paso --
+    // siempre que sea seguro hacerlo sin romper la cadena resulting_amount/resulting_consumed
+    // del adelanto (mismo criterio que ya usa eliminarMovimientoAdelanto en repo/advances.ts):
+    //  - Si el movimiento que se revierte NO es el evento MÁS RECIENTE de ESE adelanto (pasó
+    //    algo después, ej. un consumo) no se puede sincronizar solo sin desordenar la cadena --
+    //    se sigue bloqueando, igual que antes.
+    //  - Si es la ALTA (el adelanto no existía antes de este movimiento) y ya tiene consumo
+    //    aplicado, tampoco hay forma segura de deshacerlo acá -- se sigue bloqueando (mismo
+    //    caso que ya cubre eliminarAdelanto, que rechaza borrar un adelanto con consumo).
+    //  - En cualquier otro caso (ALTA sin consumo, o un AUMENTO que sí es el más reciente) se
+    //    deshace el efecto sobre rakeback_advances/rakeback_advance_movements acá mismo --
+    //    nunca se vuelve a tocar ledger_movements por este lado, eso ya lo hace el resto de
+    //    esta función unas líneas más abajo.
     const adelantoLigado = await client.query(
-      `SELECT ra.id, ra.amount, ra.consumed
+      `SELECT ram.id as ram_id, ram.type as ram_type, ram.advance_id, ra.amount, ra.consumed
        FROM rakeback_advance_movements ram
        JOIN rakeback_advances ra ON ra.id = ram.advance_id
        WHERE ram.movement_id = $1 AND ra.active = true`,
@@ -471,11 +480,38 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
     );
     if (adelantoLigado.rows.length > 0) {
       const adv = adelantoLigado.rows[0];
-      const pendiente = Number(adv.amount) - Number(adv.consumed);
-      await client.query("ROLLBACK");
-      throw new Error(
-        `Este movimiento es el alta/aumento de un adelanto de rakeback todavía activo (pendiente ${pendiente.toFixed(2)}) -- revertirlo acá dejaría ese adelanto colgado, sin nadie que avise que ya no corresponde. Andá al panel de Adelantos de rakeback y usá "Eliminar" sobre ese adelanto (si no tiene nada consumido) o "Ajustar -> Baja" (si ya tiene consumo) -- esos sí corrigen el ledger y el adelanto juntos.`
+      const mensajeNoSincronizable = () =>
+        `Este movimiento es el alta/aumento de un adelanto de rakeback todavía activo (pendiente ${(Number(adv.amount) - Number(adv.consumed)).toFixed(2)}), y no se puede sincronizar solo sin desordenar su historial -- andá al panel de Adelantos de rakeback y usá "Eliminar" sobre ese adelanto (si no tiene nada consumido) o "Ajustar -> Baja" (si ya tiene consumo) -- esos sí corrigen el ledger y el adelanto juntos.`;
+
+      const masReciente = await client.query(
+        `SELECT id FROM rakeback_advance_movements WHERE advance_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+        [adv.advance_id]
       );
+      if (masReciente.rows[0]?.id !== adv.ram_id) {
+        await client.query("ROLLBACK");
+        throw new Error(mensajeNoSincronizable());
+      }
+      if (adv.ram_type === "ALTA") {
+        if (Number(adv.consumed) > 0) {
+          await client.query("ROLLBACK");
+          throw new Error(mensajeNoSincronizable());
+        }
+        await client.query(`DELETE FROM rakeback_advance_movements WHERE advance_id = $1`, [adv.advance_id]);
+        await client.query(`DELETE FROM rakeback_advances WHERE id = $1`, [adv.advance_id]);
+      } else {
+        const anterior = await client.query(
+          `SELECT resulting_amount, resulting_consumed FROM rakeback_advance_movements
+           WHERE advance_id = $1 AND id <> $2 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+          [adv.advance_id, adv.ram_id]
+        );
+        const amountRestaurado = anterior.rows[0] ? Number(anterior.rows[0].resulting_amount) : 0;
+        const consumedRestaurado = anterior.rows[0] ? Number(anterior.rows[0].resulting_consumed) : 0;
+        await client.query(
+          `UPDATE rakeback_advances SET amount=$1, consumed=$2, active=true, updated_at=now() WHERE id=$3`,
+          [amountRestaurado, consumedRestaurado, adv.advance_id]
+        );
+        await client.query(`DELETE FROM rakeback_advance_movements WHERE id = $1`, [adv.ram_id]);
+      }
     }
 
     const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
