@@ -133,6 +133,12 @@ export interface EditarContratoInput {
   rmfRakebackPct?: number;
   rmfRakebackBancaPct?: number;
   rmfUnionSharePct?: number;
+  // Solo se pueden tocar mientras el contrato todavía no tiene ningún cierre RMF aplicado --
+  // una vez que hubo un cierre, "capital actual" se deriva de ESE historial (getEstadoRmf /
+  // ContratoRmf.tsx), así que cambiar el inicial después dejaría el historial ya aplicado
+  // inconsistente con lo que muestra la pantalla.
+  rmfCapitalInicial?: number;
+  rmfMakeupInicial?: number;
   v1RakeDealPct?: number;
   v1RakeTeambackDirectoPct?: number;
   v1SplitJugadorPct?: number;
@@ -147,14 +153,25 @@ export interface EditarContratoInput {
 export async function editarContrato(id: string, input: EditarContratoInput) {
   const actual = await getContrato(id);
   if (!actual) throw new Error("Contrato no encontrado.");
+  let rmfCapitalInicial = actual.rmf_capital_inicial;
+  let rmfMakeupInicial = actual.rmf_makeup_inicial;
+  if (actual.regla_key === "RMF" && (input.rmfCapitalInicial !== undefined || input.rmfMakeupInicial !== undefined)) {
+    const yaCerro = await pool.query(`SELECT 1 FROM bancado_contrato_rmf_cierres WHERE contrato_id = $1 LIMIT 1`, [id]);
+    if (yaCerro.rows.length > 0) {
+      throw new Error("Este contrato ya tiene cierres RMF aplicados -- el capital/makeup inicial no se puede cambiar ahora (se arrastraría mal el historial ya cerrado). Si fue mal cargado, hay que revertir los cierres primero.");
+    }
+    rmfCapitalInicial = input.rmfCapitalInicial ?? rmfCapitalInicial;
+    rmfMakeupInicial = input.rmfMakeupInicial ?? rmfMakeupInicial;
+  }
   await pool.query(
     `UPDATE bancado_contratos SET
        club_id = $1, observaciones = $2, activo = $3,
        rmf_pct_jugador = $4, rmf_pct_banca = $5, rmf_rakeback_pct = $6, rmf_rakeback_banca_pct = $7, rmf_union_share_pct = $8,
-       v1_rake_deal_pct = $9, v1_rake_teamback_directo_pct = $10,
-       v1_split_jugador_pct = $11, v1_split_teamback_pct = $12, v1_modo_memoria_default = $13,
+       rmf_capital_inicial = $9, rmf_makeup_inicial = $10,
+       v1_rake_deal_pct = $11, v1_rake_teamback_directo_pct = $12,
+       v1_split_jugador_pct = $13, v1_split_teamback_pct = $14, v1_modo_memoria_default = $15,
        updated_at = now()
-     WHERE id = $14`,
+     WHERE id = $16`,
     [
       input.clubId !== undefined ? input.clubId : actual.club_id,
       input.observaciones !== undefined ? input.observaciones : actual.observaciones,
@@ -164,6 +181,8 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
       actual.regla_key === "RMF" ? input.rmfRakebackPct ?? actual.rmf_rakeback_pct : null,
       actual.regla_key === "RMF" ? input.rmfRakebackBancaPct ?? actual.rmf_rakeback_banca_pct : null,
       actual.regla_key === "RMF" ? input.rmfUnionSharePct ?? actual.rmf_union_share_pct : null,
+      actual.regla_key === "RMF" ? rmfCapitalInicial : null,
+      actual.regla_key === "RMF" ? rmfMakeupInicial : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeDealPct ?? actual.v1_rake_deal_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1RakeTeambackDirectoPct ?? actual.v1_rake_teamback_directo_pct : null,
       actual.regla_key === "REGLA_BANCADO_V1" ? input.v1SplitJugadorPct ?? actual.v1_split_jugador_pct : null,
@@ -175,27 +194,35 @@ export async function editarContrato(id: string, input: EditarContratoInput) {
   return getContrato(id);
 }
 
-// Borrado de contrato (pedido Leo 05/10/2026): solo permite borrar contratos que todavía no
-// tienen NINGÚN historial real cargado (ni período, ni cierre RMF, ni ajuste, ni costo fijo) --
-// un contrato así es, por definición, un alta de prueba o un error de carga, nunca un contrato
-// en uso. Si ya tiene historial, no se borra nunca (filosofía de ledger inmutable del resto del
-// sistema) -- la salida ahí es desactivarlo (editarContrato({activo:false})), que lo saca de la
-// operatoria sin perder ningún número.
+// Borrado de contrato (pedido Leo 05/10/2026, ampliado 05/10/2026 "no importa que tenga
+// liquidaciones realizadas, ya que ahora como estamos probando y analizando"): borra el
+// contrato Y todo su historial en cascada (períodos, parciales, liquidaciones, ajustes, costos
+// fijos, cierres RMF). A diferencia del resto del sistema (ledger, adelantos, cierres
+// semanales), este módulo de Bancado Contratos NO genera ningún movimiento de Wallet/Tesorería
+// propio -- todo lo que crea vive únicamente en estas tablas bancado_contrato_* -- así que
+// borrarlo no deja nada huérfano en el ledger real. Mientras el módulo esté en etapa de prueba
+// esto queda sin bloqueo; si en algún momento pasa a operar con plata real en serio, achicar
+// esto a un bloqueo (como adelantos/ledger) o a un soft-delete es lo que correspondería.
 export async function eliminarContrato(id: string) {
-  const actual = await getContrato(id);
-  if (!actual) throw new Error("Contrato no encontrado.");
-  const [periodos, rmfCierres, ajustes, costosFijos] = await Promise.all([
-    pool.query(`SELECT 1 FROM bancado_contrato_periodos WHERE contrato_id = $1 LIMIT 1`, [id]),
-    pool.query(`SELECT 1 FROM bancado_contrato_rmf_cierres WHERE contrato_id = $1 LIMIT 1`, [id]),
-    pool.query(`SELECT 1 FROM bancado_contrato_ajustes WHERE contrato_id = $1 LIMIT 1`, [id]),
-    pool.query(`SELECT 1 FROM bancado_contrato_costos_fijos WHERE contrato_id = $1 LIMIT 1`, [id]),
-  ]);
-  if (periodos.rows.length > 0 || rmfCierres.rows.length > 0 || ajustes.rows.length > 0 || costosFijos.rows.length > 0) {
-    throw new Error(
-      "Este contrato ya tiene historial cargado (período, cierre, ajuste o costo fijo) -- no se puede borrar para no perder esos números. Si no lo usás más, desactivalo en vez de borrarlo."
-    );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const actual = await client.query(`SELECT 1 FROM bancado_contratos WHERE id = $1 FOR UPDATE`, [id]);
+    if (actual.rows.length === 0) throw new Error("Contrato no encontrado.");
+    await client.query(`DELETE FROM bancado_contrato_ajustes WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contrato_parciales WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contrato_liquidaciones WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contrato_costos_fijos WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contrato_rmf_cierres WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contrato_periodos WHERE contrato_id = $1`, [id]);
+    await client.query(`DELETE FROM bancado_contratos WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  await pool.query(`DELETE FROM bancado_contratos WHERE id = $1`, [id]);
 }
 
 // El nombre a mostrar sale del jugador/agente vinculado, nunca de un campo de texto cargado a

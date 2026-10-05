@@ -23,10 +23,12 @@ export default function BancadoContratos() {
   useEffect(() => { refresh(); }, []);
 
   const contrato = contratos?.find((c) => c.id === seleccionado) ?? null;
+  const [editando, setEditando] = useState(false);
+  useEffect(() => { setEditando(false); }, [seleccionado]);
 
   async function eliminar(c: any, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!(await confirmDialog(`¿Borrar el contrato de ${c.nombre}? Esto solo funciona si todavía no tiene ningún período, cierre, ajuste o costo fijo cargado.`))) return;
+    if (!(await confirmDialog(`¿Borrar el contrato de ${c.nombre}? Esto borra TODO su historial (períodos, parciales, liquidaciones, cierres RMF, ajustes, costos fijos) para siempre -- no se puede deshacer. No afecta ningún movimiento de Wallet/Tesorería (este módulo no genera ninguno).`))) return;
     try {
       await api.bancadoContratos.eliminar(c.id);
       if (seleccionado === c.id) setSeleccionado(null);
@@ -111,6 +113,17 @@ export default function BancadoContratos() {
 
       {contrato && (
         <div style={{ marginTop: 20 }}>
+          <div className="topbar">
+            <h3 style={{ margin: 0 }}>{contrato.nombre} <span className="badge neutral">{contrato.regla_key}</span></h3>
+            <button className="btn secondary small" onClick={() => setEditando((v) => !v)}>{editando ? "Cerrar" : "Editar"}</button>
+          </div>
+          {editando && (
+            <EditarContratoForm
+              contrato={contrato}
+              onSaved={() => { setEditando(false); refresh(); }}
+              onCancel={() => setEditando(false)}
+            />
+          )}
           {contrato.regla_key === "RMF" ? (
             <ContratoRmf contrato={contrato} onChanged={refresh} />
           ) : (
@@ -452,6 +465,132 @@ function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Edición de un contrato ya creado (pedido Leo 05/10/2026, "falta un botón para Editar").
+// No deja tocar la regla ni el jugador/agente vinculado (eso se resuelve creando un contrato
+// nuevo, ver comentario en repo/editarContrato) -- solo club, observaciones, activo, los
+// parámetros de la regla elegida, y -- solo para RMF y solo si el contrato todavía no tiene
+// ningún cierre RMF aplicado -- el capital/makeup inicial (el backend rechaza el cambio si ya
+// hubo un cierre, con un mensaje claro).
+function EditarContratoForm({ contrato, onSaved, onCancel }: { contrato: any; onSaved: () => void; onCancel: () => void }) {
+  const [clubes, setClubes] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => { api.clubes().then(setClubes).catch(() => setClubes([])); }, []);
+
+  const [clubId, setClubId] = useState(contrato.club_id ?? "");
+  const [observaciones, setObservaciones] = useState(contrato.observaciones ?? "");
+  const [activo, setActivo] = useState(!!contrato.activo);
+  const [rmfPctJugador, setRmfPctJugador] = useState(String(Number(contrato.rmf_pct_jugador ?? 0) * 100));
+  const [rmfPctBanca, setRmfPctBanca] = useState(String(Number(contrato.rmf_pct_banca ?? 0) * 100));
+  const [rmfRakebackPct, setRmfRakebackPct] = useState(String(Number(contrato.rmf_rakeback_pct ?? 0) * 100));
+  const [rmfRakebackBancaPct, setRmfRakebackBancaPct] = useState(String(Number(contrato.rmf_rakeback_banca_pct ?? 0) * 100));
+  const [rmfUnionSharePct, setRmfUnionSharePct] = useState(String(Number(contrato.rmf_union_share_pct ?? 0) * 100));
+  const [rmfCapitalInicial, setRmfCapitalInicial] = useState(String(Number(contrato.rmf_capital_inicial ?? 0)));
+  const [rmfMakeupInicial, setRmfMakeupInicial] = useState(String(Number(contrato.rmf_makeup_inicial ?? 0)));
+  const [v1RakeDealPct, setV1RakeDealPct] = useState(String(Number(contrato.v1_rake_deal_pct ?? 0) * 100));
+  const [v1RakeTeambackDirectoPct, setV1RakeTeambackDirectoPct] = useState(String(Number(contrato.v1_rake_teamback_directo_pct ?? 0) * 100));
+  const [v1SplitJugadorPct, setV1SplitJugadorPct] = useState(String(Number(contrato.v1_split_jugador_pct ?? 0) * 100));
+  const [v1SplitTeambackPct, setV1SplitTeambackPct] = useState(String(Number(contrato.v1_split_teamback_pct ?? 0) * 100));
+  const [v1ModoMemoriaDefault, setV1ModoMemoriaDefault] = useState<"AUTOMATICO" | "PARCIAL_MANUAL">(contrato.v1_modo_memoria_default ?? "AUTOMATICO");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function guardar() {
+    setGuardando(true);
+    setMsg(null);
+    try {
+      await api.bancadoContratos.editar(contrato.id, {
+        clubId: clubId || null,
+        observaciones: observaciones.trim() || null,
+        activo,
+        rmfPctJugador: contrato.regla_key === "RMF" ? Number(rmfPctJugador) / 100 : undefined,
+        rmfPctBanca: contrato.regla_key === "RMF" ? Number(rmfPctBanca) / 100 : undefined,
+        rmfRakebackPct: contrato.regla_key === "RMF" ? Number(rmfRakebackPct) / 100 : undefined,
+        rmfRakebackBancaPct: contrato.regla_key === "RMF" ? Number(rmfRakebackBancaPct) / 100 : undefined,
+        rmfUnionSharePct: contrato.regla_key === "RMF" ? Number(rmfUnionSharePct) / 100 : undefined,
+        rmfCapitalInicial: contrato.regla_key === "RMF" ? Number(rmfCapitalInicial) : undefined,
+        rmfMakeupInicial: contrato.regla_key === "RMF" ? Number(rmfMakeupInicial) : undefined,
+        v1RakeDealPct: contrato.regla_key === "REGLA_BANCADO_V1" ? Number(v1RakeDealPct) / 100 : undefined,
+        v1RakeTeambackDirectoPct: contrato.regla_key === "REGLA_BANCADO_V1" ? Number(v1RakeTeambackDirectoPct) / 100 : undefined,
+        v1SplitJugadorPct: contrato.regla_key === "REGLA_BANCADO_V1" ? Number(v1SplitJugadorPct) / 100 : undefined,
+        v1SplitTeambackPct: contrato.regla_key === "REGLA_BANCADO_V1" ? Number(v1SplitTeambackPct) / 100 : undefined,
+        v1ModoMemoriaDefault: contrato.regla_key === "REGLA_BANCADO_V1" ? v1ModoMemoriaDefault : undefined,
+      });
+      onSaved();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar." });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 12, maxWidth: 560 }}>
+      <h3 style={{ marginTop: 0 }}>Editar contrato de {contrato.nombre}</h3>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        No se puede cambiar la regla ni el jugador/agente vinculado -- si eso cambió de verdad, hay que crear un contrato nuevo.
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Club</label>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
+            <option value="">Sin club asignado</option>
+            {clubes?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Estado</label>
+          <select value={activo ? "1" : "0"} onChange={(e) => setActivo(e.target.value === "1")}>
+            <option value="1">Activo</option>
+            <option value="0">Inactivo</option>
+          </select>
+        </div>
+      </div>
+
+      {contrato.regla_key === "RMF" ? (
+        <div className="form-grid">
+          <div className="field"><label>% Jugador</label><input type="number" step="0.01" value={rmfPctJugador} onChange={(e) => setRmfPctJugador(e.target.value)} /></div>
+          <div className="field"><label>% Banca</label><input type="number" step="0.01" value={rmfPctBanca} onChange={(e) => setRmfPctBanca(e.target.value)} /></div>
+          <div className="field"><label>Rakeback Jugador (%)</label><input type="number" step="0.01" value={rmfRakebackPct} onChange={(e) => setRmfRakebackPct(e.target.value)} /></div>
+          <div className="field"><label>Rakeback Banca (%)</label><input type="number" step="0.01" value={rmfRakebackBancaPct} onChange={(e) => setRmfRakebackBancaPct(e.target.value)} /></div>
+          <div className="field"><label>% Unión sobre rake total</label><input type="number" step="0.01" value={rmfUnionSharePct} onChange={(e) => setRmfUnionSharePct(e.target.value)} /></div>
+          <div className="field">
+            <label title="Solo se puede cambiar si este contrato todavía no tiene ningún cierre RMF aplicado.">Capital inicial (USD)</label>
+            <input type="number" step="0.01" value={rmfCapitalInicial} onChange={(e) => setRmfCapitalInicial(e.target.value)} />
+          </div>
+          <div className="field">
+            <label title="Solo se puede cambiar si este contrato todavía no tiene ningún cierre RMF aplicado.">Makeup inicial (USD)</label>
+            <input type="number" step="0.01" value={rmfMakeupInicial} onChange={(e) => setRmfMakeupInicial(e.target.value)} />
+          </div>
+        </div>
+      ) : (
+        <div className="form-grid">
+          <div className="field"><label>% rake para el deal</label><input type="number" value={v1RakeDealPct} onChange={(e) => setV1RakeDealPct(e.target.value)} /></div>
+          <div className="field"><label>% rake directo TeamBack</label><input type="number" value={v1RakeTeambackDirectoPct} onChange={(e) => setV1RakeTeambackDirectoPct(e.target.value)} /></div>
+          <div className="field"><label>% split jugador</label><input type="number" value={v1SplitJugadorPct} onChange={(e) => setV1SplitJugadorPct(e.target.value)} /></div>
+          <div className="field"><label>% split TeamBack</label><input type="number" value={v1SplitTeambackPct} onChange={(e) => setV1SplitTeambackPct(e.target.value)} /></div>
+          <div className="field">
+            <label>Modo de recuperación de memoria (default)</label>
+            <select value={v1ModoMemoriaDefault} onChange={(e) => setV1ModoMemoriaDefault(e.target.value as any)}>
+              <option value="AUTOMATICO">Automático</option>
+              <option value="PARCIAL_MANUAL">Parcial manual</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      <div className="field">
+        <label>Observaciones</label>
+        <input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+      </div>
+
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
+        <button className="btn secondary" disabled={guardando} onClick={onCancel}>Cancelar</button>
+      </div>
     </div>
   );
 }
