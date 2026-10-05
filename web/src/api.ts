@@ -247,6 +247,7 @@ export const api = {
   // nuevo) sin revertir ningún cruce/pago real.
   reabrirLiquidacion: (id: string) => request(`/catalog/liquidacion/${id}/reabrir`, { method: "POST" }),
   historialLiquidaciones: () => request("/catalog/liquidacion/historial"),
+  crucesDetalleLiquidacion: (id: string) => request(`/catalog/liquidacion/${id}/cruces-detalle`),
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 
   // Drill-down de movimientos y tesorería

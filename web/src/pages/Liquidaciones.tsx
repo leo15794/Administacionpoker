@@ -355,6 +355,24 @@ export default function Liquidaciones() {
   const [movIdsPagosPendienteSesion, setMovIdsPagosPendienteSesion] = useState<string[]>([]);
   const [movIdsPagosGenericoSesion, setMovIdsPagosGenericoSesion] = useState<string[]>([]);
 
+  // AGREGADO 05/10/2026 (pedido de Leo: "como veo que rakeback se descontó, dentro de
+  // liquidaciones"): al revisar una liquidación ya guardada, resuelve sus
+  // adelanto_movement_ids/pago_pendiente_movement_ids a algo legible (ver GET
+  // /catalog/liquidacion/:id/cruces-detalle) -- antes esos ids quedaban guardados pero invisibles
+  // en cualquier pantalla. Se dispara solo con revisandoId (no con el flujo de "Retomar"), así
+  // que cubre cualquier forma de llegar a revisar una liquidación, no solo una en particular.
+  const [crucesDetalle, setCrucesDetalle] = useState<{ adelantosCruzados: any[]; pendienteSaldado: any[] } | null>(null);
+  useEffect(() => {
+    if (!revisandoId) {
+      setCrucesDetalle(null);
+      return;
+    }
+    api
+      .crucesDetalleLiquidacion(revisandoId)
+      .then(setCrucesDetalle)
+      .catch(() => setCrucesDetalle(null));
+  }, [revisandoId]);
+
   useEffect(() => {
     setSemanas([]);
     setData(null);
@@ -1791,6 +1809,40 @@ export default function Liquidaciones() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {crucesDetalle && (crucesDetalle.adelantosCruzados.length > 0 || crucesDetalle.pendienteSaldado.length > 0) && (
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <h3 style={{ marginTop: 0 }}>Adelantos cruzados en esta liquidación</h3>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                  No es plata nueva — es rakeback pendiente saldado con un adelanto que ya se le había dado a ese agente.
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th><th>Agente</th><th>Adelanto origen</th><th className="num">Monto cruzado</th><th>Observación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crucesDetalle.adelantosCruzados.map((c: any) => (
+                      <tr key={c.id}>
+                        <td className="muted">{dateShort(c.occurred_at)}</td>
+                        <td>{c.agent_name}</td>
+                        <td className="muted">{c.club_origen_name ? `Club: ${c.club_origen_name}` : "—"}</td>
+                        <td className="num money">{usd(Number(c.amount))}</td>
+                        <td className="muted" style={{ fontSize: 12 }}>{c.notes || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {crucesDetalle.adelantosCruzados.length > 0 && crucesDetalle.pendienteSaldado.length === 0 && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                    ⚠ Esta liquidación se guardó antes del 05/10/2026 -- el lado del rakeback pendiente de este cruce no quedó
+                    registrado por un bug ya corregido (ver src/scripts/diagnosticoCruceAdelantoPendiente.ts para reconstruirlo).
+                    El adelanto de arriba sí es el dato real.
+                  </div>
+                )}
               </div>
             )}
 

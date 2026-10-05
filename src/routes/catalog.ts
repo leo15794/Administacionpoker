@@ -904,6 +904,59 @@ catalogRouter.get("/liquidacion/historial", requireAuth, requireAdmin, async (_r
   res.json(r.rows);
 });
 
+// AGREGADO 05/10/2026 (pedido de Leo: "no podemos ver a quién le cobró el rakeback pendiente"):
+// resuelve adelanto_movement_ids/pago_pendiente_movement_ids de una liquidación guardada a algo
+// legible -- antes esa info solo existía como arrays de ids sueltos en la fila, sin mostrarse en
+// ningún lado. Dos listas separadas porque son dos lados del mismo cruce (ver confirmarModalCruce
+// en Liquidaciones.tsx): adelantosCruzados es el lado del adelanto (siempre se guardó bien,
+// CONSUMO ya estaba permitido) y pendienteSaldado es el lado del rakeback pendiente (el que
+// tenía el bug de la constraint -- para liquidaciones guardadas ANTES del fix del 05/10/2026
+// puede salir vacío aunque adelantosCruzados sí tenga filas, justamente porque ese INSERT
+// fallaba). Se muestran juntas para que, aunque una de las dos esté incompleta por el bug viejo,
+// la otra siga sirviendo para entender qué pasó.
+catalogRouter.get("/liquidacion/:id/cruces-detalle", requireAuth, requireAdmin, async (req, res) => {
+  const liq = await pool.query(
+    `SELECT adelanto_movement_ids, pago_pendiente_movement_ids FROM liquidaciones_guardadas WHERE id = $1`,
+    [req.params.id]
+  );
+  if (!liq.rows[0]) return res.status(404).json({ error: "No se encontró esa liquidación." });
+  const { adelanto_movement_ids, pago_pendiente_movement_ids } = liq.rows[0];
+
+  const adelantosCruzados = (adelanto_movement_ids ?? []).length
+    ? (
+        await pool.query(
+          `SELECT ram.id, ram.amount, ram.occurred_at, ram.notes, a.name as agent_name, co.name as club_origen_name
+           FROM rakeback_advance_movements ram
+           JOIN rakeback_advances ra ON ra.id = ram.advance_id
+           JOIN agents a ON a.id = ram.agent_id
+           LEFT JOIN clubs co ON co.id = ra.club_origen_id
+           WHERE ram.id = ANY($1::text[])
+           ORDER BY ram.occurred_at`,
+          [adelanto_movement_ids]
+        )
+      ).rows
+    : [];
+
+  const pendienteSaldado = (pago_pendiente_movement_ids ?? []).length
+    ? (
+        await pool.query(
+          `SELECT rpm.id, rpm.type, rpm.amount, rpm.occurred_at, rpm.notes, a.name as agent_name,
+                  c.name as club_name, wc.week_start, wc.week_end
+           FROM rakeback_pendiente_movements rpm
+           JOIN rakeback_pendiente rp ON rp.id = rpm.pendiente_id
+           JOIN agents a ON a.id = rpm.agent_id
+           JOIN clubs c ON c.id = rp.club_id
+           JOIN weekly_closings wc ON wc.id = rp.weekly_closing_id
+           WHERE rpm.id = ANY($1::text[])
+           ORDER BY rpm.occurred_at`,
+          [pago_pendiente_movement_ids]
+        )
+      ).rows
+    : [];
+
+  res.json({ adelantosCruzados, pendienteSaldado });
+});
+
 // Borrado real — para limpiar liquidaciones de PRUEBA. (28/09/2026, pedido de Leo) Antes de
 // borrar la foto/reporte, libera los cruces (CONSUMO) que esta liquidación puntual generó
 // contra adelantos de rakeback y cargas de tesorería -- mismo mecanismo que
