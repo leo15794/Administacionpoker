@@ -254,13 +254,24 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
 
   // --- Hoja 2: totales por sub-agente (control cruzado contra la hoja 3, ver más abajo) ---
   const maxColAg = wsAgentes.columnCount || 30;
-  const colRakeTotalAg = buscarColumnaDeGrupo(wsAgentes, 4, 5, maxColAg, "rake", "total");
+  // FIX 05/10/2026 (caso real: agente 5889-2084, semana 28/09-04/10/2026 de dangerfish96, rake
+  // MTT=30 por primera vez -- antes siempre había sido 0 en todos los reportes vistos). La hoja
+  // 3 (jugadores, la que de verdad se importa) solo trae "Fee without Tournament & SNG" --
+  // EXCLUYE a propósito el rake de torneo/SNG (Tiny no lo comparte con los agentes, ver
+  // encabezado del archivo). Comparar esa suma contra el Rake TOTAL de la hoja 2 (que sí suma
+  // Ring Game+SNG+MTT) coincidía siempre por casualidad mientras nadie tuviera rake de MTT/SNG
+  // en la semana -- apenas aparece alguno, tira una alarma falsa de "formato cambió" con un
+  // archivo perfectamente válido (confirmado a mano: 6912.1 de Ring Game vs 6942.1 de Total,
+  // la diferencia es exactamente el MTT=30). Ahora se compara contra Ring Game + SNG -- el
+  // mismo universo que excluye la hoja de jugadores -- en vez de contra el Total.
+  const colRakeRingGameAg = buscarColumnaDeGrupo(wsAgentes, 4, 5, maxColAg, "rake", "ring game");
+  const colRakeSngAg = buscarColumnaDeGrupo(wsAgentes, 4, 5, maxColAg, "rake", "sng");
   const colWinLossTotalAg = buscarColumnaDeGrupo(wsAgentes, 4, 5, maxColAg, "win/loss", "total");
-  if (!colRakeTotalAg || !colWinLossTotalAg) {
+  if (!colRakeRingGameAg || !colRakeSngAg || !colWinLossTotalAg) {
     return {
       error: {
         fileName,
-        reason: "No tiene el formato Tiny GG esperado — no se encontraron las columnas Rake Total / Win-Loss Total en la hoja de agentes.",
+        reason: "No tiene el formato Tiny GG esperado — no se encontraron las columnas Rake Ring Game / SNG / Win-Loss Total en la hoja de agentes.",
       },
     };
   }
@@ -271,7 +282,7 @@ export async function parseTinyGGFile(buffer: Buffer, fileName: string): Promise
     if (!id) continue;
     if (id.toLowerCase().includes("total")) break; // fila "總計 Total"
     totalesPorSubAgente.set(id, {
-      rake: toNumber(wsAgentes.getCell(r, colRakeTotalAg).value),
+      rake: toNumber(wsAgentes.getCell(r, colRakeRingGameAg).value) + toNumber(wsAgentes.getCell(r, colRakeSngAg).value),
       resultado: toNumber(wsAgentes.getCell(r, colWinLossTotalAg).value),
     });
   }
