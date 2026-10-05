@@ -463,31 +463,68 @@ function PreviewResumen({
 }) {
   const { confirmDialog, alertDialog } = useConfirmDialog();
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
-  // marcarPendiente (05/10/2026, pedido de Leo: "que un ajuste pendiente se arrastre semana a
-  // semana en Saldo anterior hasta que se pague, con posibilidad de volver todo para atras") --
-  // toggle reversible: no mueve plata ni genera ningún movimiento, solo prende/apaga la bandera
-  // que decide si ESTE AJUSTE/COBRO/PAGO puntual sigue arrastrándose en "Saldo anterior" la
-  // semana que viene (ver marcarSaldoPendiente en repo/agentesResumen.ts). Se puede volver para
-  // atrás en cualquier momento con el mismo botón.
-  async function marcarPendiente(m: any, pendiente: boolean) {
-    const verbo = pendiente ? "marcar" : "desmarcar";
+  // restanteInputs (05/10/2026, pedido de Leo: "si quedan 129,90 y pagamos 100, quedan
+  // pendientes 29,90 -- solo ese resto se arrastra") -- valor que se está editando a mano por
+  // fila, antes de guardar. Arranca vacío; al enfocar un campo sin editar todavía se sugiere
+  // m.restante (si ya estaba marcado) o m.deltaPropio (el monto entero, la primera vez).
+  const [restanteInputs, setRestanteInputs] = useState<Record<string, string>>({});
+
+  function valorSugerido(m: any): string {
+    const v = restanteInputs[m.id];
+    if (v !== undefined) return v;
+    return String(m.restante ?? m.deltaPropio);
+  }
+
+  // guardarRestante (05/10/2026, pedido de Leo) -- edición puntual reversible: no mueve plata
+  // ni genera ningún movimiento, solo guarda cuánto de ESTE AJUSTE/COBRO/PAGO sigue sin
+  // cobrarse/pagarse (ver marcarSaldoPendiente en repo/agentesResumen.ts). Un pago parcial se
+  // refleja escribiendo el nuevo resto y guardando de nuevo -- se puede volver para atrás
+  // (poner el monto original, o quitar) en cualquier momento.
+  async function guardarRestante(m: any) {
+    const texto = valorSugerido(m);
+    const restante = Number(texto);
+    if (!texto.trim() || Number.isNaN(restante)) {
+      await alertDialog("Ese monto no es válido.");
+      return;
+    }
     if (
       !(await confirmDialog(
-        `¿${pendiente ? "Marcar" : "Desmarcar"} este ${m.type.toLowerCase()} de ${usd(m.amount)} (${m.agentName}) como pendiente? ${
-          pendiente
-            ? "Va a seguir sumando en \"Saldo anterior\" semana a semana hasta que lo desmarques."
-            : "Deja de arrastrarse de acá en adelante -- se puede volver a marcar cuando quieras."
-        }`
+        `¿Marcar este ${m.type.toLowerCase()} de ${m.agentName} con ${usd(restante)} todavía pendiente? Va a seguir sumando en "Saldo anterior" semana a semana hasta que lo edites o lo quites.`
       ))
     ) {
       return;
     }
     setMarcandoId(m.id);
     try {
-      await api.marcarSaldoPendiente(m.id, pendiente);
+      await api.marcarSaldoPendiente(m.id, restante);
+      setRestanteInputs((prev) => {
+        const next = { ...prev };
+        delete next[m.id];
+        return next;
+      });
       onRefrescar();
     } catch (err: any) {
-      await alertDialog(err.message || `No se pudo ${verbo} como pendiente.`);
+      await alertDialog(err.message || "No se pudo guardar.");
+    } finally {
+      setMarcandoId(null);
+    }
+  }
+
+  async function quitarRestante(m: any) {
+    if (!(await confirmDialog(`¿Quitar el pendiente de este ${m.type.toLowerCase()} de ${m.agentName}? Deja de arrastrarse de acá en adelante -- se puede volver a marcar cuando quieras.`))) {
+      return;
+    }
+    setMarcandoId(m.id);
+    try {
+      await api.marcarSaldoPendiente(m.id, null);
+      setRestanteInputs((prev) => {
+        const next = { ...prev };
+        delete next[m.id];
+        return next;
+      });
+      onRefrescar();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo quitar.");
     } finally {
       setMarcandoId(null);
     }
@@ -619,16 +656,17 @@ function PreviewResumen({
       {ec.ajustesPendientesDetalle && ec.ajustesPendientesDetalle.length > 0 && (
         <>
           <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>
-            Detalle de los ajustes marcados como pendientes que componen el {usd(ec.ajustesPendientesTotal ?? 0)} de arriba:
+            Detalle de los ajustes marcados como pendientes que componen el {usd(ec.ajustesPendientesTotal ?? 0)} de arriba (si "Resta" es menor al "Monto original", ya hubo un pago parcial):
           </div>
-          <table style={{ maxWidth: 620 }}>
+          <table style={{ maxWidth: 680 }}>
             <thead>
               <tr>
                 {preview.porAgente.length > 1 && <th>Agente</th>}
                 <th>Club</th>
                 <th>Fecha</th>
                 <th>Nota</th>
-                <th className="num">Monto</th>
+                <th className="num">Monto original</th>
+                <th className="num">Resta (se arrastra)</th>
               </tr>
             </thead>
             <tbody>
@@ -638,7 +676,8 @@ function PreviewResumen({
                   <td>{d.clubName}</td>
                   <td className="muted">{dateShort(d.occurredAt)}</td>
                   <td className="muted">{d.observation || "—"}</td>
-                  <td className="num money">{usd(d.amount)}</td>
+                  <td className="num money muted">{usd(d.amount)}</td>
+                  <td className="num money">{usd(d.restante)}</td>
                 </tr>
               ))}
             </tbody>
@@ -646,17 +685,18 @@ function PreviewResumen({
         </>
       )}
 
-      {/* Marcar/desmarcar manual (05/10/2026, pedido de Leo) -- lista los últimos AJUSTE/COBRO/
-          PAGO/TICKET_PROMOCIONAL del agente hasta el fin de esta semana, para poder decidir cuál
-          sigue siendo una deuda real (se marca "pendiente", se arrastra) y cuál ya se resolvió
-          (queda sin marcar, desaparece la semana que viene como hasta ahora). */}
+      {/* Marcar/editar/quitar pendiente (05/10/2026, pedido de Leo: soporta pago parcial) --
+          lista los últimos AJUSTE/COBRO/PAGO/TICKET_PROMOCIONAL del agente hasta el fin de esta
+          semana. Se escribe cuánto de ESE movimiento sigue sin cobrarse/pagarse y se guarda --
+          si después se hace un pago parcial, se edita el número y se guarda de nuevo (solo el
+          resto sigue arrastrando). "Quitar" lo saca del todo (ya resuelto, o fue un error). */}
       {ec.movimientosAjustables && ec.movimientosAjustables.length > 0 && (
         <>
-          <h4 style={{ marginTop: 16, marginBottom: 6 }}>Ajustes / cobros / pagos — marcar como pendiente</h4>
+          <h4 style={{ marginTop: 16, marginBottom: 6 }}>Ajustes / cobros / pagos — marcar pendiente</h4>
           <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-            Marcado como pendiente = sigue sumando en "Saldo anterior" semana a semana hasta que lo desmarques. Reversible en cualquier momento.
+            Lo que pongas en "Pendiente" se arrastra en "Saldo anterior" semana a semana hasta que lo edites (pago parcial) o lo quites. Reversible en cualquier momento.
           </div>
-          <table style={{ maxWidth: 760 }}>
+          <table style={{ maxWidth: 820 }}>
             <thead>
               <tr>
                 {preview.porAgente.length > 1 && <th>Agente</th>}
@@ -665,6 +705,7 @@ function PreviewResumen({
                 <th>Club</th>
                 <th>Nota</th>
                 <th className="num">Monto</th>
+                <th>Pendiente</th>
                 <th></th>
               </tr>
             </thead>
@@ -678,14 +719,29 @@ function PreviewResumen({
                   <td className="muted">{m.observation || "—"}</td>
                   <td className="num money">{usd(m.amount)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn secondary small"
-                      disabled={marcandoId === m.id}
-                      onClick={() => marcarPendiente(m, !m.saldoPendiente)}
-                    >
-                      {marcandoId === m.id ? "..." : m.saldoPendiente ? "Pendiente ✓ (desmarcar)" : "Marcar pendiente"}
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={valorSugerido(m)}
+                      onChange={(e) => setRestanteInputs((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                      style={{ width: 100 }}
+                    />
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button type="button" className="btn secondary small" disabled={marcandoId === m.id} onClick={() => guardarRestante(m)}>
+                      {marcandoId === m.id ? "..." : m.restante !== null ? "Guardar" : "Marcar pendiente"}
                     </button>
+                    {m.restante !== null && (
+                      <button
+                        type="button"
+                        className="btn secondary small"
+                        disabled={marcandoId === m.id}
+                        style={{ marginLeft: 6, color: "var(--red)" }}
+                        onClick={() => quitarRestante(m)}
+                      >
+                        Quitar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

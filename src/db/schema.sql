@@ -2067,14 +2067,25 @@ CREATE INDEX IF NOT EXISTS idx_bancado_contrato_rmf_cierres_contrato ON bancado_
 ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_cierres NUMERIC(18,4);
 ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_bancados NUMERIC(18,4);
 
--- saldo_pendiente (05/10/2026, pedido de Leo: "que un ajuste pendiente se arrastre semana a
--- semana en Saldo anterior hasta que se pague, con posibilidad de volver todo para atras").
+-- saldo_pendiente_restante (05/10/2026, pedido de Leo, REEMPLAZA la columna booleana
+-- "saldo_pendiente" agregada unas horas antes en esta misma sesión -- todavía sin migrar a
+-- ninguna base real, así que este DROP+ADD no pierde nada). Primer diseño (on/off) no alcanzaba
+-- el pedido real de Leo, con la secuencia completa de "El Latigo Loco" como especificación:
+-- "Si quedan 129,90 a favor del agente y pagamos 100,00, quedan pendientes 29,90. Solo ese
+-- resto se arrastra" -- un pago PARCIAL tiene que poder reducir lo que sigue pendiente, no solo
+-- prender/apagar un sí-o-no.
+--
 -- Por diseño (ver repo/agentesResumen.ts, redefinición del 30/09/2026), "Saldo anterior" solo
--- arrastra CARGA/DESCARGA/ADELANTO_FICHAS -- un AJUSTE se trata como "ya resuelto esa semana" y
--- desaparece la semana siguiente, aunque sea una deuda real todavía sin cobrar/pagar (caso real
--- "El Latigo Loco", AJUSTE "Deudas" -769.83). Esta columna, default false (no cambia NADA de lo
--- que ya existe), marca un movimiento puntual como "todavía pendiente, seguir arrastrando" --
--- se prende/apaga a mano desde Resumen por agente (nunca se setea solo), así que es un toggle
--- reversible en cualquier momento, no una migración de datos.
-ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS saldo_pendiente BOOLEAN NOT NULL DEFAULT false;
+-- arrastra CARGA/DESCARGA/ADELANTO_FICHAS semana a semana -- un AJUSTE/COBRO/PAGO se trata como
+-- "ya resuelto esa semana" y desaparece la semana siguiente, aunque sea una deuda real todavía
+-- sin cobrar/pagar del todo (caso real "El Latigo Loco", AJUSTE "Deudas"/"conciliacion").
+--
+-- saldo_pendiente_restante (NULL = no se está arrastrando, default, no cambia NADA de lo que ya
+-- existe) guarda a mano "cuánto de este movimiento puntual sigue sin cobrarse/pagarse" -- ESE
+-- valor (no el monto original del movimiento) es lo que se arrastra en Saldo anterior de las
+-- semanas siguientes. Se edita desde Resumen por agente cada vez que se hace un pago parcial
+-- (se escribe el nuevo resto), o se vacía (NULL) cuando ya se saldó del todo o fue un error --
+-- reversible en cualquier momento, nunca se setea solo, no es una migración de datos.
+ALTER TABLE ledger_movements DROP COLUMN IF EXISTS saldo_pendiente;
+ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS saldo_pendiente_restante NUMERIC(18,4);
 

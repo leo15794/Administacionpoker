@@ -39,13 +39,14 @@ agentesResumenRouter.get("/:agentId/:weekStart", requireAuth, requireAdmin, asyn
   res.json(r);
 });
 
-// Marcar/desmarcar un AJUSTE/COBRO/PAGO como "pendiente" (05/10/2026, pedido de Leo) -- toggle
-// reversible, ver marcarSaldoPendiente en repo/agentesResumen.ts. No mueve plata ni balances.
-const saldoPendienteSchema = z.object({ pendiente: z.boolean() });
+// Marcar/editar/quitar cuánto de un AJUSTE/COBRO/PAGO sigue "pendiente" (05/10/2026, pedido de
+// Leo, soporta pago parcial) -- edición puntual reversible, ver marcarSaldoPendiente en
+// repo/agentesResumen.ts. No mueve plata ni balances. restante=null lo saca del todo.
+const saldoPendienteSchema = z.object({ restante: z.number().nullable() });
 agentesResumenRouter.post("/movimiento/:movementId/saldo-pendiente", requireAuth, requireAdmin, async (req, res) => {
   const body = saldoPendienteSchema.parse(req.body);
   try {
-    res.json(await marcarSaldoPendiente(req.params.movementId, body.pendiente));
+    res.json(await marcarSaldoPendiente(req.params.movementId, body.restante));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo actualizar." });
   }

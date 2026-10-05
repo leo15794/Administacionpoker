@@ -141,12 +141,16 @@ export interface ResumenAgentePDF {
       clubId: string;
       clubName: string;
       occurredAt: string;
-      amount: number;
+      amount: number; // monto original del movimiento (informativo)
+      restante: number; // lo que todavía se arrastra de este movimiento (puede ser parcial)
       observation: string | null;
     }[];
     // movimientosAjustables (05/10/2026): últimos AJUSTE/COBRO/PAGO/TICKET_PROMOCIONAL del
-    // agente -- para poder marcar/desmarcar "pendiente" desde esta misma pantalla, sin tocar
-    // Movimientos. saldoPendiente refleja el estado ACTUAL (prendido o no) de cada uno.
+    // agente -- para poder marcar/editar/quitar "pendiente" desde esta misma pantalla, sin
+    // tocar Movimientos. deltaPropio es lo que vale este movimiento con su signo normal (sirve
+    // de sugerencia al marcarlo pendiente por primera vez); restante es NULL si no se está
+    // arrastrando, o el monto puntual (editable, para reflejar pagos parciales) que sí se suma
+    // en Saldo anterior de las semanas siguientes.
     movimientosAjustables: {
       id: string;
       clubId: string;
@@ -154,8 +158,9 @@ export interface ResumenAgentePDF {
       type: string;
       occurredAt: string;
       amount: number;
+      deltaPropio: number;
       observation: string | null;
-      saldoPendiente: boolean;
+      restante: number | null;
     }[];
   };
 }
@@ -387,7 +392,7 @@ export async function getResumenAgentePDF(
   const deltaRes = await pool.query(
     `SELECT
        COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE type IN ('CARGA','DESCARGA','ADELANTO_FICHAS') AND occurred_at::date < $2::date), 0) as saldo_fichas_antes,
-       COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE saldo_pendiente = true AND occurred_at::date < $2::date), 0) as saldo_ajustes_pendientes,
+       COALESCE(SUM(saldo_pendiente_restante) FILTER (WHERE saldo_pendiente_restante IS NOT NULL AND occurred_at::date < $2::date), 0) as saldo_ajustes_pendientes,
        COALESCE(SUM(${DELTA_SQL}) FILTER (WHERE occurred_at::date BETWEEN $2::date AND $3::date AND type <> 'CIERRE_SEMANAL'), 0) as movimientos_semana
      FROM ledger_movements
      WHERE agent_id = $1 AND status <> 'REVERTIDO'`,
@@ -397,14 +402,15 @@ export async function getResumenAgentePDF(
   const ajustesPendientesTotal = Number(deltaRes.rows[0]?.saldo_ajustes_pendientes ?? 0);
   const pagosPosteriores = Number(deltaRes.rows[0]?.movimientos_semana ?? 0);
 
-  // Detalle itemizado de los AJUSTE/COBRO/PAGO marcados "pendiente" que entran en el total de
-  // arriba -- mismo criterio de auditoría que pendientesAnterioresDetalle (poder ver de dónde
-  // sale cada peso, no solo el número ya sumado).
+  // Detalle itemizado de los movimientos con saldo_pendiente_restante seteado que entran en el
+  // total de arriba -- mismo criterio de auditoría que pendientesAnterioresDetalle (poder ver de
+  // dónde sale cada peso, no solo el número ya sumado). "restante" es lo que de verdad se suma
+  // (puede ser menor al "amount" original si ya hubo un pago parcial).
   const ajustesPendientesRes = await pool.query(
-    `SELECT m.id, m.club_id, c.name as club_name, m.occurred_at, m.amount, m.observation
+    `SELECT m.id, m.club_id, c.name as club_name, m.occurred_at, m.amount, m.saldo_pendiente_restante, m.observation
      FROM ledger_movements m
      JOIN clubs c ON c.id = m.club_id
-     WHERE m.agent_id = $1 AND m.status <> 'REVERTIDO' AND m.saldo_pendiente = true
+     WHERE m.agent_id = $1 AND m.status <> 'REVERTIDO' AND m.saldo_pendiente_restante IS NOT NULL
        AND m.occurred_at::date < $2::date
      ORDER BY m.occurred_at ASC`,
     [agentId, weekStart]
@@ -415,14 +421,19 @@ export async function getResumenAgentePDF(
     clubName: row.club_name,
     occurredAt: new Date(row.occurred_at).toISOString(),
     amount: Number(row.amount),
+    restante: Number(row.saldo_pendiente_restante),
     observation: row.observation,
   }));
 
   // movimientosAjustables (05/10/2026): últimos AJUSTE/COBRO/PAGO/TICKET_PROMOCIONAL del agente
-  // hasta el fin de ESTA semana -- para poder marcar/desmarcar "pendiente" desde esta misma
+  // hasta el fin de ESTA semana -- para poder marcar/editar/quitar "pendiente" desde esta misma
   // pantalla. CARGA/DESCARGA/ADELANTO_FICHAS no entran acá porque esos YA se arrastran solos.
+  // delta_propio: lo que vale este movimiento puntual con su signo normal (mismo criterio que
+  // DELTA_SQL) -- se manda como sugerencia inicial al marcarlo pendiente por primera vez.
   const movimientosAjustablesRes = await pool.query(
-    `SELECT m.id, m.club_id, c.name as club_name, m.type, m.occurred_at, m.amount, m.observation, m.saldo_pendiente
+    `SELECT m.id, m.club_id, c.name as club_name, m.type, m.occurred_at, m.amount, m.observation,
+            m.saldo_pendiente_restante,
+            ${DELTA_SQL.replace(/\btype\b/g, "m.type").replace(/\bamount\b/g, "m.amount")} as delta_propio
      FROM ledger_movements m
      JOIN clubs c ON c.id = m.club_id
      WHERE m.agent_id = $1 AND m.status <> 'REVERTIDO'
@@ -439,8 +450,9 @@ export async function getResumenAgentePDF(
     type: row.type,
     occurredAt: new Date(row.occurred_at).toISOString(),
     amount: Number(row.amount),
+    deltaPropio: Number(row.delta_propio),
     observation: row.observation,
-    saldoPendiente: Boolean(row.saldo_pendiente),
+    restante: row.saldo_pendiente_restante === null ? null : Number(row.saldo_pendiente_restante),
   }));
 
   const fichasAdelantadasRes = await pool.query(
@@ -874,22 +886,24 @@ export async function eliminarResumenHistorial(id: string) {
 }
 
 // marcarSaldoPendiente (05/10/2026, pedido de Leo: "que un ajuste pendiente se arrastre semana
-// a semana en Saldo anterior hasta que se pague, con posibilidad de volver todo para atras") --
-// toggle puro, reversible en cualquier momento: no toca balances ni genera ningún movimiento
-// nuevo, solo prende/apaga la bandera que agentesResumen usa para decidir si ese AJUSTE/COBRO/
-// PAGO sigue arrastrándose en "Saldo anterior" (ver saldo_pendiente en db/schema.sql) o si ya
-// se considera resuelto. No se puede marcar un movimiento REVERTIDO (no tiene sentido arrastrar
-// algo que ya no existe para los balances).
-export async function marcarSaldoPendiente(movementId: string, pendiente: boolean) {
+// a semana en Saldo anterior hasta que se pague -- con pago parcial, solo el resto se arrastra
+// -- y con posibilidad de volver todo para atras") -- edición puntual, reversible en cualquier
+// momento: no toca balances ni genera ningún movimiento nuevo, solo guarda "cuánto de este
+// movimiento puntual sigue sin cobrarse/pagarse" (ver saldo_pendiente_restante en
+// db/schema.sql). `restante: null` lo saca del todo (ya resuelto, o fue un error al marcarlo).
+// No se puede marcar un movimiento REVERTIDO (no tiene sentido arrastrar algo que ya no existe
+// para los balances).
+export async function marcarSaldoPendiente(movementId: string, restante: number | null) {
   const r = await pool.query(
-    `UPDATE ledger_movements SET saldo_pendiente = $1
+    `UPDATE ledger_movements SET saldo_pendiente_restante = $1
      WHERE id = $2 AND status <> 'REVERTIDO'
-     RETURNING id, saldo_pendiente`,
-    [pendiente, movementId]
+     RETURNING id, saldo_pendiente_restante`,
+    [restante, movementId]
   );
   if (r.rowCount === 0) {
     throw new Error("No se encontró ese movimiento, o ya fue revertido.");
   }
-  return { id: r.rows[0].id, saldoPendiente: Boolean(r.rows[0].saldo_pendiente) };
+  const row = r.rows[0];
+  return { id: row.id, restante: row.saldo_pendiente_restante === null ? null : Number(row.saldo_pendiente_restante) };
 }
 
