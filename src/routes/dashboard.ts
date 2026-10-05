@@ -11,7 +11,7 @@ import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
 import { aplicarCierresAutomaticosParaClub } from "../repo/proveedores.js";
 import { getResumenTinyExtra, guardarTinyRebateUnion } from "../repo/tinyResumen.js";
-import { getResumenFinanciero } from "../repo/resumenFinanciero.js";
+import { getResumenFinanciero, computeGananciaCierresYBancadosPorSemanas } from "../repo/resumenFinanciero.js";
 
 export const dashboardRouter = Router();
 
@@ -43,9 +43,26 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   const totalAFavorAgentes = saldoFinanciero.filter((f) => f.saldoFinanciero > 0).reduce((s, f) => s + f.saldoFinanciero, 0);
   const totalAFavorNuestro = saldoFinanciero.filter((f) => f.saldoFinanciero < 0).reduce((s, f) => s + f.saldoFinanciero, 0);
 
+  // FIX 05/10/2026 (bug encontrado en análisis, confirmado por Leo): esta query sumaba
+  // balances.amount crudo -- para un agente PREPAGO eso es INCOMPLETO, falta sumarle
+  // total_fichas_ganadas_mesas (el resultado de mesas de sus cierres semanales, que a propósito
+  // nunca toca balances.amount -- ver repo/ledger.ts listAllBalances y fichasTotal() en
+  // web/src/pages/Resumen.tsx). Antes de este fix, un club con agentes Prepago con fichas
+  // ganadas en mesa mostraba acá un "saldo neto" que no coincidía con sumar a mano la columna
+  // Fichas de la tabla "Saldos por agente y club" de la misma pantalla -- mismo tipo de bug que
+  // Leo encontró el 30/09/2026 en Agentes (saldo_total), corregido ahí pero no acá. Mismo patrón
+  // de JOIN LATERAL que listAllBalances, para no reimplementar la fórmula con otra forma.
   const porClub = await pool.query(
-    `SELECT c.id as club_id, c.name as club, COUNT(DISTINCT b.agent_id) as agentes, COALESCE(SUM(b.amount),0) as saldo_neto
-     FROM clubs c LEFT JOIN balances b ON b.club_id = c.id
+    `SELECT c.id as club_id, c.name as club, COUNT(DISTINCT b.agent_id) as agentes,
+            COALESCE(SUM(b.amount + COALESCE(mesas.total_fichas_ganadas_mesas, 0)),0) as saldo_neto
+     FROM clubs c
+     LEFT JOIN balances b ON b.club_id = c.id
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO'
+     ) mesas ON true
      GROUP BY c.id, c.name ORDER BY c.name`
   );
 
@@ -57,6 +74,12 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   // accountStock.ts listRaw). Solo entran clubes que SÍ tienen algún balance distinto de 0 con
   // ese sistema -- un club sin nada no aparece en ninguna de las dos listas, igual que ya hace
   // Stock consolidado con "Sin cuentas con este sistema".
+  // FIX 05/10/2026 (item 2/3 del análisis de Resumen, mismo bug y mismo fix que porClub arriba):
+  // sumaba b.amount crudo, así que un agente PREPAGO con fichas ganadas en mesa pero
+  // balances.amount = 0 quedaba afuera de las dos listas (ni nos debe ni le debemos) y además
+  // el saldo neto por sistema no coincidía con porClub. Mismo JOIN LATERAL que arriba, y el
+  // WHERE ahora filtra por el total YA sumado (amount + mesas), no por amount solo -- si no,
+  // seguía desapareciendo ese caso.
   const porClubPorSistema = await pool.query(
     `SELECT c.id as club_id, c.name as club,
             COALESCE(
@@ -65,11 +88,18 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
                ORDER BY d.valid_from DESC LIMIT 1),
               a.default_system
             ) as system,
-            COUNT(DISTINCT b.agent_id) as agentes, COALESCE(SUM(b.amount),0) as saldo_neto
+            COUNT(DISTINCT b.agent_id) as agentes,
+            COALESCE(SUM(b.amount + COALESCE(mesas.total_fichas_ganadas_mesas, 0)),0) as saldo_neto
      FROM balances b
      JOIN clubs c ON c.id = b.club_id
      JOIN agents a ON a.id = b.agent_id
-     WHERE b.amount <> 0
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
+       FROM weekly_closings wc
+       WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
+         AND wc.system = 'PREPAGO'
+     ) mesas ON true
+     WHERE (b.amount + COALESCE(mesas.total_fichas_ganadas_mesas, 0)) <> 0
      GROUP BY c.id, c.name, system
      ORDER BY c.name, system`
   );
@@ -181,9 +211,18 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
   // Últimas 8 semanas "limpias" (mismo criterio que arriba: si una semana tiene algún cierre
   // RECONSTRUIDO_SIN_DESGLOSE se descarta entera, no solo esa fila) — para el gráfico de
   // tendencia del Resumen. Chico a propósito: es un vistazo rápido, no reemplaza Cierres.
-  const historicoSemanal = await pool.query(
-    `SELECT wc.week_start, wc.week_end,
-            COALESCE(SUM(wc.rake_total - wc.rakeback - wc.rebate), 0) as ganancia
+  // FIX 05/10/2026 (item 1 del análisis de Resumen, confirmado por Leo): esta query calculaba
+  // la ganancia de cada semana con la fórmula genérica rake-rakeback-rebate -- la misma fórmula
+  // "vieja" que "Ganancia de la semana" tenía antes del fix del 24/09/2026, que no respeta el
+  // ratio de plataforma propio de cada club y que ignora lo que aporta Bancado esa semana. Por
+  // eso el gráfico de tendencia y la variación semana a semana podían no coincidir con la
+  // "Ganancia de la semana" de los KPIs de arriba. Ahora usa la misma fórmula oficial que ya
+  // usan el período de ganancias (profitPeriods.ts) y el resto de Resumen --
+  // computeGananciaCierresYBancadosPorSemanas -- semana por semana (la función suma TODO el
+  // array de semanas que recibe junto, así que para tener el desglose por semana hay que
+  // llamarla una vez por cada una).
+  const semanasLimpiasHistorico = await pool.query(
+    `SELECT DISTINCT wc.week_start, wc.week_end
      FROM weekly_closings wc
      WHERE wc.status <> 'REVERTIDO'
        AND NOT EXISTS (
@@ -191,9 +230,14 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
          WHERE wc2.week_start = wc.week_start AND wc2.status <> 'REVERTIDO'
            AND wc2.rule_applied = 'RECONSTRUIDO_SIN_DESGLOSE'
        )
-     GROUP BY wc.week_start, wc.week_end
      ORDER BY wc.week_start DESC
      LIMIT 8`
+  );
+  const historicoSemanal = await Promise.all(
+    semanasLimpiasHistorico.rows.map(async (r) => {
+      const { gananciaOperativa } = await computeGananciaCierresYBancadosPorSemanas([r.week_start]);
+      return { week_start: r.week_start, week_end: r.week_end, ganancia: gananciaOperativa };
+    })
   );
 
   res.json({
@@ -224,7 +268,7 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
     porClub: porClub.rows,
     porClubPorSistema: porClubPorSistema.rows,
     resultadoPorClub,
-    historicoSemanal: historicoSemanal.rows.reverse(),
+    historicoSemanal: historicoSemanal.reverse(),
     balances,
     // (30/09/2026) Para el desglose Win/Lose vs Prepago de los KPIs financieros en
     // web/src/pages/Resumen.tsx -- ver comentario más arriba, mismo array usado para el total
