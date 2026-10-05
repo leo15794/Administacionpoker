@@ -191,7 +191,7 @@ export default function Liquidaciones() {
   // poder deshacerlo de un click sin ir a Adelantos ni tener que resetear toda la base. Solo
   // el último -- si se aplica otro cruce encima, el backend (eliminarMovimientoAdelanto /
   // eliminarMovimientoCarga) igual exige que sea el más reciente de cada adelanto/carga.
-  const [ultimoCruceAdelantos, setUltimoCruceAdelantos] = useState<{ movIds: string[]; monto: number } | null>(null);
+  const [ultimoCruceAdelantos, setUltimoCruceAdelantos] = useState<{ movIds: string[]; monto: number; aplicadoDelta: number } | null>(null);
   const [ultimoCruceCargas, setUltimoCruceCargas] = useState<{ movIds: string[]; monto: number } | null>(null);
   // ultimoCrucePendiente (29/09/2026, pedido de Leo: "si en liquidación sale el pago en
   // rakeback pendiente tiene que desaparecer"): cuando cruzar un ADELANTO además salda de
@@ -940,7 +940,7 @@ export default function Liquidaciones() {
         errores.push(err.message || "No se pudo descontar del rakeback pendiente.");
       }
     }
-    return { movIds, errores };
+    return { movIds, errores, restante };
   }
 
   // Confirma el cruce del popup -- se aplica de una, contra ESTA liquidación (la semana ya
@@ -962,16 +962,26 @@ export default function Liquidaciones() {
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
         const movIds = r?.movementRowId ? [r.movementRowId] : [];
-        setAplicado((prev) => prev + monto);
-        setUltimoCruceAdelantos({ movIds, monto });
         setMovIdsAdelantosSesion((prev) => [...prev, ...movIds]);
 
-        const { movIds: pendienteMovIds, errores: erroresPendiente } = await saldarPendientesDeAgente(
+        // Antes esto hacía setAplicado(prev => prev + monto) con el monto COMPLETO cruzado, y
+        // además saldarPendientesDeAgente restaba lo mismo del rakeback pendiente -- ese
+        // descuento ya queda reflejado en data.total en el refetch de más abajo, así que sumar
+        // el monto entero también a "aplicado" lo restaba DOS VECES del total a pagar. Ahora
+        // sólo se suma a "aplicado" lo que NO se pudo absorber en ningún rakeback pendiente
+        // (restante) -- el resto ya está reflejado en data.total.
+        const {
+          movIds: pendienteMovIds,
+          errores: erroresPendiente,
+          restante: restanteSinAbsorber,
+        } = await saldarPendientesDeAgente(
           modalCruce.item.agentId,
           monto,
           `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de adelanto).`.trim(),
           construirDisponiblePorFila()
         );
+        setAplicado((prev) => prev + restanteSinAbsorber);
+        setUltimoCruceAdelantos({ movIds, monto, aplicadoDelta: restanteSinAbsorber });
         if (pendienteMovIds.length > 0) {
           setUltimoCrucePendiente({ movIds: pendienteMovIds });
           setMovIdsPagosPendienteSesion((prev) => [...prev, ...pendienteMovIds]);
@@ -1050,6 +1060,7 @@ export default function Liquidaciones() {
     const movIdsAdelantos: string[] = [];
     const movIdsCargas: string[] = [];
     let sumaAdelantos = 0;
+    let sumaAdelantosSinAbsorber = 0;
     let sumaCargas = 0;
     const errores: string[] = [];
     const movIdsPendiente: string[] = [];
@@ -1069,12 +1080,17 @@ export default function Liquidaciones() {
             if (r?.movementRowId) movIdsAdelantos.push(r.movementRowId);
             sumaAdelantos += monto;
 
-            const { movIds: pendienteMovIds, errores: erroresPendiente } = await saldarPendientesDeAgente(
+            const {
+              movIds: pendienteMovIds,
+              errores: erroresPendiente,
+              restante: restanteSinAbsorber,
+            } = await saldarPendientesDeAgente(
               item.agentId,
               monto,
               `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de adelanto).`.trim(),
               disponiblePorFila
             );
+            sumaAdelantosSinAbsorber += restanteSinAbsorber;
             movIdsPendiente.push(...pendienteMovIds);
             for (const e of erroresPendiente) errores.push(`${item.agentName || "?"} (rakeback pendiente): ${e}`);
           } else {
@@ -1091,8 +1107,8 @@ export default function Liquidaciones() {
         }
       }
       if (sumaAdelantos > 0) {
-        setAplicado((prev) => prev + sumaAdelantos);
-        setUltimoCruceAdelantos({ movIds: movIdsAdelantos, monto: sumaAdelantos });
+        setAplicado((prev) => prev + sumaAdelantosSinAbsorber);
+        setUltimoCruceAdelantos({ movIds: movIdsAdelantos, monto: sumaAdelantos, aplicadoDelta: sumaAdelantosSinAbsorber });
         setMovIdsAdelantosSesion((prev) => [...prev, ...movIdsAdelantos]);
       }
       if (sumaCargas > 0) {
@@ -1150,7 +1166,7 @@ export default function Liquidaciones() {
           errores.push(err.message || "No se pudo deshacer un descuento de rakeback pendiente.");
         }
       }
-      if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.monto));
+      if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.aplicadoDelta));
       if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.monto));
       if (ultimoCruceAdelantos) {
         const idsDeshechos = new Set(ultimoCruceAdelantos.movIds);
