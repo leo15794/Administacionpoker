@@ -39,6 +39,10 @@ export default function Agentes() {
   // verlos, reactivarlos o borrarlos de verdad si eran duplicados de prueba — este toggle los
   // trae de vuelta (atenuados) con esas dos acciones.
   const [verDadosDeBaja, setVerDadosDeBaja] = useState(false);
+  // AGREGADO 05/10/2026 (rediseno visual de Administracion, pedido de Leo): filtro rapido
+  // para las tarjetas resumen de arriba -- no agrega filas nuevas a la tabla, solo acota
+  // las que ya estaban.
+  const [soloSinDeal, setSoloSinDeal] = useState(false);
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
@@ -117,7 +121,16 @@ export default function Agentes() {
     }
   }
 
-  const agentesFiltrados = agentes.filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()));
+  const agentesFiltrados = agentes
+    .filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()))
+    .filter((a) => !soloSinDeal || (dealsPorAgente[a.id]?.length ?? 0) === 0);
+
+  // Tarjetas resumen (rediseno visual de Administracion, 05/10/2026): mismos numeros que
+  // ya estaban disponibles en la lista, solo que de un vistazo -- ningun calculo nuevo.
+  const totalActivos = agentesFiltrados.filter((a) => a.active !== false).length;
+  const totalDadosDeBaja = agentesFiltrados.filter((a) => a.active === false).length;
+  const totalSinDeal = agentesFiltrados.filter((a) => (dealsPorAgente[a.id]?.length ?? 0) === 0).length;
+  const saldoNetoTotal = agentesFiltrados.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
 
   return (
     <div>
@@ -126,12 +139,18 @@ export default function Agentes() {
           <h2>Administración</h2>
           <div className="muted">Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050).</div>
         </div>
+        {/* AGREGADO 05/10/2026 (rediseno visual, pedido de Leo): separadas de las pestanas de
+            navegacion -- antes "+ Nuevo agente"/"+ Nuevo club" vivian como una pestana mas al
+            lado de "Lista"/"Configurar clubes", mezclando "crear algo nuevo" con "ir a ver algo
+            que ya existe". */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn secondary small" onClick={() => setTab(tab === "nuevo-club" ? "lista" : "nuevo-club")}>+ Nuevo club</button>
+          <button className="btn small" onClick={() => setTab(tab === "nuevo-agente" ? "lista" : "nuevo-agente")}>+ Nuevo agente</button>
+        </div>
       </div>
 
       <div className="tabs">
         <button className={tab === "lista" ? "active" : ""} onClick={() => setTab("lista")}>Lista</button>
-        <button className={tab === "nuevo-agente" ? "active" : ""} onClick={() => setTab("nuevo-agente")}>+ Nuevo agente</button>
-        <button className={tab === "nuevo-club" ? "active" : ""} onClick={() => setTab("nuevo-club")}>+ Nuevo club</button>
         <button className={tab === "clubes" ? "active" : ""} onClick={() => setTab("clubes")}>Configurar clubes</button>
         <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
         <button className={tab === "reglas" ? "active" : ""} onClick={() => setTab("reglas")}>Reglas especiales</button>
@@ -146,6 +165,40 @@ export default function Agentes() {
       {tab === "arbol" && <ArbolClubes agentes={agentes} clubes={clubes} />}
 
       {tab === "lista" && (
+        <>
+          <div className="dash-section">
+            <div className="dash-section-title">Resumen</div>
+            <div className="dash-section-subtitle">Mismos numeros que la lista de abajo -- de un vistazo, antes de filtrar o buscar.</div>
+          </div>
+          <div className="kpi-hero-grid" style={{ marginBottom: 20 }}>
+            <div className="kpi-hero-card">
+              <div className="kpi-hero-label">Activos</div>
+              <div className="kpi-hero-amount neutral">{totalActivos}</div>
+            </div>
+            <div
+              className={`kpi-hero-card row-click${verDadosDeBaja ? " kpi-active" : ""}`}
+              onClick={() => setVerDadosDeBaja(!verDadosDeBaja)}
+              title="Click para mostrar u ocultar los agentes dados de baja en la lista de abajo"
+            >
+              <div className="kpi-hero-label">Dados de baja</div>
+              <div className="kpi-hero-amount neutral">{verDadosDeBaja ? totalDadosDeBaja : "—"}</div>
+              <div className="kpi-hero-sub">{verDadosDeBaja ? "Mostrando" : "Click para mostrar"}</div>
+            </div>
+            <div
+              className={`kpi-hero-card row-click${soloSinDeal ? " kpi-active" : ""}`}
+              onClick={() => setSoloSinDeal(!soloSinDeal)}
+              title="Click para ver solo los agentes sin deal propio asignado (usan el default de cada club)"
+            >
+              <div className="kpi-hero-label">Sin deal asignado</div>
+              <div className="kpi-hero-amount neutral">{totalSinDeal}</div>
+              <div className="kpi-hero-sub">{soloSinDeal ? "Filtrando" : "Click para filtrar"}</div>
+            </div>
+            <div className="kpi-hero-card">
+              <div className="kpi-hero-label">Saldo neto total</div>
+              <div className={`kpi-hero-amount ${saldoNetoTotal > 0 ? "pos" : saldoNetoTotal < 0 ? "neg" : "neutral"}`}>{usd(saldoNetoTotal)}</div>
+            </div>
+          </div>
+
         <div style={{ display: "flex", gap: 20 }}>
           <div className="panel" style={{ flex: 1 }}>
             <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
@@ -190,7 +243,8 @@ export default function Agentes() {
                           <>ID plataforma: {a.external_id}</>
                         ) : (
                           <span
-                            style={{ cursor: "pointer", textDecoration: "underline dotted" }}
+                            className="badge neutral"
+                            style={{ cursor: "pointer" }}
                             title="Sin ID de plataforma cargado: si el nombre del archivo no matchea exacto, la importación puede no reconocer a este agente o crear uno duplicado. Click para cargarlo."
                             onClick={() => setEditando(a)}
                           >
@@ -216,8 +270,8 @@ export default function Agentes() {
                         </div>
                       ) : (
                         <span
-                          className="muted"
-                          style={{ cursor: "pointer", textDecoration: "underline dotted" }}
+                          className="badge neutral"
+                          style={{ cursor: "pointer" }}
                           onClick={() => open(a)}
                           title="Sin deal propio en ningún club — usa el default de cada club. Click para asignarle uno."
                         >
@@ -334,6 +388,7 @@ export default function Agentes() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {historialAgent && (
