@@ -484,6 +484,20 @@ ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pend
 ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
   CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION'));
 
+-- FIX 05/10/2026 (pedido de Leo, mismo caso: "El caiman me pagó esto [Cobro cargado en
+-- Movimientos], por qué aparece en la liquidación?" + "necesito que se crucen estas cosas...
+-- esto es más que nada para los win/lose [dejar saldo a favor o en contra según la semana]"):
+-- 'VINCULO' liga un movimiento de ledger YA EXISTENTE (cargado directo en Movimientos, por
+-- afuera de Enviar/Cruzar/Compensar) contra un pendiente -- sin crear movimiento nuevo. A
+-- diferencia de COMPENSACION (siempre resta, pensado solo para pendiente negativo), VINCULO
+-- puede sumar o restar según el signo del pendiente en ese momento (ver
+-- vincularMovimientoExistente/recalcularCadenaPendiente en repo/rakebackPendiente.ts) -- sirve
+-- tanto para "ya le pagamos esto por afuera" (pendiente positivo) como para "ya nos pagó esto
+-- por afuera" (pendiente negativo, el caso real de WIN_LOSE que motivó este fix).
+ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
+ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
+  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION','VINCULO'));
+
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),

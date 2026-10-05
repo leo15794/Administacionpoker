@@ -370,7 +370,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
   const pagosModernos = await pool.query(
     `SELECT rpm.id, rpm.type, rpm.amount, rpm.occurred_at, rpm.notes,
             lm.payment_method, lm.observation, te.custodian,
-            a.name as agent_name, c.name as club_name
+            a.name as agent_name, c.name as club_name, rpm.agent_id as agent_id, rp.club_id as club_id
      FROM rakeback_pendiente_movements rpm
      JOIN rakeback_pendiente rp ON rp.id = rpm.pendiente_id
      JOIN agents a ON a.id = rpm.agent_id
@@ -397,7 +397,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
       : await pool.query(
           `SELECT lm.id, lm.type, lm.amount, lm.occurred_at, NULL as notes,
                   lm.payment_method, lm.observation, te.custodian,
-                  a.name as agent_name, c.name as club_name
+                  a.name as agent_name, c.name as club_name, lm.agent_id as agent_id, lm.club_id as club_id
            FROM ledger_movements lm
            JOIN agents a ON a.id = lm.agent_id
            JOIN clubs c ON c.id = lm.club_id
@@ -415,6 +415,8 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     .map((p) => ({
       id: p.id,
       tipo: p.type,
+      agentId: p.agent_id,
+      clubId: p.club_id,
       agentName: p.agent_name,
       clubName: p.club_name,
       amount: Number(p.amount),

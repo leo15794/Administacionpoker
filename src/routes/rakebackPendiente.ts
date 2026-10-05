@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo, vincularMovimientoExistente } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
@@ -80,6 +80,34 @@ rakebackPendienteRouter.post("/compensar-negativo", requireAuth, requireAdmin, a
   try {
     const pendiente = await compensarPendienteNegativo({
       pendienteId: parsed.data.pendienteId,
+      amount: parsed.data.amount,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(pendiente);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const vincularSchema = z.object({
+  pendienteId: z.string(),
+  movementId: z.string(),
+  amount: z.number().positive(),
+  notes: z.string().optional(),
+});
+
+// Liga un movimiento de ledger YA EXISTENTE (Carga/Pago/Cobro cargado directo en Movimientos)
+// contra un rakeback pendiente -- sin crear movimiento nuevo (ver vincularMovimientoExistente
+// en repo/rakebackPendiente.ts). Caso real 05/10/2026: un Cobro cargado por afuera de
+// Liquidaciones que en los hechos ya saldaba una deuda, pero el pendiente no se entera solo.
+rakebackPendienteRouter.post("/vincular-movimiento", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = vincularSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pendiente = await vincularMovimientoExistente({
+      pendienteId: parsed.data.pendienteId,
+      movementId: parsed.data.movementId,
       amount: parsed.data.amount,
       notes: parsed.data.notes,
       createdBy: req.user?.email,

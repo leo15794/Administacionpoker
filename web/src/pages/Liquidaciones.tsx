@@ -212,6 +212,12 @@ export default function Liquidaciones() {
   // adelanto ya dado), esto salda un pendiente NEGATIVO contra el sobrante de otra fila de la
   // MISMA liquidación -- sin generar ningún movimiento de plata nuevo.
   const [compensandoPendiente, setCompensandoPendiente] = useState<string | null>(null);
+  // AGREGADO 05/10/2026 (pedido de Leo, mismo caso: "El caiman me pagó esto [Cobro cargado en
+  // Movimientos], por qué aparece en la liquidación?"): liga un pago/cobro YA CARGADO en
+  // Movimientos (por afuera de Enviar/Cruzar/Compensar) contra el pendiente de esa fila -- sin
+  // mandar plata de nuevo. Key = id del pago (p.id) en vez de pendienteId, porque puede haber
+  // varios pagos genéricos para el mismo pendiente.
+  const [vinculandoPago, setVinculandoPago] = useState<string | null>(null);
   // Enviar/Recibir (21/09/2026): registra el pago/cobro real contra la wallet, reusando el
   // movimiento CARGA... no, PAGO/COBRO que ya existe en Movimientos -- acá elegimos con qué
   // agente+club de la liquidación se cruza (puede ser multi-agente) y el medio de pago, igual
@@ -1336,6 +1342,36 @@ export default function Liquidaciones() {
     }
   }
 
+  // Liga un pago/cobro YA CARGADO en Movimientos (por afuera de Enviar/Cruzar/Compensar) contra
+  // el rakeback pendiente de esa fila -- no manda plata de nuevo, el movimiento ya existe. "f"
+  // es la fila (con rakebackPendienteId/rakebackPendienteDisponible) que coincide en agente+club
+  // con el pago "p" (ver botón "Vincular" en el historial de pagos más abajo).
+  async function vincularPagoAPendiente(p: any, f: any) {
+    const disponible = Number(f.rakebackPendienteDisponible);
+    const monto = Math.min(Number(p.amount), Math.abs(disponible));
+    if (
+      !(await confirmDialog(
+        `¿Vincular este ${p.tipo === "COBRO" ? "cobro" : "pago"} de ${usd(p.amount)} (${p.agentName} — ${p.clubName}) contra el pendiente de ${usd(disponible)}? NO se genera ningún movimiento nuevo -- solo se marca que este pendiente ya quedó resuelto por este movimiento.`
+      ))
+    )
+      return;
+    setVinculandoPago(p.id);
+    try {
+      const r = await api.vincularMovimientoAPendiente({
+        pendienteId: f.rakebackPendienteId,
+        movementId: p.id,
+        amount: monto,
+        notes: `Vinculado al ${p.tipo === "COBRO" ? "cobro" : "pago"} ya cargado del ${dateShort(p.occurredAt)} — ${p.observation || "sin observación"}`,
+      });
+      if (r?.movementRowId) setMovIdsPagosPendienteSesion((prev) => [...prev, r.movementRowId]);
+      refrescarLiquidacion(true);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo vincular este pago.");
+    } finally {
+      setVinculandoPago(null);
+    }
+  }
+
   return (
     <div>
       <h2>Liquidaciones</h2>
@@ -1836,31 +1872,55 @@ export default function Liquidaciones() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.pagos.map((p: any) => (
-                      <tr key={p.id}>
-                        <td className="muted">{dateShort(p.occurredAt)}</td>
-                        <td>{p.agentName}</td>
-                        <td>{p.clubName}</td>
-                        <td>{etiquetaTipoPago(p.tipo)}</td>
-                        <td>
-                          {etiquetaMedioPago(p.medio)}
-                          {p.custodian && <span className="muted"> ({p.custodian})</span>}
-                        </td>
-                        <td className={`num money ${p.tipo === "COBRO" ? "neg" : "pos"}`}>{usd(p.amount)}</td>
-                        <td className="muted" style={{ fontSize: 12 }}>{p.observation || "-"}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn danger small"
-                            disabled={eliminandoPago === p.id}
-                            onClick={() => eliminarPago(p)}
-                            title="Eliminar este pago"
-                          >
-                            {eliminandoPago === p.id ? "..." : "Eliminar"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {data.pagos.map((p: any) => {
+                      // "Vincular" (05/10/2026): solo tiene sentido para un PAGO/COBRO genérico
+                      // (cargado directo en Movimientos, no vía Enviar) -- PAGO_FICHAS/PAGO_USDT
+                      // ya están vinculados desde que se crearon. Busca la fila de esta misma
+                      // liquidación con el mismo agente+club que tenga un pendiente sin resolver.
+                      const filaPendiente =
+                        (p.tipo === "PAGO" || p.tipo === "COBRO") && p.agentId && p.clubId
+                          ? data.filas.find(
+                              (f: any) =>
+                                f.agentId === p.agentId && f.clubId === p.clubId && f.rakebackPendienteId && Math.abs(Number(f.rakebackPendienteDisponible)) > 0.004
+                            )
+                          : null;
+                      return (
+                        <tr key={p.id}>
+                          <td className="muted">{dateShort(p.occurredAt)}</td>
+                          <td>{p.agentName}</td>
+                          <td>{p.clubName}</td>
+                          <td>{etiquetaTipoPago(p.tipo)}</td>
+                          <td>
+                            {etiquetaMedioPago(p.medio)}
+                            {p.custodian && <span className="muted"> ({p.custodian})</span>}
+                          </td>
+                          <td className={`num money ${p.tipo === "COBRO" ? "neg" : "pos"}`}>{usd(p.amount)}</td>
+                          <td className="muted" style={{ fontSize: 12 }}>{p.observation || "-"}</td>
+                          <td style={{ display: "flex", gap: 4 }}>
+                            {filaPendiente && (
+                              <button
+                                type="button"
+                                className="btn secondary small"
+                                disabled={vinculandoPago === p.id}
+                                onClick={() => vincularPagoAPendiente(p, filaPendiente)}
+                                title="Este pago/cobro ya existe -- marcar que resuelve el rakeback pendiente de esa fila, sin mandar plata de nuevo."
+                              >
+                                {vinculandoPago === p.id ? "..." : "Vincular"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn danger small"
+                              disabled={eliminandoPago === p.id}
+                              onClick={() => eliminarPago(p)}
+                              title="Eliminar este pago"
+                            >
+                              {eliminandoPago === p.id ? "..." : "Eliminar"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

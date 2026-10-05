@@ -516,6 +516,12 @@ export const api = {
   // la cubre.
   compensarRakebackPendienteNegativo: (data: { pendienteId: string; amount: number; notes?: string }) =>
     request("/rakeback-pendiente/compensar-negativo", { method: "POST", body: JSON.stringify(data) }),
+  // Liga un movimiento de ledger YA EXISTENTE (cargado directo en Movimientos, por afuera de
+  // Liquidaciones) contra un rakeback pendiente, sin crear movimiento nuevo -- ver
+  // repo/rakebackPendiente.ts. Sirve tanto para un pago (pendiente positivo) como para un cobro
+  // (pendiente negativo, caso WIN_LOSE).
+  vincularMovimientoAPendiente: (data: { pendienteId: string; movementId: string; amount: number; notes?: string }) =>
+    request("/rakeback-pendiente/vincular-movimiento", { method: "POST", body: JSON.stringify(data) }),
   darDeBajaRakebackPendiente: (id: string, notes?: string) =>
     request(`/rakeback-pendiente/${id}/baja`, { method: "POST", body: JSON.stringify({ notes }) }),
   eliminarRakebackPendiente: (id: string) => request(`/rakeback-pendiente/${id}`, { method: "DELETE" }),
