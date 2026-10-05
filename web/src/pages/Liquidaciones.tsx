@@ -205,6 +205,13 @@ export default function Liquidaciones() {
   const [ventasPorFila, setVentasPorFila] = useState<Record<string, number>>({});
   const [ticketsPorFila, setTicketsPorFila] = useState<Record<string, number>>({});
   const [borrandoCarga, setBorrandoCarga] = useState<string | null>(null);
+  // AGREGADO 05/10/2026 (pedido de Leo, caso real "El Caimán" semana 21-27/09: Tiny GG quedó
+  // debiendo -US$185.06 en la misma liquidación en que TeamBack GG generaba +US$604.30 --
+  // "el cierre da positivo para el agente... se compensa con el otro club"): a diferencia de
+  // "Enviar" (que paga un pendiente positivo) o "Cruzar pendientes" (que lo salda contra un
+  // adelanto ya dado), esto salda un pendiente NEGATIVO contra el sobrante de otra fila de la
+  // MISMA liquidación -- sin generar ningún movimiento de plata nuevo.
+  const [compensandoPendiente, setCompensandoPendiente] = useState<string | null>(null);
   // Enviar/Recibir (21/09/2026): registra el pago/cobro real contra la wallet, reusando el
   // movimiento CARGA... no, PAGO/COBRO que ya existe en Movimientos -- acá elegimos con qué
   // agente+club de la liquidación se cruza (puede ser multi-agente) y el medio de pago, igual
@@ -1299,6 +1306,36 @@ export default function Liquidaciones() {
     }
   }
 
+  // Compensa un rakeback pendiente NEGATIVO (el agente quedó debiendo en ESTE club) contra el
+  // sobrante de otra fila de la MISMA liquidación -- no manda ni recibe plata nueva, solo marca
+  // ese pendiente como saldado (así no vuelve a aparecer en "saldo anterior" las semanas
+  // siguientes). Pensado para el caso real de un agente con un club en negativo y otro en
+  // positivo la misma semana -- si no corresponde (todavía no hay con qué cubrirlo), no la uses:
+  // dejalo pendiente hasta que haya un adelanto para cruzar, o un club en positivo que lo cubra.
+  async function compensarPendienteNegativo(f: any) {
+    const monto = Math.abs(Number(f.rakebackPendienteDisponible));
+    if (
+      !(await confirmDialog(
+        `¿Compensar la deuda de ${usd(f.rakebackPendienteDisponible)} de ${f.agentName} (${f.clubName}) contra el resto de esta liquidación? NO se genera ningún pago/cobro nuevo -- se asume que ya se descontó al pagar las demás filas de ${f.agentName} en esta misma liquidación. Si en realidad todavía no hay con qué cubrirla, cancelá esto y dejala pendiente.`
+      ))
+    )
+      return;
+    setCompensandoPendiente(f.rakebackPendienteId);
+    try {
+      const r = await api.compensarRakebackPendienteNegativo({
+        pendienteId: f.rakebackPendienteId,
+        amount: monto,
+        notes: `Compensado contra el resto de la liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
+      });
+      if (r?.movementRowId) setMovIdsPagosPendienteSesion((prev) => [...prev, r.movementRowId]);
+      refrescarLiquidacion(true);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo compensar este pendiente.");
+    } finally {
+      setCompensandoPendiente(null);
+    }
+  }
+
   return (
     <div>
       <h2>Liquidaciones</h2>
@@ -1561,6 +1598,23 @@ export default function Liquidaciones() {
                     <td className="num"><strong>{usd(f.rakebackNeto)}</strong></td>
                     <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo, o cruzando un adelanto de este agente (\"Cruzar pendientes\" más abajo, si tiene)." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
                       {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
+                      {/* Pendiente NEGATIVO (el agente quedó debiendo en este club, 05/10/2026):
+                          "Enviar" no sirve (pagarPendiente exige disponible positivo) -- esto es
+                          para el caso en que otra fila de este mismo agente, en esta misma
+                          liquidación, ya lo cubre (ver compensarPendienteNegativo más arriba). */}
+                      {f.rakebackPendienteId && Number(f.rakebackPendienteDisponible) < -0.004 && (
+                        <div>
+                          <button
+                            type="button"
+                            className="btn secondary small"
+                            disabled={compensandoPendiente === f.rakebackPendienteId}
+                            onClick={() => compensarPendienteNegativo(f)}
+                            title="Saldar esta deuda contra el sobrante de otra fila de este agente en esta misma liquidación -- sin mandar ni recibir plata nueva."
+                          >
+                            {compensandoPendiente === f.rakebackPendienteId ? "Compensando..." : "Compensar"}
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td>
                       <input

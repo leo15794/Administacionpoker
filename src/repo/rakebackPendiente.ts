@@ -184,6 +184,68 @@ export async function saldarPendienteConCruce(input: SaldarPendienteConCruceInpu
   }
 }
 
+export interface CompensarPendienteNegativoInput {
+  pendienteId: string;
+  amount: number;
+  notes?: string;
+  createdBy?: string;
+}
+
+/**
+ * Salda (total o parcialmente) un rakeback pendiente NEGATIVO (el agente quedó debiendo --
+ * ver nota de 05/10/2026 en schema.sql) compensándolo contra el resto de LA MISMA liquidación,
+ * sin generar ningún movimiento de ledger nuevo -- la plata ya se descontó al pagar de menos
+ * otra fila (de otro club) de esa misma liquidación. Ni pagarPendiente ni
+ * saldarPendienteConCruce sirven acá: las dos exigen amount > 0 Y amount <= disponible, y un
+ * disponible negativo hace que cualquier monto positivo "supere" el disponible -- siempre
+ * tiran error. "amount" acá es la magnitud de la deuda que se compensa (positiva, ej. 185.06
+ * para un pendiente de -185.06) -- internamente se RESTA de consumed (al revés que
+ * pagarPendiente/saldarPendienteConCruce, que suman) para que el disponible (amount - consumed)
+ * suba hacia 0 en vez de bajar más.
+ */
+export async function compensarPendienteNegativo(input: CompensarPendienteNegativoInput) {
+  if (!(input.amount > 0)) throw new Error("El monto tiene que ser mayor a 0.");
+
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT * FROM rakeback_pendiente WHERE id = $1 AND active = true FOR UPDATE`,
+      [input.pendienteId]
+    );
+    const actual = existing.rows[0];
+    if (!actual) throw new Error("No se encontró ese rakeback pendiente (o ya está dado de baja).");
+
+    const pendienteDisponible = Number(actual.amount) - Number(actual.consumed);
+    if (pendienteDisponible > -0.005) {
+      throw new Error("Este pendiente no está en negativo -- para pagarlo usá \"Enviar\", no compensación.");
+    }
+    if (input.amount > Math.abs(pendienteDisponible) + 0.005) {
+      throw new Error("La compensación no puede superar la deuda pendiente.");
+    }
+
+    const nuevoConsumed = Number(actual.consumed) - input.amount;
+    const r = await client.query(
+      `UPDATE rakeback_pendiente SET consumed = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+      [nuevoConsumed, actual.id]
+    );
+    const pendiente = r.rows[0];
+    const rpmId = newId("rpm");
+    await client.query(
+      `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, movement_id, notes, created_by)
+       VALUES ($1,$2,$3,'COMPENSACION',$4,$5,$6,$7,$8,$9)`,
+      [rpmId, pendiente.id, pendiente.agent_id, input.amount, pendiente.amount, pendiente.consumed, null, input.notes ?? null, input.createdBy ?? null]
+    );
+    await client.query("COMMIT");
+    return { ...pendiente, movementRowId: rpmId };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // Recalcula la cadena resulting_amount/resulting_consumed de UN pendiente entero, en orden
 // cronológico, después de borrar un movimiento del medio -- en vez de exigir borrar siempre el
 // más reciente primero (29/09/2026, pedido de Leo: "eso tiene que estar libre para todo", mismo
@@ -211,6 +273,11 @@ async function recalcularCadenaPendiente(client: PoolClient, pendienteId: string
       active = true;
     } else if (m.type === "PAGO_FICHAS" || m.type === "PAGO_USDT" || m.type === "CRUCE_ADELANTO") {
       consumed += Number(m.amount);
+    } else if (m.type === "COMPENSACION") {
+      // Sentido opuesto a los de arriba (05/10/2026): COMPENSACION salda un pendiente
+      // NEGATIVO, así que el disponible (amount - consumed) tiene que subir hacia 0 -- consumed
+      // se RESTA, no se suma (ver compensarPendienteNegativo más abajo).
+      consumed -= Number(m.amount);
     } else if (m.type === "BAJA") {
       active = false;
     }
@@ -244,7 +311,7 @@ export async function revertirPagoPendiente(pendienteMovementId: string) {
   const movRes = await pool.query(`SELECT * FROM rakeback_pendiente_movements WHERE id = $1`, [pendienteMovementId]);
   const mov = movRes.rows[0];
   if (!mov) throw new Error("No se encontró ese pago.");
-  if (mov.type !== "PAGO_FICHAS" && mov.type !== "PAGO_USDT" && mov.type !== "CRUCE_ADELANTO") {
+  if (mov.type !== "PAGO_FICHAS" && mov.type !== "PAGO_USDT" && mov.type !== "CRUCE_ADELANTO" && mov.type !== "COMPENSACION") {
     throw new Error("Esto no es un pago (la ALTA no se revierte así).");
   }
   if (mov.movement_id) {

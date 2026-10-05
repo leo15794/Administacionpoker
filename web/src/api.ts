@@ -510,6 +510,12 @@ export const api = {
   // una fila que tiene rakebackPendienteId.
   saldarRakebackPendienteConCruce: (data: { pendienteId: string; amount: number; notes?: string }) =>
     request("/rakeback-pendiente/saldar-cruce", { method: "POST", body: JSON.stringify(data) }),
+  // Salda un rakeback pendiente NEGATIVO compensándolo contra el resto de la misma liquidación
+  // (sin movimiento de plata nuevo -- ver repo/rakebackPendiente.ts). Se usa desde
+  // Liquidaciones.tsx cuando un club de la liquidación quedó debiendo y otro club de la misma
+  // la cubre.
+  compensarRakebackPendienteNegativo: (data: { pendienteId: string; amount: number; notes?: string }) =>
+    request("/rakeback-pendiente/compensar-negativo", { method: "POST", body: JSON.stringify(data) }),
   darDeBajaRakebackPendiente: (id: string, notes?: string) =>
     request(`/rakeback-pendiente/${id}/baja`, { method: "POST", body: JSON.stringify({ notes }) }),
   eliminarRakebackPendiente: (id: string) => request(`/rakeback-pendiente/${id}`, { method: "DELETE" }),

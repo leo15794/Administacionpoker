@@ -468,6 +468,22 @@ ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pend
 ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
   CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO'));
 
+-- FIX 05/10/2026 (pedido de Leo, caso real de "El Caimán" semana 21-27/09: Tiny GG cerró con
+-- rakeback pendiente NEGATIVO de -US$185.06 -- el agente quedó debiendo esa plata -- mientras
+-- que TeamBack GG en la misma liquidación le generaba +US$604.30. Leo: "el cierre da positivo
+-- para el agente... en este caso la deuda se cancela, se compensa con el otro club"): hasta
+-- ahora, pagarPendiente()/saldarPendienteConCruce() exigen amount > 0 Y amount <= disponible --
+-- ninguna de las dos sirve para saldar un pendiente NEGATIVO (cualquier monto positivo supera
+-- un disponible negativo, tira error siempre). Tampoco corresponde "dar de baja" (eso PERDONA
+-- la deuda, no la cobra). 'COMPENSACION' (ver compensarPendienteNegativo en
+-- repo/rakebackPendiente.ts) es el movimiento que falta: salda el pendiente negativo SIN
+-- generar ningún movimiento de ledger nuevo, porque la plata ya se descontó al pagar de menos
+-- otra fila (de otro club) de la MISMA liquidación -- mismo criterio sin-movimiento-nuevo que ya
+-- usa CRUCE_ADELANTO, pero compensando contra el propio cierre en vez de contra un adelanto.
+ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
+ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
+  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION'));
+
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
@@ -52,6 +52,33 @@ rakebackPendienteRouter.post("/saldar-cruce", requireAuth, requireAdmin, async (
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const pendiente = await saldarPendienteConCruce({
+      pendienteId: parsed.data.pendienteId,
+      amount: parsed.data.amount,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(pendiente);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const compensarNegativoSchema = z.object({
+  pendienteId: z.string(),
+  amount: z.number().positive(),
+  notes: z.string().optional(),
+});
+
+// Salda (total o parcial) un rakeback pendiente NEGATIVO compensándolo contra el resto de la
+// misma liquidación -- no genera movimiento de ledger/tesorería nuevo (ver
+// compensarPendienteNegativo en repo/rakebackPendiente.ts). Caso real 05/10/2026: agente con un
+// club en positivo y otro en negativo en la misma semana -- la deuda del club negativo se
+// cancela con el sobrante del club positivo, en vez de pagarla/perdonarla aparte.
+rakebackPendienteRouter.post("/compensar-negativo", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = compensarNegativoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pendiente = await compensarPendienteNegativo({
       pendienteId: parsed.data.pendienteId,
       amount: parsed.data.amount,
       notes: parsed.data.notes,
