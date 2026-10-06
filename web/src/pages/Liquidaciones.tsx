@@ -192,7 +192,7 @@ export default function Liquidaciones() {
   // el último -- si se aplica otro cruce encima, el backend (eliminarMovimientoAdelanto /
   // eliminarMovimientoCarga) igual exige que sea el más reciente de cada adelanto/carga.
   const [ultimoCruceAdelantos, setUltimoCruceAdelantos] = useState<{ movIds: string[]; monto: number; aplicadoDelta: number } | null>(null);
-  const [ultimoCruceCargas, setUltimoCruceCargas] = useState<{ movIds: string[]; monto: number } | null>(null);
+  const [ultimoCruceCargas, setUltimoCruceCargas] = useState<{ movIds: string[]; monto: number; aplicadoDelta: number } | null>(null);
   // ultimoCrucePendiente (29/09/2026, pedido de Leo: "si en liquidación sale el pago en
   // rakeback pendiente tiene que desaparecer"): cuando cruzar un ADELANTO además salda de
   // rakeback pendiente (ver saldarPendientesDeAgente más abajo), estos son los movimientos que
@@ -996,9 +996,29 @@ export default function Liquidaciones() {
           notes: `Liquidación ${nombreGrupo || ""} — cierre ${weekStart}`.trim(),
         });
         const movIds = r?.movementRowId ? [r.movementRowId] : [];
-        setAplicadoCarga((prev) => prev + monto);
-        setUltimoCruceCargas({ movIds, monto });
         setMovIdsCargasSesion((prev) => [...prev, ...movIds]);
+
+        // FIX 06/10/2026 (pedido de Leo, ver nota arriba de esta función): cruzar una carga
+        // también descuenta el rakeback pendiente del agente, igual que cruzar un adelanto.
+        const {
+          movIds: pendienteMovIds,
+          errores: erroresPendiente,
+          restante: restanteSinAbsorber,
+        } = await saldarPendientesDeAgente(
+          modalCruce.item.agentId,
+          monto,
+          `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de carga).`.trim(),
+          construirDisponiblePorFila()
+        );
+        setAplicadoCarga((prev) => prev + restanteSinAbsorber);
+        setUltimoCruceCargas({ movIds, monto, aplicadoDelta: restanteSinAbsorber });
+        if (pendienteMovIds.length > 0) {
+          setUltimoCrucePendiente({ movIds: pendienteMovIds });
+          setMovIdsPagosPendienteSesion((prev) => [...prev, ...pendienteMovIds]);
+        }
+        if (erroresPendiente.length > 0) {
+          await alertDialog(`El cruce se aplicó, pero no se pudo descontar del todo el rakeback pendiente: ${erroresPendiente.join(" · ")}`);
+        }
       }
       setModalCruce(null);
       refrescarLiquidacion(true);
@@ -1062,6 +1082,7 @@ export default function Liquidaciones() {
     let sumaAdelantos = 0;
     let sumaAdelantosSinAbsorber = 0;
     let sumaCargas = 0;
+    let sumaCargasSinAbsorber = 0;
     const errores: string[] = [];
     const movIdsPendiente: string[] = [];
     const disponiblePorFila = construirDisponiblePorFila();
@@ -1101,6 +1122,22 @@ export default function Liquidaciones() {
             });
             if (r?.movementRowId) movIdsCargas.push(r.movementRowId);
             sumaCargas += monto;
+
+            // FIX 06/10/2026 (pedido de Leo): mismo descuento automático del rakeback pendiente
+            // que ya tiene el cruce de adelantos, ver confirmarModalCruce más arriba.
+            const {
+              movIds: pendienteMovIdsCarga,
+              errores: erroresPendienteCarga,
+              restante: restanteSinAbsorberCarga,
+            } = await saldarPendientesDeAgente(
+              item.agentId,
+              monto,
+              `Liquidación ${nombreGrupo || ""} — cierre ${weekStart} (cruce de carga).`.trim(),
+              disponiblePorFila
+            );
+            sumaCargasSinAbsorber += restanteSinAbsorberCarga;
+            movIdsPendiente.push(...pendienteMovIdsCarga);
+            for (const e of erroresPendienteCarga) errores.push(`${item.agentName || "?"} (rakeback pendiente): ${e}`);
           }
         } catch (err: any) {
           errores.push(`${item.agentName || "?"}: ${err.message || "no se pudo aplicar"}`);
@@ -1112,8 +1149,8 @@ export default function Liquidaciones() {
         setMovIdsAdelantosSesion((prev) => [...prev, ...movIdsAdelantos]);
       }
       if (sumaCargas > 0) {
-        setAplicadoCarga((prev) => prev + sumaCargas);
-        setUltimoCruceCargas({ movIds: movIdsCargas, monto: sumaCargas });
+        setAplicadoCarga((prev) => prev + sumaCargasSinAbsorber);
+        setUltimoCruceCargas({ movIds: movIdsCargas, monto: sumaCargas, aplicadoDelta: sumaCargasSinAbsorber });
         setMovIdsCargasSesion((prev) => [...prev, ...movIdsCargas]);
       }
       if (movIdsPendiente.length > 0) {
@@ -1167,7 +1204,7 @@ export default function Liquidaciones() {
         }
       }
       if (ultimoCruceAdelantos) setAplicado((prev) => Math.max(0, prev - ultimoCruceAdelantos.aplicadoDelta));
-      if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.monto));
+      if (ultimoCruceCargas) setAplicadoCarga((prev) => Math.max(0, prev - ultimoCruceCargas.aplicadoDelta));
       if (ultimoCruceAdelantos) {
         const idsDeshechos = new Set(ultimoCruceAdelantos.movIds);
         setMovIdsAdelantosSesion((prev) => prev.filter((id) => !idsDeshechos.has(id)));
@@ -1784,7 +1821,8 @@ export default function Liquidaciones() {
               <h4 style={{ marginTop: 0, marginBottom: 4 }}>Cargas de tesorería pendientes</h4>
               <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                 Fichas/USD que ya se le cargaron a este agente en este club (ver "Cargar Movimiento", tipo CARGA) y todavía
-                no se descontaron de ninguna liquidación.
+                no se descontaron de ninguna liquidación. Al cruzar, si el agente tiene rakeback pendiente en esta misma
+                liquidación, se descuenta automáticamente de ahí también -- no hace falta pagarlo de nuevo con "Enviar".
               </div>
               {data.cargas.length === 0 ? (
                 <div className="muted">Sin cargas de tesorería pendientes para estos agentes/clubes.</div>
