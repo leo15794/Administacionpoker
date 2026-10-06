@@ -2089,3 +2089,14 @@ ALTER TABLE profit_periods ADD COLUMN IF NOT EXISTS ganancia_bancados NUMERIC(18
 ALTER TABLE ledger_movements DROP COLUMN IF EXISTS saldo_pendiente;
 ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS saldo_pendiente_restante NUMERIC(18,4);
 
+-- is_manual (06/10/2026, pedido de Leo: "quiero que agreguemos un boton rakeback pendiente,
+-- para traer rakeback viejos que todavia no pusimos en el sistema, eso tiene que afectar
+-- directamente al cierre del agente" -- ver crearRakebackPendienteManual en
+-- repo/rakebackPendiente.ts): rakeback_pendiente exige un weekly_closing_id real (NOT NULL,
+-- UNIQUE por agente+club+semana) -- para dar de alta una deuda vieja que nunca se cargó, se
+-- crea un cierre "fantasma" con todo en $0 salvo el rakeback que se tipea a mano, para que
+-- entre sin tocar nada más del sistema (Saldo anterior, Liquidaciones, Rakeback pendiente ya
+-- lo leen desde rakeback_pendiente/weekly_closings tal cual). is_manual marca estos cierres
+-- fantasma para que el historial del agente (Estado de cuenta) los distinga de un cierre real.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT FALSE;
+

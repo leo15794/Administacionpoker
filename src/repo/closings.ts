@@ -877,13 +877,21 @@ export async function eliminarCierreSemanalDefinitivo(closingId: string) {
     // que sumó aplicarCierreSemanal, con el signo invertido, aplicado directo (sin generar
     // ningún movimiento de reversa: se está por borrar todo, no tiene sentido dejar un rastro).
     if (!yaRevertido) {
+      // is_manual (06/10/2026): un cierre manual (alta de rakeback pendiente histórico, ver
+      // crearRakebackPendienteManual en repo/rakebackPendiente.ts) NUNCA generó ledger_movements
+      // ni tocó balances -- final_closing ahí guarda el monto del rakeback viejo, no un delta de
+      // stock. Sin este chequeo, el fallback de abajo (pensado para legacy real sin movimiento
+      // encontrado) tomaría ESE monto como si fuera stock a revertir, y movería el balance del
+      // agente por error al borrar un cierre que nunca lo tocó.
       const movAmountRes = movId ? await client.query(`SELECT amount FROM ledger_movements WHERE id = $1`, [movId]) : null;
-      const montoStockOriginal = movAmountRes?.rows[0] ? Number(movAmountRes.rows[0].amount) : Number(wc.final_closing);
-      await client.query(
-        `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
-         ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
-        [newId("bal"), wc.agent_id, wc.club_id, -montoStockOriginal]
-      );
+      const montoStockOriginal = wc.is_manual ? 0 : movAmountRes?.rows[0] ? Number(movAmountRes.rows[0].amount) : Number(wc.final_closing);
+      if (montoStockOriginal !== 0) {
+        await client.query(
+          `INSERT INTO balances (id, agent_id, club_id, amount, updated_at) VALUES ($1,$2,$3,$4, now())
+           ON CONFLICT (agent_id, club_id) DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+          [newId("bal"), wc.agent_id, wc.club_id, -montoStockOriginal]
+        );
+      }
       // Legacy: cierres de antes del rakeback pendiente (22/09/2026) acreditaban el rebate
       // desviado directo al balance del supervisor -- si este cierre es de esa época, deshacerlo
       // también. En formato nuevo (supervisor_movement_id null) el rebate quedó como rakeback

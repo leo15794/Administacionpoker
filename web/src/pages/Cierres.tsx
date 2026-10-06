@@ -331,6 +331,11 @@ export default function Cierres() {
                                   cuando no hay nada que mostrar (antes eran dos columnas separadas que
                                   mostraban "—" en casi todas las filas, puro ruido visual). */}
                               {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+                              {c.is_manual && (
+                                <span className="badge neutral" style={{ marginRight: 6 }} title="Carga manual de rakeback pendiente histórico -- no es un cierre real, no mueve stock ni ledger (ver Rakeback pendiente).">
+                                  Manual
+                                </span>
+                              )}
                               {c.rule_applied && <span className="badge neutral">{c.rule_applied}</span>}
                               {c.rodeo != null && Number(c.rodeo) !== 0 && (
                                 <span className="muted" style={{ marginLeft: c.rule_applied ? 6 : 0 }}>

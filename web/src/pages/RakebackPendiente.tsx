@@ -33,6 +33,22 @@ export default function RakebackPendiente() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
 
+  // Alta manual de rakeback viejo (06/10/2026, pedido de Leo: "traer rakeback viejos que
+  // todavia no pusimos en el sistema, eso tiene que afectar directamente al cierre del
+  // agente") -- agentes/clubes para los selects del formulario, ver crearRakebackPendienteManual
+  // en repo/rakebackPendiente.ts.
+  const [agentes, setAgentes] = useState<any[]>([]);
+  const [clubes, setClubes] = useState<any[]>([]);
+  const [manualAbierto, setManualAbierto] = useState(false);
+  const [manualAgentId, setManualAgentId] = useState("");
+  const [manualClubId, setManualClubId] = useState("");
+  const [manualWeekStart, setManualWeekStart] = useState("");
+  const [manualWeekEnd, setManualWeekEnd] = useState("");
+  const [manualMonto, setManualMonto] = useState("");
+  const [manualNota, setManualNota] = useState("");
+  const [manualGuardando, setManualGuardando] = useState(false);
+  const [manualMsg, setManualMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   function refresh() {
     setError("");
     api.rakebackPendiente().then(setRows).catch((e) => setError(e.message));
@@ -40,7 +56,55 @@ export default function RakebackPendiente() {
 
   useEffect(() => {
     refresh();
+    api.agentes().then(setAgentes).catch(() => {});
+    api.clubes().then(setClubes).catch(() => {});
   }, []);
+
+  // Mismo criterio de semana (lunes a domingo) que ya usa "Nuevo cierre" en Cierres.tsx -- al
+  // elegir "desde" se autocompleta "hasta" si todavía está vacío, pero queda editable.
+  function mondayOf(dateStr: string) {
+    const d = new Date(dateStr);
+    const day = d.getDay();
+    const diff = (day === 0 ? -6 : 1) - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  function abrirManual() {
+    setManualAbierto(true);
+    setManualMsg(null);
+    setManualAgentId("");
+    setManualClubId("");
+    setManualWeekStart("");
+    setManualWeekEnd("");
+    setManualMonto("");
+    setManualNota("");
+  }
+
+  async function crearManual() {
+    if (!manualAgentId || !manualClubId) return setManualMsg({ ok: false, text: "Elegí agente y club." });
+    if (!manualWeekStart || !manualWeekEnd) return setManualMsg({ ok: false, text: "Completá la semana (desde/hasta)." });
+    const m = Number(manualMonto);
+    if (!m || Math.abs(m) <= 0.004) return setManualMsg({ ok: false, text: "El monto tiene que ser distinto de 0." });
+    setManualGuardando(true);
+    setManualMsg(null);
+    try {
+      await api.crearRakebackPendienteManual({
+        agentId: manualAgentId,
+        clubId: manualClubId,
+        weekStart: manualWeekStart,
+        weekEnd: manualWeekEnd,
+        amount: m,
+        notes: manualNota.trim() || undefined,
+      });
+      setManualAbierto(false);
+      refresh();
+    } catch (err: any) {
+      setManualMsg({ ok: false, text: err.message || "No se pudo cargar el rakeback pendiente." });
+    } finally {
+      setManualGuardando(false);
+    }
+  }
 
   function abrir(p: any) {
     setAbierto(p.id);
@@ -219,7 +283,81 @@ export default function RakebackPendiente() {
             hasta que se paga en fichas (mueve el stock) o en USDT/efectivo/Zelle (pago financiero, no toca el stock).
           </div>
         </div>
+        <button className="btn secondary" onClick={() => (manualAbierto ? setManualAbierto(false) : abrirManual())}>
+          {manualAbierto ? "Cancelar" : "+ Cargar rakeback viejo"}
+        </button>
       </div>
+
+      {/* Alta manual de rakeback viejo (06/10/2026, pedido de Leo) -- crea un cierre "fantasma"
+          que ancla el pendiente al sistema (ver crearRakebackPendienteManual en
+          repo/rakebackPendiente.ts); afecta Saldo anterior/Liquidaciones igual que uno real. */}
+      {manualAbierto && (
+        <div className="panel" style={{ marginTop: 14, maxWidth: 560 }}>
+          <h3 style={{ marginTop: 0 }}>Cargar rakeback pendiente viejo</h3>
+          <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
+            Para un rakeback de una semana vieja que nunca se cargó en el sistema. Queda igual que un cierre real a
+            todos los efectos (Saldo anterior, Liquidaciones) -- no mueve fichas ni genera ningún movimiento de
+            tesorería, solo la deuda de rakeback en sí.
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Agente</label>
+              <select value={manualAgentId} onChange={(e) => setManualAgentId(e.target.value)}>
+                <option value="">Elegir...</option>
+                {agentes.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Club</label>
+              <select value={manualClubId} onChange={(e) => setManualClubId(e.target.value)}>
+                <option value="">Elegir...</option>
+                {clubes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Semana desde</label>
+              <input
+                type="date"
+                value={manualWeekStart}
+                onChange={(e) => {
+                  setManualWeekStart(e.target.value);
+                  if (e.target.value && !manualWeekEnd) {
+                    const monday = mondayOf(e.target.value);
+                    const sunday = new Date(monday);
+                    sunday.setDate(sunday.getDate() + 6);
+                    setManualWeekEnd(sunday.toISOString().slice(0, 10));
+                  }
+                }}
+              />
+            </div>
+            <div className="field">
+              <label>Semana hasta</label>
+              <input type="date" value={manualWeekEnd} onChange={(e) => setManualWeekEnd(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Monto (USD)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Ej: 903.42 (o -903.42 si el agente queda debiendo)"
+                value={manualMonto}
+                onChange={(e) => setManualMonto(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Observación (opcional)</label>
+              <input value={manualNota} onChange={(e) => setManualNota(e.target.value)} placeholder="De dónde sale este rakeback viejo" />
+            </div>
+          </div>
+          {manualMsg && <div className={manualMsg.ok ? "success" : "error"}>{manualMsg.text}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn" disabled={manualGuardando} onClick={crearManual}>
+              {manualGuardando ? "Cargando..." : "Cargar"}
+            </button>
+            <button className="btn secondary" onClick={() => setManualAbierto(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
 

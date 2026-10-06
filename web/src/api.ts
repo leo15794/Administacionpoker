@@ -505,6 +505,12 @@ export const api = {
   rakebackPendiente: () => request("/rakeback-pendiente"),
   pagarRakebackPendiente: (data: { pendienteId: string; amount: number; medio: "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE"; custodian?: string; notes?: string }) =>
     request("/rakeback-pendiente/pagar", { method: "POST", body: JSON.stringify(data) }),
+  // Alta manual de un rakeback pendiente viejo que nunca se cargó en el sistema (06/10/2026,
+  // pedido de Leo) -- crea un cierre "fantasma" (is_manual=true) como ancla, ver
+  // crearRakebackPendienteManual en repo/rakebackPendiente.ts. Afecta el cierre del agente
+  // exactamente igual que uno real (Saldo anterior, Liquidaciones, esta misma pantalla).
+  crearRakebackPendienteManual: (data: { agentId: string; clubId: string; weekStart: string; weekEnd: string; amount: number; notes?: string }) =>
+    request("/rakeback-pendiente/manual", { method: "POST", body: JSON.stringify(data) }),
   // Salda un rakeback pendiente cruzándolo contra un adelanto (sin movimiento de plata nuevo --
   // ver repo/rakebackPendiente.ts). Se usa desde Liquidaciones.tsx al cruzar un adelanto contra
   // una fila que tiene rakebackPendienteId.

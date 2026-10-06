@@ -21,6 +21,117 @@ export async function listRakebackPendiente() {
   return r.rows;
 }
 
+export interface CrearRakebackPendienteManualInput {
+  agentId: string;
+  clubId: string;
+  weekStart: string;
+  weekEnd: string;
+  amount: number;
+  notes?: string;
+  createdBy?: string;
+}
+
+/**
+ * Alta MANUAL de un rakeback pendiente viejo que nunca se cargó en el sistema (06/10/2026,
+ * pedido de Leo: "quiero que agreguemos un boton rakeback pendiente, para traer rakeback viejos
+ * que todavia no pusimos en el sistema, eso tiene que afectar directamente al cierre del
+ * agente"). rakeback_pendiente exige un weekly_closing_id real (NOT NULL, UNIQUE por
+ * agente+club+semana, ver schema.sql) -- en vez de abrir un caso especial en cada lugar que ya
+ * lee rakeback_pendiente/weekly_closings (Saldo anterior en agentesResumen.ts, Liquidaciones,
+ * esta misma pantalla), se crea un cierre "fantasma" (is_manual = true, todo en $0 salvo el
+ * rakeback que se tipea a mano) que sirve de ancla -- así este pendiente entra sin tocar NADA
+ * más del sistema, exactamente como si fuera un cierre real ya aplicado.
+ *
+ * No toca balances ni ledger_movements (a diferencia de un cierre real vía repo/closings.ts):
+ * no hubo ningún movimiento de fichas/plata esa semana vieja, solo queda la deuda de rakeback
+ * en sí. system sale del agente (default_system) -- no se le pide a quien carga, un agente no
+ * debería tener nunca los dos sistemas a la vez.
+ */
+export async function crearRakebackPendienteManual(input: CrearRakebackPendienteManualInput) {
+  if (!(Math.abs(input.amount) > 0.004)) throw new Error("El monto tiene que ser distinto de 0.");
+  if (!input.weekStart || !input.weekEnd) throw new Error("Faltan las fechas de la semana.");
+  if (input.weekStart > input.weekEnd) throw new Error("La fecha \"desde\" no puede ser posterior a \"hasta\".");
+
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const agentRes = await client.query(`SELECT id, name, default_system FROM agents WHERE id = $1`, [input.agentId]);
+    const agent = agentRes.rows[0];
+    if (!agent) throw new Error("No se encontró ese agente.");
+    const clubRes = await client.query(`SELECT id, name FROM clubs WHERE id = $1`, [input.clubId]);
+    const club = clubRes.rows[0];
+    if (!club) throw new Error("No se encontró ese club.");
+
+    const existing = await client.query(
+      `SELECT id FROM weekly_closings WHERE agent_id = $1 AND club_id = $2 AND week_start = $3`,
+      [input.agentId, input.clubId, input.weekStart]
+    );
+    if (existing.rows.length > 0) {
+      throw new Error(
+        `Ya existe un cierre para ${agent.name} en ${club.name} para la semana del ${input.weekStart} -- ` +
+          `si el rakeback viejo corresponde a esa semana, hay que corregir ESE cierre en vez de cargar uno manual nuevo.`
+      );
+    }
+
+    const weeklyClosingId = newId("wc");
+    await client.query(
+      `INSERT INTO weekly_closings
+        (id, agent_id, club_id, week_start, week_end, system, result, rake_total, rakeback_pct,
+         rakeback, rebate_pct, rebate, adjusted_result, final_closing, rate_snapshot, status,
+         observation, is_manual)
+       VALUES ($1,$2,$3,$4,$5,$6,0,0,0,$7,0,0,0,$7,1,'APLICADO',$8,true)`,
+      [
+        weeklyClosingId,
+        input.agentId,
+        input.clubId,
+        input.weekStart,
+        input.weekEnd,
+        agent.default_system,
+        input.amount,
+        `Carga manual de rakeback pendiente histórico (06/10/2026).` + (input.notes ? ` ${input.notes}` : ""),
+      ]
+    );
+
+    const pendienteId = newId("rp");
+    await client.query(
+      `INSERT INTO rakeback_pendiente (id, weekly_closing_id, role, agent_id, club_id, amount, consumed, active)
+       VALUES ($1,$2,'AGENTE',$3,$4,$5,0,true)`,
+      [pendienteId, weeklyClosingId, input.agentId, input.clubId, input.amount]
+    );
+    await client.query(
+      `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, notes, created_by)
+       VALUES ($1,$2,$3,'ALTA',$4,$4,0,$5,$6)`,
+      [
+        newId("rpm"),
+        pendienteId,
+        input.agentId,
+        input.amount,
+        `Carga manual de rakeback pendiente histórico, semana ${input.weekStart} al ${input.weekEnd}.` +
+          (input.notes ? ` ${input.notes}` : ""),
+        input.createdBy ?? null,
+      ]
+    );
+
+    await client.query("COMMIT");
+    const r = await client.query(
+      `SELECT rp.*, a.name as agent_name, c.name as club_name, wc.week_start, wc.week_end
+       FROM rakeback_pendiente rp
+       JOIN agents a ON a.id = rp.agent_id
+       JOIN clubs c ON c.id = rp.club_id
+       JOIN weekly_closings wc ON wc.id = rp.weekly_closing_id
+       WHERE rp.id = $1`,
+      [pendienteId]
+    );
+    return r.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export interface PagarPendienteInput {
   pendienteId: string;
   amount: number;

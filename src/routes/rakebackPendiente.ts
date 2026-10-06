@@ -1,13 +1,45 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo, vincularMovimientoExistente } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo, vincularMovimientoExistente, crearRakebackPendienteManual } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
 // Listado de rakeback pendiente activo (por agente+club+cierre) -- ver repo/rakebackPendiente.ts.
 rakebackPendienteRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
   res.json(await listRakebackPendiente());
+});
+
+const crearManualSchema = z.object({
+  agentId: z.string(),
+  clubId: z.string(),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  amount: z.number().refine((n) => Math.abs(n) > 0.004, "El monto tiene que ser distinto de 0."),
+  notes: z.string().optional(),
+});
+
+// Alta manual de un rakeback pendiente viejo que nunca se cargó en el sistema (06/10/2026,
+// pedido de Leo) -- crea un cierre semanal "fantasma" (is_manual=true) como ancla, igual que un
+// cierre real para todo lo demás que ya lee rakeback_pendiente (ver crearRakebackPendienteManual
+// en repo/rakebackPendiente.ts).
+rakebackPendienteRouter.post("/manual", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = crearManualSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pendiente = await crearRakebackPendienteManual({
+      agentId: parsed.data.agentId,
+      clubId: parsed.data.clubId,
+      weekStart: parsed.data.weekStart,
+      weekEnd: parsed.data.weekEnd,
+      amount: parsed.data.amount,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(201).json(pendiente);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const pagarSchema = z.object({

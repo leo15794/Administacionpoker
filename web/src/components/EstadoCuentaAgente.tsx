@@ -258,7 +258,14 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
                     <tbody>
                       {semana.filas.map((c: any) => (
                         <tr key={c.id}>
-                          <td>{c.club_name}</td>
+                          <td>
+                            {c.club_name}
+                            {c.is_manual && (
+                              <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Carga manual de rakeback pendiente histórico -- no es un cierre real, no mueve stock ni ledger.">
+                                Manual
+                              </span>
+                            )}
+                          </td>
                           <td>{usd(c.result)}</td>
                           <td>{usd(c.rake_total)}</td>
                           <td className="muted">{pct(c.rakeback_pct)}</td>
