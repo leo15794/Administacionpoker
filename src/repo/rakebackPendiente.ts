@@ -15,7 +15,7 @@ export async function listRakebackPendiente() {
      JOIN agents a ON a.id = rp.agent_id
      JOIN clubs c ON c.id = rp.club_id
      JOIN weekly_closings wc ON wc.id = rp.weekly_closing_id
-     WHERE rp.active = true AND rp.amount > rp.consumed
+     WHERE rp.active = true AND rp.amount <> rp.consumed
      ORDER BY wc.week_end DESC, a.name`
   );
   return r.rows;
