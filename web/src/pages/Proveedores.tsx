@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 
@@ -1394,10 +1395,7 @@ async function generarLiquidacionPdf(input: {
   garantiaVigente: number;
   nota: string;
 }) {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
+  const { jsPDF, autoTable } = await cargarLibreriasPdf();
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;

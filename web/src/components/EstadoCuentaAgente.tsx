@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import MovimientosHistorial from "./MovimientosHistorial";
 import { useConfirmDialog } from "./ConfirmProvider";
@@ -41,10 +42,7 @@ function agruparPorSemana(cierres: any[]) {
 // página, se importa acá adentro, dinámico, recién cuando alguien aprieta "Descargar PDF" —
 // al resto de la app no le cuesta nada.
 async function generarPdf(agente: any, saldos: any[], cierres: any[], totalNeto: number, garantia: any) {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
+  const { jsPDF, autoTable } = await cargarLibreriasPdf();
   const doc = new jsPDF();
   const hoy = new Date().toLocaleDateString("es-AR");
   const margen = 14;

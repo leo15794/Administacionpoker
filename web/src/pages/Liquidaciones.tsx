@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Modal from "../components/Modal";
@@ -76,10 +77,7 @@ interface PdfInput {
 // los pendientes), el PDF terminaba mostrando "Adelantos a descontar: 0" a pesar de que el
 // cruce sí se había consumido de verdad (BIT: pasaba justo con el adelanto de rake de Prodigio).
 async function generarPdf(input: PdfInput) {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
+  const { jsPDF, autoTable } = await cargarLibreriasPdf();
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;

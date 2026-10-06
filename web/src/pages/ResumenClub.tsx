@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { ClubPicker } from "../components/ClubPicker";
@@ -18,10 +19,7 @@ import { ClubPicker } from "../components/ClubPicker";
 // (si es Tiny) el panel de conciliacion Settlement/Rake share, para poder comparar a mano
 // contra el cierre que nos manda el club/plataforma y encontrar diferencias.
 async function generarPdfResumenClub(resumen: any, tinyExtra: any | null) {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
+  const { jsPDF, autoTable } = await cargarLibreriasPdf();
   const doc = new jsPDF();
   const margen = 14;
   let y = 18;
