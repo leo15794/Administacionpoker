@@ -505,6 +505,10 @@ export const api = {
   rakebackPendiente: () => request("/rakeback-pendiente"),
   pagarRakebackPendiente: (data: { pendienteId: string; amount: number; medio: "FICHAS" | "USDT" | "EFECTIVO" | "ZELLE"; custodian?: string; notes?: string }) =>
     request("/rakeback-pendiente/pagar", { method: "POST", body: JSON.stringify(data) }),
+  // Cobra (total o parcial) un rakeback pendiente NEGATIVO -- contraparte de pagarRakebackPendiente,
+  // para cuando el agente nos manda plata (06/10/2026, ver repo/rakebackPendiente.ts).
+  cobrarRakebackPendienteNegativo: (data: { pendienteId: string; amount: number; medio: "USDT" | "EFECTIVO" | "ZELLE"; custodian?: string; notes?: string }) =>
+    request("/rakeback-pendiente/cobrar-negativo", { method: "POST", body: JSON.stringify(data) }),
   // Alta manual de un rakeback pendiente viejo que nunca se cargó en el sistema (06/10/2026,
   // pedido de Leo) -- crea un cierre "fantasma" (is_manual=true) como ancla, ver
   // crearRakebackPendienteManual en repo/rakebackPendiente.ts. Afecta el cierre del agente

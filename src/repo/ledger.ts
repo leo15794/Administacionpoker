@@ -99,7 +99,10 @@ export async function registrarMovimiento(input: NewMovement) {
       if (paymentMethod === "EFECTIVO" && !input.custodian) {
         throw new Error("Un movimiento en EFECTIVO requiere custodio físico (regla BIT-051/052).");
       }
-      const direction = ["COBRO", "CARGA"].includes(input.type) ? "INGRESO" : "EGRESO";
+      // COBRO_RAKEBACK (06/10/2026, pedido de Leo -- rakeback pendiente NEGATIVO, "al ser
+      // negativo, nosotros recibimos el dinero"): contraparte de PAGO_RAKEBACK, el agente nos
+      // manda plata para saldar la deuda -- misma direccion INGRESO que un COBRO/CARGA normal.
+      const direction = ["COBRO", "CARGA", "COBRO_RAKEBACK"].includes(input.type) ? "INGRESO" : "EGRESO";
       await client.query(
         `INSERT INTO treasury_entries (id, movement_id, ledger, direction, amount, custodian, occurred_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -171,6 +174,12 @@ function deltaParaBalance(type: string, amount: number, esDestinoDeTransferencia
       // stock/balance del agente (eso es lo que registra rakeback_pendiente aparte). A
       // propósito NO es lo mismo que "PAGO", que siempre resta del balance -- ver
       // repo/rakebackPendiente.ts.
+      return 0;
+    case "COBRO_RAKEBACK":
+      // Contraparte de PAGO_RAKEBACK (06/10/2026, pedido de Leo): cobro financiero real
+      // (USDT/efectivo/Zelle) de un rakeback pendiente NEGATIVO -- el agente nos manda plata,
+      // pero tampoco toca el stock/balance (eso lo sigue trackeando rakeback_pendiente aparte,
+      // ver cobrarPendienteNegativo en repo/rakebackPendiente.ts).
       return 0;
     case "ADELANTO_RAKEBACK":
       // Adelanto de rakeback dado en USDT (repo/advances.ts): sale de la wallet (entrada de
@@ -727,6 +736,7 @@ const SALDO_HISTORICO_DELTA_SQL = `
     WHEN 'AJUSTE' THEN m.amount
     WHEN 'CIERRE_SEMANAL' THEN m.amount
     WHEN 'PAGO_RAKEBACK' THEN 0
+    WHEN 'COBRO_RAKEBACK' THEN 0
     WHEN 'ADELANTO_RAKEBACK' THEN 0
     WHEN 'ADELANTO_FICHAS' THEN -ABS(m.amount)
     WHEN 'TRANSFERENCIA_ENTRE_CLUBES' THEN

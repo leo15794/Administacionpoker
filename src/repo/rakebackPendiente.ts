@@ -250,6 +250,79 @@ export interface SaldarPendienteConCruceInput {
  * El movimiento queda tipo "CRUCE_ADELANTO" (ver recalcularCadenaPendiente y
  * revertirPagoPendiente más abajo, que ya lo contemplan igual que PAGO_FICHAS/PAGO_USDT).
  */
+export interface CobrarPendienteNegativoInput {
+  pendienteId: string;
+  amount: number;
+  medio: "USDT" | "EFECTIVO" | "ZELLE";
+  custodian?: string;
+  notes?: string;
+  createdBy?: string;
+}
+
+/**
+ * Cobra (total o parcialmente) un rakeback pendiente NEGATIVO -- contraparte de pagarPendiente
+ * (06/10/2026, reporte real de Leo: pendiente de Mar Bruno/Fénix Suprema en -US$121,96 y
+ * -US$490,29, intentó pagar con "Pagar" y rechazaba "el importe tiene que ser mayor a 0" --
+ * Leo aclaró "en este caso al ser negativo, nosotros recibimos el dinero"). pagarPendiente
+ * sirve para cuando LE debemos al agente (disponible positivo); esto es para cuando el agente
+ * NOS debe (disponible negativo) y nos manda USDT/efectivo/Zelle para saldarlo.
+ *
+ * Solo USDT/EFECTIVO/ZELLE -- a propósito NO incluye FICHAS: "cobrar en fichas" significaría
+ * sacarle stock físico al agente (lo opuesto de pagarPendiente con FICHAS, que se lo suma), un
+ * movimiento de naturaleza distinta (más parecido a una DESCARGA) que no se pidió acá y merece
+ * su propia decisión explícita si hace falta más adelante.
+ *
+ * Genera un movimiento COBRO_RAKEBACK real (SÍ entra a tesorería como INGRESO, nunca toca el
+ * stock/balance del agente -- ver deltaParaBalance en repo/ledger.ts) y resta `consumed` (en vez
+ * de sumarlo, como pagarPendiente) para que el disponible (amount - consumed) suba hacia 0 --
+ * mismo sentido que compensarPendienteNegativo, pero con plata real de por medio.
+ */
+export async function cobrarPendienteNegativo(input: CobrarPendienteNegativoInput) {
+  if (!(input.amount > 0)) throw new Error("El monto tiene que ser mayor a 0.");
+
+  const existing = await pool.query(`SELECT * FROM rakeback_pendiente WHERE id = $1 AND active = true`, [input.pendienteId]);
+  const actual = existing.rows[0];
+  if (!actual) throw new Error("No se encontró ese rakeback pendiente (o ya está dado de baja).");
+
+  const pendienteDisponible = Number(actual.amount) - Number(actual.consumed);
+  if (pendienteDisponible > -0.005) {
+    throw new Error("Este pendiente no está en negativo -- para pagarlo usá \"Pagar\", no \"Cobrar\".");
+  }
+  if (input.amount > Math.abs(pendienteDisponible) + 0.005) {
+    throw new Error("El cobro no puede superar la deuda pendiente.");
+  }
+  if (input.medio === "EFECTIVO" && !input.custodian) {
+    throw new Error("Un cobro en efectivo requiere custodio físico (regla BIT-051/052).");
+  }
+
+  const reg = await registrarMovimiento({
+    idempotencyKey: `cobro_rakeback:${input.pendienteId}:${newId("x")}`,
+    type: "COBRO_RAKEBACK",
+    clubId: actual.club_id,
+    agentId: actual.agent_id,
+    amount: input.amount,
+    paymentMethod: input.medio,
+    custodian: input.medio === "EFECTIVO" ? input.custodian : undefined,
+    occurredAt: new Date(),
+    observation: input.notes || `Cobro de rakeback pendiente negativo en ${input.medio}.`,
+    createdBy: input.createdBy ?? null,
+  });
+
+  const nuevoConsumed = Number(actual.consumed) - input.amount;
+  const r = await pool.query(
+    `UPDATE rakeback_pendiente SET consumed = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+    [nuevoConsumed, actual.id]
+  );
+  const pendiente = r.rows[0];
+  const rpmId = newId("rpm");
+  await pool.query(
+    `INSERT INTO rakeback_pendiente_movements (id, pendiente_id, agent_id, type, amount, resulting_amount, resulting_consumed, movement_id, notes, created_by)
+     VALUES ($1,$2,$3,'COBRO',$4,$5,$6,$7,$8,$9)`,
+    [rpmId, pendiente.id, pendiente.agent_id, input.amount, pendiente.amount, pendiente.consumed, reg.id, input.notes ?? null, input.createdBy ?? null]
+  );
+  return { ...pendiente, movementRowId: rpmId };
+}
+
 export async function saldarPendienteConCruce(input: SaldarPendienteConCruceInput) {
   if (!(input.amount > 0)) throw new Error("El monto tiene que ser mayor a 0.");
 
@@ -462,10 +535,12 @@ async function recalcularCadenaPendiente(client: PoolClient, pendienteId: string
       active = true;
     } else if (m.type === "PAGO_FICHAS" || m.type === "PAGO_USDT" || m.type === "CRUCE_ADELANTO") {
       consumed += Number(m.amount);
-    } else if (m.type === "COMPENSACION") {
-      // Sentido opuesto a los de arriba (05/10/2026): COMPENSACION salda un pendiente
-      // NEGATIVO, así que el disponible (amount - consumed) tiene que subir hacia 0 -- consumed
-      // se RESTA, no se suma (ver compensarPendienteNegativo más abajo).
+    } else if (m.type === "COMPENSACION" || m.type === "COBRO") {
+      // Sentido opuesto a los de arriba (05/10/2026, extendido 06/10/2026 con COBRO): tanto
+      // COMPENSACION como COBRO saldan un pendiente NEGATIVO, así que el disponible
+      // (amount - consumed) tiene que subir hacia 0 -- consumed se RESTA, no se suma. Difieren
+      // en si generaron plata real: COMPENSACION no (ver compensarPendienteNegativo), COBRO sí
+      // (ver cobrarPendienteNegativo, movement_id siempre presente).
       consumed -= Number(m.amount);
     } else if (m.type === "VINCULO") {
       // Dirección dinámica (05/10/2026, ver vincularMovimientoExistente más abajo): VINCULO
@@ -516,7 +591,8 @@ export async function revertirPagoPendiente(pendienteMovementId: string) {
     mov.type !== "PAGO_USDT" &&
     mov.type !== "CRUCE_ADELANTO" &&
     mov.type !== "COMPENSACION" &&
-    mov.type !== "VINCULO"
+    mov.type !== "VINCULO" &&
+    mov.type !== "COBRO"
   ) {
     throw new Error("Esto no es un pago (la ALTA no se revierte así).");
   }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo, vincularMovimientoExistente, crearRakebackPendienteManual } from "../repo/rakebackPendiente.js";
+import { listRakebackPendiente, pagarPendiente, darDeBajaPendiente, eliminarPendiente, revertirPagoPendiente, saldarPendienteConCruce, compensarPendienteNegativo, vincularMovimientoExistente, crearRakebackPendienteManual, cobrarPendienteNegativo } from "../repo/rakebackPendiente.js";
 
 export const rakebackPendienteRouter = Router();
 
@@ -57,6 +57,36 @@ rakebackPendienteRouter.post("/pagar", requireAuth, requireAdmin, async (req: Au
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const pendiente = await pagarPendiente({
+      pendienteId: parsed.data.pendienteId,
+      amount: parsed.data.amount,
+      medio: parsed.data.medio,
+      custodian: parsed.data.custodian,
+      notes: parsed.data.notes,
+      createdBy: req.user?.email,
+    });
+    res.status(200).json(pendiente);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const cobrarNegativoSchema = z.object({
+  pendienteId: z.string(),
+  amount: z.number().positive(),
+  medio: z.enum(["USDT", "EFECTIVO", "ZELLE"]),
+  custodian: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Cobra (total o parcial) un rakeback pendiente NEGATIVO -- contraparte de /pagar, para cuando
+// el agente nos manda USDT/efectivo/Zelle para saldar una deuda (06/10/2026, reporte real de
+// Leo: "Pagar" rechazaba un pendiente negativo porque exige importe > 0; "al ser negativo,
+// nosotros recibimos el dinero" -- ver cobrarPendienteNegativo en repo/rakebackPendiente.ts).
+rakebackPendienteRouter.post("/cobrar-negativo", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = cobrarNegativoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pendiente = await cobrarPendienteNegativo({
       pendienteId: parsed.data.pendienteId,
       amount: parsed.data.amount,
       medio: parsed.data.medio,

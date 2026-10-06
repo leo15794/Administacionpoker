@@ -498,6 +498,15 @@ ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pend
 ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
   CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION','VINCULO'));
 
+-- COBRO (06/10/2026, pedido de Leo, ver comentario de COBRO_RAKEBACK más arriba en
+-- ledger_movements): registra el cobro REAL (con movimiento de ledger nuevo, a diferencia de
+-- COMPENSACION que nunca genera uno) de un pendiente negativo -- mismo sentido que COMPENSACION
+-- en recalcularCadenaPendiente (consumed se RESTA, el disponible sube hacia 0), pero con
+-- movement_id apuntando al COBRO_RAKEBACK real que sí movió la wallet/caja.
+ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
+ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
+  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION','VINCULO','COBRO'));
+
 CREATE TABLE IF NOT EXISTS rakeback_advance_movements (
   id                  TEXT PRIMARY KEY,
   agent_id            TEXT NOT NULL REFERENCES agents(id),
@@ -1627,6 +1636,18 @@ ALTER TABLE tb_users DROP COLUMN IF EXISTS email;
 ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
 ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
   CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK','ADELANTO_FICHAS'));
+
+-- COBRO_RAKEBACK (06/10/2026, pedido de Leo: reporte real con un rakeback pendiente NEGATIVO
+-- de Mar Bruno/Fénix Suprema -- "Pagar" rechazaba el monto porque exige > 0, y Leo aclaró "al
+-- ser negativo, nosotros recibimos el dinero", no al revés): contraparte de PAGO_RAKEBACK, para
+-- cuando el agente nos manda USDT/efectivo/Zelle para saldar un pendiente negativo -- genera su
+-- entrada de tesorería real (INGRESO, ver registrarMovimiento) pero, igual que PAGO_RAKEBACK,
+-- NUNCA toca el stock/balance del agente (ver deltaParaBalance en repo/ledger.ts) -- eso lo
+-- sigue trackeando rakeback_pendiente aparte (ver cobrarPendienteNegativo en
+-- repo/rakebackPendiente.ts).
+ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
+ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
+  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK','ADELANTO_FICHAS','COBRO_RAKEBACK'));
 
 -- kind (29/09/2026, pedido de Leo): distingue un adelanto de rakeback (medio FICHAS/USDT/NULL,
 -- se compensa contra un cierre real, "Consumo" es puramente contable) de un adelanto de fichas

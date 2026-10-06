@@ -25,6 +25,7 @@ export default function RakebackPendiente() {
   const [colapsados, setColapsados] = useState<Set<string>>(new Set());
 
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [accion, setAccion] = useState<"pagar" | "cobrar">("pagar");
   const [monto, setMonto] = useState("");
   const [medio, setMedio] = useState<"FICHAS" | "USDT" | "EFECTIVO" | "ZELLE">("FICHAS");
   const [custodio, setCustodio] = useState("");
@@ -106,13 +107,20 @@ export default function RakebackPendiente() {
     }
   }
 
-  function abrir(p: any) {
+  // accion (06/10/2026, reporte real de Leo: pendiente negativo de Mar Bruno/Fénix Suprema --
+  // "Pagar" rechazaba el importe porque exige > 0; "en este caso al ser negativo, nosotros
+  // recibimos el dinero") -- un pendiente negativo (el agente nos debe) usa "Cobrar" en vez de
+  // "Pagar": mismo panel, pero llama a cobrarRakebackPendienteNegativo y no ofrece FICHAS como
+  // medio (cobrar en fichas sería sacarle stock al agente, una operación distinta que no se
+  // pidió acá -- ver comentario de cobrarPendienteNegativo en repo/rakebackPendiente.ts).
+  function abrir(p: any, accionElegida: "pagar" | "cobrar") {
     setAbierto(p.id);
+    setAccion(accionElegida);
     setMsg(null);
-    setMedio("FICHAS");
+    setMedio(accionElegida === "cobrar" ? "USDT" : "FICHAS");
     setCustodio("");
     setNota("");
-    setMonto((Number(p.amount) - Number(p.consumed)).toFixed(2));
+    setMonto(Math.abs(Number(p.amount) - Number(p.consumed)).toFixed(2));
   }
 
   async function pagar(p: any) {
@@ -135,6 +143,31 @@ export default function RakebackPendiente() {
       refresh();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo registrar el pago." });
+    } finally {
+      setPagando(false);
+    }
+  }
+
+  async function cobrar(p: any) {
+    const pendiente = Number(p.amount) - Number(p.consumed);
+    const m = Number(monto);
+    if (!(m > 0)) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
+    if (m > Math.abs(pendiente) + 0.005) return setMsg({ ok: false, text: `No puede superar la deuda pendiente (${usd(Math.abs(pendiente))}).` });
+    if (medio === "EFECTIVO" && !custodio.trim()) return setMsg({ ok: false, text: "Un cobro en efectivo requiere custodio (BIT-051/052)." });
+    setPagando(true);
+    setMsg(null);
+    try {
+      await api.cobrarRakebackPendienteNegativo({
+        pendienteId: p.id,
+        amount: m,
+        medio: medio as "USDT" | "EFECTIVO" | "ZELLE",
+        custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
+        notes: nota.trim() || undefined,
+      });
+      setAbierto(null);
+      refresh();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo registrar el cobro." });
     } finally {
       setPagando(false);
     }
@@ -217,7 +250,9 @@ export default function RakebackPendiente() {
           <td className="num muted">{usd(p.consumed)}</td>
           <td className="num"><strong className={pendiente >= 0 ? "pos" : "neg"}>{usd(pendiente)}</strong></td>
           <td style={{ display: "flex", gap: 6 }}>
-            <button className="btn secondary small" onClick={() => abrir(p)}>Pagar</button>
+            <button className="btn secondary small" onClick={() => abrir(p, pendiente < -0.004 ? "cobrar" : "pagar")}>
+              {pendiente < -0.004 ? "Cobrar" : "Pagar"}
+            </button>
             <button className="btn secondary small" onClick={() => darDeBaja(p)}>Dar de baja</button>
             {Number(p.consumed) === 0 && (
               <button
@@ -236,9 +271,9 @@ export default function RakebackPendiente() {
             <td colSpan={mostrarAgente ? 8 : 7}>
               <div className="panel" style={{ margin: "8px 0", maxWidth: 460 }}>
                 <div className="field">
-                  <label>Medio de pago</label>
+                  <label>Medio de {accion === "cobrar" ? "cobro" : "pago"}</label>
                   <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-                    <option value="FICHAS">Fichas (mueve el stock físico)</option>
+                    {accion === "pagar" && <option value="FICHAS">Fichas (mueve el stock físico)</option>}
                     <option value="USDT">USDT</option>
                     <option value="EFECTIVO">Efectivo</option>
                     <option value="ZELLE">Zelle</option>
@@ -260,8 +295,8 @@ export default function RakebackPendiente() {
                 </div>
                 {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn" disabled={pagando} onClick={() => pagar(p)}>
-                    {pagando ? "Registrando..." : "Confirmar pago"}
+                  <button className="btn" disabled={pagando} onClick={() => (accion === "cobrar" ? cobrar(p) : pagar(p))}>
+                    {pagando ? "Registrando..." : accion === "cobrar" ? "Confirmar cobro" : "Confirmar pago"}
                   </button>
                   <button className="btn secondary" onClick={() => setAbierto(null)}>Cancelar</button>
                 </div>
