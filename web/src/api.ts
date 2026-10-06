@@ -768,6 +768,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ restante }),
     }),
+  // Campana de notificaciones del sistema (06/10/2026, pedido de Leo) -- se recalcula en
+  // caliente en cada pedido, ver repo/alertas.ts.
+  alertas: () => request(`/alertas`),
   // Config vigente (deal propio o default del club) AHORA MISMO — para refrescar una fila de
   // importación cuyo % pudo haber cambiado después de analizar el archivo.
   configVigente: (agentId: string, clubId: string) => request(`/catalog/agents/${agentId}/clubs/${clubId}/config-vigente`),
