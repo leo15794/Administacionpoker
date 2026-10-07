@@ -356,7 +356,7 @@ export default function ResumenClub() {
             ) : (
               <div style={{ overflowX: "auto" }}>
                 {resumen.clubFamily === "SUPREMA" ? (
-                  <table>
+                  <table className="table-compact">
                     <thead>
                       <tr>
                         <th>Agente</th><th className="num">Jugadores</th><th className="num">Resultado</th><th className="num">Ring Game</th><th className="num">MTT</th><th className="num">SNG</th><th className="num">Spin</th>
@@ -386,7 +386,7 @@ export default function ResumenClub() {
                     </tbody>
                   </table>
                 ) : (
-                  <table>
+                  <table className="table-compact">
                     <thead>
                       <tr>
                         <th>Agente</th><th className="num">Resultado</th><th className="num">Rake total</th><th className="num">% Rakeback</th>

@@ -533,7 +533,7 @@ export default function Resumen() {
           Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
         </div>
         <div className="table-scroll">
-        <table>
+        <table className="table-compact">
           <thead>
             <tr><th>Agente</th><th>Club</th><th>Sistema</th><th className="num">Cierre última semana</th><th className="num">Cargado</th><th className="num">Descargado</th><th className="num">Fichas ganadas en mesas</th><th className="num">Fichas</th></tr>
           </thead>

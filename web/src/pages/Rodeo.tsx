@@ -40,7 +40,7 @@ export default function Rodeo() {
           <div className="muted">Todavía no hay ningún agente con Rodeo cargado.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table>
+            <table className="table-compact">
               <thead>
                 <tr>
                   <th>Agente</th>

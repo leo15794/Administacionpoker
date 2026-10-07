@@ -1811,7 +1811,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             </div>
           </div>
           <div className="table-scroll">
-          <table style={{ marginTop: 10 }}>
+          <table className="table-compact" style={{ marginTop: 10 }}>
             <thead>
               <tr>
                 <th></th><th>Club</th><th>Agente</th><th>Sistema</th><th>Jugadores</th><th className="num">Resultado</th><th className="num">Rake</th>
