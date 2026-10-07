@@ -244,6 +244,9 @@ const pagoSchema = z.object({
   // funcionando exactamente como antes (mueve el saldo agregado nomás).
   cierreLineaId: z.string().nullable().optional(),
   origen: z.enum(["PAGO_COBRO", "AJUSTE"]).optional(),
+  // custodian (07/10/2026, fix wallet): obligatorio cuando medio = EFECTIVO -- ver
+  // comentario largo en repo/proveedores.ts (PagoProveedorInput).
+  custodian: z.string().nullable().optional(),
 });
 proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = pagoSchema.safeParse(req.body);

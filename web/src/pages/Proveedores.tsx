@@ -1073,6 +1073,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
   const [modo, setModo] = useState<"lineas" | "suelto">("lineas");
   const [proveedorId, setProveedorId] = useState("");
   const [medio, setMedio] = useState<"USDT" | "EFECTIVO" | "ZELLE" | "OTRO">("USDT");
+  const [custodio, setCustodio] = useState("");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1106,6 +1107,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
     setMsg(null);
     if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
     if (!(Number(amount) > 0)) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
+    if (medio === "EFECTIVO" && !custodio.trim()) return setMsg({ ok: false, text: "Un pago/cobro en efectivo requiere custodio (BIT-051/052)." });
     setLoading(true);
     try {
       await api.registrarPagoProveedor({
@@ -1115,6 +1117,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
         medio,
         direction,
         notes: notes.trim() || undefined,
+        custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
       });
       onDone();
     } catch (err: any) {
@@ -1132,6 +1135,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
     for (const [, v] of elegidas) {
       if (!(Number(v.monto) > 0)) return setMsg({ ok: false, text: "Todos los montos tildados tienen que ser mayores a 0." });
     }
+    if (medio === "EFECTIVO" && !custodio.trim()) return setMsg({ ok: false, text: "Un pago/cobro en efectivo requiere custodio (BIT-051/052)." });
     setLoading(true);
     let exitos = 0;
     let ultimoError = "";
@@ -1147,6 +1151,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
           direction: Number(l.disponible) >= 0 ? "PAGO" : "COBRO",
           notes: notes.trim() || undefined,
           cierreLineaId: l.id,
+          custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
         });
         exitos++;
       } catch (err: any) {
@@ -1240,6 +1245,12 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
                 <option value="OTRO">Otro</option>
               </select>
             </div>
+            {medio === "EFECTIVO" && (
+              <div className="field">
+                <label>Custodio</label>
+                <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+              </div>
+            )}
           </div>
           <div className="field">
             <label>Notas (opcional)</label>
@@ -1274,6 +1285,12 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
                 <option value="OTRO">Otro</option>
               </select>
             </div>
+            {medio === "EFECTIVO" && (
+              <div className="field">
+                <label>Custodio</label>
+                <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+              </div>
+            )}
             <div className="field">
               <label>Monto (USD)</label>
               <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />

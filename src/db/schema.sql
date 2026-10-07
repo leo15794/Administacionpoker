@@ -1331,6 +1331,18 @@ ALTER TABLE proveedor_pagos ADD CONSTRAINT proveedor_pagos_origen_check CHECK (o
 ALTER TABLE proveedor_pagos DROP CONSTRAINT IF EXISTS proveedor_pagos_medio_check;
 ALTER TABLE proveedor_pagos ADD CONSTRAINT proveedor_pagos_medio_check CHECK (medio IN ('USDT','EFECTIVO','ZELLE','OTRO','SIN_TESORERIA'));
 
+-- Los pagos/cobros de Proveedores NO movían la Wallet real (07/10/2026, bug reportado por
+-- Leo: "estos cobros de proveedores no aparecen en la wallet") -- el módulo nacía
+-- deliberadamente autocontenido (ver comentario de eliminarProveedorDefinitivo más abajo en
+-- repo/proveedores.ts), pero medio=USDT/EFECTIVO/ZELLE siempre implicó plata real de
+-- tesorería, igual que en los movimientos de agentes. Mismo patrón ya usado por
+-- partner_account_entries.treasury_adjustment_id ("Mueve Wallet"): cuando el medio es uno de
+-- esos tres, registrarPagoProveedor también genera un treasury_adjustment real (WALLET_MANOS
+-- para USDT/ZELLE, CAJA_EFECTIVO para EFECTIVO) y lo linkea acá -- así se puede revertir o
+-- deshacer sin tener que ir a buscarlo aparte en Tesorería.
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS treasury_adjustment_id TEXT REFERENCES treasury_adjustments(id);
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS custodian TEXT;
+
 -- "Subagentes" (23/09/2026, pedido de Leo): un jugador puntual de un agente puede tener su
 -- propio % de rakeback (distinto al % general del agente), agrupado bajo un nombre propio
 -- (ej. "SG" agrupa a los jugadores "SG DeSueldo" + "Tony The Kid") -- sirve para liquidarle a

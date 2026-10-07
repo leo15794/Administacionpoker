@@ -2,6 +2,7 @@ import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
 import { getResumenClubSemanal, type ResumenClubSemanal } from "./clubResumen.js";
 import { getResumenTinyExtra } from "./tinyResumen.js";
+import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -840,6 +841,10 @@ export interface PagoProveedorInput {
   // tesorería (medio se fuerza a SIN_TESORERIA, igual que el AJUSTE de agentes en ledger.ts).
   // Nunca va atado a una línea (una corrección no es "el pago de tal cierre").
   origen?: "PAGO_COBRO" | "AJUSTE";
+  // custodian (07/10/2026, fix wallet -- ver comentario largo en schema.sql junto a
+  // treasury_adjustment_id): obligatorio cuando medio = EFECTIVO, mismo criterio BIT-051/052
+  // que ya usan los movimientos de agentes (ver ledger.ts) -- quién tiene la plata físicamente.
+  custodian?: string | null;
 }
 
 /**
@@ -853,6 +858,14 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
   if (input.amount <= 0) throw new Error("El monto tiene que ser mayor a 0.");
   const origen = input.origen ?? "PAGO_COBRO";
   const medio = origen === "AJUSTE" ? "SIN_TESORERIA" : input.medio;
+  // Tesorería real (07/10/2026, fix wallet -- ver comentario largo en schema.sql): mismo
+  // criterio que ledger.ts usa para agentes -- USDT/EFECTIVO/ZELLE SIEMPRE mueven la Wallet
+  // de verdad, OTRO/SIN_TESORERIA/AJUSTE nunca. EFECTIVO requiere custodio (BIT-051/052).
+  const moveWallet = medio === "USDT" || medio === "EFECTIVO" || medio === "ZELLE";
+  if (medio === "EFECTIVO" && !input.custodian?.trim()) {
+    throw new Error("Un pago/cobro en efectivo requiere custodio (BIT-051/052).");
+  }
+
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -865,8 +878,8 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     const id = newId("ppag");
     const r = await client.query(
       `INSERT INTO proveedor_pagos
-        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by, cierre_linea_id, origen)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by, cierre_linea_id, origen, custodian)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         id,
         input.proveedorId,
@@ -880,8 +893,10 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
         input.createdBy ?? null,
         input.cierreLineaId ?? null,
         origen,
+        medio === "EFECTIVO" ? input.custodian?.trim() : null,
       ]
     );
+    let pago = r.rows[0];
 
     await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [saldoNuevo, saldo.id]);
 
@@ -890,7 +905,26 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     }
 
     await client.query("COMMIT");
-    return r.rows[0];
+
+    // Ajuste de tesorería fuera de la transacción de arriba (mismo patrón que
+    // partnerAccounts.ts crearMovimiento -- registrarAjusteTesoreria usa el pool compartido,
+    // no un client propio). Si esto llegara a fallar, el pago ya quedó registrado en
+    // proveedor_pagos/proveedor_saldos -- Leo puede revertirlo y recargarlo si hace falta.
+    if (moveWallet) {
+      const proveedorNombre = (await pool.query(`SELECT name FROM proveedores WHERE id = $1`, [input.proveedorId])).rows[0]?.name ?? "proveedor";
+      const { id: treasuryId } = await registrarAjusteTesoreria({
+        ledger: medio === "EFECTIVO" ? "CAJA_EFECTIVO" : "WALLET_MANOS",
+        direction: input.direction === "PAGO" ? "EGRESO" : "INGRESO",
+        amount: Math.abs(input.amount),
+        custodian: medio === "EFECTIVO" ? input.custodian?.trim() : null,
+        reason: `${input.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${proveedorNombre} (${medio})${input.notes ? ` -- ${input.notes}` : ""}`,
+        createdBy: input.createdBy ?? null,
+      });
+      const r2 = await pool.query(`UPDATE proveedor_pagos SET treasury_adjustment_id = $1 WHERE id = $2 RETURNING *`, [treasuryId, id]);
+      pago = r2.rows[0];
+    }
+
+    return pago;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -930,6 +964,13 @@ export async function revertirPagoProveedor(id: string) {
     await client.query(`UPDATE proveedor_pagos SET status = 'REVERTIDO' WHERE id = $1`, [id]);
 
     await client.query("COMMIT");
+
+    // Si este pago había movido la Wallet real (07/10/2026), revertir también ESE lado --
+    // ledger de tesorería inmutable, nunca se borra (ver revertirAjusteTesoreria).
+    if (pago.treasury_adjustment_id) {
+      await revertirAjusteTesoreria(pago.treasury_adjustment_id, `Se revirtió el pago/cobro ${id} de Proveedores.`, null);
+    }
+
     return { ok: true };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1144,6 +1185,14 @@ export async function eliminarPagoProveedorDefinitivo(id: string) {
 
     await client.query(`DELETE FROM proveedor_pagos WHERE id = $1`, [id]);
     await client.query("COMMIT");
+
+    // Mismo criterio que revertirPagoProveedor: si movía la Wallet real y todavía no se
+    // había revertido, deshacerlo también -- el ledger de tesorería nunca se borra, incluso
+    // en este borrado "definitivo" de proveedor_pagos (pensado para limpiar pruebas).
+    if (pago.status !== "REVERTIDO" && pago.treasury_adjustment_id) {
+      await revertirAjusteTesoreria(pago.treasury_adjustment_id, `Se borró en forma definitiva el pago/cobro ${id} de Proveedores.`, null);
+    }
+
     return { found: true };
   } catch (err) {
     await client.query("ROLLBACK");

@@ -456,6 +456,8 @@ export const api = {
     // repo/proveedores.ts (PagoProveedorInput).
     cierreLineaId?: string | null;
     origen?: "PAGO_COBRO" | "AJUSTE";
+    // custodian (07/10/2026, fix wallet): obligatorio si medio = EFECTIVO.
+    custodian?: string;
   }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
   revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
   // Líneas con saldo pendiente de un proveedor (30/09/2026) -- para el picker de Pago/Cobro.
