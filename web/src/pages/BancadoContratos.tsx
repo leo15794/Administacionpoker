@@ -362,79 +362,155 @@ function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; 
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<{ resultado: number; rake: number; detalle: string } | null>(null);
 
-  async function subirArchivo(): Promise<any> {
+  // FIX 07/10/2026 #2 (Leo: "ahi lo probe en modo incognito y sigue igual"): el fix anterior
+  // (sumar c.bancados para contratos AGENT) era correcto pero nunca llegaba a ejecutarse -- el
+  // club de cada hoja del archivo SIEMPRE requiere una eleccion explicita del usuario
+  // (sheetClubOverrides, ver repo/imports.ts: "no hay ningun auto-match por nombre de hoja"),
+  // asi que sin mandar overrides el archivo entero quedaba en "hojasNoReconocidas" y
+  // result.clubes SIEMPRE venia vacio -- el error "no se encontro" salia siempre, para
+  // cualquier contrato (AGENT o PLAYER), antes de llegar a mirar agentes/bancados. Se agrega
+  // el mismo paso de "elegi el club de cada hoja" que ya usa Cierres.tsx (minimo necesario):
+  // analizar primero, elegir club por hoja (precargado con el club del contrato cuando hay
+  // una sola hoja pendiente), recien ahi buscar.
+  const [hojasDetectadas, setHojasDetectadas] = useState<string[]>([]);
+  const [clubPorHoja, setClubPorHoja] = useState<Record<string, string>>({});
+  const [clubesDisponibles, setClubesDisponibles] = useState<{ id: string; name: string }[]>([]);
+  const [paso, setPaso] = useState<1 | 2>(1);
+
+  useEffect(() => {
+    const fetchClubes =
+      plataforma === "teamback-gg"
+        ? api.clubesImportacionTeamBackGG()
+        : plataforma === "tiny-gg"
+        ? api.clubesImportacionTinyGG()
+        : api.clubesImportacionSuprema();
+    fetchClubes.then(setClubesDisponibles).catch(() => setClubesDisponibles([]));
+  }, [plataforma]);
+
+  function resetPaso1() {
+    setPaso(1);
+    setHojasDetectadas([]);
+    setClubPorHoja({});
+    setResultado(null);
+    setError("");
+  }
+
+  async function subirArchivo(overrides?: Record<string, string>): Promise<any> {
     if (plataforma === "suprema") {
       if (!archivo) throw new Error("Subí el archivo (.xlsx).");
-      return api.previsualizarImportacion(archivo, weekEnd);
+      return api.previsualizarImportacion(archivo, weekEnd, overrides);
     }
     if (plataforma === "teamback-gg") {
       if (!archivo) throw new Error("Subí el archivo (.xlsx).");
-      return api.previsualizarImportacionTeamBackGG(archivo, weekEnd);
+      return api.previsualizarImportacionTeamBackGG(archivo, weekEnd, overrides);
     }
     if (archivos.length === 0) throw new Error("Subí los archivos (uno por super agente).");
-    return api.previsualizarImportacionTinyGG(archivos, weekEnd);
+    return api.previsualizarImportacionTinyGG(archivos, weekEnd, overrides);
   }
 
-  async function buscar() {
+  function calcularResultado(result: any) {
+    let totalResultado = 0;
+    let totalRake = 0;
+    const partes: string[] = [];
+    for (const c of result.clubes ?? []) {
+      if (contrato.club_id && c.clubId !== contrato.club_id) continue;
+      if (contrato.tipo_vinculo === "AGENT") {
+        const ag = (c.agentes ?? []).find((a: any) => a.agentId === contrato.agent_id);
+        if (ag) {
+          totalResultado += Number(ag.resultado) || 0;
+          totalRake += Number(ag.rakeTotal) || 0;
+          partes.push(`${c.clubName}: ${usd(Number(ag.resultado) || 0)}`);
+        }
+        // FIX 07/10/2026 (Leo: "No se encontró a MatiasFx en el archivo para esa semana"):
+        // un jugador marcado como "bancado" (ver Jugadores bancados) queda afuera a proposito
+        // del agregado normal del agente durante la importacion (repo/imports.ts lo separa a
+        // c.bancados, nunca entra a c.agentes) -- sin esto, un contrato tipo AGENT nunca
+        // encontraba nada en un club donde ese agente es ademas un jugador bancado (caso real:
+        // MatiasFx es su propio agente Y esta marcado bancado en TeamBack Suprema). Se suman
+        // aparte porque no son mutuamente excluyentes: el mismo agente puede tener jugadores
+        // normales Y jugadores bancados en el mismo club a la vez.
+        const bancadosDelAgente = (c.bancados ?? []).filter((b: any) => b.agentId === contrato.agent_id);
+        for (const b of bancadosDelAgente) {
+          totalResultado += Number(b.resultado) || 0;
+          totalRake += Number(b.rake) || 0;
+          partes.push(`${c.clubName} (bancado ${b.playerName}): ${usd(Number(b.resultado) || 0)}`);
+        }
+      } else {
+        const b = (c.bancados ?? []).find((x: any) => x.playerId === contrato.player_id);
+        if (b) {
+          totalResultado += Number(b.resultado) || 0;
+          totalRake += Number(b.rake) || 0;
+          partes.push(`${c.clubName}: ${usd(Number(b.resultado) || 0)}`);
+          continue;
+        }
+        for (const ag of c.agentes ?? []) {
+          const det = (ag.jugadoresDetalle ?? []).find((j: any) => j.playerId === contrato.player_id);
+          if (det) {
+            totalResultado += Number(det.resultado) || 0;
+            totalRake += Number(det.rake) || 0;
+            partes.push(`${c.clubName}: ${usd(Number(det.resultado) || 0)}`);
+          }
+        }
+      }
+    }
+    if (partes.length === 0) {
+      setError(`No se encontró a ${contrato.nombre} en el archivo para esa semana -- revisá la plataforma, el archivo, o cargá los valores a mano.`);
+      return;
+    }
+    setResultado({
+      resultado: Math.round(totalResultado * 100) / 100,
+      rake: Math.round(totalRake * 100) / 100,
+      detalle: partes.join(" + "),
+    });
+  }
+
+  // Paso 1: lee el archivo sin ninguna eleccion de club todavia -- siempre vuelve con todas las
+  // hojas en "hojasNoReconocidas" (ver nota arriba), asi que esto solo sirve para listar que
+  // hojas tiene el archivo y dejar elegir a que club corresponde cada una.
+  async function analizar() {
     setError("");
     setResultado(null);
     if (!weekEnd) return setError("Indicá la fecha (semana hasta) antes de analizar el archivo.");
     setBuscando(true);
     try {
       const result = await subirArchivo();
-      let totalResultado = 0;
-      let totalRake = 0;
-      const partes: string[] = [];
-      for (const c of result.clubes ?? []) {
-        if (contrato.club_id && c.clubId !== contrato.club_id) continue;
-        if (contrato.tipo_vinculo === "AGENT") {
-          const ag = (c.agentes ?? []).find((a: any) => a.agentId === contrato.agent_id);
-          if (ag) {
-            totalResultado += Number(ag.resultado) || 0;
-            totalRake += Number(ag.rakeTotal) || 0;
-            partes.push(`${c.clubName}: ${usd(Number(ag.resultado) || 0)}`);
-          }
-          // FIX 07/10/2026 (Leo: "No se encontró a MatiasFx en el archivo para esa semana"):
-          // un jugador marcado como "bancado" (ver Jugadores bancados) queda afuera a proposito
-          // del agregado normal del agente durante la importacion (repo/imports.ts lo separa a
-          // c.bancados, nunca entra a c.agentes) -- sin esto, un contrato tipo AGENT nunca
-          // encontraba nada en un club donde ese agente es ademas un jugador bancado (caso real:
-          // MatiasFx es su propio agente Y esta marcado bancado en TeamBack Suprema). Se suman
-          // aparte porque no son mutuamente excluyentes: el mismo agente puede tener jugadores
-          // normales Y jugadores bancados en el mismo club a la vez.
-          const bancadosDelAgente = (c.bancados ?? []).filter((b: any) => b.agentId === contrato.agent_id);
-          for (const b of bancadosDelAgente) {
-            totalResultado += Number(b.resultado) || 0;
-            totalRake += Number(b.rake) || 0;
-            partes.push(`${c.clubName} (bancado ${b.playerName}): ${usd(Number(b.resultado) || 0)}`);
-          }
-        } else {
-          const b = (c.bancados ?? []).find((x: any) => x.playerId === contrato.player_id);
-          if (b) {
-            totalResultado += Number(b.resultado) || 0;
-            totalRake += Number(b.rake) || 0;
-            partes.push(`${c.clubName}: ${usd(Number(b.resultado) || 0)}`);
-            continue;
-          }
-          for (const ag of c.agentes ?? []) {
-            const det = (ag.jugadoresDetalle ?? []).find((j: any) => j.playerId === contrato.player_id);
-            if (det) {
-              totalResultado += Number(det.resultado) || 0;
-              totalRake += Number(det.rake) || 0;
-              partes.push(`${c.clubName}: ${usd(Number(det.resultado) || 0)}`);
-            }
-          }
-        }
-      }
-      if (partes.length === 0) {
-        setError(`No se encontró a ${contrato.nombre} en el archivo para esa semana -- revisá la plataforma, el archivo, o cargá los valores a mano.`);
+      const resolvables: string[] = (result.hojasNoReconocidas ?? [])
+        .filter((h: any) => h.resolvable)
+        .map((h: any) => h.sheetName);
+      const yaResueltas: string[] = (result.clubes ?? []).map((c: any) => c.sheetName);
+      const hojas = [...yaResueltas, ...resolvables];
+      if (hojas.length === 0) {
+        setError("El archivo no tiene ninguna hoja reconocible -- revisá que sea el archivo correcto.");
         return;
       }
-      setResultado({
-        resultado: Math.round(totalResultado * 100) / 100,
-        rake: Math.round(totalRake * 100) / 100,
-        detalle: partes.join(" + "),
-      });
+      setHojasDetectadas(hojas);
+      const prefill: Record<string, string> = {};
+      for (const c of result.clubes ?? []) prefill[c.sheetName] = c.clubId;
+      // Si hay una sola hoja pendiente de elegir, se precarga con el club del contrato -- es
+      // el caso de uso normal de esta pantalla (un solo contrato, un solo club).
+      if (resolvables.length === 1 && contrato.club_id) prefill[resolvables[0]] = contrato.club_id;
+      setClubPorHoja(prefill);
+      setPaso(2);
+    } catch (err: any) {
+      setError(err.message || "No se pudo leer el archivo.");
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  // Paso 2: ya con el club elegido para cada hoja, vuelve a mandar el mismo archivo con esa
+  // eleccion explicita (overrides) -- recien ahi el backend devuelve datos en result.clubes.
+  async function buscar() {
+    setError("");
+    setResultado(null);
+    if (hojasDetectadas.some((h) => !clubPorHoja[h])) {
+      setError("Elegí el club de cada hoja antes de buscar.");
+      return;
+    }
+    setBuscando(true);
+    try {
+      const result = await subirArchivo(clubPorHoja);
+      calcularResultado(result);
     } catch (err: any) {
       setError(err.message || "No se pudo leer el archivo.");
     } finally {
@@ -457,7 +533,7 @@ function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; 
           <div className="form-grid">
             <div className="field">
               <label>Plataforma</label>
-              <select value={plataforma} onChange={(e) => { setPlataforma(e.target.value as any); setArchivo(null); setArchivos([]); setResultado(null); }}>
+              <select value={plataforma} onChange={(e) => { setPlataforma(e.target.value as any); setArchivo(null); setArchivos([]); resetPaso1(); }}>
                 <option value="suprema">SupremaPoker (Fénix/TeamBack Suprema)</option>
                 <option value="teamback-gg">GG Poker / TeamBack GG</option>
                 <option value="tiny-gg">Tiny GG</option>
@@ -465,19 +541,46 @@ function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; 
             </div>
             <div className="field">
               <label>Semana hasta</label>
-              <input type="date" value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); setResultado(null); }} />
+              <input type="date" value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); resetPaso1(); }} />
             </div>
           </div>
           <div className="field">
             <label>{plataforma === "tiny-gg" ? "Archivos (uno por super agente)" : "Archivo"}</label>
             {plataforma === "tiny-gg" ? (
-              <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => { setArchivos(Array.from(e.target.files ?? [])); setResultado(null); }} />
+              <input type="file" multiple accept=".xlsx,.xls" onChange={(e) => { setArchivos(Array.from(e.target.files ?? [])); resetPaso1(); }} />
             ) : (
-              <input type="file" accept=".xlsx,.xls" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); setResultado(null); }} />
+              <input type="file" accept=".xlsx,.xls" onChange={(e) => { setArchivo(e.target.files?.[0] ?? null); resetPaso1(); }} />
             )}
           </div>
           {error && <div className="error">{error}</div>}
-          <button type="button" className="btn secondary small" disabled={buscando} onClick={buscar}>{buscando ? "Buscando..." : "Buscar en el archivo"}</button>
+          {paso === 1 && (
+            <button type="button" className="btn secondary small" disabled={buscando} onClick={analizar}>{buscando ? "Analizando..." : "Analizar archivo"}</button>
+          )}
+          {paso === 2 && (
+            <>
+              <div className="muted" style={{ fontSize: 12, margin: "8px 0" }}>
+                Elegí a qué club corresponde cada hoja del archivo (el importador nunca lo adivina por el nombre):
+              </div>
+              {hojasDetectadas.map((sheetName) => (
+                <div className="field" key={sheetName}>
+                  <label>Hoja "{sheetName}"</label>
+                  <select
+                    value={clubPorHoja[sheetName] ?? ""}
+                    onChange={(e) => setClubPorHoja((prev) => ({ ...prev, [sheetName]: e.target.value }))}
+                  >
+                    <option value="">-- elegir club --</option>
+                    {clubesDisponibles.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="btn secondary small" disabled={buscando} onClick={buscar}>{buscando ? "Buscando..." : "Buscar en el archivo"}</button>
+                <button type="button" className="btn secondary small" disabled={buscando} onClick={resetPaso1}>Volver a analizar</button>
+              </div>
+            </>
+          )}
           {resultado && (
             <div style={{ marginTop: 10 }}>
               <div className="muted" style={{ fontSize: 12 }}>
