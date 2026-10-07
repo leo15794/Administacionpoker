@@ -464,10 +464,17 @@ CREATE TABLE IF NOT EXISTS rakeback_pendiente_movements (
 -- que sea una sola transacción), ese UPDATE quedaba aplicado igual -- resultado: el pendiente
 -- bajaba (o llegaba a 0) sin que quedara NINGÚN registro de por qué ni con qué adelanto se
 -- saldó. Mismo patrón que ya se usó acá mismo para 'CORRECCION' en rakeback_advance_movements.
-ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
-ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
-  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO'));
-
+-- FIX 07/10/2026 (bug real, Leo: migrate rompía con "check constraint ... violated by some
+-- row" aunque ningún dato estuviera mal): los 4 FIX de abajo (05/10, 05/10, 05/10, 06/10) cada
+-- uno hacía su propio DROP + ADD CONSTRAINT, angostando y reensanchando este constraint paso a
+-- paso -- eso funcionó la primera vez que se corrieron, pero como schema.sql se re-ejecuta
+-- COMPLETO en cada `npm run migrate`, una corrida nueva vuelve a pasar por los pasos angostos
+-- intermedios (ej. el de CRUCE_ADELANTO sin COMPENSACION/VINCULO/COBRO todavía) -- y para
+-- entonces ya existen filas reales con esos tipos (la app los usa hace semanas), así que ESE
+-- paso intermedio las rechaza y migrate se corta ahí, sin llegar nunca al resto del archivo.
+-- Colapsado en un solo DROP + ADD con la lista final -- se mantienen los comentarios
+-- originales abajo para no perder el historial de por qué se agregó cada tipo.
+--
 -- FIX 05/10/2026 (pedido de Leo, caso real de "El Caimán" semana 21-27/09: Tiny GG cerró con
 -- rakeback pendiente NEGATIVO de -US$185.06 -- el agente quedó debiendo esa plata -- mientras
 -- que TeamBack GG en la misma liquidación le generaba +US$604.30. Leo: "el cierre da positivo
@@ -480,10 +487,7 @@ ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movem
 -- generar ningún movimiento de ledger nuevo, porque la plata ya se descontó al pagar de menos
 -- otra fila (de otro club) de la MISMA liquidación -- mismo criterio sin-movimiento-nuevo que ya
 -- usa CRUCE_ADELANTO, pero compensando contra el propio cierre en vez de contra un adelanto.
-ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
-ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
-  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION'));
-
+--
 -- FIX 05/10/2026 (pedido de Leo, mismo caso: "El caiman me pagó esto [Cobro cargado en
 -- Movimientos], por qué aparece en la liquidación?" + "necesito que se crucen estas cosas...
 -- esto es más que nada para los win/lose [dejar saldo a favor o en contra según la semana]"):
@@ -494,10 +498,7 @@ ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movem
 -- vincularMovimientoExistente/recalcularCadenaPendiente en repo/rakebackPendiente.ts) -- sirve
 -- tanto para "ya le pagamos esto por afuera" (pendiente positivo) como para "ya nos pagó esto
 -- por afuera" (pendiente negativo, el caso real de WIN_LOSE que motivó este fix).
-ALTER TABLE rakeback_pendiente_movements DROP CONSTRAINT IF EXISTS rakeback_pendiente_movements_type_check;
-ALTER TABLE rakeback_pendiente_movements ADD CONSTRAINT rakeback_pendiente_movements_type_check
-  CHECK (type IN ('ALTA','PAGO_FICHAS','PAGO_USDT','BAJA','CRUCE_ADELANTO','COMPENSACION','VINCULO'));
-
+--
 -- COBRO (06/10/2026, pedido de Leo, ver comentario de COBRO_RAKEBACK más arriba en
 -- ledger_movements): registra el cobro REAL (con movimiento de ledger nuevo, a diferencia de
 -- COMPENSACION que nunca genera uno) de un pendiente negativo -- mismo sentido que COMPENSACION
@@ -1645,10 +1646,20 @@ ALTER TABLE tb_users DROP COLUMN IF EXISTS email;
 -- de adelanto (el stock físico sube, igual que una carga) pero el agente NOS LAS DEBE -- no
 -- podemos reusar CARGA (que tiene que seguir siendo +, a favor del agente, para las cargas
 -- reales) así que es un tipo de movimiento propio, con signo negativo en el saldo.
-ALTER TABLE ledger_movements DROP CONSTRAINT IF EXISTS ledger_movements_type_check;
-ALTER TABLE ledger_movements ADD CONSTRAINT ledger_movements_type_check
-  CHECK (type IN ('CARGA','DESCARGA','COBRO','PAGO','TRANSFERENCIA_ENTRE_CLUBES','TICKET_PROMOCIONAL','AJUSTE','CIERRE_SEMANAL','PAGO_RAKEBACK','ADELANTO_RAKEBACK','ADELANTO_FICHAS'));
-
+-- FIX 07/10/2026 (mismo bug estructural encontrado en rakeback_pendiente_movements_type_check
+-- -- ver comentario largo ahí): este constraint tenía el mismo patrón de 2 pasos (angosto sin
+-- COBRO_RAKEBACK, después ancho con COBRO_RAKEBACK). Todavía no había explotado porque
+-- COBRO_RAKEBACK nunca se había insertado con éxito (el migrate nunca había llegado a
+-- aplicarse), pero en cuanto se usara la feature de Cobrar un pendiente negativo, el próximo
+-- `npm run migrate` iba a romper exactamente igual -- colapsado en un solo DROP + ADD.
+--
+-- Adelanto de fichas (29/09/2026, pedido de Leo): "le cargamos las fichas pero todavía no las
+-- pago" -- un adelanto de rakeback normal en fichas usa el tipo CARGA (a favor del agente, ver
+-- deltaParaBalance), porque las fichas SON del agente. Este caso es distinto: le damos fichas
+-- de adelanto (el stock físico sube, igual que una carga) pero el agente NOS LAS DEBE -- no
+-- podemos reusar CARGA (que tiene que seguir siendo +, a favor del agente, para las cargas
+-- reales) así que es un tipo de movimiento propio, con signo negativo en el saldo.
+--
 -- COBRO_RAKEBACK (06/10/2026, pedido de Leo: reporte real con un rakeback pendiente NEGATIVO
 -- de Mar Bruno/Fénix Suprema -- "Pagar" rechazaba el monto porque exige > 0, y Leo aclaró "al
 -- ser negativo, nosotros recibimos el dinero", no al revés): contraparte de PAGO_RAKEBACK, para
