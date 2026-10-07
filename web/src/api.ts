@@ -1009,8 +1009,17 @@ export const api = {
     }[];
   }) => request("/dashboard/resumen-club/tiny-rebate-union", { method: "POST", body: JSON.stringify(data) }),
 
-  setToken: (t: string) => localStorage.setItem("dp_token", t),
-  clearToken: () => localStorage.removeItem("dp_token"),
+  setToken: (t: string) => {
+    localStorage.setItem("dp_token", t);
+    // Arranca el reloj de inactividad (ver components/IdleGuard.tsx) recien ahora, no en
+    // cualquier momento en que se haya cargado la pagina -- si no, alguien que dejaba una
+    // pestaña de login abierta sin loguearse todavia podia "heredar" un reloj viejo.
+    localStorage.setItem("dp_last_activity", String(Date.now()));
+  },
+  clearToken: () => {
+    localStorage.removeItem("dp_token");
+    localStorage.removeItem("dp_last_activity");
+  },
   getToken,
 
   // ===================== TeamBack Affiliates V1 (25/09/2026) =====================

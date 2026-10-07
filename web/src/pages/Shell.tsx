@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import GlobalSearch from "../components/GlobalSearch";
 import NotificationBell from "../components/NotificationBell";
+import IdleGuard from "../components/IdleGuard";
 
 const icon = {
   resumen: (
@@ -498,6 +499,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         )}
         <Outlet key={`${location.pathname}:${refreshKey}`} />
       </div>
+      <IdleGuard />
     </div>
   );
 }

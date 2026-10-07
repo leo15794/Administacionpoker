@@ -26,8 +26,13 @@ export interface JwtPayload {
   email: string;
 }
 
+// (07/10/2026, pedido de Leo: "no quede abierto eterno") -- antes duraba 7 dias. Lo
+// acortamos a 24hs: combinado con el cierre de sesion por inactividad del frontend
+// (ver web/src/components/IdleGuard.tsx), asi alguien que minimiza el navegador y
+// vuelve al otro dia tiene que loguearse de nuevo si o si, aunque el token en
+// localStorage siga ahi.
 export function signToken(payload: JwtPayload) {
-  return jwt.sign(payload, SECRET, { expiresIn: "7d" });
+  return jwt.sign(payload, SECRET, { expiresIn: "24h" });
 }
 
 export function verifyToken(token: string): JwtPayload {
