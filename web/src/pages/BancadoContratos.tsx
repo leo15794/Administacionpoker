@@ -394,6 +394,20 @@ function ImportarResultadoContrato({ contrato, onEncontrado }: { contrato: any; 
             totalRake += Number(ag.rakeTotal) || 0;
             partes.push(`${c.clubName}: ${usd(Number(ag.resultado) || 0)}`);
           }
+          // FIX 07/10/2026 (Leo: "No se encontró a MatiasFx en el archivo para esa semana"):
+          // un jugador marcado como "bancado" (ver Jugadores bancados) queda afuera a proposito
+          // del agregado normal del agente durante la importacion (repo/imports.ts lo separa a
+          // c.bancados, nunca entra a c.agentes) -- sin esto, un contrato tipo AGENT nunca
+          // encontraba nada en un club donde ese agente es ademas un jugador bancado (caso real:
+          // MatiasFx es su propio agente Y esta marcado bancado en TeamBack Suprema). Se suman
+          // aparte porque no son mutuamente excluyentes: el mismo agente puede tener jugadores
+          // normales Y jugadores bancados en el mismo club a la vez.
+          const bancadosDelAgente = (c.bancados ?? []).filter((b: any) => b.agentId === contrato.agent_id);
+          for (const b of bancadosDelAgente) {
+            totalResultado += Number(b.resultado) || 0;
+            totalRake += Number(b.rake) || 0;
+            partes.push(`${c.clubName} (bancado ${b.playerName}): ${usd(Number(b.resultado) || 0)}`);
+          }
         } else {
           const b = (c.bancados ?? []).find((x: any) => x.playerId === contrato.player_id);
           if (b) {
