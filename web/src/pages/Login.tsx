@@ -26,24 +26,45 @@ export default function Login() {
 
   return (
     <div className="login-shell">
-      <div className="login-box">
-        <div className="login-mark">D</div>
-        <h1>DigiPlayers</h1>
-        <div className="sub">Sistema de gestión de agentes</div>
-        <form onSubmit={onSubmit}>
-          <div className="field">
-            <label>Usuario</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" autoComplete="username" />
+      <div className="login-hero-card">
+        <div className="login-visual">
+          <div className="login-particle login-particle--1" />
+          <div className="login-particle login-particle--2" />
+          <div className="login-particle login-particle--3" />
+          <div className="login-particle login-particle--4" />
+          <div className="login-particle login-particle--5" />
+          <div className="login-suit login-suit--1">♠</div>
+          <div className="login-suit login-suit--2">♦</div>
+          <div className="login-suit login-suit--3">♥</div>
+          <div className="login-suit login-suit--4">♣</div>
+          <div className="login-mark login-reveal" style={{ animationDelay: ".05s" }}>D</div>
+          <h1 className="login-reveal" style={{ animationDelay: ".15s" }}>DigiPlayers</h1>
+          <p className="login-reveal" style={{ animationDelay: ".25s" }}>Sistema de gestión de agentes — club privado.</p>
+          <div className="login-dots login-reveal" style={{ animationDelay: ".35s" }}>
+            <span />
+            <span />
+            <span />
           </div>
-          <div className="field">
-            <label>Contraseña</label>
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" />
-          </div>
-          {error && <div className="error">{error}</div>}
-          <button className="btn" style={{ width: "100%" }} disabled={loading}>
-            {loading ? "Ingresando..." : "Ingresar"}
-          </button>
-        </form>
+        </div>
+        <div className="login-form-panel">
+          <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
+          <div className="sub login-reveal" style={{ animationDelay: ".28s" }}>Accedé con tu usuario y contraseña</div>
+          <form onSubmit={onSubmit}>
+            <div className="field login-reveal" style={{ animationDelay: ".36s" }}>
+              <label>Usuario</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" autoComplete="username" />
+            </div>
+            <div className="field login-reveal" style={{ animationDelay: ".44s" }}>
+              <label>Contraseña</label>
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" />
+            </div>
+            {error && <div className="error login-reveal" style={{ animationDelay: "0s" }}>{error}</div>}
+            <button className="btn login-reveal" style={{ width: "100%", animationDelay: ".52s" }} disabled={loading}>
+              {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
+          <div className="footnote login-reveal" style={{ animationDelay: ".6s" }}>Acceso exclusivo — club privado</div>
+        </div>
       </div>
     </div>
   );

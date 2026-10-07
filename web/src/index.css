@@ -641,48 +641,253 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .badge.deal { background: var(--gold-soft); color: var(--gold); }
 .badge { white-space: nowrap; }
 
-/* ---------- login ---------- */
+/* ---------- login ----------
+   Rediseño pedido por Leo (10/2026): layout partido con glass effect + glow de borde,
+   inspirado en una referencia que trajo, pero re-temático a la identidad "club privado de
+   póker" (verde esmeralda + dorado) en vez del violeta neón del original. Los símbolos de
+   palos y las partículas son puramente decorativos vía CSS -- nada de fotos de stock. */
 
 .login-shell {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 40px 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(900px 600px at 10% 10%, var(--gold-soft), transparent 60%),
+    radial-gradient(900px 700px at 92% 90%, var(--green-soft), transparent 60%),
+    var(--bg);
 }
-.login-box {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 40px 36px;
-  width: 380px;
-  box-shadow: var(--shadow-lift);
+
+.login-hero-card {
   position: relative;
+  display: flex;
+  width: min(920px, 94vw);
+  min-height: 460px;
+  border-radius: 28px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid rgba(198, 166, 107, 0.22);
+  animation: login-card-breathe 5s ease-in-out infinite, login-card-in 0.6s ease-out both;
 }
-.login-box::before {
+@keyframes login-card-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(198, 166, 107, 0.08),
+      0 0 60px -10px rgba(45, 190, 133, 0.35),
+      0 0 90px -20px rgba(198, 166, 107, 0.25),
+      0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(198, 166, 107, 0.14),
+      0 0 80px -8px rgba(45, 190, 133, 0.5),
+      0 0 120px -16px rgba(198, 166, 107, 0.38),
+      0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  }
+}
+@keyframes login-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.login-hero-card::after {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  border-radius: 18px 18px 0 0;
-  background: var(--accent-grad);
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.07) 48%, rgba(198, 166, 107, 0.16) 50%, rgba(255, 255, 255, 0.07) 52%, transparent 60%);
+  background-size: 220% 220%;
+  background-position: -40% 0;
+  animation: login-sheen 7s ease-in-out infinite;
+  animation-delay: 1.5s;
 }
-.login-box .login-mark {
-  width: 44px;
-  height: 44px;
+@keyframes login-sheen {
+  0%, 30% { background-position: -40% 0; }
+  55%, 100% { background-position: 140% 0; }
+}
+
+.login-visual {
+  position: relative;
+  flex: 1 1 46%;
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%);
+  background:
+    radial-gradient(420px 420px at 15% 10%, rgba(198, 166, 107, 0.30), transparent 65%),
+    radial-gradient(480px 480px at 85% 90%, rgba(45, 190, 133, 0.30), transparent 65%),
+    linear-gradient(165deg, #16261f 0%, #0d1713 60%, #0b1210 100%);
+  overflow: hidden;
+}
+
+.login-suit {
+  position: absolute;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+  will-change: transform, opacity;
+  opacity: 0;
+}
+/* cada palo aparece, recorre un arco circular propio y desaparece; delay escalonado para
+   que los cuatro bailen fuera de fase en vez de todos juntos */
+.login-suit--1 { top: -20px; left: -10px; font-size: 200px; color: rgba(198, 166, 107, 0.09); animation: login-orbit-1 11s ease-in-out infinite; }
+.login-suit--2 { bottom: -50px; left: 28%; font-size: 170px; color: rgba(45, 190, 133, 0.09); animation: login-orbit-2 13s ease-in-out infinite 2.5s; }
+.login-suit--3 { top: 12%; left: 66%; font-size: 120px; color: rgba(198, 166, 107, 0.08); animation: login-orbit-3 10s ease-in-out infinite 5s; }
+.login-suit--4 { bottom: 6%; left: 56%; font-size: 110px; color: rgba(45, 190, 133, 0.08); animation: login-orbit-4 12s ease-in-out infinite 7.5s; }
+@keyframes login-orbit-1 {
+  0%   { transform: translate(0, 0) rotate(-14deg) scale(0.85); opacity: 0; }
+  12%  { opacity: 1; }
+  30%  { transform: translate(18px, -16px) rotate(-6deg) scale(1); opacity: 1; }
+  55%  { transform: translate(10px, -30px) rotate(2deg) scale(1.02); opacity: 0.8; }
+  78%  { transform: translate(-10px, -12px) rotate(-10deg) scale(0.92); opacity: 0.3; }
+  90%  { opacity: 0; }
+  100% { transform: translate(0, 0) rotate(-14deg) scale(0.85); opacity: 0; }
+}
+@keyframes login-orbit-2 {
+  0%   { transform: translate(0, 0) rotate(10deg) scale(0.85); opacity: 0; }
+  12%  { opacity: 1; }
+  32%  { transform: translate(-16px, -14px) rotate(2deg) scale(1); opacity: 1; }
+  58%  { transform: translate(-6px, -28px) rotate(-6deg) scale(1.02); opacity: 0.75; }
+  80%  { transform: translate(14px, -10px) rotate(14deg) scale(0.9); opacity: 0.3; }
+  92%  { opacity: 0; }
+  100% { transform: translate(0, 0) rotate(10deg) scale(0.85); opacity: 0; }
+}
+@keyframes login-orbit-3 {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(0.8); opacity: 0; }
+  14%  { opacity: 1; }
+  36%  { transform: translate(-14px, 14px) rotate(-8deg) scale(1); opacity: 1; }
+  60%  { transform: translate(-22px, 2px) rotate(-14deg) scale(1); opacity: 0.7; }
+  82%  { transform: translate(-8px, -10px) rotate(-4deg) scale(0.9); opacity: 0.25; }
+  94%  { opacity: 0; }
+  100% { transform: translate(0, 0) rotate(0deg) scale(0.8); opacity: 0; }
+}
+@keyframes login-orbit-4 {
+  0%   { transform: translate(0, 0) rotate(6deg) scale(0.8); opacity: 0; }
+  14%  { opacity: 1; }
+  38%  { transform: translate(16px, -12px) rotate(14deg) scale(1); opacity: 1; }
+  62%  { transform: translate(20px, 4px) rotate(18deg) scale(1); opacity: 0.7; }
+  84%  { transform: translate(6px, 12px) rotate(10deg) scale(0.9); opacity: 0.25; }
+  95%  { opacity: 0; }
+  100% { transform: translate(0, 0) rotate(6deg) scale(0.8); opacity: 0; }
+}
+
+.login-particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(1px);
+}
+.login-particle--1 { width: 6px; height: 6px; top: 18%; left: 20%; background: rgba(198, 166, 107, 0.55); animation: login-particle-float 6s ease-in-out infinite; }
+.login-particle--2 { width: 4px; height: 4px; top: 70%; left: 68%; background: rgba(45, 190, 133, 0.6); animation: login-particle-float 7.5s ease-in-out infinite 0.8s; }
+.login-particle--3 { width: 8px; height: 8px; top: 38%; left: 78%; background: rgba(198, 166, 107, 0.35); animation: login-particle-float 9s ease-in-out infinite 1.6s; }
+.login-particle--4 { width: 5px; height: 5px; top: 82%; left: 30%; background: rgba(45, 190, 133, 0.4); animation: login-particle-float 8s ease-in-out infinite 0.4s; }
+.login-particle--5 { width: 3px; height: 3px; top: 10%; left: 62%; background: rgba(198, 166, 107, 0.6); animation: login-particle-float 5.5s ease-in-out infinite 1.2s; }
+@keyframes login-particle-float {
+  0%, 100% { transform: translate(0, 0); opacity: 0.4; }
+  50% { transform: translate(10px, -16px); opacity: 1; }
+}
+
+.login-visual .login-mark {
+  position: relative;
+  z-index: 2;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   background: var(--accent-grad);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 19px;
+  font-size: 21px;
   color: var(--accent-ink);
-  margin-bottom: 18px;
-  box-shadow: 0 8px 22px -6px rgba(45, 190, 133, 0.6);
+  margin-bottom: 22px;
+  box-shadow: 0 8px 22px -6px rgba(45, 190, 133, 0.6), 0 0 0 4px rgba(198, 166, 107, 0.1);
 }
-.login-box h1 { margin: 0 0 4px; font-size: 21px; font-weight: 750; letter-spacing: -0.01em; }
-.login-box .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 26px; }
+.login-visual h1 {
+  position: relative;
+  z-index: 2;
+  margin: 0 0 12px;
+  font-size: 28px;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+  max-width: 230px;
+}
+.login-visual p {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  max-width: 220px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.login-dots {
+  position: relative;
+  z-index: 2;
+  margin-top: 28px;
+  display: flex;
+  gap: 8px;
+}
+.login-dots > span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: block;
+  background: var(--gold);
+  opacity: 0.55;
+  animation: login-dot-pulse 2.4s ease-in-out infinite;
+}
+.login-dots > span:nth-child(2) { background: var(--accent); animation-delay: 0.3s; }
+.login-dots > span:nth-child(3) { background: var(--gold); opacity: 0.3; animation-delay: 0.6s; }
+@keyframes login-dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.35); opacity: 0.9; }
+}
+
+.login-form-panel {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 54%;
+  margin-left: -46px;
+  padding: 48px 48px 40px 86px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(20, 33, 27, 0.55);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+.login-form-panel h2 { margin: 0 0 4px; font-size: 21px; font-weight: 750; }
+.login-form-panel .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 26px; }
+.login-form-panel .footnote {
+  margin-top: 20px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+.login-reveal { opacity: 0; animation: login-fade-in-up 0.55s ease-out both; }
+@keyframes login-fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 760px) {
+  .login-hero-card { flex-direction: column; width: min(380px, 92vw); min-height: 0; }
+  .login-visual {
+    flex: none;
+    clip-path: none;
+    padding: 32px 28px 24px;
+    align-items: center;
+    text-align: center;
+  }
+  .login-visual h1, .login-visual p { max-width: none; }
+  .login-dots { justify-content: center; }
+  .login-form-panel { margin-left: 0; padding: 28px 28px 32px; }
+}
 
 /* ---------- forms ---------- */
 
