@@ -648,6 +648,29 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
    palos y las partículas son puramente decorativos vía CSS -- nada de fotos de stock. */
 
 .login-shell {
+  /* La pantalla de login mantiene SIEMPRE el look oscuro "club privado de poker",
+     sin importar el theme claro/oscuro que haya quedado guardado en el navegador --
+     por eso redeclara acá las custom properties de color en vez de heredar las que
+     pisa ":root[data-theme='light']". Sin esto, con el theme claro activo el fondo
+     atmosferico y el panel de vidrio quedaban lavados/blancos (bug reportado por Leo). */
+  --bg: #0b1210;
+  --bg-elevated: #101c17;
+  --panel: #14211b;
+  --panel-2: #1a2b23;
+  --border: #2b3d33;
+  --border-strong: #3b5245;
+  --text: #f1f5f2;
+  --text-dim: #a8b8af;
+  --text-faint: #6e8177;
+  --accent: #2dbe85;
+  --accent-grad: linear-gradient(135deg, #34d399 0%, #229a6c 100%);
+  --accent-ink: #0b1210;
+  --green-soft: rgba(45, 190, 133, 0.14);
+  --red: #f07178;
+  --red-soft: rgba(240, 113, 120, 0.14);
+  --gold: #c6a66b;
+  --gold-soft: rgba(198, 166, 107, 0.14);
+
   min-height: 100vh;
   display: flex;
   align-items: center;
