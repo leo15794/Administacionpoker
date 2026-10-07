@@ -387,10 +387,9 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </button>
 
         <div className="brand">
-          <div className="brand-mark">D</div>
           {!collapsed && (
             <div>
-              <h1>DigiPlayers</h1>
+              <h1>Poker Gestión</h1>
               <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>
                 {role === "ADMIN" ? "Panel administrativo" : role === "SUPERVISOR" ? "Portal de supervisor" : "Portal de agente"}
               </div>

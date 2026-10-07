@@ -140,7 +140,7 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
       <div className="login-box">
         <div className="login-mark">T</div>
         <h1>TeamBack Affiliates</h1>
-        <div className="sub">Login propio de esta sección -- no es tu usuario del resto de DigiPlayers.</div>
+        <div className="sub">Login propio de esta sección -- no es tu usuario del resto de Poker Gestión.</div>
         <form onSubmit={onSubmit}>
           <div className="field">
             <label>Usuario</label>

@@ -193,7 +193,7 @@ export default function Resumen() {
       <div className="dash-header">
         <div>
           <h2 style={{ marginBottom: 4 }}>Resumen</h2>
-          <div className="muted">Estado financiero y operativo de DigiPlayers.</div>
+          <div className="muted">Estado financiero y operativo de Poker Gestión.</div>
         </div>
         <div className="dash-header-right">
           <div>

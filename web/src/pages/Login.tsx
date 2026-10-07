@@ -44,8 +44,7 @@ export default function Login() {
             <div className="login-card login-card--1">♠</div>
             <div className="login-card login-card--2">♥</div>
           </div>
-          <div className="login-mark login-reveal" style={{ animationDelay: ".45s" }}>D</div>
-          <h1 className="login-reveal" style={{ animationDelay: ".55s" }}>DigiPlayers</h1>
+          <h1 className="login-reveal" style={{ animationDelay: ".45s" }}>Poker Gestión</h1>
           <p className="login-reveal" style={{ animationDelay: ".65s" }}>Sistema de gestión de agentes — club privado.</p>
           <div className="login-dots login-reveal" style={{ animationDelay: ".75s" }}>
             <span />
