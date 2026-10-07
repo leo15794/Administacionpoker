@@ -37,10 +37,17 @@ export default function Login() {
           <div className="login-suit login-suit--2">♦</div>
           <div className="login-suit login-suit--3">♥</div>
           <div className="login-suit login-suit--4">♣</div>
-          <div className="login-mark login-reveal" style={{ animationDelay: ".05s" }}>D</div>
-          <h1 className="login-reveal" style={{ animationDelay: ".15s" }}>DigiPlayers</h1>
-          <p className="login-reveal" style={{ animationDelay: ".25s" }}>Sistema de gestión de agentes — club privado.</p>
-          <div className="login-dots login-reveal" style={{ animationDelay: ".35s" }}>
+          {/* FIX 07/10/2026 (pedido Leo): dos cartas caen antes de que aparezca la marca --
+              el resto del reveal se corrio un poco mas tarde (ver index.css) para que arranque
+              recien cuando las cartas terminan de acomodarse. */}
+          <div className="login-cards">
+            <div className="login-card login-card--1">♠</div>
+            <div className="login-card login-card--2">♥</div>
+          </div>
+          <div className="login-mark login-reveal" style={{ animationDelay: ".45s" }}>D</div>
+          <h1 className="login-reveal" style={{ animationDelay: ".55s" }}>DigiPlayers</h1>
+          <p className="login-reveal" style={{ animationDelay: ".65s" }}>Sistema de gestión de agentes — club privado.</p>
+          <div className="login-dots login-reveal" style={{ animationDelay: ".75s" }}>
             <span />
             <span />
             <span />

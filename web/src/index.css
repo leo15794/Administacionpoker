@@ -813,6 +813,47 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   50% { transform: translate(10px, -16px); opacity: 1; }
 }
 
+/* FIX 07/10/2026 (pedido Leo, inspirado en una referencia de Dribbble que le gusto -- no
+   copiada, reinterpretada con la marca propia): dos cartas caen y se acomodan ANTES de que
+   aparezca login-mark/h1/p/login-dots -- el resto del reveal (abajo) sigue exactamente igual,
+   solo se le corrio el animationDelay en Login.tsx para que empiece despues de que las cartas
+   terminan de caer en vez de arrancar junto con todo lo demas. */
+.login-cards {
+  position: relative;
+  z-index: 2;
+  height: 64px;
+  width: 90px;
+  margin-bottom: 18px;
+}
+.login-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 46px;
+  height: 64px;
+  border-radius: 7px;
+  background: #f4f1ea;
+  box-shadow: 0 10px 22px -6px rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  opacity: 0;
+}
+.login-card--1 { color: #16231c; animation: login-card-drop-1 0.55s cubic-bezier(.2,.8,.2,1) 0s forwards; }
+.login-card--2 { color: #b1413a; animation: login-card-drop-2 0.55s cubic-bezier(.2,.8,.2,1) 0.12s forwards; }
+@keyframes login-card-drop-1 {
+  0%   { opacity: 0; transform: translateY(-46px) rotate(-16deg); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translate(0, 6px) rotate(-9deg); }
+}
+@keyframes login-card-drop-2 {
+  0%   { opacity: 0; transform: translateY(-60px) rotate(14deg); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translate(18px, 0) rotate(7deg); }
+}
+
 .login-visual .login-mark {
   position: relative;
   z-index: 2;
