@@ -24,6 +24,16 @@
 // al lado NO es parte de este cálculo). Se acepta cualquiera de los dos nombres (RODEO_HEADER_
 // ALIASES) para no romper de nuevo si vuelven a cambiarlo, y para poder re-parsear reportes
 // viejos que todavía tengan el nombre original.
+//
+// FIX 07/10/2026 #2 (Leo: "lo nuevo es lo de los spins"): el mismo cambio de reporte rompió
+// el rake de Spin -- "SPIN Total(Local)" y "SPIN Admin Fee(Local)" (las columnas que antes
+// traían el rake de Spin ya calculado) ahora vienen siempre en 0. Leo confirmó la fórmula
+// real para reconstruirlo (07/10/2026): rake de Spin = 8% de "Total Stakes Spin(Local)"
+// (columna nueva de este mismo reporte). Verificado contra el cierre real de F coco
+// (TeamBack Suprema, semana 238): stakes_spin=24.00 -> spin=24*0.08=1.92, que sumado a
+// ring_game+mtt+sng+tlt dio rake_total=318.308, y con su 70% de rakeback (222.8156) el
+// cierre final=737.3456 -- Leo confirmó que ese número cierra contra lo real. Si el archivo
+// no tiene la columna de stakes (reporte viejo) se cae al valor nativo de "SPIN Total(Local)".
 import ExcelJS from "exceljs";
 
 const REQUIRED_HEADERS = [
@@ -46,18 +56,23 @@ const REQUIRED_HEADERS = [
 const RODEO_HEADER_ALIASES = ["Total Profit Rodeo(Local)", "Total Winnings Rodeo(Local)"] as const;
 const RODEO_KEY = "RODEO";
 
+// Spin (ver FIX 07/10/2026 #2 arriba): columna nueva de este mismo reporte, usada para
+// reconstruir el rake de Spin a mano porque la nativa viene rota. 8% confirmado por Leo
+// (07/10/2026), verificado contra el cierre real de F coco (TeamBack Suprema, semana 238).
+const SPIN_STAKES_HEADER = "Total Stakes Spin(Local)";
+const SPIN_RAKE_PCT = 0.08;
+
 // Opcionales: no bloquean la hoja si faltan (una variante del reporte de Suprema podría no
 // traerlas), pero cuando están se usan para enriquecer la resolución de agente y para mostrar
 // la jerarquía real (Role/Sub Agent) — NUNCA para reagrupar el resultado de un jugador: el
 // resultado siempre se suma por "Agent Name" (el superagente), confirmado explícitamente por el
 // usuario — el Sub Agent es solo información de a quién le reporta puertas adentro.
-const OPTIONAL_HEADERS = ["Role", "Sub Agent ID", "Sub Agent Name"] as const;
+const OPTIONAL_HEADERS = ["Role", "Sub Agent ID", "Sub Agent Name", "Total Stakes Spin(Local)"] as const;
 
 const RAKE_HEADERS = [
   "Ring Game Total(Local)",
   "MTT Total(Local)",
   "SNG Total(Local)",
-  "SPIN Total(Local)",
   "TLT Total(Local)",
 ] as const;
 
@@ -68,12 +83,15 @@ export interface SupremaPlayerRow {
   agentNameRaw: string | null;
   resultado: number;
   rake: number;
-  // Desglose del rake por tipo de juego — igual a las columnas "Ring Game"/"MTT"/"SNG" del
-  // resumen semanal por club (ver repo/clubResumen.ts). ringGame+mtt+sngOtros = rake siempre;
-  // sngOtros junta SNG+SPIN+TLT porque el resumen de la planilla real tampoco los separa.
+  // Desglose del rake por tipo de juego — igual a las columnas "Ring Game"/"MTT"/"SNG"/"Spin"
+  // del resumen semanal por club (ver repo/clubResumen.ts). ringGame+mtt+sngOtros+spin = rake
+  // siempre. sngOtros junta SNG+TLT (el resumen de la planilla real tampoco los separa); Spin
+  // va aparte (ver FIX 07/10/2026 #2) porque hay que reconstruirlo a mano y Leo pidió poder
+  // verlo solo, en su propia columna, para chequear que el 8% da bien.
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  spin?: number;
   // Solo Tiny GG (18/09/2026): "Bad Beat Jackpot > Contribution Fee" del reporte -- informativo,
   // nunca afecta el calculo del cierre de ningun agente. undefined para el resto de plataformas.
   bbjContribution?: number;
@@ -173,14 +191,21 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       const mtt = toNumber(row.getCell(colIndex["MTT Total(Local)"]).value);
       const sngOtros =
         toNumber(row.getCell(colIndex["SNG Total(Local)"]).value) +
-        toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value) +
         toNumber(row.getCell(colIndex["TLT Total(Local)"]).value);
-      const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0);
+      // Spin (ver FIX 07/10/2026 #2 arriba): si el archivo trae la columna nueva de stakes se
+      // usa SIEMPRE el calculo (8% del stake, confirmado por Leo) -- la columna nativa
+      // "SPIN Total(Local)" viene rota (en 0) desde este cambio de reporte. Fallback al valor
+      // nativo solo para poder re-parsear un archivo viejo que no tenga la columna de stakes.
+      const spin =
+        colIndex[SPIN_STAKES_HEADER] !== undefined
+          ? toNumber(row.getCell(colIndex[SPIN_STAKES_HEADER]).value) * SPIN_RAKE_PCT
+          : toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value);
+      const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0) + spin;
       const rodeo = toNumber(row.getCell(colIndex[RODEO_KEY]).value);
       const role = colIndex["Role"] !== undefined ? normText(row.getCell(colIndex["Role"]).value) : null;
       const subAgentIdRaw = colIndex["Sub Agent ID"] !== undefined ? normText(row.getCell(colIndex["Sub Agent ID"]).value) : null;
       const subAgentNameRaw = colIndex["Sub Agent Name"] !== undefined ? normText(row.getCell(colIndex["Sub Agent Name"]).value) : null;
-      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake, ringGame, mtt, sngOtros, rodeo, role, subAgentIdRaw, subAgentNameRaw });
+      rows.push({ playerId, playerName, agentIdRaw, agentNameRaw, resultado, rake, ringGame, mtt, sngOtros, spin, rodeo, role, subAgentIdRaw, subAgentNameRaw });
     });
 
     sheets.push({ sheetName: ws.name, rows });

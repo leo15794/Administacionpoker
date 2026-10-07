@@ -42,6 +42,7 @@ export interface FilaAgenteResumenClub {
   ringGame: number | null;
   mtt: number | null;
   sng: number | null;
+  spin: number | null;
   rakebackPct: number;
   rakebackAgente: number;
   comisionPlataforma: number;
@@ -116,7 +117,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
             wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share, wc.system,
-            wc.jugadores, wc.ring_game, wc.mtt, wc.sng, wc.ajuste_manual,
+            wc.jugadores, wc.ring_game, wc.mtt, wc.sng, wc.spin, wc.ajuste_manual,
             (SELECT d.club_payout_ratio_override FROM agent_club_deals d
              WHERE d.agent_id = wc.agent_id AND d.club_id = wc.club_id AND d.valid_to IS NULL
              ORDER BY d.valid_from DESC LIMIT 1) as ratio_override
@@ -181,6 +182,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
       ringGame: r.ring_game !== null ? Number(r.ring_game) : null,
       mtt: r.mtt !== null ? Number(r.mtt) : null,
       sng: r.sng !== null ? Number(r.sng) : null,
+      spin: r.spin !== null ? Number(r.spin) : null,
       rakebackPct: Number(r.rakeback_pct),
       rakebackAgente: rakeback,
       comisionPlataforma: comisionPlataformaFila,

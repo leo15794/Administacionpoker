@@ -359,7 +359,7 @@ export default function ResumenClub() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Agente</th><th className="num">Jugadores</th><th className="num">Resultado</th><th className="num">Ring Game</th><th className="num">MTT</th><th className="num">SNG</th>
+                        <th>Agente</th><th className="num">Jugadores</th><th className="num">Resultado</th><th className="num">Ring Game</th><th className="num">MTT</th><th className="num">SNG</th><th className="num">Spin</th>
                         <th className="num">Rake total</th><th className="num">% Rakeback</th><th className="num">Comisión agente</th><th className="num">Comisión plataforma</th>
                         <th className="num">Ganancia por rake</th><th className="num">Rodeo agente</th><th className="num">Cierre final agente</th>
                       </tr>
@@ -373,6 +373,7 @@ export default function ResumenClub() {
                           <td className="num muted">{f.ringGame !== null ? usd(f.ringGame) : "-"}</td>
                           <td className="num muted">{f.mtt !== null ? usd(f.mtt) : "-"}</td>
                           <td className="num muted">{f.sng !== null ? usd(f.sng) : "-"}</td>
+                          <td className="num muted">{f.spin !== null ? usd(f.spin) : "-"}</td>
                           <td className="num money">{usd(f.rakeTotal)}</td>
                           <td className="num muted">{pct(f.rakebackPct)}</td>
                           <td className="num money">{usd(f.rakebackAgente)}</td>

@@ -250,6 +250,18 @@ ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ring_game NUMERIC(18,4);
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS mtt NUMERIC(18,4);
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS sng NUMERIC(18,4);
 
+-- FIX 07/10/2026 (Leo: "lo nuevo es lo de los spins"): Suprema dejo de reportar el rake de
+-- Spin ya calculado — las columnas nativas "SPIN Total(Local)"/"SPIN Admin Fee(Local)" del
+-- reporte vienen en 0 desde el cambio de formato (semana 238). Leo confirmo la formula real
+-- (07/10/2026): rake de Spin = 8% de "Total Stakes Spin(Local)" — y que ese numero entra al
+-- rake total del agente exactamente igual que ring_game/mtt/sng (mismo % de rakeback,
+-- mismo ratio de plataforma configurado en el club). Verificado centavo a centavo contra el
+-- cierre real de F coco (TeamBack Suprema, semana 238): stakes_spin=24.00 -> spin=1.92,
+-- rake_total=318.308, rakeback(70%)=222.8156, cierre_final=737.3456 — Leo confirmo el
+-- metodo contra su propio numero. Se guarda aparte de "sng" (que sigue siendo SNG+TLT,
+-- ver engine/importSuprema.ts) para poder mostrarlo como columna propia y verificarlo.
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS spin NUMERIC(18,4);
+
 -- CORRECCIÓN (auditoría vs. planilla real, hoja MEMORIA_RODEO, BIT-nueva): la memoria de rodeo
 -- es por AGENTE+CLUB, no por jugador — la planilla agrega el rodeo bruto de todos los jugadores
 -- de un agente antes de netear contra la memoria arrastrada, así un jugador que gana esa semana

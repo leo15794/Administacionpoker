@@ -69,6 +69,7 @@ const closingSchema = z.object({
   ringGame: z.number().optional(),
   mtt: z.number().optional(),
   sng: z.number().optional(),
+  spin: z.number().optional(),
   // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD cargado a mano que
   // se suma/resta directo al cierre final del agente — ver engine/cierre.ts. La nota es
   // obligatoria del lado del frontend si el monto no es 0, pero no se re-valida acá porque el

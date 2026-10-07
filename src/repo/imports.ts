@@ -23,6 +23,7 @@ export interface AgenteAgregado {
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  spin?: number;
   // Solo Tiny GG (18/09/2026): suma de "BBJ Contribution" de todos los jugadores de este agente
   // -- informativo, no afecta el calculo del cierre. undefined para el resto de plataformas.
   bbjContribution?: number;
@@ -393,6 +394,7 @@ export async function analizarImportacionSuprema(
         acc.ringGame = (acc.ringGame ?? 0) + (row.ringGame ?? 0);
         acc.mtt = (acc.mtt ?? 0) + (row.mtt ?? 0);
         acc.sngOtros = (acc.sngOtros ?? 0) + (row.sngOtros ?? 0);
+        acc.spin = (acc.spin ?? 0) + (row.spin ?? 0);
         if (row.rodeo !== 0) acc.rodeoJugadores.push({ playerExternalId: row.playerId, baseRodeo: row.rodeo });
         acc.jugadoresDetalle.push({
           playerId: jugadorUpsert.id,
@@ -413,6 +415,7 @@ export async function analizarImportacionSuprema(
           ringGame: row.ringGame,
           mtt: row.mtt,
           sngOtros: row.sngOtros,
+          spin: row.spin,
           rodeoJugadores: row.rodeo !== 0 ? [{ playerExternalId: row.playerId, baseRodeo: row.rodeo }] : [],
           jugadoresDetalle: [{
             playerId: jugadorUpsert.id,

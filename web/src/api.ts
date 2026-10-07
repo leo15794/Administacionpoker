@@ -859,6 +859,7 @@ export const api = {
     ringGame?: number;
     mtt?: number;
     sng?: number;
+    spin?: number;
     // Ajuste manual ("tickets promocionales", 18/09/2026): monto libre en USD que se suma/resta
     // directo al cierre final del agente, cargado a mano en la grilla — ver engine/cierre.ts.
     ajusteManual?: number;
@@ -888,6 +889,7 @@ export const api = {
     ringGame?: number;
     mtt?: number;
     sng?: number;
+    spin?: number;
     ajusteManual?: number;
     ajusteManualNota?: string | null;
     // Solo Tiny GG: informativo, ver repo/closings.ts.

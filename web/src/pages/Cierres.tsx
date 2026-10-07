@@ -251,6 +251,7 @@ export default function Cierres() {
                   ring_game: c.ring_game ?? "",
                   mtt: c.mtt ?? "",
                   sng: c.sng ?? "",
+                  spin: c.spin ?? "",
                   rakeback: c.rakeback,
                   rodeo: c.rodeo,
                   cierre_final: c.final_closing,
@@ -298,7 +299,7 @@ export default function Cierres() {
                       // Suprema (Fenix/TeamBack Suprema) cargados despues de este cambio — el
                       // resto queda en NULL.
                       const tieneDesglose =
-                        c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null;
+                        c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null || c.spin != null;
                       const abierto = expandido.has(c.id);
                       const esFilaObjetivo = g.weekStart === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
                       return (
@@ -380,6 +381,7 @@ export default function Cierres() {
                                   <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
                                   <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
                                   <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
+                                  <span>Spin: <strong>{c.spin != null ? usd(c.spin) : "-"}</strong></span>
                                 </div>
                               </td>
                             </tr>
@@ -880,6 +882,7 @@ type FilaImport = {
   ringGame?: number;
   mtt?: number;
   sngOtros?: number;
+  spin?: number;
   // Solo Tiny GG (18/09/2026): informativo, se guarda junto al cierre pero no afecta el pago.
   bbjContribution?: number;
   system: "PREPAGO" | "WIN_LOSE";
@@ -1100,6 +1103,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: a.ringGame !== undefined ? Math.round((a.ringGame / tasa) * 100) / 100 : undefined,
             mtt: a.mtt !== undefined ? Math.round((a.mtt / tasa) * 100) / 100 : undefined,
             sngOtros: a.sngOtros !== undefined ? Math.round((a.sngOtros / tasa) * 100) / 100 : undefined,
+            spin: a.spin !== undefined ? Math.round((a.spin / tasa) * 100) / 100 : undefined,
             bbjContribution: a.bbjContribution,
             system: a.system,
             rakebackPct: a.rakebackPct,
@@ -1303,6 +1307,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             ringGame: f.ringGame,
             mtt: f.mtt,
             sng: f.sngOtros,
+            spin: f.spin,
             bbjContribution: f.bbjContribution,
             ajusteManual: Number(f.ajusteManual) || undefined,
             ajusteManualNota: f.ajusteManualNota.trim() || undefined,
@@ -1370,6 +1375,7 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           ringGame: f.ringGame,
           mtt: f.mtt,
           sng: f.sngOtros,
+          spin: f.spin,
           bbjContribution: f.bbjContribution,
           ajusteManual: Number(f.ajusteManual) || undefined,
           ajusteManualNota: f.ajusteManualNota.trim() || undefined,
