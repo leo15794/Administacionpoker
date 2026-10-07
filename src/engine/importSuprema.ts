@@ -15,6 +15,15 @@
 // 100% al agente (nunca se multiplica por ningún % ni se desvía a un supervisor). Verificado
 // contra dos filas reales del histórico (REPORTE ACTUAL DE MANZUR / DETALLE DE JUGADORES):
 // Cierre = Resultado ajustado + Rakeback + Rodeo + Ventas — encaja centavo a centavo.
+//
+// FIX 07/10/2026 (Leo: "hicieron un cambio en el cierre de suprema... ahora no funciona"):
+// la plataforma renombró esa columna a "Total Winnings Rodeo(Local)" (reporte semana 238) y
+// además reordenó/agregó un montón de columnas nuevas desglosadas por tipo de juego -- el resto
+// del reporte no cambió, solo ese nombre. Leo confirmó (07/10/2026) que sigue siendo el mismo
+// profit neto de siempre, no hay que restarle nada (ej. la "Total Stakes(Local)" que apareció
+// al lado NO es parte de este cálculo). Se acepta cualquiera de los dos nombres (RODEO_HEADER_
+// ALIASES) para no romper de nuevo si vuelven a cambiarlo, y para poder re-parsear reportes
+// viejos que todavía tengan el nombre original.
 import ExcelJS from "exceljs";
 
 const REQUIRED_HEADERS = [
@@ -28,8 +37,14 @@ const REQUIRED_HEADERS = [
   "SNG Total(Local)",
   "SPIN Total(Local)",
   "TLT Total(Local)",
-  "Total Profit Rodeo(Local)",
 ] as const;
+
+// Alias del nombre de columna de Rodeo (ver FIX 07/10/2026 arriba) -- se acepta cualquiera de
+// los dos, el primero que aparezca en la hoja. Clave interna "RODEO" (no es un header real) en
+// vez de agregar los dos textos reales a REQUIRED_HEADERS, porque ahí alcanza con que UNO de
+// los dos esté presente, no los dos a la vez.
+const RODEO_HEADER_ALIASES = ["Total Profit Rodeo(Local)", "Total Winnings Rodeo(Local)"] as const;
+const RODEO_KEY = "RODEO";
 
 // Opcionales: no bloquean la hoja si faltan (una variante del reporte de Suprema podría no
 // traerlas), pero cuando están se usan para enriquecer la resolución de agente y para mostrar
@@ -129,8 +144,14 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       ) {
         colIndex[text] = col;
       }
+      if ((RODEO_HEADER_ALIASES as readonly string[]).includes(text) && colIndex[RODEO_KEY] === undefined) {
+        colIndex[RODEO_KEY] = col;
+      }
     }
     const faltantes = REQUIRED_HEADERS.filter((h) => colIndex[h] === undefined);
+    if (colIndex[RODEO_KEY] === undefined) {
+      faltantes.push(`${RODEO_HEADER_ALIASES[0]} (o su alias actual, ${RODEO_HEADER_ALIASES[1]})` as any);
+    }
     if (faltantes.length > 0) {
       hojasIgnoradas.push({
         sheetName: ws.name,
@@ -155,7 +176,7 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
         toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value) +
         toNumber(row.getCell(colIndex["TLT Total(Local)"]).value);
       const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0);
-      const rodeo = toNumber(row.getCell(colIndex["Total Profit Rodeo(Local)"]).value);
+      const rodeo = toNumber(row.getCell(colIndex[RODEO_KEY]).value);
       const role = colIndex["Role"] !== undefined ? normText(row.getCell(colIndex["Role"]).value) : null;
       const subAgentIdRaw = colIndex["Sub Agent ID"] !== undefined ? normText(row.getCell(colIndex["Sub Agent ID"]).value) : null;
       const subAgentNameRaw = colIndex["Sub Agent Name"] !== undefined ? normText(row.getCell(colIndex["Sub Agent Name"]).value) : null;
