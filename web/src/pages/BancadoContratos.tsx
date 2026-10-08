@@ -1051,6 +1051,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
   const [showExtra, setShowExtra] = useState(false);
   const [showCerrar, setShowCerrar] = useState(false);
   const [showAjuste, setShowAjuste] = useState(false);
+  const [showEditarMemoria, setShowEditarMemoria] = useState(false);
   const [reabriendo, setReabriendo] = useState(false);
 
   function refresh() {
@@ -1083,13 +1084,41 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
   return (
     <div style={{ marginTop: 16 }}>
       <div className="kpi-grid">
-        <div className="kpi-card"><div className="muted">Memoria inicial</div><div className="value">{usd(periodo.memoria_inicial)}</div></div>
+        <div className="kpi-card">
+          <div className="muted" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+            <span>Memoria inicial</span>
+            {!cerrado && (
+              <button
+                onClick={() => setShowEditarMemoria((v) => !v)}
+                style={{ fontSize: 12, background: "none", border: "none", padding: 0, color: "var(--accent, #2dbe85)", cursor: "pointer", textDecoration: "underline" }}
+              >
+                {showEditarMemoria ? "cancelar" : "editar"}
+              </button>
+            )}
+          </div>
+          <div className="value">{usd(periodo.memoria_inicial)}</div>
+          {periodo.memoria_inicial_editada_en && (
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              Memoria vieja original: {usd(periodo.memoria_inicial_original)}. Corregida el {dateShort(periodo.memoria_inicial_editada_en)} por {periodo.memoria_inicial_editada_por} -- {periodo.memoria_inicial_editada_motivo}
+            </div>
+          )}
+        </div>
         <div className="kpi-card"><div className="muted">{cerrado ? "Memoria final" : "Memoria proyectada"}</div><div className="value">{usd(cerrado ? periodo.memoria_final : estado.memoriaProyectada)}</div></div>
         <div className="kpi-card"><div className="muted">Resultado deal acumulado</div><div className="value">{usd(estado.acumulados.resultadoDealAcumulado)}</div></div>
         <div className="kpi-card"><div className="muted">{cerrado ? "Split jugador" : "Split jugador proyectado"}</div><div className="value">{usd(estado.splitJugadorProyectado)}</div></div>
         <div className="kpi-card"><div className="muted">Ganancia TeamBack (rake directo acum.)</div><div className="value">{usd(estado.gananciaTeambackAcumuladaRake)}</div></div>
         <div className="kpi-card"><div className="muted">Ganancia TeamBack proyectada total</div><div className="value">{usd(estado.gananciaTeambackProyectada)}</div></div>
       </div>
+
+      {showEditarMemoria && (
+        <div className="panel" style={{ marginTop: 12, maxWidth: 480 }}>
+          <EditarMemoriaInicialForm
+            periodoId={periodoId}
+            valorActual={Number(periodo.memoria_inicial)}
+            onGuardado={() => { setShowEditarMemoria(false); refresh(); onPeriodoCambiado(); }}
+          />
+        </div>
+      )}
 
       {cerrado ? (
         <div className="muted" style={{ marginTop: 10 }}>
@@ -1305,6 +1334,44 @@ function AjusteManualForm({ contrato, periodoId, onCreated }: { contrato: any; p
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Cargar ajuste"}</button>
     </div>
+  );
+}
+
+// Editor de memoria inicial (pedido Leo 08/10/2026, "editor de las tarjetas para ajustar la
+// memoria vieja"): corrige memoria_inicial de un período ABIERTO con motivo obligatorio --
+// nunca silencioso (ver editarMemoriaInicial en repo/bancadoContratos.ts). No disponible en
+// períodos CERRADOS: hay que reabrir primero (el botón "editar" ya no aparece en ese caso).
+function EditarMemoriaInicialForm({ periodoId, valorActual, onGuardado }: { periodoId: string; valorActual: number; onGuardado: () => void }) {
+  const [nuevoValor, setNuevoValor] = useState(String(valorActual));
+  const [motivo, setMotivo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function guardar() {
+    if (!motivo.trim()) return setMsg({ ok: false, text: "El motivo es obligatorio -- nunca se corrige la memoria sin dejar por qué." });
+    if (nuevoValor.trim() === "" || Number.isNaN(Number(nuevoValor))) return setMsg({ ok: false, text: "Valor inválido." });
+    setGuardando(true);
+    setMsg(null);
+    try {
+      await api.bancadoContratos.editarMemoriaInicial(periodoId, Number(nuevoValor), motivo.trim());
+      onGuardado();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo guardar el ajuste." });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+        Corrige la memoria inicial de este período (valor actual: {usd(valorActual)}). Lo pendiente por recuperar se ajusta por la misma diferencia, así no se pisa lo que ya se recuperó con parciales/splits cargados hasta ahora.
+      </div>
+      <div className="field"><label>Memoria inicial nueva (USD)</label><input type="number" step="0.01" value={nuevoValor} onChange={(e) => setNuevoValor(e.target.value)} /></div>
+      <div className="field"><label>Motivo (obligatorio)</label><input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="ej. el valor migrado del acuerdo viejo estaba mal cargado" /></div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Guardar corrección"}</button>
+    </>
   );
 }
 

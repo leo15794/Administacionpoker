@@ -399,6 +399,58 @@ export async function reabrirPeriodo(input: ReabrirPeriodoInput) {
   }
 }
 
+export interface EditarMemoriaInicialInput {
+  periodoId: string;
+  nuevoValor: number;
+  motivo: string;
+  usuario: string;
+}
+
+// Editor de memoria inicial (pedido Leo 08/10/2026, "editor de las tarjetas para ajustar la
+// memoria vieja"): corrige memoria_inicial de un período ABIERTO -- NUNCA en uno CERRADO
+// (memoria_final ya puede haberse heredado al período siguiente -- corregirla ahí desincroniza
+// la cadena, mismo motivo por el que reabrirPeriodo ya exige reabrir antes de tocar nada). El
+// delta (nuevoValor - memoria_inicial anterior) se traslada 1:1 a memoria_actual para no pisar
+// la recuperación ya acumulada por parciales/splits de este período: calcularPendiente usa
+// (memoria_inicial - memoria_actual) como "memoria ya aplicada", así que aplicar el mismo delta
+// a ambas dejá ese acumulado intacto -- solo se corrige el punto de partida. Siempre auditado
+// (motivo obligatorio) y nunca silencioso -- memoria_inicial_original guarda el valor de ANTES
+// del primer ajuste (no se pisa en ediciones siguientes).
+export async function editarMemoriaInicial(input: EditarMemoriaInicialInput) {
+  if (!Number.isFinite(input.nuevoValor)) throw new Error("Valor inválido.");
+  if (!input.motivo.trim()) throw new Error("El motivo es obligatorio -- nunca se corrige la memoria sin dejar por qué.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const periodoRes = await client.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1 FOR UPDATE`, [input.periodoId]);
+    const periodo = periodoRes.rows[0];
+    if (!periodo) throw new Error("Período no encontrado.");
+    if (periodo.estado === "CERRADO") {
+      throw new Error("El período está CERRADO -- reabrilo primero si hay que corregir la memoria inicial.");
+    }
+    const anterior = Number(periodo.memoria_inicial);
+    const delta = input.nuevoValor - anterior;
+    const r = await client.query(
+      `UPDATE bancado_contrato_periodos
+       SET memoria_inicial = $1,
+           memoria_actual = memoria_actual + $2,
+           memoria_inicial_original = COALESCE(memoria_inicial_original, $3),
+           memoria_inicial_editada_en = now(),
+           memoria_inicial_editada_por = $4,
+           memoria_inicial_editada_motivo = $5
+       WHERE id = $6 RETURNING *`,
+      [input.nuevoValor, delta, anterior, input.usuario, input.motivo.trim(), input.periodoId]
+    );
+    await client.query("COMMIT");
+    return r.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Parciales semanales (sección 7/8) -- nunca liquidan, nunca tocan memoria
 // ---------------------------------------------------------------------------------------------

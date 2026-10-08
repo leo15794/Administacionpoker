@@ -12,6 +12,7 @@ import {
   getPeriodo,
   abrirPeriodo,
   reabrirPeriodo,
+  editarMemoriaInicial,
   registrarParcial,
   listParciales,
   eliminarParcial,
@@ -131,6 +132,22 @@ bancadoContratosRouter.post("/periodos/:periodoId/reabrir", requireAuth, require
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await reabrirPeriodo({ periodoId: req.params.periodoId, motivo: parsed.data.motivo, reabiertoPor: req.user?.email ?? "admin" }));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const editarMemoriaInicialSchema = z.object({ nuevoValor: z.number(), motivo: z.string().min(1) });
+bancadoContratosRouter.post("/periodos/:periodoId/memoria-inicial", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = editarMemoriaInicialSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await editarMemoriaInicial({
+      periodoId: req.params.periodoId,
+      nuevoValor: parsed.data.nuevoValor,
+      motivo: parsed.data.motivo,
+      usuario: req.user?.email ?? "admin",
+    }));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

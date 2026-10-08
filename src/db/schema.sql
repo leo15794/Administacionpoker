@@ -1944,6 +1944,18 @@ CREATE TABLE IF NOT EXISTS bancado_contrato_periodos (
   UNIQUE(contrato_id, anio, mes)
 );
 
+-- Editor de memoria inicial (pedido Leo 08/10/2026, "editor de las tarjetas para ajustar la
+-- memoria vieja"): permite corregir memoria_inicial de un período ya ABIERTO (ej. si el valor
+-- migrado a mano del acuerdo viejo, como los USD 344,75 de Matías, se había cargado mal).
+-- memoria_inicial_original guarda el valor de ANTES del primer ajuste (nunca se pisa en
+-- ediciones siguientes) -- así queda registro de cuál era la memoria vieja real cargada
+-- originalmente, aunque se corrija más de una vez. Ver editarMemoriaInicial en
+-- repo/bancadoContratos.ts.
+ALTER TABLE bancado_contrato_periodos ADD COLUMN IF NOT EXISTS memoria_inicial_original NUMERIC(18,4);
+ALTER TABLE bancado_contrato_periodos ADD COLUMN IF NOT EXISTS memoria_inicial_editada_en TIMESTAMPTZ;
+ALTER TABLE bancado_contrato_periodos ADD COLUMN IF NOT EXISTS memoria_inicial_editada_por TEXT;
+ALTER TABLE bancado_contrato_periodos ADD COLUMN IF NOT EXISTS memoria_inicial_editada_motivo TEXT;
+
 -- Cierre parcial semanal (secciones 7-8): registra producción, NUNCA liquida nada ni toca
 -- memoria. Nunca se sobrescribe -- cada semana es una fila propia e inmutable.
 CREATE TABLE IF NOT EXISTS bancado_contrato_parciales (

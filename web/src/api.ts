@@ -1078,6 +1078,8 @@ export const api = {
     estadoPeriodo: (periodoId: string) => request(`/bancado-contratos/periodos/${periodoId}/estado`),
     reabrirPeriodo: (periodoId: string, motivo: string) =>
       request(`/bancado-contratos/periodos/${periodoId}/reabrir`, { method: "POST", body: JSON.stringify({ motivo }) }),
+    editarMemoriaInicial: (periodoId: string, nuevoValor: number, motivo: string) =>
+      request(`/bancado-contratos/periodos/${periodoId}/memoria-inicial`, { method: "POST", body: JSON.stringify({ nuevoValor, motivo }) }),
 
     parciales: (periodoId: string) => request(`/bancado-contratos/periodos/${periodoId}/parciales`),
     registrarParcial: (
