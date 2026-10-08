@@ -136,26 +136,57 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
     }
   }
 
+  // (08/10/2026, pedido de Leo: "pasar la estetica que hicimos en poker administracion a
+  // teamback afiliates") -- esta pantalla usaba .login-box/.login-mark, clases viejas que ya
+  // no tienen ninguna regla en index.css desde el rediseño del login principal (quedó
+  // literalmente sin estilo, por eso se veía como texto suelto). Se reemplaza por la MISMA
+  // estructura que Login.tsx (login-hero-card, cartas cayendo, palos, reveal) -- ningún CSS
+  // nuevo, reusa el que ya existe. Lo único propio de esta sección: usuario (no mail), el ojo
+  // para mostrar/ocultar contraseña (CampoContrasena) y la aclaración de que es un login aparte.
   return (
     <div className="login-shell">
-      <div className="login-box">
-        <div className="login-mark">T</div>
-        <h1>TeamBack Affiliates</h1>
-        <div className="sub">Login propio de esta sección -- no es tu usuario del resto de Poker Gestión.</div>
-        <form onSubmit={onSubmit}>
-          <div className="field">
-            <label>Usuario</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+      <div className="login-hero-card">
+        <div className="login-visual">
+          <div className="login-particle login-particle--1" />
+          <div className="login-particle login-particle--2" />
+          <div className="login-particle login-particle--3" />
+          <div className="login-particle login-particle--4" />
+          <div className="login-particle login-particle--5" />
+          <div className="login-suit login-suit--1">♠</div>
+          <div className="login-suit login-suit--2">♦</div>
+          <div className="login-suit login-suit--3">♥</div>
+          <div className="login-suit login-suit--4">♣</div>
+          <div className="login-cards">
+            <div className="login-card login-card--1">♠</div>
+            <div className="login-card login-card--2">♥</div>
           </div>
-          <div className="field">
-            <label>Contraseña</label>
-            <CampoContrasena value={password} onChange={(e) => setPassword(e.target.value)} />
+          <h1 className="login-reveal" style={{ animationDelay: ".45s" }}>TeamBack Affiliates</h1>
+          <p className="login-reveal" style={{ animationDelay: ".65s" }}>Programa de rakeback y referidos — sección aparte.</p>
+          <div className="login-dots login-reveal" style={{ animationDelay: ".75s" }}>
+            <span />
+            <span />
+            <span />
           </div>
-          {error && <div className="error">{error}</div>}
-          <button className="btn" disabled={loading} style={{ width: "100%" }}>
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
+        </div>
+        <div className="login-form-panel">
+          <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
+          <div className="sub login-reveal" style={{ animationDelay: ".28s" }}>Login propio de esta sección -- no es tu usuario del resto de Poker Gestión.</div>
+          <form onSubmit={onSubmit}>
+            <div className="field login-reveal" style={{ animationDelay: ".36s" }}>
+              <label>Usuario</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+            </div>
+            <div className="field login-reveal" style={{ animationDelay: ".44s" }}>
+              <label>Contraseña</label>
+              <CampoContrasena value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+            {error && <div className="error login-reveal" style={{ animationDelay: "0s" }}>{error}</div>}
+            <button className="btn login-reveal" style={{ width: "100%", animationDelay: ".52s" }} disabled={loading}>
+              {loading ? "Entrando..." : "Entrar"}
+            </button>
+          </form>
+          <div className="footnote login-reveal" style={{ animationDelay: ".6s" }}>Acceso exclusivo — TeamBack Affiliates</div>
+        </div>
       </div>
     </div>
   );
