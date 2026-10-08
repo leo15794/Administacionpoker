@@ -23,6 +23,17 @@ export interface NewMovement {
    * que no es un adelanto sino la liquidación misma (Leo, 22/09/2026: "no debería quedar
    * pendiente de pago porque ya se le acreditaron"). Nunca se usa para una CARGA común. */
   sinNotaDeCredito?: boolean;
+  /** Pisa el delta de balance que normalmente calcula deltaParaBalance() segun el tipo -- SOLO
+   * para el caso puntual de ajustarAdelanto() CONSUMO de un adelanto FICHAS_PENDIENTE
+   * (repo/advances.ts, 08/10/2026, bug real que encontro Leo con cajerouy): ese Consumo genera
+   * un COBRO (para que siga apareciendo en Movimientos/Liquidaciones como un cobro real, mismo
+   * tipo de siempre) PERO la deuda de esas fichas YA se resto del balance en el Alta
+   * (ADELANTO_FICHAS, mismo monto) -- sin este override, el Consumo la restaba OTRA VEZ (el
+   * balance terminaba contando la misma deuda dos veces). 0 aca dice "este movimiento no toca
+   * el balance, solo queda de registro" -- mismo criterio ya usado para PAGO_RAKEBACK/
+   * COBRO_RAKEBACK/ADELANTO_RAKEBACK en deltaParaBalance mas abajo. undefined (default) no
+   * cambia nada de lo que ya existe. */
+  balanceDeltaOverride?: number;
 }
 
 /**
@@ -56,7 +67,12 @@ export async function registrarMovimiento(input: NewMovement) {
     }
 
     const movementId = newId("mov");
-    const paymentMethod = input.paymentMethod ?? "SIN_TESORERIA";
+    // AJUSTE nunca mueve la wallet (29/09/2026, pedido de Leo: "busquemos simpleza" -- antes el
+    // formulario dejaba elegir medio para un ajuste igual que cualquier otro movimiento, y si se
+    // elegía uno generaba un movimiento real de tesorería, aunque un ajuste es puramente
+    // contable, nunca debería mover plata de verdad). Se fuerza acá, en el punto único donde se
+    // decide si se abre treasury_entries, así queda blindado sin importar qué mande el frontend.
+    const paymentMethod = input.type === "AJUSTE" ? "SIN_TESORERIA" : input.paymentMethod ?? "SIN_TESORERIA";
 
     // DESCARGA (el agente entrega fichas/crédito) se guarda con signo negativo -- Leo,
     // 22/09/2026: "la descarga de fichas tienen que ser negativas". Antes se guardaba el
@@ -111,7 +127,18 @@ export async function registrarMovimiento(input: NewMovement) {
     }
 
     // Proyección de balance: club origen siempre se actualiza.
-    await upsertBalanceDelta(client, input.agentId, input.clubId, deltaParaBalance(input.type, input.amount, false));
+    const deltaBalanceClubOrigen =
+      input.balanceDeltaOverride !== undefined ? input.balanceDeltaOverride : deltaParaBalance(input.type, input.amount, false);
+    await upsertBalanceDelta(client, input.agentId, input.clubId, deltaBalanceClubOrigen);
+    // Guarda el delta REALMENTE aplicado (ver columna balance_delta_applied, schema.sql,
+    // 08/10/2026) para que revertirMovimiento/eliminarMovimiento no tengan que recalcularlo con
+    // deltaParaBalance() más adelante -- necesario porque balanceDeltaOverride puede hacer que
+    // el delta aplicado hoy no coincida con lo que deltaParaBalance(type, amount) devolvería en
+    // el futuro.
+    await client.query(`UPDATE ledger_movements SET balance_delta_applied = $1 WHERE id = $2`, [
+      deltaBalanceClubOrigen,
+      movementId,
+    ]);
 
     // Si es transferencia entre clubes, actualiza también el club destino (mismo signo invertido).
     if (input.type === "TRANSFERENCIA_ENTRE_CLUBES") {
@@ -122,9 +149,11 @@ export async function registrarMovimiento(input: NewMovement) {
     // Carga de tesorería (21/09/2026, pedido de Leo): un movimiento CARGA además de sumar al
     // balance del agente (arriba) abre una "nota de crédito" pendiente de cruzar contra ese
     // agente+club — mismo mecanismo que un adelanto de rakeback (amount/consumed), para poder
-    // descontarla después en Liquidaciones (ver repo/cargaCruces.ts). Independiente del método
-    // de pago (a diferencia de treasury_entries, que solo se genera con USDT/EFECTIVO/ZELLE).
-    if (input.type === "CARGA" && !input.sinNotaDeCredito) {
+    // descontarla después en Liquidaciones (ver repo/cargaCruces.ts). SOLO si es a crédito
+    // (SIN_TESORERIA) -- corregido 29/09/2026, pedido de Leo: "busquemos simpleza" (una carga
+    // pagada con USDT/EFECTIVO/ZELLE ya se cobró en el momento, no tiene sentido que además
+    // quede pendiente de cruzar como si se la debieran).
+    if (input.type === "CARGA" && !input.sinNotaDeCredito && paymentMethod === "SIN_TESORERIA") {
       const cargaId = newId("cpc");
       const montoCarga = Math.abs(input.amount);
       await client.query(
@@ -523,7 +552,10 @@ export async function revertirMovimiento(id: string, motivo?: string, revertidoP
       }
     }
 
-    const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
+    const deltaOrigen =
+      mov.balance_delta_applied !== null && mov.balance_delta_applied !== undefined
+        ? Number(mov.balance_delta_applied)
+        : deltaParaBalance(mov.type, Number(mov.amount), false);
     await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaOrigen);
     let deltaDestino: number | null = null;
     if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
@@ -665,7 +697,10 @@ export async function eliminarMovimiento(movementId: string, opts?: { ignorarOrd
       }
     }
 
-    const deltaOrigen = deltaParaBalance(mov.type, Number(mov.amount), false);
+    const deltaOrigen =
+      mov.balance_delta_applied !== null && mov.balance_delta_applied !== undefined
+        ? Number(mov.balance_delta_applied)
+        : deltaParaBalance(mov.type, Number(mov.amount), false);
     await upsertBalanceDelta(client, mov.agent_id, mov.club_id, -deltaOrigen);
     if (mov.type === "TRANSFERENCIA_ENTRE_CLUBES" && mov.club_destino_id) {
       const deltaDestino = deltaParaBalance(mov.type, Number(mov.amount), true);
