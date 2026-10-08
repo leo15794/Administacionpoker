@@ -141,8 +141,11 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
   // no tienen ninguna regla en index.css desde el rediseño del login principal (quedó
   // literalmente sin estilo, por eso se veía como texto suelto). Se reemplaza por la MISMA
   // estructura que Login.tsx (login-hero-card, cartas cayendo, palos, reveal) -- ningún CSS
-  // nuevo, reusa el que ya existe. Lo único propio de esta sección: usuario (no mail), el ojo
-  // para mostrar/ocultar contraseña (CampoContrasena) y la aclaración de que es un login aparte.
+  // nuevo, reusa el que ya existe. Lo único propio de esta sección: usuario (no mail) y el ojo
+  // para mostrar/ocultar contraseña (CampoContrasena).
+  // FIX (08/10/2026, pedido de Leo): sacó el texto "Login propio de esta sección..." y
+  // "sección aparte" del copy -- quedaba redundante/cargado visualmente. El título "TeamBack
+  // Affiliates" queda en blanco puro acá (no en Login.tsx -- eso no se tocó).
   return (
     <div className="login-shell">
       <div className="login-hero-card">
@@ -160,8 +163,8 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
             <div className="login-card login-card--1">♠</div>
             <div className="login-card login-card--2">♥</div>
           </div>
-          <h1 className="login-reveal" style={{ animationDelay: ".45s" }}>TeamBack Affiliates</h1>
-          <p className="login-reveal" style={{ animationDelay: ".65s" }}>Programa de rakeback y referidos — sección aparte.</p>
+          <h1 className="login-reveal" style={{ animationDelay: ".45s", color: "#fff" }}>TeamBack Affiliates</h1>
+          <p className="login-reveal" style={{ animationDelay: ".65s" }}>Programa de rakeback y referidos.</p>
           <div className="login-dots login-reveal" style={{ animationDelay: ".75s" }}>
             <span />
             <span />
@@ -170,7 +173,6 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
         </div>
         <div className="login-form-panel">
           <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
-          <div className="sub login-reveal" style={{ animationDelay: ".28s" }}>Login propio de esta sección -- no es tu usuario del resto de Poker Gestión.</div>
           <form onSubmit={onSubmit}>
             <div className="field login-reveal" style={{ animationDelay: ".36s" }}>
               <label>Usuario</label>
