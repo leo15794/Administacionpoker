@@ -792,6 +792,14 @@ export default function Liquidaciones() {
         if (r?.id) setMovIdsPagosGenericoSesion((prev) => [...prev, r.id]);
         setMovMsg({ ok: true, text: "Cobro registrado y aplicado." });
         setMovObservacion("");
+        // 08/10/2026, pedido de Leo -- bug real: el campo "Importe" quedaba con el monto
+        // sugerido de ANTES de este cobro (nunca se resincronizaba solo), así que el botón
+        // "Confirmar cobro" seguía habilitado y, si lo tocabas de nuevo sin querer, mandaba
+        // OTRA VEZ el mismo importe -- quedaba fácil duplicar un cobro ya hecho. Vaciarlo acá
+        // obliga a tipear un importe nuevo a propósito para registrar otro cobro (sigue siendo
+        // posible, por ejemplo para un pago partido en varias veces), en vez de que un click de
+        // más repita el anterior en silencio.
+        setMovMonto("");
         if (seleccionados.length > 0 && weekStart) {
           const dataActualizada = await api.liquidacion(seleccionados, weekStart, sistemaLiquidar ?? undefined);
           setData(dataActualizada);
