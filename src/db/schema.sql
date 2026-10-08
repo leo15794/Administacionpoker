@@ -2168,3 +2168,20 @@ ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS saldo_pendiente_restante N
 -- fantasma para que el historial del agente (Estado de cuenta) los distinga de un cierre real.
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT FALSE;
 
+
+-- balance_delta_applied (08/10/2026, pedido de Leo -- bug real encontrado al preparar el
+-- revert/redo de cajerouy): tanto "Revertir" (revertirMovimiento) como "Eliminar movimiento"
+-- (eliminarMovimiento, repo/ledger.ts) deshacían el efecto de un movimiento sobre `balances`
+-- RECALCULANDO deltaParaBalance(type, amount) de nuevo al momento de revertir, en vez de
+-- reusar el delta que realmente se aplicó cuando se creó. Eso es correcto SIEMPRE que el
+-- delta aplicado haya sido el "de catálogo" -- pero desde que existe balanceDeltaOverride
+-- (ver NewMovement en repo/ledger.ts, para el Consumo de un adelanto FICHAS_PENDIENTE) un
+-- movimiento puede haberse aplicado con un delta DISTINTO al que deltaParaBalance(type,...)
+-- devuelve hoy -- revertir ese movimiento con el recálculo viejo sumaría o restaría de más.
+-- Esta columna guarda el delta realmente aplicado en balances en el momento de
+-- registrarMovimiento(); revertirMovimiento/eliminarMovimiento la usan cuando está presente
+-- y sólo recalculan con deltaParaBalance() como respaldo para movimientos viejos (anteriores a
+-- este cambio) que nunca la tuvieron. Nullable a propósito: no hace falta backfill, ya que
+-- para todo movimiento viejo el recálculo YA coincide con lo aplicado en su momento (ninguno
+-- usó balanceDeltaOverride antes de hoy).
+ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS balance_delta_applied NUMERIC(18,4);
