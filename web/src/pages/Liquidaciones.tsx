@@ -4,6 +4,7 @@ import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Modal from "../components/Modal";
+import Loading from "../components/Loading";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
 // agente+club con lo que generó en rakeback esa semana, un total, y (abajo) lo que
@@ -1548,7 +1549,7 @@ export default function Liquidaciones() {
       </div>
 
       {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
-      {cargando && <div className="muted" style={{ marginTop: 14 }}>Cargando...</div>}
+      {cargando && <Loading style={{ marginTop: 14 }} />}
 
       {data && (
         <div className="panel" style={{ marginTop: 16 }}>
@@ -2313,7 +2314,7 @@ export default function Liquidaciones() {
       <div className="panel" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Historial de liquidaciones</h3>
         {!historial ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : historial.length === 0 ? (
           <div className="muted">Todavía no se guardó ninguna liquidación.</div>
         ) : (

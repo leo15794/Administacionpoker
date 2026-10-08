@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import Loading from "../components/Loading";
 
 type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios";
 
@@ -748,7 +749,7 @@ function GananciaSemanalTab() {
     cargar();
   }, []);
 
-  if (cargando) return <div className="panel muted">Cargando...</div>;
+  if (cargando) return <div className="panel"><Loading /></div>;
 
   const filas = datos?.semanas ?? [];
   const acumulado = datos?.acumulado;
@@ -863,7 +864,7 @@ function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; week
     api.teamback.liquidacionIndividual(playerId, weekStart).then(setData);
   }, [playerId, weekStart]);
 
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
   return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} />;
 }
 
@@ -1125,7 +1126,7 @@ function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => 
     })();
   }, [jugador.id]);
 
-  if (!cfg) return <div className="muted">Cargando...</div>;
+  if (!cfg) return <Loading />;
 
   function num(key: string) {
     return {
@@ -1476,7 +1477,7 @@ function ConfigTab() {
     api.teamback.getConfig().then(setCfg);
   }, []);
 
-  if (!cfg) return <div className="panel muted">Cargando...</div>;
+  if (!cfg) return <div className="panel"><Loading /></div>;
 
   function num(key: string) {
     return {

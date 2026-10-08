@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import Loading from "../components/Loading";
 
 // Mismas etiquetas que usa el admin en Movimientos (web/src/components/MovimientosHistorial.tsx)
 // -- acá en versión de solo lectura, sin acciones de revertir/eliminar (eso es admin-only).
@@ -39,7 +40,7 @@ export default function MiSupervision() {
   }, []);
 
   if (error) return <div className="error">No se pudo cargar: {error}</div>;
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   return (
     <div>

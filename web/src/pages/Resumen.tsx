@@ -5,6 +5,7 @@ import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import MovimientosHistorial from "../components/MovimientosHistorial";
+import Loading from "../components/Loading";
 
 // ================================================================================================
 // Resumen ejecutivo -- rediseño visual/UX (25/09/2026, pedido de Leo: "mejorar visualmente y a
@@ -134,7 +135,7 @@ export default function Resumen() {
   }
 
   if (error) return <div className="error">No se pudo cargar el resumen: {error}</div>;
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   // Puente: hacer click en una KPI de arriba lleva directo al detalle que la compone — para
   // "Agentes nos deben"/"Debemos a agentes" es filtrar por signo la misma tabla de saldos de

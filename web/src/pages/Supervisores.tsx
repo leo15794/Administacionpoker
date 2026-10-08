@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import Loading from "../components/Loading";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -106,7 +107,7 @@ export default function Supervisores() {
       </div>
     );
   }
-  if (!supervisores) return <div className="muted">Cargando...</div>;
+  if (!supervisores) return <Loading />;
 
   return (
     <div>
@@ -180,7 +181,7 @@ export default function Supervisores() {
 
           <h4>Cómo se compone el saldo</h4>
           {!migracion ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : migracion.length === 0 ? (
             <div className="muted">Todavía no se migró ningún saldo histórico a esta cuenta.</div>
           ) : (
@@ -216,7 +217,7 @@ export default function Supervisores() {
 
           <h4>Agentes a cargo (solo lectura -- sin saldo propio)</h4>
           {!subordinados ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : subordinados.length === 0 ? (
             <div className="muted">
               Ningún agente tiene "Supervisor" = "{seleccionado.name}" todavía -- asignalo desde Administración.
@@ -291,7 +292,7 @@ export default function Supervisores() {
 
           <h4>Movimientos manuales</h4>
           {!movimientos ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : movimientos.length === 0 ? (
             <div className="muted">Todavía no hay movimientos cargados.</div>
           ) : (

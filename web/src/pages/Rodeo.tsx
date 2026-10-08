@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import Loading from "../components/Loading";
 
 // "Resumen de Rodeo" (23/09/2026, pedido de Leo): una fila por agente+club con la memoria
 // vigente y el acumulado histórico de rodeo pagado -- para poder ver de un vistazo si la
@@ -35,7 +36,7 @@ export default function Rodeo() {
 
       <div className="panel" style={{ marginTop: 16 }}>
         {!rows ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : rows.length === 0 ? (
           <div className="muted">Todavía no hay ningún agente con Rodeo cargado.</div>
         ) : (

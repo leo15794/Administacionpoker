@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 const CATEGORY_LABEL: Record<string, string> = {
   COMPENSACION: "Compensación",
@@ -124,7 +125,7 @@ export default function CuentasSocios() {
       </div>
     );
   }
-  if (!cuentas) return <div className="muted">Cargando...</div>;
+  if (!cuentas) return <Loading />;
 
   const cuentaMovimientos = showMovimientosDe ? cuentas.find((c) => c.id === showMovimientosDe) ?? null : null;
 
@@ -334,7 +335,7 @@ export default function CuentasSocios() {
           </div>
 
           {!movimientos[cuentaMovimientos.id] ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : movimientos[cuentaMovimientos.id].length === 0 ? (
             <div className="muted">Sin movimientos todavía.</div>
           ) : (

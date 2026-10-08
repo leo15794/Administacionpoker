@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { dateShort } from "../fmt";
+import Loading from "./Loading";
 
 const INTERVALO_REFRESH_MS = 2 * 60 * 1000; // 2 minutos
 
@@ -92,7 +93,7 @@ export default function NotificationBell() {
       {abierto && (
         <div className="notif-dropdown">
           <div className="notif-dropdown-header">Notificaciones</div>
-          {cargando && <div className="muted" style={{ padding: 14 }}>Cargando...</div>}
+          {cargando && <Loading compact style={{ padding: 14 }} />}
           {!cargando && alertas.length === 0 && (
             <div className="muted" style={{ padding: 14 }}>Sin novedades por ahora.</div>
           )}

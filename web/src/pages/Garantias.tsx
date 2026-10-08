@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import Loading from "../components/Loading";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -39,7 +40,7 @@ export default function Garantias() {
       </div>
     );
   }
-  if (!garantias) return <div className="muted">Cargando...</div>;
+  if (!garantias) return <Loading />;
 
   const totalGarantizado = garantias.reduce((s, g) => s + Number(g.amount), 0);
   const totalConsumido = garantias.reduce((s, g) => s + Number(g.consumed), 0);
@@ -107,7 +108,7 @@ export default function Garantias() {
       <div className="panel">
         <h3>Historial de movimientos</h3>
         {!historial ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : historial.length === 0 ? (
           <div className="muted">Todavía no hay movimientos de garantías.</div>
         ) : (

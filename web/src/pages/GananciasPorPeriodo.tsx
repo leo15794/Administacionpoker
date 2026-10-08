@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 // Recreación de las pestañas GANANCIAS_POR_PERIODO + AJUSTES EXTRAORDINARIOS de la planilla
 // (15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre ("Agosto 2026") y, al
@@ -94,7 +95,7 @@ export default function GananciasPorPeriodo() {
       </div>
     );
   }
-  if (!periodos || !ajustes) return <div className="muted">Cargando...</div>;
+  if (!periodos || !ajustes) return <Loading />;
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -389,7 +390,7 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
     load();
   }, [id]);
 
-  if (!periodo) return <div className="muted">Cargando...</div>;
+  if (!periodo) return <Loading />;
 
   async function cerrar() {
     if (!(await confirmDialog(`¿Cerrar "${periodo.name}"? Se congelan los números.`))) return;

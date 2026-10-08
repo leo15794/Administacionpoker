@@ -4,6 +4,7 @@ import { usd, dateTime } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 const LEDGER_LABEL: Record<string, string> = {
   WALLET_MANOS: "Wallet USDT",
@@ -56,7 +57,7 @@ export default function Tesoreria() {
       </div>
     );
   }
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   const wallet = data.porLedger.find((l: any) => l.ledger === "WALLET_MANOS");
   const caja = data.porLedger.find((l: any) => l.ledger === "CAJA_EFECTIVO");

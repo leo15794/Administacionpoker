@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -88,7 +89,7 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
       </div>
     );
   }
-  if (!adelantos) return <div className="muted">Cargando...</div>;
+  if (!adelantos) return <Loading />;
 
   const totalAdelantado = adelantos.reduce((s, a) => s + Number(a.amount), 0);
   const totalConsumido = adelantos.reduce((s, a) => s + Number(a.consumed), 0);
@@ -191,7 +192,7 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
       <div className="panel">
         <h3>Historial de movimientos</h3>
         {!historial ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : historial.length === 0 ? (
           <div className="muted">Todavía no hay movimientos de adelantos.</div>
         ) : (

@@ -4,6 +4,7 @@ import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import MovimientosHistorial from "./MovimientosHistorial";
 import { useConfirmDialog } from "./ConfirmProvider";
+import Loading from "./Loading";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
 // sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
@@ -141,7 +142,7 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
   }, [agentId]);
 
   if (error) return <div className="error">No se pudo cargar el estado de cuenta: {error}</div>;
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
 

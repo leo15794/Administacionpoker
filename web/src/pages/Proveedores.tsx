@@ -3,6 +3,7 @@ import { api } from "../api";
 import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import Loading from "../components/Loading";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -72,7 +73,7 @@ export default function Proveedores() {
       </div>
     );
   }
-  if (!proveedores) return <div className="muted">Cargando...</div>;
+  if (!proveedores) return <Loading />;
 
   // Separado en dos KPIs en vez de un solo neto (22/09/2026, pedido de Leo: "esta mal lo de
   // saldo total a favor del proveedor... ese dinero es para nosotros" -- un total neto puede
@@ -253,7 +254,7 @@ export default function Proveedores() {
         <div className="panel">
           <h3>Saldo operativo por proveedor+club</h3>
           {!saldos ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : saldos.length === 0 ? (
             <div className="muted">Todavía no hay saldos -- se generan solos con el primer cierre o pago.</div>
           ) : (
@@ -279,7 +280,7 @@ export default function Proveedores() {
             Un cierre puede tener varias líneas (club y/o agente) -- tocá una fila para ver el detalle.
           </div>
           {!cierres ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : cierres.length === 0 ? (
             <div className="muted">Todavía no hay cierres cargados.</div>
           ) : (
@@ -303,7 +304,7 @@ export default function Proveedores() {
         <div className="panel">
           <h3>Historial de pagos / cobros</h3>
           {!pagos ? (
-            <div className="muted">Cargando...</div>
+            <Loading />
           ) : pagos.length === 0 ? (
             <div className="muted">Todavía no hay pagos/cobros cargados.</div>
           ) : (
@@ -344,7 +345,7 @@ export default function Proveedores() {
               <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({})}>+ Ajustar garantía</button>
             </div>
             {!garantias ? (
-              <div className="muted">Cargando...</div>
+              <Loading />
             ) : garantias.length === 0 ? (
               <div className="muted">Todavía no hay garantías activas.</div>
             ) : (
@@ -371,7 +372,7 @@ export default function Proveedores() {
           <div className="panel">
             <h3>Historial de garantías</h3>
             {!garantiasHistorial ? (
-              <div className="muted">Cargando...</div>
+              <Loading />
             ) : garantiasHistorial.length === 0 ? (
               <div className="muted">Todavía no hay movimientos.</div>
             ) : (
@@ -737,7 +738,7 @@ function AutoCierreClubesEditor({ proveedorId, clubes }: { proveedorId: string; 
         club en "Resumen por club" -- sin tener que volver a esta pantalla.
       </div>
       {configs === null ? (
-        <div className="muted">Cargando...</div>
+        <Loading />
       ) : configs.length === 0 ? (
         <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>Sin clubes configurados -- este proveedor se cierra a mano.</div>
       ) : (

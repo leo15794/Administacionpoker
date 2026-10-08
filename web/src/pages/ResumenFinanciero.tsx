@@ -4,6 +4,7 @@ import { api } from "../api";
 import { usd } from "../fmt";
 import { exportCsv } from "../csv";
 import GananciasPorPeriodo from "./GananciasPorPeriodo";
+import Loading from "../components/Loading";
 
 // Resumen financiero (18/09/2026, pedido explícito de Leo): "un resumen de todas las
 // ganancias, cada ingreso y cada egreso que se contabiliza, filtrable por día/semana/mes, para
@@ -163,7 +164,7 @@ export default function ResumenFinanciero() {
       )}
 
       {cargando && !data ? (
-        <div className="muted">Cargando...</div>
+        <Loading />
       ) : data ? (
         <>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>

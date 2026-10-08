@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 function num(n: number | string | null | undefined) {
   if (n === null || n === undefined) return "—";
@@ -143,7 +144,7 @@ export default function StockDeudas() {
 }
 
 function ResumenTab({ resumen, deudas }: { resumen: any; deudas: any }) {
-  if (!resumen || !deudas) return <div className="muted">Cargando...</div>;
+  if (!resumen || !deudas) return <Loading />;
   const t = deudas.totales;
   return (
     <div>
@@ -211,7 +212,7 @@ function TablaStockPorClub({ titulo, filas }: { titulo: string; filas: any[] }) 
 }
 
 function DeudasTab({ deudas }: { deudas: any }) {
-  if (!deudas) return <div className="muted">Cargando...</div>;
+  if (!deudas) return <Loading />;
   return (
     <div className="panel">
       <h3>Deudas consolidadas por agente/supervisor</h3>
@@ -253,7 +254,7 @@ function DeudasTab({ deudas }: { deudas: any }) {
 }
 
 function PrepagoTab({ prepago }: { prepago: any[] | null }) {
-  if (!prepago) return <div className="muted">Cargando...</div>;
+  if (!prepago) return <Loading />;
   const total = prepago.reduce((acc, p) => acc + (p.usd_ref !== null ? Number(p.usd_ref) : 0), 0);
   return (
     <div className="panel">
@@ -322,7 +323,7 @@ function TablaConsolidadoPorSistema({ titulo, filas }: { titulo: string; filas: 
 }
 
 function ConsolidadoTab({ consolidado }: { consolidado: any[] | null }) {
-  if (!consolidado) return <div className="muted">Cargando...</div>;
+  if (!consolidado) return <Loading />;
   const winLose = consolidado.filter((c) => c.system === "WIN_LOSE");
   const prepago = consolidado.filter((c) => c.system === "PREPAGO");
   const otros = consolidado.filter((c) => c.system !== "WIN_LOSE" && c.system !== "PREPAGO");
@@ -346,7 +347,7 @@ function CuentasTab({
   onEliminar: (s: any) => void;
   borrando: string | null;
 }) {
-  if (!stock) return <div className="muted">Cargando...</div>;
+  if (!stock) return <Loading />;
   return (
     <div className="panel">
       <h3>Stock por cuenta</h3>

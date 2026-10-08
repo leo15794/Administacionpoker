@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 // Pantalla dedicada para no tener que entrar a Usuarios y permisos → editar cada supervisor
 // solo para ver cuánto le corresponde de comisión por referido. Acá se ven TODOs los
@@ -108,7 +109,7 @@ export default function ComisionesReferidos() {
       </div>
     );
   }
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   return (
     <div>
@@ -163,7 +164,7 @@ export default function ComisionesReferidos() {
             </button>
             {verHistorial === s.userId && (
               cargandoHistorial === s.userId ? (
-                <div className="muted" style={{ marginTop: 8 }}>Cargando...</div>
+                <Loading style={{ marginTop: 8 }} />
               ) : (historiales[s.userId]?.length ?? 0) === 0 ? (
                 <div className="muted" style={{ marginTop: 8 }}>Todavía no hay movimientos.</div>
               ) : (

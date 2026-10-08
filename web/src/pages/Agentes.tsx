@@ -6,6 +6,7 @@ import Modal from "../components/Modal";
 import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -955,7 +956,7 @@ function ReglasGlobal({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       {showForm && <NuevaReglaGlobal agentes={agentes} clubes={clubes} onCreated={() => { setShowForm(false); refresh(); }} />}
 
       {cargando ? (
-        <div className="muted">Cargando...</div>
+        <Loading />
       ) : visibles.length === 0 ? (
         <div className="muted">{filtro === "vigentes" ? "Ningún agente tiene una regla especial vigente." : "No hay reglas cargadas todavía."}</div>
       ) : (
@@ -1219,7 +1220,7 @@ function ArbolClubes({ agentes, clubes }: { agentes: any[]; clubes: any[] }) {
       )}
 
       {cargando ? (
-        <div className="muted">Cargando...</div>
+        <Loading />
       ) : (
         grupos.map((grupo) => (
           <div key={grupo.key} style={{ marginBottom: 22 }}>

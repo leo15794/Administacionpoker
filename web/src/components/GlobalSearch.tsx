@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "./Modal";
+import Loading from "./Loading";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
 // sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
@@ -163,7 +164,7 @@ function FichaAgente({ agentId, onClose }: { agentId: string; onClose: () => voi
   return (
     <Modal title={data ? data.agente.name : "Agente"} onClose={onClose} wide>
       {error && <div className="error">{error}</div>}
-      {!data && !error && <div className="muted">Cargando...</div>}
+      {!data && !error && <Loading />}
       {data && (
         <div>
           <div className="muted" style={{ marginBottom: 14 }}>

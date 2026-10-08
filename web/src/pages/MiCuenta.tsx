@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
+import Loading from "../components/Loading";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
 // sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
@@ -25,7 +26,7 @@ export default function MiCuenta() {
     api.miCuenta(agentId || undefined).then(setData);
   }, [agentId]);
 
-  if (!data) return <div className="muted">Cargando...</div>;
+  if (!data) return <Loading />;
 
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
 

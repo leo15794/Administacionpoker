@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import { useConfirmDialog } from "./ConfirmProvider";
+import Loading from "./Loading";
 
 const TIPO_LABEL: Record<string, string> = {
   CARGA: "Carga",
@@ -82,7 +83,7 @@ export default function MovimientosHistorial({
   }
 
   if (error) return <div className="error">No se pudo cargar el historial: {error}</div>;
-  if (!rows) return <div className="muted">Cargando...</div>;
+  if (!rows) return <Loading />;
   if (rows.length === 0) {
     return <div className="muted">No hay movimientos cargados en el sistema nuevo para este filtro todavía (el saldo puede venir del estado inicial importado de la planilla).</div>;
   }

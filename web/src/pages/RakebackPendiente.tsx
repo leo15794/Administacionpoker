@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 // Rakeback pendiente (22/09/2026, pedido de Leo): el cierre semanal ahora separa el resultado
 // de mesas (Win/Lose -- lo único que mueve el stock físico/balance del agente automáticamente,
@@ -419,7 +420,7 @@ export default function RakebackPendiente() {
 
       <div className="panel" style={{ marginTop: 10 }}>
         {!rows ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : rows.length === 0 ? (
           <div className="muted">No hay rakeback pendiente por pagar.</div>
         ) : filasFiltradas.length === 0 ? (

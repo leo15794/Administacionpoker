@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -70,7 +71,7 @@ export default function BancadoContratos() {
 
       <div className="panel" style={{ marginTop: 16 }}>
         {!contratos ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : contratos.length === 0 ? (
           <div className="muted">Todavía no hay ningún contrato de bancado creado.</div>
         ) : (
@@ -844,7 +845,7 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
 
       <div className="panel" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Historial</h3>
-        {!historial ? <div className="muted">Cargando...</div> : historial.length === 0 ? <div className="muted">Todavía no hay cierres.</div> : (
+        {!historial ? <Loading /> : historial.length === 0 ? <div className="muted">Todavía no hay cierres.</div> : (
           <table>
             <thead>
               <tr>
@@ -896,7 +897,7 @@ function ContratoRmf({ contrato, onChanged }: { contrato: any; onChanged: () => 
         {showAjuste && (
           <AjusteManualForm contrato={contrato} onCreated={() => { setShowAjuste(false); refresh(); }} />
         )}
-        {!ajustes ? <div className="muted">Cargando...</div> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
+        {!ajustes ? <Loading /> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
           <table>
             <thead><tr><th>Tipo</th><th className="num">Importe</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
             <tbody>
@@ -960,7 +961,7 @@ function ContratoV1({ contrato }: { contrato: any }) {
       )}
 
       <div className="panel" style={{ marginTop: 12 }}>
-        {!periodos ? <div className="muted">Cargando...</div> : periodos.length === 0 ? (
+        {!periodos ? <Loading /> : periodos.length === 0 ? (
           <div className="muted">Todavía no hay ningún período abierto para este contrato.</div>
         ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1077,7 +1078,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
     }
   }
 
-  if (!estado) return <div className="panel" style={{ marginTop: 16 }}><div className="muted">Cargando...</div></div>;
+  if (!estado) return <div className="panel" style={{ marginTop: 16 }}><Loading /></div>;
   const { periodo } = estado;
   const cerrado = periodo.estado === "CERRADO";
 
@@ -1163,7 +1164,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
 
       <div className="panel" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Parciales semanales</h3>
-        {!parciales ? <div className="muted">Cargando...</div> : parciales.length === 0 ? <div className="muted">Sin parciales todavía.</div> : (
+        {!parciales ? <Loading /> : parciales.length === 0 ? <div className="muted">Sin parciales todavía.</div> : (
           <table>
             <thead><tr><th>Semana</th><th className="num">Mesa</th><th className="num">Rake</th><th className="num">Deal</th><th className="num">TeamBack</th><th></th></tr></thead>
             <tbody>
@@ -1201,7 +1202,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
 
       <div className="panel" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>Liquidaciones de este período</h3>
-        {!liquidaciones ? <div className="muted">Cargando...</div> : liquidaciones.length === 0 ? <div className="muted">Ninguna todavía.</div> : (
+        {!liquidaciones ? <Loading /> : liquidaciones.length === 0 ? <div className="muted">Ninguna todavía.</div> : (
           <table>
             <thead><tr><th>Tipo</th><th>Semana</th><th className="num">Memoria antes</th><th className="num">Aplicada</th><th className="num">Memoria después</th><th className="num">Split jugador</th><th className="num">Split TeamBack</th><th>Fecha</th><th>Estado</th></tr></thead>
             <tbody>
@@ -1235,7 +1236,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
             onCreated={() => { setShowAjuste(false); refresh(); }}
           />
         )}
-        {!ajustes ? <div className="muted">Cargando...</div> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
+        {!ajustes ? <Loading /> : ajustes.length === 0 ? <div className="muted">Sin ajustes.</div> : (
           <table>
             <thead><tr><th>Tipo</th><th className="num">Importe</th><th>Estado</th><th>Motivo</th><th></th></tr></thead>
             <tbody>
@@ -1448,7 +1449,7 @@ function CostosFijosPanel({ contrato }: { contrato: any }) {
           <button className="btn" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Guardar"}</button>
         </div>
       )}
-      {!costos ? <div className="muted" style={{ marginTop: 10 }}>Cargando...</div> : costos.length === 0 ? <div className="muted" style={{ marginTop: 10 }}>Sin costos fijos cargados.</div> : (
+      {!costos ? <Loading style={{ marginTop: 10 }} /> : costos.length === 0 ? <div className="muted" style={{ marginTop: 10 }}>Sin costos fijos cargados.</div> : (
         <table style={{ marginTop: 10 }}>
           <thead><tr><th>Mes</th><th className="num">Monto</th><th>Observaciones</th></tr></thead>
           <tbody>

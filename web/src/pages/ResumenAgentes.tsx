@@ -3,6 +3,7 @@ import { api } from "../api";
 import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Loading from "../components/Loading";
 
 // "Resumen por agente" (23/09/2026, pedido de Leo): réplica del "Estado de cuenta semanal" que
 // ya arma a mano en Excel (PDF de referencia "Cierre El Latigo Loco") -- elegís semana + uno o
@@ -246,7 +247,7 @@ export default function ResumenAgentes() {
                 </div>
               </div>
 
-              {cargandoHistorial && <div className="muted">Cargando...</div>}
+              {cargandoHistorial && <Loading />}
               {!cargandoHistorial && historial && historial.length === 0 && (
                 <div className="muted">No hay resúmenes guardados {(filtroDesde || filtroHasta) && "en ese rango de fechas"}.</div>
               )}
@@ -331,7 +332,7 @@ export default function ResumenAgentes() {
           </div>
 
           {!agentes ? (
-            <div className="muted" style={{ marginTop: 10 }}>Cargando...</div>
+            <Loading style={{ marginTop: 10 }} />
           ) : (
             <>
               {filtrados.length > 0 && (
@@ -1278,7 +1279,7 @@ function SaldosActuales() {
       )}
 
       {error && <div className="error">{error}</div>}
-      {cargando && !datos && <div className="muted">Cargando...</div>}
+      {cargando && !datos && <Loading />}
 
       {datos && (
         <table>

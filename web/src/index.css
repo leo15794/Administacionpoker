@@ -911,6 +911,39 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   50% { transform: scale(1.35); opacity: 0.9; }
 }
 
+/* ---------- loading genérico (08/10/2026, pedido Leo: usar la animación del login mientras
+   carga cualquier otra parte del sistema, no solo texto "Cargando...") ---------- */
+.app-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 36px 20px;
+  width: 100%;
+}
+.app-loading--compact {
+  padding: 14px;
+  gap: 8px;
+}
+.app-loading-suits {
+  display: flex;
+  gap: 9px;
+  font-size: 20px;
+  line-height: 1;
+}
+.app-loading--compact .app-loading-suits { font-size: 15px; gap: 6px; }
+.app-loading-suits > span {
+  display: inline-block;
+  animation: login-dot-pulse 1.6s ease-in-out infinite;
+}
+.app-loading-suits > span:nth-child(1) { color: var(--gold); }
+.app-loading-suits > span:nth-child(2) { color: var(--accent); animation-delay: .15s; }
+.app-loading-suits > span:nth-child(3) { color: var(--gold); animation-delay: .3s; }
+.app-loading-suits > span:nth-child(4) { color: var(--accent); animation-delay: .45s; }
+.app-loading-text { color: var(--text-dim); font-size: 13px; }
+.app-loading--compact .app-loading-text { font-size: 12px; }
+
 .login-form-panel {
   position: relative;
   z-index: 2;

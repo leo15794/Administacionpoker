@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import BancadoContratosEmbed from "./BancadoContratos";
+import Loading from "../components/Loading";
 
 /**
  * "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que hay que excluir
@@ -267,7 +268,7 @@ export default function JugadoresBancados() {
       <div className="panel">
         <h3>Jugadores marcados como bancados ({bancados.length})</h3>
         {cargando ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : bancados.length === 0 ? (
           <div className="muted">Todavía no hay ningún jugador marcado como bancado.</div>
         ) : (
@@ -362,7 +363,7 @@ export default function JugadoresBancados() {
           empresa, para ver el desglose sin tener que abrir cada uno. Respeta los filtros de arriba.
         </div>
         {cargandoResumen ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : resumenBancados.length === 0 ? (
           <div className="muted">Todavía no hay ningún cierre semanal cargado.</div>
         ) : (
@@ -413,7 +414,7 @@ export default function JugadoresBancados() {
           Fila por fila, cada cierre semanal (o recarga de capital) de cada bancado. Respeta los filtros de arriba.
         </div>
         {cargandoHistorial ? (
-          <div className="muted">Cargando...</div>
+          <Loading />
         ) : historialGlobal.length === 0 ? (
           <div className="muted">Todavía no se cerró ninguna semana de banca.</div>
         ) : (
@@ -990,7 +991,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
               )}
             </div>
             {cargandoHistorial ? (
-              <div className="muted">Cargando...</div>
+              <Loading />
             ) : historial.length === 0 ? (
               <div className="muted">Todavía no se cerró ninguna semana.</div>
             ) : (
