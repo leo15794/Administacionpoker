@@ -238,6 +238,15 @@ export async function ajustarAdelanto(input: AjusteAdelantoInput) {
       observation: input.notes || "Cobro de adelanto de fichas.",
       createdBy: input.createdBy ?? null,
       sinNotaDeCredito: true,
+      // FIX 08/10/2026 (bug real que encontro Leo con cajerouy, caso "adelanto de fichas sin
+      // saldo para cruzar"): esta plata YA se resto del balance en el Alta (ADELANTO_FICHAS, ver
+      // deltaParaBalance) -- sin esto, este COBRO la restaba OTRA VEZ (la misma deuda contada
+      // doble en balances/fichasTotal). Sigue generando el COBRO de siempre (para que aparezca
+      // en Movimientos y en "Pagos ya registrados" de Liquidaciones, igual que antes) pero sin
+      // tocar el balance -- lo que de verdad "cobra" esto es que rakeback_advances.consumed ya
+      // queda en el monto completo (ver el UPDATE mas abajo), que es lo unico que mira
+      // fichasAdelantadasPendientes en Resumen.
+      balanceDeltaOverride: 0,
     });
     movementId = reg.id;
   }
