@@ -2185,3 +2185,35 @@ ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL 
 -- para todo movimiento viejo el recálculo YA coincide con lo aplicado en su momento (ninguno
 -- usó balanceDeltaOverride antes de hoy).
 ALTER TABLE ledger_movements ADD COLUMN IF NOT EXISTS balance_delta_applied NUMERIC(18,4);
+
+-- Grupos de liquidación (09/10/2026, pedido de Leo: "agrupar agentes para que en Liquidación
+-- aparezcan todos juntos", caso real "Sixto" = yAtt0r0 + triunfoepico + TB prodigio25): hasta
+-- acá, combinar los mismos agentes en una liquidación significaba tildarlos uno por uno en la
+-- lista de checkboxes y escribir el nombre del pago a mano CADA VEZ -- no quedaba guardado como
+-- plantilla reusable (lo único parecido, "Retomar" desde el historial, sirve para UNA semana ya
+-- guardada, no para arrancar una semana nueva). Esta tabla es justo eso: una plantilla con
+-- nombre + la lista de agentes que la componen, para elegirla de un desplegable en vez de
+-- rearmar la selección.
+--
+-- A PROPÓSITO no toca nada del motor financiero: no es una cuenta nueva, no genera balance ni
+-- cierre propio -- GET /liquidacion ya sabe combinar cualquier lista de agentIds y sumar un
+-- TOTAL (ver catalogRouter.get("/liquidacion")), esto solo ataja CÓMO se arma esa lista. Cada
+-- agente del grupo sigue teniendo su propio balance/cierre/rakeback pendiente/adelantos exactamente
+-- igual que si se lo seleccionara a mano.
+--
+-- active=false en vez de borrar de verdad (mismo criterio que agents/clubs): "eliminar" un grupo
+-- desde la pantalla solo lo oculta, nunca borra el historial de liquidaciones ya guardadas con
+-- ese nombre (esas quedan con su propio nombre_grupo/grupo_key de siempre, no dependen de esta
+-- tabla). El índice único de nombre es parcial (solo entre los activos) para poder reusar un
+-- nombre si el grupo viejo con ese nombre ya se "eliminó".
+CREATE TABLE IF NOT EXISTS grupos_liquidacion (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  agent_ids  TEXT[] NOT NULL DEFAULT '{}',
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS grupos_liquidacion_nombre_activo_unico
+  ON grupos_liquidacion (name) WHERE active;

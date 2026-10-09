@@ -618,3 +618,95 @@ export async function listAllDeals() {
   );
   return r.rows;
 }
+
+// Grupos de liquidación (09/10/2026, pedido de Leo, ver nota en schema.sql): plantilla chica
+// (nombre + lista de agentIds) para elegir de un desplegable en Liquidaciones en vez de rearmar
+// la selección de agentes a mano cada semana. A propósito NO toca balances/cierres/ledger --
+// es solo una lista guardada que el frontend usa para precargar `seleccionados`+`nombreGrupo`.
+export interface GrupoLiquidacion {
+  id: string;
+  name: string;
+  agentIds: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapGrupoLiquidacion(row: any): GrupoLiquidacion {
+  return {
+    id: row.id,
+    name: row.name,
+    agentIds: row.agent_ids ?? [],
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function listGruposLiquidacion(includeInactive = false) {
+  const r = await pool.query(
+    `SELECT * FROM grupos_liquidacion ${includeInactive ? "" : "WHERE active"} ORDER BY name`
+  );
+  return r.rows.map(mapGrupoLiquidacion);
+}
+
+export async function crearGrupoLiquidacion(name: string, agentIds: string[], createdBy?: string | null) {
+  if (!name.trim()) throw new Error("El grupo necesita un nombre.");
+  if (agentIds.length === 0) throw new Error("El grupo necesita al menos un agente.");
+  const existente = await pool.query(`SELECT id FROM grupos_liquidacion WHERE name = $1 AND active`, [name.trim()]);
+  if (existente.rows.length > 0) {
+    throw new Error(`Ya existe un grupo activo llamado "${name.trim()}" -- elegí otro nombre o editá el que ya existe.`);
+  }
+  const id = newId("grpliq");
+  const r = await pool.query(
+    `INSERT INTO grupos_liquidacion (id, name, agent_ids, created_by) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, name.trim(), agentIds, createdBy ?? null]
+  );
+  return mapGrupoLiquidacion(r.rows[0]);
+}
+
+export async function actualizarGrupoLiquidacion(
+  id: string,
+  fields: { name?: string; agentIds?: string[]; active?: boolean }
+) {
+  if (fields.name !== undefined && !fields.name.trim()) throw new Error("El grupo necesita un nombre.");
+  if (fields.agentIds !== undefined && fields.agentIds.length === 0) {
+    throw new Error("El grupo necesita al menos un agente.");
+  }
+  if (fields.name !== undefined) {
+    const existente = await pool.query(
+      `SELECT id FROM grupos_liquidacion WHERE name = $1 AND active AND id <> $2`,
+      [fields.name.trim(), id]
+    );
+    if (existente.rows.length > 0) {
+      throw new Error(`Ya existe otro grupo activo llamado "${fields.name.trim()}".`);
+    }
+  }
+  const sets: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (fields.name !== undefined) { sets.push(`name = $${i++}`); values.push(fields.name.trim()); }
+  if (fields.agentIds !== undefined) { sets.push(`agent_ids = $${i++}`); values.push(fields.agentIds); }
+  if (fields.active !== undefined) { sets.push(`active = $${i++}`); values.push(fields.active); }
+  if (sets.length === 0) {
+    const r = await pool.query(`SELECT * FROM grupos_liquidacion WHERE id = $1`, [id]);
+    return r.rows[0] ? mapGrupoLiquidacion(r.rows[0]) : null;
+  }
+  sets.push(`updated_at = now()`);
+  values.push(id);
+  const r = await pool.query(
+    `UPDATE grupos_liquidacion SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`,
+    values
+  );
+  return r.rows[0] ? mapGrupoLiquidacion(r.rows[0]) : null;
+}
+
+// "Eliminar" = active=false (mismo criterio que agents/clubs) -- nunca borra la fila ni afecta
+// liquidaciones ya guardadas con ese nombre, que no dependen de esta tabla.
+export async function eliminarGrupoLiquidacion(id: string) {
+  const r = await pool.query(
+    `UPDATE grupos_liquidacion SET active = false, updated_at = now() WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return r.rows[0] ? mapGrupoLiquidacion(r.rows[0]) : null;
+}

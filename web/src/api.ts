@@ -310,6 +310,15 @@ export const api = {
 
   // Catálogo (alta/edición)
   clubes: () => request("/catalog/clubs"),
+  // Grupos de liquidación (09/10/2026, pedido de Leo: "agrupar agentes para que en Liquidación
+  // aparezcan todos juntos", ej. "Sixto") -- plantilla de agentIds con nombre, para elegir de un
+  // desplegable en vez de rearmar la selección a mano cada semana. No toca balances/cierres.
+  gruposLiquidacion: () => request("/catalog/grupos-liquidacion"),
+  crearGrupoLiquidacion: (data: { name: string; agentIds: string[] }) =>
+    request("/catalog/grupos-liquidacion", { method: "POST", body: JSON.stringify(data) }),
+  editarGrupoLiquidacion: (id: string, data: { name?: string; agentIds?: string[]; active?: boolean }) =>
+    request(`/catalog/grupos-liquidacion/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  eliminarGrupoLiquidacion: (id: string) => request(`/catalog/grupos-liquidacion/${id}`, { method: "DELETE" }),
   // (25/09/2026, pedido de Leo: PRUEBA para Tiny) -- cotizacion en vivo de USDT/TWD via MAX
   // (max.maicoin.com), para no tener que cargar el valor de la ficha a mano cada vez.
   cotizacionUsdtTwd: () => request("/market-rates/usdttwd"),

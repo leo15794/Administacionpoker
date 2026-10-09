@@ -26,6 +26,10 @@ import {
   buscarJugadores,
   setJugadorBancado,
   setSubagenteJugador,
+  listGruposLiquidacion,
+  crearGrupoLiquidacion,
+  actualizarGrupoLiquidacion,
+  eliminarGrupoLiquidacion,
 } from "../repo/catalog.js";
 import { listBalancesByAgent, listMovementsByAgent, eliminarMovimiento as eliminarMovimientoLedger } from "../repo/ledger.js";
 import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarMovimientoCarga } from "../repo/cargaCruces.js";
@@ -1159,3 +1163,53 @@ catalogRouter.delete("/agents/:id", requireAuth, requireAdmin, async (req, res) 
   }
 });
 
+// Grupos de liquidación (09/10/2026, pedido de Leo -- ver nota en schema.sql/repo/catalog.ts):
+// plantillas chicas de "qué agentes combinar" para elegir de un desplegable en Liquidaciones en
+// vez de rearmar la selección a mano cada semana. No tocan balances/cierres/ledger.
+catalogRouter.get("/grupos-liquidacion", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listGruposLiquidacion(req.query.includeInactive === "true"));
+});
+
+const grupoLiquidacionSchema = z.object({
+  name: z.string().min(1),
+  agentIds: z.array(z.string()).min(1),
+});
+catalogRouter.post("/grupos-liquidacion", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = grupoLiquidacionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const grupo = await crearGrupoLiquidacion(parsed.data.name, parsed.data.agentIds, req.user?.email ?? null);
+    res.status(201).json(grupo);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const grupoLiquidacionUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  agentIds: z.array(z.string()).min(1).optional(),
+  active: z.boolean().optional(),
+});
+catalogRouter.patch("/grupos-liquidacion/:id", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = grupoLiquidacionUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const grupo = await actualizarGrupoLiquidacion(req.params.id, parsed.data);
+    if (!grupo) return res.status(404).json({ error: "Grupo no encontrado" });
+    res.json(grupo);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// "Eliminar" = active=false, nunca borra la fila ni afecta liquidaciones ya guardadas con ese
+// nombre (ver nota en repo/catalog.ts).
+catalogRouter.delete("/grupos-liquidacion/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const grupo = await eliminarGrupoLiquidacion(req.params.id);
+    if (!grupo) return res.status(404).json({ error: "Grupo no encontrado" });
+    res.json(grupo);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});

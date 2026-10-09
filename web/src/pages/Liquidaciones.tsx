@@ -267,6 +267,15 @@ export default function Liquidaciones() {
   // de los dos (Leo confirma que no debería pasar nunca, pero si pasa, el del otro sistema queda
   // afuera en vez de mezclarse).
   const [sistemaLiquidar, setSistemaLiquidar] = useState<"WIN_LOSE" | "PREPAGO" | null>(null);
+  // Grupos de liquidación (09/10/2026, pedido de Leo: "agrupar agentes y que si los
+  // agrupamos en administracion en liquidacion aparezcan todos juntos" -- "deberia ser
+  // configurable y editable"): un grupo guardado es solo un atajo de selección (nombre +
+  // lista de agentIds) para no tener que re-tildar los mismos agentes y re-escribir el mismo
+  // "Nombre del pago" cada semana. No toca balances/cierres/ledger -- al elegir un grupo
+  // simplemente carga seleccionados + nombreGrupo, igual que si se hubiera tildado a mano.
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState("");
+  const [guardandoGrupo, setGuardandoGrupo] = useState(false);
 
   function elegirSistemaLiquidar(s: "WIN_LOSE" | "PREPAGO") {
     setSistemaLiquidar(s);
@@ -280,11 +289,79 @@ export default function Liquidaciones() {
     setNombreGrupo("");
     setFiltro("");
     setSistemaLiquidar(null);
+    setGrupoSeleccionado("");
+  }
+
+  function refrescarGrupos() {
+    api.gruposLiquidacion().then(setGrupos).catch(() => {});
+  }
+
+  function cargarGrupo(id: string) {
+    setGrupoSeleccionado(id);
+    if (!id) return;
+    const g = grupos.find((x) => x.id === id);
+    if (!g) return;
+    setSeleccionados(g.agentIds);
+    setNombreGrupo(g.name);
+    setSemanas([]);
+    setWeekStart("");
+    setData(null);
+  }
+
+  async function guardarGrupoNuevo() {
+    if (!nombreGrupo.trim() || seleccionados.length === 0) {
+      await alertDialog("Elegí un nombre y al menos un agente antes de guardar el grupo.");
+      return;
+    }
+    setGuardandoGrupo(true);
+    try {
+      const g = await api.crearGrupoLiquidacion({ name: nombreGrupo.trim(), agentIds: seleccionados });
+      refrescarGrupos();
+      setGrupoSeleccionado(g.id);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo guardar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
+  }
+
+  async function actualizarGrupoActual() {
+    if (!grupoSeleccionado) return;
+    if (!nombreGrupo.trim() || seleccionados.length === 0) {
+      await alertDialog("Elegí un nombre y al menos un agente antes de actualizar el grupo.");
+      return;
+    }
+    setGuardandoGrupo(true);
+    try {
+      await api.editarGrupoLiquidacion(grupoSeleccionado, { name: nombreGrupo.trim(), agentIds: seleccionados });
+      refrescarGrupos();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo actualizar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
+  }
+
+  async function eliminarGrupoActual() {
+    if (!grupoSeleccionado) return;
+    const g = grupos.find((x) => x.id === grupoSeleccionado);
+    if (!(await confirmDialog(`¿Eliminar el grupo guardado "${g ? g.name : ""}"? Los agentes y el nombre del pago quedan como están, solo se borra el atajo.`))) return;
+    setGuardandoGrupo(true);
+    try {
+      await api.eliminarGrupoLiquidacion(grupoSeleccionado);
+      setGrupoSeleccionado("");
+      refrescarGrupos();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
   }
 
   useEffect(() => {
     api.agentes().then(setAgentes).catch(() => {});
     refrescarHistorial();
+    refrescarGrupos();
   }, []);
 
   function refrescarHistorial() {
@@ -300,6 +377,7 @@ export default function Liquidaciones() {
 
   function toggleAgente(id: string) {
     setSeleccionados((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setGrupoSeleccionado("");
     setSemanas([]);
     setWeekStart("");
     setData(null);
@@ -1489,6 +1567,32 @@ export default function Liquidaciones() {
 
             {sistemaLiquidar && (
               <>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+              <label className="muted" style={{ fontSize: 12 }}>Grupo guardado</label>
+              <select value={grupoSeleccionado} onChange={(e) => cargarGrupo(e.target.value)} style={{ maxWidth: 220 }}>
+                <option value="">— Elegir agentes a mano —</option>
+                {grupos.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} ({g.agentIds.length} agente{g.agentIds.length === 1 ? "" : "s"})
+                  </option>
+                ))}
+              </select>
+              {grupoSeleccionado ? (
+                <>
+                  <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={actualizarGrupoActual}>
+                    Actualizar grupo
+                  </button>
+                  <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={eliminarGrupoActual}>
+                    Eliminar grupo
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={guardarGrupoNuevo}>
+                  Guardar como grupo
+                </button>
+              )}
+            </div>
             <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Agentes a combinar</label>
             <input
               value={filtro}
