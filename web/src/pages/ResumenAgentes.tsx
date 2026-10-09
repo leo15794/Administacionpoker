@@ -1270,6 +1270,14 @@ function SaldosActuales() {
   // "Evolución del saldo"). Vacío = HOY (camino rápido, lee balances directo). Con fecha,
   // reconstruye cada agente desde el historial de movimientos -- tarda un poco más.
   const [fecha, setFecha] = useState("");
+  // Grupo guardado (09/10/2026, pedido de Leo: "una sección en donde podamos agrupar los saldos
+  // de estos agentes unidos") -- reusa el mismo catálogo grupos_liquidacion de Liquidaciones/
+  // Resumen por agente. A propósito NO es una suma nueva: elegir un grupo acá solo se suma como
+  // un filtro más (igual que "Sistema"/"Mostrar en cero"/buscar), y el renglón "Total" que ya
+  // existe más abajo pasa a sumar nada más que los agentes de ese grupo -- la combinación ya
+  // probada, sin escribir ninguna lógica de agregación nueva.
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoFiltro, setGrupoFiltro] = useState("");
 
   function cargar(fechaElegida?: string) {
     setCargando(true);
@@ -1283,6 +1291,7 @@ function SaldosActuales() {
 
   useEffect(() => {
     cargar();
+    api.gruposLiquidacion().then(setGrupos).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1305,10 +1314,16 @@ function SaldosActuales() {
     return ordenAsc ? " ▲" : " ▼";
   }
 
+  const grupoElegido = grupoFiltro ? grupos.find((g) => g.id === grupoFiltro) : null;
+  const grupoAgentesEncontrados = grupoElegido
+    ? grupoElegido.agentIds.filter((id: string) => (datos ?? []).some((d: any) => d.agentId === id)).length
+    : 0;
+
   const filtrados = (datos ?? [])
     .filter((a: any) => !query.trim() || a.agentName.toLowerCase().includes(query.trim().toLowerCase()))
     .filter((a: any) => sistemaFiltro === "TODOS" || a.defaultSystem === sistemaFiltro)
     .filter((a: any) => mostrarEnCero || a.saldoReal !== 0)
+    .filter((a: any) => !grupoElegido || grupoElegido.agentIds.includes(a.agentId))
     .sort((a: any, b: any) => {
       const cmp = orden === "nombre" ? a.agentName.localeCompare(b.agentName) : a[orden] - b[orden];
       return ordenAsc ? cmp : -cmp;
@@ -1339,6 +1354,14 @@ function SaldosActuales() {
           onChange={(e) => setQuery(e.target.value)}
           style={{ maxWidth: 220 }}
         />
+        <select value={grupoFiltro} onChange={(e) => setGrupoFiltro(e.target.value)} style={{ maxWidth: 200 }}>
+          <option value="">— Todos los agentes —</option>
+          {grupos.map((g: any) => (
+            <option key={g.id} value={g.id}>
+              {g.name} ({g.agentIds.length} agente{g.agentIds.length === 1 ? "" : "s"})
+            </option>
+          ))}
+        </select>
         <div style={{ display: "flex", gap: 6 }}>
           <button className={`chip${sistemaFiltro === "TODOS" ? " chip-active" : ""}`} onClick={() => setSistemaFiltro("TODOS")}>
             Todos
@@ -1374,6 +1397,13 @@ function SaldosActuales() {
       {fecha && (
         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           Mostrando el saldo reconstruido tal como estaba el {dateShort(fecha)} -- no el de hoy.
+        </div>
+      )}
+
+      {grupoElegido && grupoAgentesEncontrados < grupoElegido.agentIds.length && (
+        <div className="error" style={{ fontSize: 12, marginBottom: 10 }}>
+          {grupoAgentesEncontrados} de {grupoElegido.agentIds.length} agentes de este grupo están activos -- el
+          total de abajo no incluye a los demás.
         </div>
       )}
 
