@@ -425,6 +425,20 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
 // Portal del jugador (autoservicio, solo lectura de su propia liquidación)
 // ===================================================================================
 
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${breakpoint}px)`).matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [cuenta, setCuenta] = useState<any | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -445,6 +459,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
   const totalPendiente = totalHistorico - totalPagado;
   const semanasPagadas = historial.filter((l) => l.pagado).length;
   const referidosActivosUltimaSemana = historial[0]?.referidos_activos_count ?? 0;
+  const isMobile = useIsMobile();
 
   return (
     <div className="page">
@@ -492,80 +507,141 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
         </div>
       )}
 
-      <div className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>Semana</th>
-              <th className="num">Rake propio</th>
-              <th className="num">Referidos activos</th>
-              <th className="num">Escalón</th>
-              <th className="num">Rakeback</th>
-              <th className="num">Comisión 3%</th>
-              <th className="num">Total</th>
-              <th>Pago</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {historial.map((l) => {
-              const weekKey = String(l.week_start).slice(0, 10);
-              const abierta = expandida === weekKey;
-              return (
-                <Fragment key={l.id}>
-                  <tr>
-                    <td>{dateShort(l.week_start)} al {dateShort(l.week_end)}</td>
-                    <td className="num">{usd(l.rake_propio)}</td>
-                    <td className="num">{l.referidos_activos_count}</td>
-                    <td className="num">
-                      {pct(l.rakeback_pct)}{" "}
-                      <span className="muted" style={{ fontSize: 11 }}>
-                        ({l.tier_alcanzado_por === "BASE" ? "base" : l.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
-                      </span>
-                    </td>
-                    <td className="num">{usd(l.rakeback_generado)}</td>
-                    <td className="num">
-                      {usd(l.comision_3pct_acreditada)}
-                      {l.comision_3pct_pausada && (
-                        <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
-                          pausada
-                        </span>
-                      )}
-                    </td>
-                    <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
-                    <td>
-                      {l.pagado ? (
-                        <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
-                          Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
-                        </span>
-                      ) : (
-                        <span className="badge neg">Pendiente</span>
-                      )}
-                    </td>
-                    <td>
-                      <button className="btn secondary small" onClick={() => setExpandida(abierta ? null : weekKey)}>
-                        {abierta ? "Ocultar" : "Ver"}
-                      </button>
-                    </td>
-                  </tr>
-                  {abierta && (
+      {isMobile ? (
+        <div className="week-list">
+          {historial.map((l) => {
+            const weekKey = String(l.week_start).slice(0, 10);
+            const abierta = expandida === weekKey;
+            return (
+              <div className={`week-card${abierta ? " open" : ""}`} key={l.id}>
+                <div className="week-head" onClick={() => setExpandida(abierta ? null : weekKey)}>
+                  <div className="dates">
+                    {dateShort(l.week_start)} al {dateShort(l.week_end)}
+                    <span className="foot">
+                      {l.referidos_activos_count} referido{l.referidos_activos_count === 1 ? "" : "s"} · escalón {pct(l.rakeback_pct)}
+                    </span>
+                  </div>
+                  <div className="right">
+                    <div className="total">{usd(l.total_acreditado)}</div>
+                    <div className="chev">▾</div>
+                  </div>
+                </div>
+                <div className="badge-row">
+                  {l.pagado ? (
+                    <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+                      Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                    </span>
+                  ) : (
+                    <span className="badge neg">Pendiente</span>
+                  )}
+                  {l.comision_3pct_pausada && (
+                    <span className="badge neg" title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
+                      pausada
+                    </span>
+                  )}
+                </div>
+                {abierta && (
+                  <div className="detail">
+                    <div className="item">
+                      <div className="label">Rake propio</div>
+                      <div className="val">{usd(l.rake_propio)}</div>
+                    </div>
+                    <div className="item">
+                      <div className="label">Rakeback</div>
+                      <div className="val">{usd(l.rakeback_generado)}</div>
+                    </div>
+                    <div className="item span2">
+                      <div className="label">Comisión 3%</div>
+                      <div className="val">{usd(l.comision_3pct_acreditada)}</div>
+                    </div>
+                    <div className="item span2">
+                      <MiLiquidacionSemana weekStart={weekKey} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {historial.length === 0 && (
+            <div className="muted" style={{ padding: "4px 2px" }}>Todavía no tenés ninguna liquidación calculada.</div>
+          )}
+        </div>
+      ) : (
+        <div className="panel">
+          <table>
+            <thead>
+              <tr>
+                <th>Semana</th>
+                <th className="num">Rake propio</th>
+                <th className="num">Referidos activos</th>
+                <th className="num">Escalón</th>
+                <th className="num">Rakeback</th>
+                <th className="num">Comisión 3%</th>
+                <th className="num">Total</th>
+                <th>Pago</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((l) => {
+                const weekKey = String(l.week_start).slice(0, 10);
+                const abierta = expandida === weekKey;
+                return (
+                  <Fragment key={l.id}>
                     <tr>
-                      <td colSpan={9} style={{ background: "var(--bg-soft, rgba(255,255,255,0.03))" }}>
-                        <MiLiquidacionSemana weekStart={weekKey} />
+                      <td>{dateShort(l.week_start)} al {dateShort(l.week_end)}</td>
+                      <td className="num">{usd(l.rake_propio)}</td>
+                      <td className="num">{l.referidos_activos_count}</td>
+                      <td className="num">
+                        {pct(l.rakeback_pct)}{" "}
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          ({l.tier_alcanzado_por === "BASE" ? "base" : l.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
+                        </span>
+                      </td>
+                      <td className="num">{usd(l.rakeback_generado)}</td>
+                      <td className="num">
+                        {usd(l.comision_3pct_acreditada)}
+                        {l.comision_3pct_pausada && (
+                          <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
+                            pausada
+                          </span>
+                        )}
+                      </td>
+                      <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
+                      <td>
+                        {l.pagado ? (
+                          <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+                            Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                          </span>
+                        ) : (
+                          <span className="badge neg">Pendiente</span>
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn secondary small" onClick={() => setExpandida(abierta ? null : weekKey)}>
+                          {abierta ? "Ocultar" : "Ver"}
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {historial.length === 0 && (
-              <tr>
-                <td colSpan={9} className="muted">Todavía no tenés ninguna liquidación calculada.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    {abierta && (
+                      <tr>
+                        <td colSpan={9} style={{ background: "var(--bg-soft, rgba(255,255,255,0.03))" }}>
+                          <MiLiquidacionSemana weekStart={weekKey} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {historial.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="muted">Todavía no tenés ninguna liquidación calculada.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   );

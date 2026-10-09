@@ -300,6 +300,37 @@ a { color: inherit; }
   border: 1px solid var(--border); padding: 5px 11px; border-radius: 20px; white-space: nowrap;
 }
 
+/* ---------- TeamBack Affiliates: version mobile del portal del jugador (09/10/2026, pedido
+   de Leo: "estaria bueno que se pueda ver bien desde el celular") -- debajo de los 640px la
+   bienvenida se apila y los KPI pasan a una grilla 2x2. El historial pasa de tabla a lista de
+   tarjetas (.week-list mas abajo); esa decision se toma en JS (ver useIsMobile() en
+   TeamBackAffiliates.tsx), no solo en CSS, asi que estas reglas no necesitan @media propio. ---------- */
+@media (max-width: 640px) {
+  .welcome-row { align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .welcome-row .avatar { width: 44px; height: 44px; border-radius: 13px; font-size: 17px; }
+  .welcome-row .greeting { font-size: 19px; }
+  .welcome-row .sub { margin: 10px 0 14px; font-size: 12.5px; max-width: none; }
+  .welcome-row .welcome-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .kpi-card { padding: 13px 14px; }
+  .kpi-card .value { font-size: 18px; }
+}
+
+.week-list { display: flex; flex-direction: column; gap: 10px; }
+.week-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-soft); overflow: hidden; }
+.week-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 14px; cursor: pointer; }
+.week-head .dates { font-size: 13px; font-weight: 650; }
+.week-head .dates .foot { display: block; font-size: 10.5px; font-weight: 500; color: var(--text-faint); margin-top: 2px; }
+.week-head .right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.week-head .total { font-size: 16px; font-weight: 750; letter-spacing: -0.01em; }
+.chev { width: 20px; height: 20px; border-radius: 50%; background: var(--panel-2); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-dim); transition: transform 0.15s, background 0.15s, color 0.15s; flex-shrink: 0; }
+.week-card.open .chev { transform: rotate(180deg); background: var(--accent-grad); color: var(--accent-ink); }
+.badge-row { padding: 0 14px 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.week-card .detail { border-top: 1px solid var(--hairline); padding: 12px 14px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; background: var(--panel-2); }
+.week-card .detail .item .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; margin-bottom: 2px; }
+.week-card .detail .item .val { font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.week-card .detail .item.span2 { grid-column: 1 / -1; }
+
 h2 { margin: 0 0 5px; font-size: 23px; font-weight: 700; letter-spacing: -0.015em; }
 h3 { font-weight: 650; letter-spacing: -0.005em; }
 .muted { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
