@@ -539,7 +539,7 @@ function MiLiquidacionSemana({ weekStart }: { weekStart: string }) {
   }, [weekStart]);
 
   if (!data) return <Loading />;
-  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} referidos={data.referidos} />;
+  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} referidos={data.referidos} soloReferidos />;
 }
 
 // ===================================================================================
@@ -1005,22 +1005,38 @@ interface ReferidoDesgloseUI {
   comisionAportada: number;
 }
 
-function BloqueLiquidacionCopiable({ liquidacion, referidos }: { liquidacion: any; referidos?: ReferidoDesgloseUI[] }) {
+function BloqueLiquidacionCopiable({
+  liquidacion,
+  referidos,
+  soloReferidos,
+}: {
+  liquidacion: any;
+  referidos?: ReferidoDesgloseUI[];
+  soloReferidos?: boolean;
+}) {
   const texto = textoLiquidacion(liquidacion, referidos);
   return (
     <div>
-      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, lineHeight: 1.7 }}>{texto}</pre>
-      <button
-        className="btn secondary small"
-        onClick={() => {
-          navigator.clipboard?.writeText(texto);
-        }}
-      >
-        Copiar
-      </button>
+      {!soloReferidos && (
+        <>
+          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, lineHeight: 1.7 }}>{texto}</pre>
+          <button
+            className="btn secondary small"
+            onClick={() => {
+              navigator.clipboard?.writeText(texto);
+            }}
+          >
+            Copiar
+          </button>
+        </>
+      )}
+
+      {referidos && referidos.length === 0 && soloReferidos && (
+        <div className="muted" style={{ fontSize: 13 }}>No tenés referidos activos esta semana.</div>
+      )}
 
       {referidos && referidos.length > 0 && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: soloReferidos ? 0 : 16 }}>
           <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
             Desglose por referido -- qué generó cada uno esta semana.
           </div>
