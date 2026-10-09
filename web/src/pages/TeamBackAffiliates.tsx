@@ -438,17 +438,59 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
     api.teamback.portal.historial().then(setHistorial);
   }, []);
 
+  const nombreJugador = cuenta?.name || session.name;
+  const inicial = (nombreJugador || "?").trim().charAt(0).toUpperCase() || "?";
+  const totalHistorico = historial.reduce((acc, l) => acc + Number(l.total_acreditado), 0);
+  const totalPagado = historial.filter((l) => l.pagado).reduce((acc, l) => acc + Number(l.total_acreditado), 0);
+  const totalPendiente = totalHistorico - totalPagado;
+  const semanasPagadas = historial.filter((l) => l.pagado).length;
+  const referidosActivosUltimaSemana = historial[0]?.referidos_activos_count ?? 0;
+
   return (
     <div className="page">
-      <div className="topbar">
-        <h2>Mi liquidación — TeamBack Affiliates</h2>
-        <div className="muted" style={{ fontSize: 13 }}>
-          {cuenta ? `${cuenta.name} (${cuenta.suprema_player_id})` : session.name}
+      <div className="welcome-row">
+        <div className="avatar">{inicial}</div>
+        <div>
+          <div className="eyebrow">TeamBack Affiliates</div>
+          <h1 className="greeting">¡Hola, {nombreJugador}! 👋</h1>
+          <p className="sub">Acá vas a ver, semana a semana, lo que generás vos y tus referidos -- y si ya se te pagó o todavía está pendiente.</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="welcome-actions">
+          {cuenta && <span className="id-tag">ID Suprema {cuenta.suprema_player_id}</span>}
           <button className="btn secondary small" onClick={onLogout}>Cerrar sesión</button>
         </div>
       </div>
+
+      {historial.length > 0 && (
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <div className="label">Total histórico</div>
+            <div className="value">{usd(totalHistorico)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+              {historial.length} semana{historial.length === 1 ? "" : "s"} liquidada{historial.length === 1 ? "" : "s"}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="label">Pagado</div>
+            <div className="value pos">{usd(totalPagado)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+              {semanasPagadas} de {historial.length} semana{historial.length === 1 ? "" : "s"}
+            </div>
+          </div>
+          <div className="kpi-card kpi-warn">
+            <div className="label">Pendiente</div>
+            <div className="value warn">{usd(totalPendiente)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+              {historial.length - semanasPagadas} semana{historial.length - semanasPagadas === 1 ? "" : "s"} por cobrar
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="label">Referidos activos</div>
+            <div className="value">{referidosActivosUltimaSemana}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>esta semana</div>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <table>
