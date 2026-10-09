@@ -12,6 +12,11 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireTbAuth, requireTbAdmin, requireTbPlayer } from "../lib/tbAuth.js";
 import { parseSupremaWorkbook } from "../engine/importSuprema.js";
+// (09/10/2026, pedido de Leo: "podemos poner en espejo la wallet de adm poker... en modo
+// espejo") -- única excepción deliberada a "TeamBack Affiliates no importa nada del sistema
+// principal": lee (nunca escribe) el saldo de la Wallet del sistema principal, para mostrarlo acá
+// en modo SOLO LECTURA. Ver la ruta GET /wallet-espejo más abajo, admin-only.
+import { getSaldoWalletNeto } from "../repo/treasury.js";
 import {
   getTbConfig,
   updateTbConfig,
@@ -230,6 +235,19 @@ teambackRouter.get("/ganancia-semanal", requireTbAuth, requireTbAdmin, async (_r
     res.json(await getGananciaPorSemana());
   } catch (err: any) {
     res.status(500).json({ error: err.message || "No se pudo calcular la ganancia por semana." });
+  }
+});
+
+// (09/10/2026, pedido de Leo: "poner en espejo la wallet de adm poker... en modo espejo")
+// -- espejo de SOLO LECTURA del saldo de la Wallet (WALLET_MANOS) del sistema principal.
+// Admin-only a propósito (Leo: "Solo ADMIN") -- un jugador nunca debe ver esto, por eso
+// requireTbAdmin y no requireTbPlayer. No escribe nada: ni ajusta ni mueve la Wallet real,
+// solo la lee (ver repo/treasury.ts, getSaldoWalletNeto).
+teambackRouter.get("/wallet-espejo", requireTbAuth, requireTbAdmin, async (_req, res) => {
+  try {
+    res.json({ saldo: await getSaldoWalletNeto() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "No se pudo obtener el saldo de la Wallet." });
   }
 });
 

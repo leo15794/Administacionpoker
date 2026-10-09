@@ -14,7 +14,7 @@ import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import TbIdleGuard from "../components/TbIdleGuard";
 
-type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios";
+type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet";
 
 const TB_SESSION_KEY = "tb_session";
 
@@ -250,6 +250,12 @@ const tbIcon = {
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
     </svg>
   ),
+  wallet: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+      <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -286,6 +292,7 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "ganancia", label: "Ganancia por semana", icon: "ganancia" },
   { key: "config", label: "Configuración (plantilla)", icon: "config" },
   { key: "usuarios", label: "Usuarios", icon: "usuarios" },
+  { key: "wallet", label: "Wallet (espejo)", icon: "wallet" },
 ];
 
 // (25/09/2026, pedido de Leo: "hagamos el menu como la administracion de poker") -- mismo
@@ -408,6 +415,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         {tab === "ganancia" && <GananciaSemanalTab />}
         {tab === "config" && <ConfigTab />}
         {tab === "usuarios" && <UsuariosTab />}
+        {tab === "wallet" && <WalletEspejoTab />}
       </div>
     </div>
   );
@@ -870,6 +878,56 @@ function GananciaSemanalTab() {
           </tfoot>
         )}
       </table>
+    </div>
+  );
+}
+
+// (09/10/2026, pedido de Leo: "podemos poner en espejo la wallet de adm poker... en modo
+// espejo") -- pestaña NUEVA (no mezclada con Resumen/KPIs existentes), SOLO LECTURA, visible
+// únicamente para ADMIN (la ruta de abajo ya exige requireTbAdmin, nunca requireTbPlayer). No
+// hay ningún botón para mover ni ajustar la Wallet acá -- es un espejo, no un control remoto.
+function WalletEspejoTab() {
+  const [saldo, setSaldo] = useState<number | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function cargar() {
+    setCargando(true);
+    try {
+      const r = await api.teamback.walletEspejo();
+      setSaldo(r.saldo);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo cargar el saldo de la Wallet." });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  if (cargando) return <div className="panel"><Loading /></div>;
+
+  return (
+    <div className="panel">
+      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Espejo de solo lectura del saldo de la Wallet de Poker Gestión (sistema principal). Se
+        actualiza al abrir esta pestaña. Acá no se puede cargar, ajustar ni mover la Wallet -- para
+        eso hay que entrar al sistema principal.
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+      {saldo !== null && (
+        <div className="kpi-sub-grid">
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Saldo Wallet (espejo)</div>
+            <div className="kpi-sub-value" style={{ color: saldo >= 0 ? "var(--green)" : "var(--red)" }}>
+              {usd(saldo)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

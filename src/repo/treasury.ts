@@ -51,6 +51,24 @@ export async function listTreasuryAdjustments(limit = 200) {
   return r.rows;
 }
 
+// Saldo neto de la Wallet (WALLET_MANOS): mismo cálculo que ya usa el dashboard principal
+// (ver routes/dashboard.ts, KPI "saldoWallet") -- se saca acá como función reusable para que
+// TeamBack Affiliates pueda "espejarlo" en modo SOLO LECTURA (09/10/2026, pedido de Leo:
+// "podemos poner en espejo la wallet de adm poker... en modo espejo") sin duplicar la query a
+// mano. Suma ingresos/egresos de treasury_entries (lo que generan automático los pagos/cobros
+// a agentes) + treasury_adjustments (ajustes manuales), filtrado al ledger WALLET_MANOS.
+export async function getSaldoWalletNeto(): Promise<number> {
+  const r = await pool.query(
+    `SELECT COALESCE(SUM(CASE WHEN direction='INGRESO' THEN amount ELSE -amount END), 0) as neto
+     FROM (
+       SELECT direction, amount FROM treasury_entries WHERE ledger = 'WALLET_MANOS'
+       UNION ALL
+       SELECT direction, amount FROM treasury_adjustments WHERE ledger = 'WALLET_MANOS'
+     ) t`
+  );
+  return Number(r.rows[0].neto);
+}
+
 /**
  * Revierte un ajuste de tesorería (manual o histórico importado) cargado por error. LEDGER
  * INMUTABLE: nunca se borra — se inserta un ajuste nuevo con la dirección invertida (mismo

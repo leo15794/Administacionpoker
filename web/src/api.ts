@@ -1215,6 +1215,10 @@ export const api = {
     // Ganancia por semana (25/09/2026, pedido de Leo).
     gananciaSemanal: () => requestTb("/teamback/ganancia-semanal"),
 
+    // Wallet en modo espejo (09/10/2026, pedido de Leo) -- SOLO LECTURA, admin-only (ver
+    // routes/teamback.ts). Nunca escribe ni mueve la Wallet real del sistema principal.
+    walletEspejo: () => requestTb("/teamback/wallet-espejo"),
+
     // Pago de liquidaciones (25/09/2026, pedido de Leo) -- por liquidación individual, no por semana.
     marcarLiquidacionPagada: (id: string) => requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "POST" }),
     marcarLiquidacionNoPagada: (id: string) => requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "DELETE" }),
