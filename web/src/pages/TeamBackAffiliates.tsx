@@ -12,6 +12,7 @@ import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
+import TbIdleGuard from "../components/TbIdleGuard";
 
 type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios";
 
@@ -39,11 +40,16 @@ function leerTbSession(): TbSession | null {
 function guardarTbSession(s: TbSession) {
   localStorage.setItem(TB_SESSION_KEY, JSON.stringify(s));
   localStorage.setItem("tb_token", s.token); // lo que lee requestTb()/requestFormTb() en api.ts
+  // (09/10/2026, pedido de Leo: cierre de sesión por inactividad, ver TbIdleGuard.tsx) --
+  // arranca el reloj de inactividad recién al loguearse de verdad, mismo criterio que
+  // api.setToken() para el sistema principal.
+  localStorage.setItem("tb_last_activity", String(Date.now()));
 }
 
 function cerrarTbSession() {
   localStorage.removeItem(TB_SESSION_KEY);
   localStorage.removeItem("tb_token");
+  localStorage.removeItem("tb_last_activity");
 }
 
 // Modo dia/noche -- misma key de localStorage ("dp_theme") y mismo mecanismo (atributo
@@ -105,8 +111,17 @@ export default function TeamBackAffiliates() {
   }, []);
 
   if (!session) return <TbLogin onLoggedIn={setSession} />;
-  if (session.role === "PLAYER") return <TeamBackPortalJugador session={session} onLogout={() => { cerrarTbSession(); setSession(null); }} />;
-  return <TeamBackAdmin session={session} onLogout={() => { cerrarTbSession(); setSession(null); }} />;
+  const cerrarSesion = () => { cerrarTbSession(); setSession(null); };
+  return (
+    <>
+      {session.role === "PLAYER" ? (
+        <TeamBackPortalJugador session={session} onLogout={cerrarSesion} />
+      ) : (
+        <TeamBackAdmin session={session} onLogout={cerrarSesion} />
+      )}
+      <TbIdleGuard onLogout={cerrarSesion} />
+    </>
+  );
 }
 
 // ===================================================================================

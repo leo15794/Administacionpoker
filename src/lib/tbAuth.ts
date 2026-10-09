@@ -38,8 +38,12 @@ export interface TbJwtPayload {
   playerId: string | null;
 }
 
+// (09/10/2026, pedido de Leo: "lo mismo que hicimos con los tiempos de login" -- mismo
+// cambio que ya se hizo en lib/auth.ts para el sistema principal el 07/10/2026) -- el JWT
+// pasa de durar 7 dias a 24hs, combinado con el cierre de sesion por inactividad del
+// frontend (ver web/src/components/TbIdleGuard.tsx).
 export function signTbToken(payload: TbJwtPayload) {
-  return jwt.sign(payload, getSecret(), { expiresIn: "7d" });
+  return jwt.sign(payload, getSecret(), { expiresIn: "24h" });
 }
 
 export function verifyTbToken(token: string): TbJwtPayload {
