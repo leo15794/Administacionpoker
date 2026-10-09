@@ -39,6 +39,13 @@ export default function ResumenAgentes() {
   // resultado de juego no es responsabilidad del agente, así que el cierre semanal es solo el
   // rakeback neto, no el total club entero como en Win/Lose.
   const [sistema, setSistema] = useState<"WIN_LOSE" | "PREPAGO">("WIN_LOSE");
+  // Grupos de liquidación (09/10/2026, pedido de Leo: "ahora podemos agrupar en resumen por
+  // agente?") -- reusa el mismo catálogo de grupos guardados (nombre + agentIds) que ya existe
+  // en Liquidaciones, para no tener que re-tildar los mismos agentes acá también. No toca el
+  // cálculo del resumen -- solo precarga seleccionados + nombreGrupo.
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState("");
+  const [guardandoGrupo, setGuardandoGrupo] = useState(false);
   const [armando, setArmando] = useState(false);
   const [cargandoPreview, setCargandoPreview] = useState(false);
   const [preview, setPreview] = useState<any>(null);
@@ -63,7 +70,71 @@ export default function ResumenAgentes() {
       setSemanas(s);
       if (s.length > 0) setWeekStart(s[0]);
     });
+    refrescarGrupos();
   }, []);
+
+  function refrescarGrupos() {
+    api.gruposLiquidacion().then(setGrupos).catch(() => {});
+  }
+
+  function cargarGrupo(id: string) {
+    setGrupoSeleccionado(id);
+    if (!id) return;
+    const g = grupos.find((x) => x.id === id);
+    if (!g) return;
+    setSeleccionados(new Set(g.agentIds));
+    setNombreGrupo(g.name);
+  }
+
+  async function guardarGrupoNuevo() {
+    if (!nombreGrupo.trim() || seleccionados.size === 0) {
+      await alertDialog("Elegí un nombre y al menos un agente antes de guardar el grupo.");
+      return;
+    }
+    setGuardandoGrupo(true);
+    try {
+      const g = await api.crearGrupoLiquidacion({ name: nombreGrupo.trim(), agentIds: Array.from(seleccionados) });
+      refrescarGrupos();
+      setGrupoSeleccionado(g.id);
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo guardar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
+  }
+
+  async function actualizarGrupoActual() {
+    if (!grupoSeleccionado) return;
+    if (!nombreGrupo.trim() || seleccionados.size === 0) {
+      await alertDialog("Elegí un nombre y al menos un agente antes de actualizar el grupo.");
+      return;
+    }
+    setGuardandoGrupo(true);
+    try {
+      await api.editarGrupoLiquidacion(grupoSeleccionado, { name: nombreGrupo.trim(), agentIds: Array.from(seleccionados) });
+      refrescarGrupos();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo actualizar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
+  }
+
+  async function eliminarGrupoActual() {
+    if (!grupoSeleccionado) return;
+    const g = grupos.find((x) => x.id === grupoSeleccionado);
+    if (!(await confirmDialog(`¿Eliminar el grupo guardado "${g ? g.name : ""}"? Los agentes y el nombre quedan como están, solo se borra el atajo.`))) return;
+    setGuardandoGrupo(true);
+    try {
+      await api.eliminarGrupoLiquidacion(grupoSeleccionado);
+      setGrupoSeleccionado("");
+      refrescarGrupos();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar el grupo.");
+    } finally {
+      setGuardandoGrupo(false);
+    }
+  }
 
   function toggle(agentId: string) {
     setSeleccionados((s) => {
@@ -72,6 +143,7 @@ export default function ResumenAgentes() {
       else next.add(agentId);
       return next;
     });
+    setGrupoSeleccionado("");
   }
 
   function cancelarArmado() {
@@ -82,6 +154,7 @@ export default function ResumenAgentes() {
     setQuery("");
     setPreview(null);
     setError("");
+    setGrupoSeleccionado("");
   }
 
   const filtrados = (agentes ?? []).filter(
@@ -301,6 +374,32 @@ export default function ResumenAgentes() {
             <button type="button" className="btn secondary small" onClick={cancelarArmado}>
               Cancelar
             </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+            <label className="muted" style={{ fontSize: 12 }}>Grupo guardado</label>
+            <select value={grupoSeleccionado} onChange={(e) => cargarGrupo(e.target.value)} style={{ maxWidth: 220 }}>
+              <option value="">— Elegir agentes a mano —</option>
+              {grupos.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} ({g.agentIds.length} agente{g.agentIds.length === 1 ? "" : "s"})
+                </option>
+              ))}
+            </select>
+            {grupoSeleccionado ? (
+              <>
+                <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={actualizarGrupoActual}>
+                  Actualizar grupo
+                </button>
+                <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={eliminarGrupoActual}>
+                  Eliminar grupo
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn secondary small" disabled={guardandoGrupo} onClick={guardarGrupoNuevo}>
+                Guardar como grupo
+              </button>
+            )}
           </div>
 
           <div className="field">
