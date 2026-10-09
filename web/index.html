@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b0e17" />
+    <meta name="theme-color" content="#f4f7f5" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -13,10 +13,12 @@
   <body>
     <script>
       // Setea el tema ANTES de que React pinte nada, así no hay un flash del tema por defecto
-      // (oscuro) al entrar en modo día — mismo localStorage que usa el toggle en Shell.tsx.
+      // (claro, pedido de Leo: "por defecto quede todos los sistemas en blanco y despues
+      // optar por el modo noche") al entrar en modo noche — mismo localStorage que usa el
+      // toggle en Shell.tsx. Sin nada guardado todavia, queda en claro.
       try {
         var t = localStorage.getItem("dp_theme");
-        if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+        if (t !== "dark") document.documentElement.setAttribute("data-theme", "light");
       } catch (e) {}
     </script>
     <div id="root"></div>

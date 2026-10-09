@@ -163,7 +163,7 @@ function getInitialTheme(): Theme {
   } catch {
     /* localStorage no disponible, sigue con el default */
   }
-  return "dark";
+  return "light";
 }
 
 function applyTheme(theme: Theme) {

@@ -66,7 +66,7 @@ function leerTemaInicial(): TbTheme {
   } catch {
     /* localStorage no disponible, sigue con el default */
   }
-  return "dark";
+  return "light";
 }
 
 function aplicarTema(theme: TbTheme) {
