@@ -1220,7 +1220,9 @@ export const api = {
     walletEspejo: () => requestTb("/teamback/wallet-espejo"),
 
     // Pago de liquidaciones (25/09/2026, pedido de Leo) -- por liquidación individual, no por semana.
-    marcarLiquidacionPagada: (id: string) => requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "POST" }),
+    // (09/10/2026: "que aparezcan en USDT o en Fichas") -- el medio de pago ahora es obligatorio.
+    marcarLiquidacionPagada: (id: string, medioPago: "USDT" | "FICHAS") =>
+      requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "POST", body: JSON.stringify({ medioPago }) }),
     marcarLiquidacionNoPagada: (id: string) => requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "DELETE" }),
     historialJugador: (playerId: string) => requestTb(`/teamback/liquidaciones/jugador/${playerId}`),
     liquidacionIndividual: (playerId: string, weekStart: string) => requestTb(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),

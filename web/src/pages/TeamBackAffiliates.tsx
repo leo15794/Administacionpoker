@@ -493,7 +493,9 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                     <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
                     <td>
                       {l.pagado ? (
-                        <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>Pagado</span>
+                        <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+                          Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                        </span>
                       ) : (
                         <span className="badge neg">Pendiente</span>
                       )}
@@ -561,6 +563,10 @@ function LiquidacionesTab() {
   const [sinConfigurar, setSinConfigurar] = useState<{ playerId: string; playerName: string; supremaPlayerId: string }[]>([]);
   const [eliminando, setEliminando] = useState(false);
   const [pagandoId, setPagandoId] = useState<string | null>(null);
+  // (09/10/2026, pedido de Leo: "que aparezcan en USDT o en Fichas") -- liquidación para la que
+  // se está eligiendo el medio de pago (ver Modal + FormPagarLiquidacion, más abajo). null =
+  // ningún modal de pago abierto.
+  const [pagando, setPagando] = useState<any | null>(null);
 
   async function cargarSemanas() {
     const r = await api.teamback.semanasDisponibles();
@@ -629,19 +635,10 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
   // (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de PAGAR y despues
   // Pagado") -- se paga liquidación por liquidación (jugador+semana), no la semana entera de
   // una. Al pagar se suma solo a "Comisiones pagadas" DE ESE jugador (Jugadores/árbol).
-  async function pagar(f: any) {
-    const confirmado = window.confirm(`¿Marcar como pagada la liquidación de ${f.player_name} (${usd(f.total_acreditado)})?`);
-    if (!confirmado) return;
-    setPagandoId(f.id);
-    try {
-      await api.teamback.marcarLiquidacionPagada(f.id);
-      await cargarFilas(weekStart);
-    } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
-    } finally {
-      setPagandoId(null);
-    }
-  }
+  //
+  // (09/10/2026, pedido de Leo: "que aparezcan en USDT o en Fichas") -- "Pagar" ahora abre
+  // FormPagarLiquidacion (más abajo) para elegir el medio antes de confirmar, en vez de un
+  // simple confirm().
 
   async function deshacerPago(f: any) {
     const confirmado = window.confirm(`¿Deshacer el pago de ${f.player_name}?`);
@@ -758,14 +755,16 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
               <td>
                 {f.pagado ? (
                   <>
-                    <span className="badge pos" style={{ marginRight: 6 }} title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>Pagado</span>
+                    <span className="badge pos" style={{ marginRight: 6 }} title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>
+                      Pagado{f.medio_pago ? ` (${f.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                    </span>
                     <button className="btn secondary small" disabled={pagandoId === f.id} onClick={() => deshacerPago(f)}>
                       Deshacer
                     </button>
                   </>
                 ) : (
-                  <button className="btn small" disabled={pagandoId === f.id} onClick={() => pagar(f)}>
-                    {pagandoId === f.id ? "..." : "Pagar"}
+                  <button className="btn small" onClick={() => setPagando(f)}>
+                    Pagar
                   </button>
                 )}
               </td>
@@ -805,6 +804,72 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
           <LiquidacionIndividual playerId={individual.playerId} weekStart={individual.weekStart} />
         </Modal>
       )}
+
+      {pagando && (
+        <Modal title={`Pagar — ${pagando.player_name}`} onClose={() => setPagando(null)}>
+          <FormPagarLiquidacion
+            liquidacion={pagando}
+            onPagado={() => {
+              setPagando(null);
+              cargarFilas(weekStart);
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// (09/10/2026, pedido de Leo: "que aparezcan en USDT o en Fichas... al pagar en USDT deberia
+// mover la wallet en el otro sistema") -- elige el medio de pago antes de confirmar. Si es
+// USDT, el backend (marcarLiquidacionPagada) registra un egreso real en la Wallet del sistema
+// principal (WALLET_MANOS) -- acá solo se avisa que eso va a pasar, el movimiento en sí lo hace
+// el backend. Fichas nunca toca la Wallet.
+function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onPagado: () => void }) {
+  const [medioPago, setMedioPago] = useState<"USDT" | "FICHAS">("USDT");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function confirmar() {
+    setLoading(true);
+    setMsg(null);
+    try {
+      await api.teamback.marcarLiquidacionPagada(liquidacion.id, medioPago);
+      onPagado();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 12 }}>
+        Monto a pagar: <strong>{usd(liquidacion.total_acreditado)}</strong>
+      </div>
+      <div className="field">
+        <label>Medio de pago</label>
+        <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as "USDT" | "FICHAS")}>
+          <option value="USDT">USDT</option>
+          <option value="FICHAS">Fichas</option>
+        </select>
+      </div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+        {medioPago === "USDT"
+          ? `Se va a registrar un egreso de ${usd(liquidacion.total_acreditado)} en la Wallet del sistema principal.`
+          : "Pago en fichas del club -- no mueve la Wallet."}
+      </div>
+      {msg && (
+        <div className={msg.ok ? "success" : "error"} style={{ marginTop: 10 }}>
+          {msg.text}
+        </div>
+      )}
+      <div style={{ marginTop: 14 }}>
+        <button className="btn" disabled={loading} onClick={confirmar}>
+          {loading ? "Confirmando..." : "Confirmar pago"}
+        </button>
+      </div>
     </div>
   );
 }

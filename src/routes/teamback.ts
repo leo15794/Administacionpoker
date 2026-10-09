@@ -253,17 +253,21 @@ teambackRouter.get("/wallet-espejo", requireTbAuth, requireTbAdmin, async (_req,
 
 // (25/09/2026, pedido de Leo: "en liquidaciones recorda lo del boton de PAGAR y despues Pagado")
 // -- el pago se marca por liquidación individual (jugador+semana), no por semana entera.
-teambackRouter.post("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
+teambackRouter.post("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  const medioPago = req.body?.medioPago;
+  if (medioPago !== "USDT" && medioPago !== "FICHAS") {
+    return res.status(400).json({ error: 'medioPago tiene que ser "USDT" o "FICHAS".' });
+  }
   try {
-    res.json(await marcarLiquidacionPagada(req.params.id));
+    res.json(await marcarLiquidacionPagada(req.params.id, medioPago, `TeamBack:${req.tbUser.username}`));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo marcar como pagada." });
   }
 });
 
-teambackRouter.delete("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req, res) => {
+teambackRouter.delete("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin, async (req: any, res) => {
   try {
-    res.json(await marcarLiquidacionNoPagada(req.params.id));
+    res.json(await marcarLiquidacionNoPagada(req.params.id, `TeamBack:${req.tbUser.username}`));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo deshacer el pago." });
   }

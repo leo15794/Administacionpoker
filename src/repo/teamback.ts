@@ -4,12 +4,18 @@
 // parser crudo de archivos de Suprema (engine/importSuprema.ts), porque es el mismo formato de
 // archivo, pero acá se usa para OTRA cosa (rake por jugador para el programa de afiliados, no
 // para armar cierres de agentes).
+//
+// Dos excepciones deliberadas a lo anterior, ambas vía repo/treasury.ts: getSaldoWalletNeto
+// (wallet-espejo, de solo lectura) y, desde el 09/10/2026, registrarAjusteTesoreria /
+// revertirAjusteTesoreria (pagar una liquidación en USDT mueve la Wallet real -- ver más abajo,
+// sección "Pago de liquidaciones").
 import { pool, newId } from "../db/pool.js";
 import {
   calcularLiquidacionSemanal,
   type TbConfig,
   type OrigenLiquidacionSemanal,
 } from "../engine/teambackAffiliates.js";
+import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
 // ---------------------------------------------------------------------------------------------
 // Config
@@ -486,28 +492,72 @@ async function asegurarColumnasPago() {
   await pool.query(
     `ALTER TABLE tb_weekly_liquidations
        ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE,
-       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`
+       ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
+       ADD COLUMN IF NOT EXISTS medio_pago TEXT,
+       ADD COLUMN IF NOT EXISTS wallet_movimiento_id TEXT`
   );
   columnasPagoListas = true;
 }
 
-export async function marcarLiquidacionPagada(id: string) {
+export async function marcarLiquidacionPagada(id: string, medioPago: "USDT" | "FICHAS", actor?: string | null) {
   await asegurarColumnasPago();
-  const r = await pool.query(
-    `UPDATE tb_weekly_liquidations SET pagado = true, paid_at = now() WHERE id = $1 RETURNING *`,
+  if (medioPago !== "USDT" && medioPago !== "FICHAS") {
+    throw new Error('El medio de pago tiene que ser "USDT" o "FICHAS".');
+  }
+  const actual = await pool.query(
+    `SELECT l.*, p.name as player_name
+     FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
+     WHERE l.id = $1`,
     [id]
   );
-  if (!r.rows[0]) throw new Error("No se encontró esa liquidación.");
+  const liq = actual.rows[0];
+  if (!liq) throw new Error("No se encontró esa liquidación.");
+  if (liq.pagado) throw new Error("Esta liquidación ya está marcada como pagada -- deshacé el pago antes de volver a marcarla.");
+
+  // Solo USDT mueve la Wallet real del sistema principal (WALLET_MANOS) -- Fichas son del club,
+  // nunca tocan la Wallet. El id del ajuste queda guardado para poder revertirlo con prolijidad
+  // si se deshace el pago (ver marcarLiquidacionNoPagada).
+  let walletMovimientoId: string | null = null;
+  if (medioPago === "USDT") {
+    const { id: movimientoId } = await registrarAjusteTesoreria({
+      ledger: "WALLET_MANOS",
+      direction: "EGRESO",
+      amount: Number(liq.total_acreditado),
+      reason: `Pago comisión TeamBack — ${liq.player_name} — semana del ${String(liq.week_start).slice(0, 10)}`,
+      createdBy: actor ?? null,
+    });
+    walletMovimientoId = movimientoId;
+  }
+
+  const r = await pool.query(
+    `UPDATE tb_weekly_liquidations
+       SET pagado = true, paid_at = now(), medio_pago = $2, wallet_movimiento_id = $3
+       WHERE id = $1 RETURNING *`,
+    [id, medioPago, walletMovimientoId]
+  );
   return r.rows[0];
 }
 
-export async function marcarLiquidacionNoPagada(id: string) {
+export async function marcarLiquidacionNoPagada(id: string, actor?: string | null) {
   await asegurarColumnasPago();
+  const actual = await pool.query(`SELECT * FROM tb_weekly_liquidations WHERE id = $1`, [id]);
+  const liq = actual.rows[0];
+  if (!liq) throw new Error("No se encontró esa liquidación.");
+
+  // Si se había pagado en USDT, el pago movió la Wallet real -- deshacerlo tiene que revertir
+  // ESE movimiento (nunca borrarlo: revertirAjusteTesoreria deja el original marcado
+  // REVERTIDO y agrega uno nuevo en sentido contrario, ver repo/treasury.ts). Pagos en Fichas
+  // nunca generaron movimiento, así que acá no hay nada que revertir.
+  if (liq.medio_pago === "USDT" && liq.wallet_movimiento_id) {
+    await revertirAjusteTesoreria(liq.wallet_movimiento_id, "Se deshizo el pago de esta liquidación en TeamBack Affiliates.", actor ?? null);
+  }
+
   const r = await pool.query(
-    `UPDATE tb_weekly_liquidations SET pagado = false, paid_at = NULL WHERE id = $1 RETURNING *`,
+    `UPDATE tb_weekly_liquidations
+       SET pagado = false, paid_at = NULL, medio_pago = NULL, wallet_movimiento_id = NULL
+       WHERE id = $1 RETURNING *`,
     [id]
   );
-  if (!r.rows[0]) throw new Error("No se encontró esa liquidación.");
   return r.rows[0];
 }
 
@@ -673,6 +723,7 @@ export async function actualizarTbUser(
 }
 
 export async function getHistorialJugadorConNombre(playerId: string) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT l.*, p.name as player_name, p.suprema_player_id
      FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
