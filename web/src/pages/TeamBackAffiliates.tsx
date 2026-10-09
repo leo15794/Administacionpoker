@@ -453,7 +453,6 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
   }, []);
 
   const nombreJugador = cuenta?.name || session.name;
-  const inicial = (nombreJugador || "?").trim().charAt(0).toUpperCase() || "?";
   const totalHistorico = historial.reduce((acc, l) => acc + Number(l.total_acreditado), 0);
   const totalPagado = historial.filter((l) => l.pagado).reduce((acc, l) => acc + Number(l.total_acreditado), 0);
   const totalPendiente = totalHistorico - totalPagado;
@@ -462,9 +461,8 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
   const isMobile = useIsMobile();
 
   return (
-    <div className="page">
+    <div className="page tb-portal-jugador">
       <div className="welcome-row">
-        <div className="avatar">{inicial}</div>
         <div>
           <div className="eyebrow">TeamBack Affiliates</div>
           <h1 className="greeting">¡Hola, {nombreJugador}! 👋</h1>
@@ -1223,34 +1221,36 @@ function BloqueLiquidacionCopiable({
           <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
             Desglose por referido -- qué generó cada uno esta semana.
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Jugador</th>
-                <th>ID Suprema</th>
-                <th className="num">Rake</th>
-                <th>Estado</th>
-                <th className="num">Comisión aportada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {referidos.map((r) => (
-                <tr key={r.playerId}>
-                  <td>{r.playerName}</td>
-                  <td className="muted">{r.supremaPlayerId}</td>
-                  <td className="num">{usd(r.rake)}</td>
-                  <td>
-                    {r.activo ? (
-                      <span className="badge pos">activo</span>
-                    ) : (
-                      <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
-                    )}
-                  </td>
-                  <td className="num">{usd(r.comisionAportada)}</td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Jugador</th>
+                  <th>ID Suprema</th>
+                  <th className="num">Rake</th>
+                  <th>Estado</th>
+                  <th className="num">Comisión aportada</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {referidos.map((r) => (
+                  <tr key={r.playerId}>
+                    <td>{r.playerName}</td>
+                    <td className="muted">{r.supremaPlayerId}</td>
+                    <td className="num">{usd(r.rake)}</td>
+                    <td>
+                      {r.activo ? (
+                        <span className="badge pos">activo</span>
+                      ) : (
+                        <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
+                      )}
+                    </td>
+                    <td className="num">{usd(r.comisionAportada)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
