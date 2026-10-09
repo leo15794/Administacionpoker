@@ -1236,6 +1236,10 @@ export const api = {
     portal: {
       miCuenta: () => requestTb("/teamback/portal/mi-cuenta"),
       historial: () => requestTb("/teamback/portal/historial"),
+      // Desglose por referido de una semana puntual (09/10/2026, pedido de Leo) -- mismo shape
+      // que liquidacionIndividual del admin ({ player, liquidacion, referidos }), pero siempre
+      // scopeado a uno mismo del lado del backend.
+      liquidacionSemana: (weekStart: string) => requestTb(`/teamback/portal/liquidacion/${weekStart}`),
     },
   },
 };

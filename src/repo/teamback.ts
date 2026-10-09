@@ -335,6 +335,49 @@ async function rakeDeReferidosDirectos(playerId: string, weekStart: string): Pro
   return r.rows.map((row) => Number(row.rake));
 }
 
+export interface ReferidoDesglose {
+  playerId: string;
+  playerName: string;
+  supremaPlayerId: string;
+  rake: number;
+  activo: boolean;
+  comisionAportada: number;
+}
+
+/** (09/10/2026, pedido de Leo: "deberiamos poder ver el desglose de cada jugador y que generó
+ * para que el lo pueda ver") -- mismos referidos y mismo rake que rakeDeReferidosDirectos (ahí
+ * arriba), pero CON la identidad de cada uno (nombre, ID de Suprema) en vez de solo el número,
+ * para armar el desglose jugador-por-jugador que se muestra en "Ver liquidación" (tanto del lado
+ * admin como en el portal del propio jugador). Usa el `cfg` que se le pasa (normalmente el
+ * config_snapshot YA GUARDADO de esa liquidación, nunca la config actual) para que "activo" y la
+ * comisión de cada fila sumen EXACTO contra los totales ya persistidos en tb_weekly_liquidations
+ * -- si se usara la config de hoy, un cambio posterior de umbral/% rompería esa cuenta contra el
+ * histórico. */
+async function desgloseReferidosDirectos(playerId: string, weekStart: string, cfg: TbConfig): Promise<ReferidoDesglose[]> {
+  const r = await pool.query(
+    `SELECT p.id, p.name, p.suprema_player_id, COALESCE(s.rake_bruto, 0) as rake
+     FROM tb_players p
+     LEFT JOIN tb_weekly_stats s ON s.player_id = p.id AND s.week_start = $2::date
+     WHERE p.referido_por_id = $1
+     ORDER BY COALESCE(s.rake_bruto, 0) DESC, p.name`,
+    [playerId, weekStart]
+  );
+  return r.rows.map((row) => {
+    const rake = Number(row.rake);
+    const activo = rake >= cfg.umbralReferidoActivoUsd;
+    const generaComision = cfg.aplicarUmbralAComision ? activo : true;
+    const comisionAportada = generaComision ? Math.round(rake * cfg.pctComisionReferido * 100) / 100 : 0;
+    return {
+      playerId: row.id,
+      playerName: row.name,
+      supremaPlayerId: row.suprema_player_id,
+      rake,
+      activo,
+      comisionAportada,
+    };
+  });
+}
+
 /** Calcula (y persiste) la liquidación de TODOS los jugadores activos que tengan algo para
  * liquidar esa semana (rake propio esa semana, o al menos un referido directo con rake esa
  * semana -- si no, no genera fila, para no ensuciar el histórico con ceros de jugadores
@@ -539,7 +582,10 @@ export async function getHistorialJugador(playerId: string) {
   return r.rows;
 }
 
-/** Liquidación individual lista para copiar/mandarle al jugador -- mismo formato que pidió Leo. */
+/** Liquidación individual lista para copiar/mandarle al jugador -- mismo formato que pidió Leo.
+ * Incluye el desglose por referido (09/10/2026, pedido de Leo) para que se vea, jugador por
+ * jugador, quién generó qué -- tanto del lado admin como en el portal del propio jugador
+ * (mismo endpoint de datos, ver routes/teamback.ts). */
 export async function getLiquidacionIndividual(playerId: string, weekStart: string) {
   const player = await getTbPlayer(playerId);
   if (!player) throw new Error("No se encontró ese jugador.");
@@ -549,7 +595,8 @@ export async function getLiquidacionIndividual(playerId: string, weekStart: stri
   );
   const liq = r.rows[0];
   if (!liq) throw new Error("No hay liquidación calculada para ese jugador en esa semana.");
-  return { player, liquidacion: liq };
+  const referidos = await desgloseReferidosDirectos(playerId, weekStart, liq.config_snapshot as TbConfig);
+  return { player, liquidacion: liq, referidos };
 }
 
 // ---------------------------------------------------------------------------------------------

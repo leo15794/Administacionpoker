@@ -340,3 +340,16 @@ teambackRouter.get("/portal/mi-cuenta", requireTbAuth, requireTbPlayer, async (r
 teambackRouter.get("/portal/historial", requireTbAuth, requireTbPlayer, async (req: any, res) => {
   res.json(await getHistorialJugadorConNombre(req.tbUser.playerId));
 });
+
+// (09/10/2026, pedido de Leo: "deberiamos poder ver el desglose de cada jugador y que generó
+// para que el lo pueda ver") -- misma función que usa el admin (getLiquidacionIndividual, con el
+// desglose de referidos incluido), pero SIEMPRE con el playerId del propio token -- nunca uno
+// elegido por el cliente -- mismo criterio que el resto del portal (ver mi-cuenta/historial
+// arriba). Así el jugador puede ver, semana por semana, qué generó cada uno de sus referidos.
+teambackRouter.get("/portal/liquidacion/:weekStart", requireTbAuth, requireTbPlayer, async (req: any, res) => {
+  try {
+    res.json(await getLiquidacionIndividual(req.tbUser.playerId, req.params.weekStart));
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});

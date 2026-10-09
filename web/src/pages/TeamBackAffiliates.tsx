@@ -484,7 +484,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                 </td>
                 <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
                 <td>
-                  <button className="btn secondary small" onClick={() => setSeleccion(l)}>Ver</button>
+                  <button className="btn secondary small" onClick={() => setSeleccion(String(l.week_start).slice(0, 10))}>Ver</button>
                 </td>
               </tr>
             ))}
@@ -498,12 +498,27 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
       </div>
 
       {seleccion && (
-        <Modal title={`Semana del ${dateShort(seleccion.week_start)}`} onClose={() => setSeleccion(null)}>
-          <BloqueLiquidacionCopiable liquidacion={seleccion} />
+        <Modal title={`Semana del ${dateShort(seleccion)}`} onClose={() => setSeleccion(null)}>
+          <MiLiquidacionSemana weekStart={seleccion} />
         </Modal>
       )}
     </div>
   );
+}
+
+// (09/10/2026, pedido de Leo: "deberiamos poder ver el desglose de cada jugador y que generó
+// para que el lo pueda ver") -- analogo a LiquidacionIndividual (vista admin) mas abajo, pero
+// pide el endpoint del PORTAL (siempre scopeado a uno mismo del lado del backend, nunca a un
+// playerId elegido acá) para que el propio jugador vea, semana por semana, el desglose de lo que
+// generó cada uno de sus referidos.
+function MiLiquidacionSemana({ weekStart }: { weekStart: string }) {
+  const [data, setData] = useState<any | null>(null);
+  useEffect(() => {
+    api.teamback.portal.liquidacionSemana(weekStart).then(setData);
+  }, [weekStart]);
+
+  if (!data) return <Loading />;
+  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} referidos={data.referidos} />;
 }
 
 // ===================================================================================
@@ -935,8 +950,8 @@ function WalletEspejoTab() {
 // Formato de liquidación lista para copiar/mandarle al jugador -- compartido entre la vista de
 // admin (LiquidacionIndividual, pide el dato por playerId+weekStart) y el portal del propio
 // jugador (que ya tiene la fila entera de antes, no necesita pedir nada más).
-function textoLiquidacion(l: any): string {
-  return [
+function textoLiquidacion(l: any, referidos?: ReferidoDesgloseUI[]): string {
+  const base = [
     `Rake propio: ${usd(l.rake_propio)}`,
     `Referidos activos: ${l.referidos_activos_count}`,
     `Rakeback aplicado: ${pct(l.rakeback_pct)}`,
@@ -944,11 +959,33 @@ function textoLiquidacion(l: any): string {
     `Rake generado por referidos: ${usd(l.rake_referidos_directos)}`,
     `Comisión de afiliado 3%: ${usd(l.comision_3pct_acreditada)}${l.comision_3pct_pausada ? " (pausada esta semana)" : ""}`,
     `Total acreditado: ${usd(l.total_acreditado)}`,
-  ].join("\n");
+  ];
+  // (09/10/2026, pedido de Leo: "deberiamos poder ver el desglose de cada jugador y que
+  // generó") -- detalle jugador por jugador, para que el texto que Leo copia y manda por
+  // WhatsApp también lo explique (no solo la pantalla). Si no hay ningún referido (jugador sin
+  // nadie abajo en el árbol) no se agrega nada, para no ensuciar el texto con una lista vacía.
+  if (referidos && referidos.length > 0) {
+    base.push("", "Desglose por referido:");
+    for (const r of referidos) {
+      base.push(
+        `- ${r.playerName} (${r.supremaPlayerId}): rake ${usd(r.rake)}${r.activo ? "" : " (inactivo esta semana)"} -> comisión ${usd(r.comisionAportada)}`
+      );
+    }
+  }
+  return base.join("\n");
 }
 
-function BloqueLiquidacionCopiable({ liquidacion }: { liquidacion: any }) {
-  const texto = textoLiquidacion(liquidacion);
+interface ReferidoDesgloseUI {
+  playerId: string;
+  playerName: string;
+  supremaPlayerId: string;
+  rake: number;
+  activo: boolean;
+  comisionAportada: number;
+}
+
+function BloqueLiquidacionCopiable({ liquidacion, referidos }: { liquidacion: any; referidos?: ReferidoDesgloseUI[] }) {
+  const texto = textoLiquidacion(liquidacion, referidos);
   return (
     <div>
       <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, lineHeight: 1.7 }}>{texto}</pre>
@@ -960,6 +997,42 @@ function BloqueLiquidacionCopiable({ liquidacion }: { liquidacion: any }) {
       >
         Copiar
       </button>
+
+      {referidos && referidos.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+            Desglose por referido -- qué generó cada uno esta semana.
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Jugador</th>
+                <th>ID Suprema</th>
+                <th className="num">Rake</th>
+                <th>Estado</th>
+                <th className="num">Comisión aportada</th>
+              </tr>
+            </thead>
+            <tbody>
+              {referidos.map((r) => (
+                <tr key={r.playerId}>
+                  <td>{r.playerName}</td>
+                  <td className="muted">{r.supremaPlayerId}</td>
+                  <td className="num">{usd(r.rake)}</td>
+                  <td>
+                    {r.activo ? (
+                      <span className="badge pos">activo</span>
+                    ) : (
+                      <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
+                    )}
+                  </td>
+                  <td className="num">{usd(r.comisionAportada)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -971,7 +1044,7 @@ function LiquidacionIndividual({ playerId, weekStart }: { playerId: string; week
   }, [playerId, weekStart]);
 
   if (!data) return <Loading />;
-  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} />;
+  return <BloqueLiquidacionCopiable liquidacion={data.liquidacion} referidos={data.referidos} />;
 }
 
 // ===================================================================================
