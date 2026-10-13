@@ -8,6 +8,7 @@
 // player_id (req.tbUser.playerId), nunca a uno elegido por el cliente.
 import { Router } from "express";
 import multer from "multer";
+import { put as subirAVercelBlob } from "@vercel/blob";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireTbAuth, requireTbAdmin, requireTbPlayer } from "../lib/tbAuth.js";
@@ -427,6 +428,33 @@ teambackRouter.post("/push/notificar-referidos-activos", requireTbAuth, requireT
     res.json(await notificarReferidosActivos(weekStart, `TeamBack:${req.tbUser.username}`));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo notificar a los referentes." });
+  }
+});
+
+// (13/10/2026, pedido de Leo: "podemos cargar nosotros la imagen?") -- sube el archivo a
+// Vercel Blob Storage (hace falta la env var BLOB_READ_WRITE_TOKEN -- se crea sola al conectar
+// un Blob Store al proyecto desde el dashboard de Vercel) y devuelve la URL pública para usarla
+// después como imagenUrl del aviso. No se guarda nada en Postgres -- el archivo en sí vive en
+// Blob, aquí solo se referencia por URL en tb_push_notifications_log.imagen_url.
+teambackRouter.post("/push/upload-imagen", requireTbAuth, requireTbAdmin, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Falta el archivo." });
+  if (!req.file.mimetype.startsWith("image/")) {
+    return res.status(400).json({ error: "Tiene que ser una imagen." });
+  }
+  try {
+    const nombre = `teamback-avisos/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const blob = await subirAVercelBlob(nombre, req.file.buffer, {
+      access: "public",
+      contentType: req.file.mimetype,
+    });
+    res.json({ url: blob.url });
+  } catch (err: any) {
+    res.status(500).json({
+      error:
+        err.message?.includes("BLOB_READ_WRITE_TOKEN") || err.message?.includes("No token")
+          ? "Falta conectar un Blob Store a este proyecto en Vercel (Storage -> Create Database -> Blob)."
+          : err.message || "No se pudo subir la imagen.",
+    });
   }
 });
 

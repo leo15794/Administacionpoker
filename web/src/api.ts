@@ -1267,6 +1267,14 @@ export const api = {
       broadcast: (titulo: string, mensaje: string, playerId?: string | null, imagenUrl?: string | null) =>
         requestTb("/teamback/push/broadcast", { method: "POST", body: JSON.stringify({ titulo, mensaje, playerId: playerId ?? null, imagenUrl: imagenUrl || null }) }),
       deleteLog: (id: string) => requestTb(`/teamback/push/log/${id}`, { method: "DELETE" }),
+      // (13/10/2026, pedido de Leo: "podemos cargar nosotros la imagen?") -- sube el archivo al
+      // backend, que lo manda a Vercel Blob y devuelve la URL pública ya lista para usar como
+      // imagenUrl del aviso.
+      subirImagen: (file: File) => {
+        const form = new FormData();
+        form.append("file", file);
+        return requestFormTb("/teamback/push/upload-imagen", form) as Promise<{ url: string }>;
+      },
     },
   },
 };

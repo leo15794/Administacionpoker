@@ -1390,10 +1390,14 @@ function AvisosTab() {
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
-  // Imagen (13/10/2026, pedido de Leo: "podemos pushear una imagen?") -- va un link a una
-  // imagen ya hosteada en algún lado, no hay upload propio acá.
+  // Imagen (13/10/2026, pedido de Leo: "podemos pushear una imagen?" y después "podemos
+  // cargar nosotros la imagen?") -- se puede subir un archivo directo (sube a Vercel Blob, ver
+  // onArchivoSeleccionado más abajo) o pegar un link si ya está hosteada en otro lado -- ambos
+  // caminos terminan llenando este mismo estado.
   const [imagenUrl, setImagenUrl] = useState("");
   const [borrandoId, setBorrandoId] = useState<string | null>(null);
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [fileKey, setFileKey] = useState(0); // cambia para "resetear" el <input type=file>
 
   async function cargarHistorial() {
     try {
@@ -1419,6 +1423,7 @@ function AvisosTab() {
       setMensaje("");
       setDestino("");
       setImagenUrl("");
+      setFileKey((k) => k + 1);
       cargarHistorial();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo mandar el aviso." });
@@ -1439,6 +1444,30 @@ function AvisosTab() {
     } finally {
       setBorrandoId(null);
     }
+  }
+
+  // (13/10/2026, pedido de Leo: "podemos cargar nosotros la imagen?") -- sube el archivo elegido
+  // a Vercel Blob (vía el backend) y, si sale bien, lo deja como si hubieras pegado el link a
+  // mano en el campo de abajo.
+  async function onArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoImagen(true);
+    setMsg(null);
+    try {
+      const r = await api.teamback.push.subirImagen(file);
+      setImagenUrl(r.url);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo subir la imagen." });
+      setFileKey((k) => k + 1);
+    } finally {
+      setSubiendoImagen(false);
+    }
+  }
+
+  function quitarImagen() {
+    setImagenUrl("");
+    setFileKey((k) => k + 1);
   }
 
   return (
@@ -1467,8 +1496,24 @@ function AvisosTab() {
           <input value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej: Torneo 10k Garantizados hoy a las 21hs." maxLength={180} />
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
-          <label>Imagen (opcional) -- link a una imagen ya subida a algún lado</label>
-          <input value={imagenUrl} onChange={(e) => setImagenUrl(e.target.value)} placeholder="https://..." />
+          <label>Imagen (opcional)</label>
+          <input key={fileKey} type="file" accept="image/*" disabled={subiendoImagen} onChange={onArchivoSeleccionado} />
+          {subiendoImagen && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Subiendo...</div>}
+          {imagenUrl && !subiendoImagen && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+              <img src={imagenUrl} alt="" style={{ height: 48, borderRadius: 4, border: "1px solid var(--border)" }} />
+              <button className="btn secondary small" type="button" onClick={quitarImagen}>Quitar</button>
+            </div>
+          )}
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            O si ya está subida en otro lado, pegá el link directamente:{" "}
+            <input
+              value={imagenUrl}
+              onChange={(e) => setImagenUrl(e.target.value)}
+              placeholder="https://..."
+              style={{ marginTop: 4 }}
+            />
+          </div>
         </div>
         <div className="field" style={{ alignSelf: "flex-end" }}>
           <button className="btn" disabled={enviando} onClick={enviar}>
