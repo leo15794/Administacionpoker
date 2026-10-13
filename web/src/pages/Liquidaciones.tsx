@@ -277,6 +277,15 @@ export default function Liquidaciones() {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState("");
   const [guardandoGrupo, setGuardandoGrupo] = useState(false);
 
+  // "¿Cuáles ya liquidé?" (13/10/2026, pedido de Leo: "quiero saber cuales hice ya... y
+  // tambien los grupos, si se liquido o no") -- semanaEstado es una semana elegida SOLO para
+  // mostrar el estado (badge) de cada agente/grupo, totalmente aparte de weekStart (que es la
+  // semana de la liquidación que se está armando/pagando de verdad más abajo). semanasGlobales
+  // sale de pedirle a /liquidacion/semanas TODOS los agentes juntos (no nada más los
+  // seleccionados), para tener el universo completo de semanas con cierres cargados.
+  const [semanasGlobales, setSemanasGlobales] = useState<any[]>([]);
+  const [semanaEstado, setSemanaEstado] = useState("");
+
   function elegirSistemaLiquidar(s: "WIN_LOSE" | "PREPAGO") {
     setSistemaLiquidar(s);
     setSeleccionados([]);
@@ -363,6 +372,60 @@ export default function Liquidaciones() {
     refrescarHistorial();
     refrescarGrupos();
   }, []);
+
+  useEffect(() => {
+    if (agentes.length === 0) return;
+    api
+      .semanasLiquidacion(agentes.map((a) => a.id))
+      .then((r) => {
+        setSemanasGlobales(r);
+        setSemanaEstado((prev) => prev || r[0]?.week_start || "");
+      })
+      .catch(() => {});
+  }, [agentes]);
+
+  // Semana → función: devuelve "PAGADA"/"CERRADA"/"PENDIENTE" o undefined (sin liquidar) para
+  // un agente/grupo puntual, mirando SOLO las liquidaciones guardadas de semanaEstado. El
+  // historial ya viene ordenado por created_at DESC (ver /liquidacion/historial), así que la
+  // PRIMERA fila que matchea cada agente/grupo es la más reciente -- exactamente lo que
+  // queremos si alguna vez quedó más de una fila para el mismo agente+semana.
+  const historialDeEstaSemana = useMemo(() => {
+    if (!historial || !semanaEstado) return [];
+    return historial.filter((h: any) => String(h.week_start).slice(0, 10) === semanaEstado);
+  }, [historial, semanaEstado]);
+
+  const estadoPorAgente = useMemo(() => {
+    const map = new Map<string, { estado: string; grupoNombre?: string }>();
+    for (const h of historialDeEstaSemana) {
+      const ids: string[] = h.agent_ids || [];
+      const esGrupoCombinado = ids.length > 1;
+      for (const id of ids) {
+        if (!map.has(id)) map.set(id, { estado: h.estado, grupoNombre: esGrupoCombinado ? h.nombre_grupo : undefined });
+      }
+    }
+    return map;
+  }, [historialDeEstaSemana]);
+
+  function clave(ids: string[]) {
+    return [...ids].sort().join(",");
+  }
+
+  const estadoPorGrupoGuardado = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of grupos) {
+      const k = clave(g.agentIds);
+      const match = historialDeEstaSemana.find((h: any) => clave(h.agent_ids || []) === k);
+      if (match) map.set(g.id, match.estado);
+    }
+    return map;
+  }, [grupos, historialDeEstaSemana]);
+
+  function BadgeEstadoLiquidacion({ estado }: { estado?: string }) {
+    if (estado === "PAGADA") return <span className="badge pos">✓ Pagada</span>;
+    if (estado === "CERRADA") return <span className="badge neutral" title="Armada y guardada, pero todavía no se pagó">Cerrada</span>;
+    if (estado === "PENDIENTE") return <span className="badge neg">Pendiente de pago</span>;
+    return <span className="muted" style={{ fontSize: 12 }}>Sin liquidar</span>;
+  }
 
   function refrescarHistorial() {
     api.historialLiquidaciones().then(setHistorial).catch(() => {});
@@ -1568,6 +1631,45 @@ export default function Liquidaciones() {
             {sistemaLiquidar && (
               <>
 
+            {semanasGlobales.length > 0 && (
+              <div
+                className="panel"
+                style={{ background: "var(--panel-2)", marginBottom: 16, padding: "12px 14px" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: grupos.length > 0 ? 10 : 0 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>¿Qué ya liquidé? — semana</label>
+                  <select value={semanaEstado} onChange={(e) => setSemanaEstado(e.target.value)} style={{ maxWidth: 220 }}>
+                    {semanasGlobales.map((s: any) => (
+                      <option key={s.week_start} value={s.week_start}>
+                        {dateShort(s.week_start)} - {dateShort(s.week_end)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {grupos.length > 0 && (
+                  <>
+                    <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>
+                      Grupos guardados
+                    </div>
+                    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "2px 8px" }}>
+                      {grupos.map((g) => (
+                        <div
+                          key={g.id}
+                          onClick={() => cargarGrupo(g.id)}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 2px", cursor: "pointer", borderTop: "1px solid var(--border)" }}
+                        >
+                          <span style={{ fontSize: 14 }}>
+                            {g.name} <span className="muted" style={{ fontSize: 12 }}>({g.agentIds.length} agente{g.agentIds.length === 1 ? "" : "s"})</span>
+                          </span>
+                          <BadgeEstadoLiquidacion estado={estadoPorGrupoGuardado.get(g.id)} />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
               <label className="muted" style={{ fontSize: 12 }}>Grupo guardado</label>
               <select value={grupoSeleccionado} onChange={(e) => cargarGrupo(e.target.value)} style={{ maxWidth: 220 }}>
@@ -1630,12 +1732,21 @@ export default function Liquidaciones() {
               </div>
             )}
             <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8 }}>
-              {agentesFiltrados.map((a) => (
-                <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggleAgente(a.id)} />
-                  {a.name}
-                </label>
-              ))}
+              {agentesFiltrados.map((a) => {
+                const est = estadoPorAgente.get(a.id);
+                return (
+                  <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 4px", cursor: "pointer" }}>
+                    <input type="checkbox" checked={seleccionados.includes(a.id)} onChange={() => toggleAgente(a.id)} />
+                    <span style={{ flex: 1 }}>
+                      {a.name}
+                      {est?.grupoNombre && (
+                        <span className="muted" style={{ fontSize: 11 }}> — parte de "{est.grupoNombre}"</span>
+                      )}
+                    </span>
+                    <BadgeEstadoLiquidacion estado={est?.estado} />
+                  </label>
+                );
+              })}
               {agentesFiltrados.length === 0 && <div className="muted">Sin resultados.</div>}
             </div>
 
