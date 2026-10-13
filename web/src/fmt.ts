@@ -1,6 +1,13 @@
 export function usd(n: number | string) {
   const v = Number(n);
-  return v.toLocaleString("es-AR", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+  // Pedido de Leo (13/10/2026): montos sin centavos en toda la app -- se ven más limpios y
+  // más fáciles de leer de un vistazo en los dashboards y tablas.
+  return v.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 }
 
 export function pct(n: number | string) {
