@@ -19,7 +19,7 @@ self.addEventListener("fetch", () => {
 // notifications.ts (frontend). El payload lo arma el backend como JSON ({title, body, url}),
 // ver PushPayload en lib/push.ts.
 self.addEventListener("push", (event) => {
-  let data = { title: "TeamBack Affiliates", body: "Tenés una novedad.", url: "/", image: undefined };
+  let data = { title: "TeamBack Affiliates", body: "Tenés una novedad.", url: "/teamback", image: undefined };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -37,7 +37,7 @@ self.addEventListener("push", (event) => {
       // un ícono a color, como icon-192.png, Chrome no lo puede usar y lo deja vacío. Por eso va
       // un archivo aparte (badge-96.png), generado a partir del mismo logo pero como silueta.
       badge: "/badge-96.png",
-      data: { url: data.url || "/" },
+      data: { url: data.url || "/teamback" },
     })
   );
 });
@@ -46,11 +46,22 @@ self.addEventListener("push", (event) => {
 // abre una nueva en la URL que vino en el payload.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+  const url = event.notification.data?.url || "/teamback";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ("focus" in client) return client.focus();
+        if ("focus" in client) {
+          // (13/10/2026, Leo reportó: "cuando hago click me lleva al poker administracion y no
+          // al de afiliados") -- antes esto solo hacía focus() de la primera ventana abierta,
+          // SIN importar en qué sección de la app estaba -- si ya tenías el admin principal
+          // abierto en otra pestaña, el click en la notificación de TeamBack solo la enfocaba
+          // tal cual estaba, en vez de llevarte a /teamback. Ahora, si esa ventana no está ya
+          // en la url del aviso, primero la navega ahí.
+          if ("navigate" in client && typeof client.url === "string" && !client.url.includes(url)) {
+            return client.navigate(url).then((c) => (c ? c.focus() : client.focus()));
+          }
+          return client.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
     })

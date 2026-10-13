@@ -855,7 +855,7 @@ export async function notificarLiquidacionCerrada(weekStart: string, actor?: str
   let totalEnviados = 0;
   for (const row of r.rows) {
     const subs = await getPushSubscripcionesDeJugador(row.player_id);
-    totalEnviados += await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+    totalEnviados += await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
   }
   await registrarLogNotificacion({ tipo: "liquidacion_cerrada", weekStart, titulo, mensaje, enviadoA: totalEnviados, actor });
   return { jugadoresNotificados: r.rows.length, pushEnviados: totalEnviados };
@@ -873,7 +873,7 @@ export async function notificarLiquidacionPagada(liquidacionId: string, actor?: 
   const titulo = "Te acreditamos tu pago";
   const mensaje = `Te pagamos tu comisión de la semana del ${String(liq.week_start).slice(0, 10)}.`;
   const subs = await getPushSubscripcionesDeJugador(liq.player_id);
-  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
   await registrarLogNotificacion({
     tipo: "liquidacion_pagada",
     weekStart: liq.week_start,
@@ -911,7 +911,7 @@ export async function notificarReferidosActivos(weekStart: string, actor?: strin
         ? "Uno de tus referidos llegó al umbral de activo esta semana -- sumá su comisión."
         : `${cantidad} de tus referidos llegaron al umbral de activo esta semana -- sumá sus comisiones.`;
     const subs = await getPushSubscripcionesDeJugador(row.referrer_id);
-    const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+    const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
     totalEnviados += enviados;
     await registrarLogNotificacion({
       tipo: "referido_activo",
@@ -939,7 +939,7 @@ export async function enviarBroadcast(
   const enviados = await mandarATodasLasSuscripcionesDe(subs, {
     title: titulo,
     body: mensaje,
-    url: "/",
+    url: "/teamback",
     image: imagenUrl || undefined,
   });
   await registrarLogNotificacion({
