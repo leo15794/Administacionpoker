@@ -1957,6 +1957,12 @@ function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => 
   const [yaTeniaConfig, setYaTeniaConfig] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  // Vista previa (13/10/2026, pedido de Leo: "que se modifique en tiempo real lo que tiene que
+  // pasar") -- simula, contra la semana más reciente importada, cómo quedaría ESTE jugador con
+  // los valores de arriba SIN guardar nada todavía. Se limpia sola en cuanto se toca cualquier
+  // campo, para no dejar en pantalla un resultado que ya no corresponde a lo que hay tipeado.
+  const [preview, setPreview] = useState<any | null>(null);
+  const [previsualizando, setPrevisualizando] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1972,6 +1978,22 @@ function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => 
       }
     })();
   }, [jugador.id]);
+
+  useEffect(() => {
+    setPreview(null);
+  }, [cfg]);
+
+  async function previsualizar() {
+    setPrevisualizando(true);
+    setMsg(null);
+    try {
+      setPreview(await api.teamback.previsualizarPlayerConfig(jugador.id, cfg));
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo previsualizar." });
+    } finally {
+      setPrevisualizando(false);
+    }
+  }
 
   if (!cfg) return <Loading />;
 
@@ -2026,9 +2048,37 @@ function FormConfigJugador({ jugador, onSaved }: { jugador: any; onSaved: () => 
         </div>
       </div>
       {msg && <div className="error">{msg.text}</div>}
-      <button className="btn" disabled={loading} onClick={guardar}>
-        {loading ? "Guardando..." : "Guardar"}
-      </button>
+
+      {preview && (
+        <div className="panel" style={{ background: "var(--panel-2)", marginBottom: 14 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Simulación con semana {dateShort(preview.weekStart)} - {dateShort(preview.weekEnd)} (la última importada) -- no se guardó nada todavía.
+          </div>
+          <div className="kpi-sub-grid">
+            <div className="kpi-sub-card">
+              <div className="kpi-sub-label">Rakeback ({(preview.rakebackPct * 100).toFixed(1)}%)</div>
+              <div className="kpi-sub-value">{usd(preview.rakebackGenerado)}</div>
+            </div>
+            <div className="kpi-sub-card">
+              <div className="kpi-sub-label">Comisión de afiliado{preview.comision3pctPausada ? " (pausada)" : ""}</div>
+              <div className="kpi-sub-value">{usd(preview.comision3pctAcreditada)}</div>
+            </div>
+            <div className="kpi-sub-card">
+              <div className="kpi-sub-label">Total acreditado</div>
+              <div className="kpi-sub-value" style={{ color: "var(--green)" }}>{usd(preview.totalAcreditado)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn" disabled={loading} onClick={guardar}>
+          {loading ? "Guardando..." : "Guardar"}
+        </button>
+        <button type="button" className="btn secondary" disabled={previsualizando} onClick={previsualizar}>
+          {previsualizando ? "Calculando..." : "Vista previa (sin guardar)"}
+        </button>
+      </div>
     </div>
   );
 }

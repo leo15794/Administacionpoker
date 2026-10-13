@@ -23,6 +23,7 @@ import {
   updateTbConfig,
   getTbPlayerConfig,
   upsertTbPlayerConfig,
+  previsualizarConfigJugador,
   listTbPlayers,
   getTbPlayer,
   crearTbPlayer,
@@ -107,6 +108,21 @@ teambackRouter.put("/players/:id/config", requireTbAuth, requireTbAdmin, async (
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await upsertTbPlayerConfig(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// (13/10/2026, pedido de Leo: "que se modifique en tiempo real lo que tiene que pasar") --
+// prueba los valores que está por guardar contra la semana más reciente importada, SIN guardar
+// nada -- ver previsualizarConfigJugador en repo/teamback.ts para el detalle completo.
+teambackRouter.post("/players/:id/config/previsualizar", requireTbAuth, requireTbAdmin, async (req, res) => {
+  const parsed = configSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const r = await previsualizarConfigJugador(req.params.id, parsed.data);
+    if (!r) return res.status(404).json({ error: "Todavía no se importó ninguna semana para poder previsualizar." });
+    res.json(r);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

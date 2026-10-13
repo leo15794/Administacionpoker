@@ -1186,6 +1186,25 @@ export const api = {
         ventanaActividadSemanas: number;
       }
     ) => requestTb(`/teamback/players/${id}/config`, { method: "PUT", body: JSON.stringify(data) }),
+    // (13/10/2026, pedido de Leo: "que se modifique en tiempo real lo que tiene que pasar") --
+    // prueba estos valores (todavía sin guardar) contra la semana más reciente importada, sin
+    // tocar la base -- para ver "cómo quedaría" antes de confirmar un cambio de %.
+    previsualizarPlayerConfig: (
+      id: string,
+      data: {
+        pctBase: number;
+        pctTier2: number;
+        pctTier3: number;
+        umbralVolumenTier2Usd: number;
+        umbralVolumenTier3Usd: number;
+        umbralReferidosTier2: number;
+        umbralReferidosTier3: number;
+        umbralReferidoActivoUsd: number;
+        pctComisionReferido: number;
+        aplicarUmbralAComision: boolean;
+        ventanaActividadSemanas: number;
+      }
+    ) => requestTb(`/teamback/players/${id}/config/previsualizar`, { method: "POST", body: JSON.stringify(data) }),
     crearPlayer: (data: { supremaPlayerId: string; name: string; fechaAlta?: string; referidoPorId?: string | null; notes?: string | null }) =>
       requestTb("/teamback/players", { method: "POST", body: JSON.stringify(data) }),
     actualizarPlayer: (

@@ -385,6 +385,36 @@ async function desgloseReferidosDirectos(playerId: string, weekStart: string, cf
   });
 }
 
+/** (13/10/2026, pedido de Leo: "no tenemos forma de hacer cambios en tiempo real... que se
+ * modifique en tiempo real lo que tiene que pasar") -- simula cómo quedaría la liquidación de
+ * ESTE jugador en la semana más reciente importada, usando los valores que está por guardar en
+ * su % (todavía sin guardar), SIN escribir nada en la base. Mismo cálculo exacto que usa
+ * calcularYGuardarLiquidacionSemana de abajo para un jugador puntual, pero de solo lectura --
+ * así se puede "probar" un cambio de % antes de confirmarlo. Devuelve null si todavía no se
+ * importó ninguna semana (nada contra qué previsualizar). */
+export async function previsualizarConfigJugador(playerId: string, cfgCandidata: TbConfig) {
+  const semana = await pool.query(`SELECT week_start, week_end FROM tb_weekly_stats ORDER BY week_start DESC LIMIT 1`);
+  if (semana.rows.length === 0) return null;
+  const weekStartRaw = semana.rows[0].week_start;
+  const weekEndRaw = semana.rows[0].week_end;
+
+  const statsPropia = await pool.query(
+    `SELECT rake_bruto FROM tb_weekly_stats WHERE player_id = $1 AND week_start = $2::date`,
+    [playerId, weekStartRaw]
+  );
+  const rakePropio = Number(statsPropia.rows[0]?.rake_bruto ?? 0);
+  const rakeReferidosDirectos = await rakeDeReferidosDirectos(playerId, weekStartRaw);
+  const rakePropioSemanasAnteriores = await rakePropioDeSemanasAnteriores(playerId, weekStartRaw, cfgCandidata.ventanaActividadSemanas);
+
+  const calc = calcularLiquidacionSemanal({ rakePropio, rakeReferidosDirectos, rakePropioSemanasAnteriores }, cfgCandidata);
+
+  return {
+    weekStart: String(weekStartRaw).slice(0, 10),
+    weekEnd: String(weekEndRaw).slice(0, 10),
+    ...calc,
+  };
+}
+
 /** Calcula (y persiste) la liquidación de TODOS los jugadores activos que tengan algo para
  * liquidar esa semana (rake propio esa semana, o al menos un referido directo con rake esa
  * semana -- si no, no genera fila, para no ensuciar el histórico con ceros de jugadores
