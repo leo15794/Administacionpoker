@@ -10,6 +10,12 @@ function estaRevertido(m: any) {
   return (m.status ?? m.movimiento_status) === "REVERTIDO";
 }
 
+function todayLocal() {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+}
+
 export default function Wallet() {
   const { alertDialog, promptDialog } = useConfirmDialog();
   const [data, setData] = useState<any>(null);
@@ -164,6 +170,10 @@ function AjusteForm({ onDone }: { onDone: () => void }) {
   const [direction, setDirection] = useState<"INGRESO" | "EGRESO">("INGRESO");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  // Fecha y hora (13/10/2026, pedido de Leo: "no se carga todo en tiempo real") -- arranca en
+  // el momento actual (como ya hace el mismo campo en Movimientos), pero queda editable para
+  // cargar algo que pasó antes y recién ahora se está registrando.
+  const [occurredAt, setOccurredAt] = useState(todayLocal());
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -180,6 +190,7 @@ function AjusteForm({ onDone }: { onDone: () => void }) {
         direction,
         amount: monto,
         reason: reason.trim(),
+        occurredAt: new Date(occurredAt).toISOString(),
       });
       onDone();
     } catch (err: any) {
@@ -205,6 +216,10 @@ function AjusteForm({ onDone }: { onDone: () => void }) {
         <div className="field">
           <label>Monto (USD)</label>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
+        </div>
+        <div className="field">
+          <label>Fecha y hora</label>
+          <input value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} type="datetime-local" />
         </div>
       </div>
       <div className="field">
