@@ -49,6 +49,7 @@ import {
   notificarLiquidacionPagada,
   notificarReferidosActivos,
   enviarBroadcast,
+  eliminarLogNotificacion,
   type ImportRow,
 } from "../repo/teamback.js";
 
@@ -433,6 +434,7 @@ const broadcastSchema = z.object({
   titulo: z.string().min(1),
   mensaje: z.string().min(1),
   playerId: z.string().nullable().optional(),
+  imagenUrl: z.string().url().nullable().optional(),
 });
 teambackRouter.post("/push/broadcast", requireTbAuth, requireTbAdmin, async (req: any, res) => {
   const parsed = broadcastSchema.safeParse(req.body);
@@ -443,10 +445,22 @@ teambackRouter.post("/push/broadcast", requireTbAuth, requireTbAdmin, async (req
         parsed.data.titulo,
         parsed.data.mensaje,
         parsed.data.playerId ?? null,
-        `TeamBack:${req.tbUser.username}`
+        `TeamBack:${req.tbUser.username}`,
+        parsed.data.imagenUrl ?? null
       )
     );
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo mandar el anuncio." });
+  }
+});
+
+// (13/10/2026, pedido de Leo) -- borra un aviso del historial. No revoca la notificación ya
+// entregada (imposible), solo lo saca de la lista.
+teambackRouter.delete("/push/log/:id", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    await eliminarLogNotificacion(req.params.id);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo borrar el aviso." });
   }
 });

@@ -19,7 +19,7 @@ self.addEventListener("fetch", () => {
 // notifications.ts (frontend). El payload lo arma el backend como JSON ({title, body, url}),
 // ver PushPayload en lib/push.ts.
 self.addEventListener("push", (event) => {
-  let data = { title: "TeamBack Affiliates", body: "Tenés una novedad.", url: "/" };
+  let data = { title: "TeamBack Affiliates", body: "Tenés una novedad.", url: "/", image: undefined };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -29,6 +29,9 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: "/icon-192.png",
+      // Imagen grande opcional (13/10/2026, pedido de Leo) -- si el payload no trae "image",
+      // queda undefined y el navegador simplemente no muestra ninguna.
+      image: data.image,
       // (13/10/2026, Leo probó en Android: el badge quedaba en blanco) -- el badge de Android
       // TIENE que ser una imagen de solo alfa (silueta blanca sobre transparente); si se le pasa
       // un ícono a color, como icon-192.png, Chrome no lo puede usar y lo deja vacío. Por eso va

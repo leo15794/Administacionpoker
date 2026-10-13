@@ -2254,3 +2254,9 @@ CREATE TABLE IF NOT EXISTS tb_push_notifications_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_tb_push_log_tipo_semana ON tb_push_notifications_log(tipo, week_start);
+
+-- (13/10/2026, pedido de Leo: "podemos pushear una imagen?") -- URL de una imagen ya hosteada en
+-- algún lado (no hay upload/storage propio acá) para mostrar en notificaciones push más
+-- vistosas (ej. flyer de un torneo). Columna agregada a una tabla que Leo ya migró antes -- por
+-- eso ALTER, no se reescribe el CREATE TABLE de arriba.
+ALTER TABLE tb_push_notifications_log ADD COLUMN IF NOT EXISTS imagen_url TEXT;

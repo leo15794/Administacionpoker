@@ -806,12 +806,19 @@ async function registrarLogNotificacion(input: {
   mensaje: string;
   enviadoA: number;
   actor?: string | null;
+  imagenUrl?: string | null;
 }) {
   await pool.query(
-    `INSERT INTO tb_push_notifications_log (id, tipo, week_start, player_id, titulo, mensaje, enviado_a, actor)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [newId("tbnl"), input.tipo, input.weekStart ?? null, input.playerId ?? null, input.titulo, input.mensaje, input.enviadoA, input.actor ?? null]
+    `INSERT INTO tb_push_notifications_log (id, tipo, week_start, player_id, titulo, mensaje, enviado_a, actor, imagen_url)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [newId("tbnl"), input.tipo, input.weekStart ?? null, input.playerId ?? null, input.titulo, input.mensaje, input.enviadoA, input.actor ?? null, input.imagenUrl ?? null]
   );
+}
+
+/** Borra un aviso del historial (13/10/2026, pedido de Leo) -- no revoca la notificación ya
+ * entregada al celular (eso no se puede), solo lo saca de la lista de "últimos avisos". */
+export async function eliminarLogNotificacion(id: string) {
+  await pool.query(`DELETE FROM tb_push_notifications_log WHERE id = $1`, [id]);
 }
 
 export async function getLogNotificaciones(tipo?: string, weekStart?: string) {
@@ -921,9 +928,28 @@ export async function notificarReferidosActivos(weekStart: string, actor?: strin
 
 /** Anuncio libre: a todos los jugadores con alguna suscripción, o a uno puntual si se pasa
  * playerId. Para torneos, novedades, lo que sea -- pensado para la sección de "Avisos" del admin. */
-export async function enviarBroadcast(titulo: string, mensaje: string, playerId?: string | null, actor?: string | null) {
+export async function enviarBroadcast(
+  titulo: string,
+  mensaje: string,
+  playerId?: string | null,
+  actor?: string | null,
+  imagenUrl?: string | null
+) {
   const subs = playerId ? await getPushSubscripcionesDeJugador(playerId) : await getTodasLasPushSubscripciones();
-  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
-  await registrarLogNotificacion({ tipo: "broadcast", playerId: playerId ?? null, titulo, mensaje, enviadoA: enviados, actor });
+  const enviados = await mandarATodasLasSuscripcionesDe(subs, {
+    title: titulo,
+    body: mensaje,
+    url: "/",
+    image: imagenUrl || undefined,
+  });
+  await registrarLogNotificacion({
+    tipo: "broadcast",
+    playerId: playerId ?? null,
+    titulo,
+    mensaje,
+    enviadoA: enviados,
+    actor,
+    imagenUrl: imagenUrl ?? null,
+  });
   return { pushEnviados: enviados };
 }

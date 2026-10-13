@@ -34,6 +34,11 @@ export interface PushPayload {
   // Ruta dentro de la app a la que conviene llevar al usuario si toca la notificación (ver
   // sw.js, evento notificationclick). Por defecto "/" (el portal del jugador).
   url?: string;
+  // URL de una imagen ya hosteada (13/10/2026, pedido de Leo) -- se muestra como imagen grande
+  // dentro de la notificación en Android/Chrome (ver sw.js, campo "image" de
+  // showNotification). No hay upload propio: tiene que ser un link a una imagen que ya exista
+  // en algún lado.
+  image?: string;
 }
 
 /** Manda un push a UNA suscripción puntual. Si el navegador/SO la dio de baja del otro lado

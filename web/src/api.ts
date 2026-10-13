@@ -1264,8 +1264,9 @@ export const api = {
         requestTb(`/teamback/push/notificar-liquidacion-pagada/${liquidacionId}`, { method: "POST" }),
       notificarReferidosActivos: (weekStart: string) =>
         requestTb("/teamback/push/notificar-referidos-activos", { method: "POST", body: JSON.stringify({ weekStart }) }),
-      broadcast: (titulo: string, mensaje: string, playerId?: string | null) =>
-        requestTb("/teamback/push/broadcast", { method: "POST", body: JSON.stringify({ titulo, mensaje, playerId: playerId ?? null }) }),
+      broadcast: (titulo: string, mensaje: string, playerId?: string | null, imagenUrl?: string | null) =>
+        requestTb("/teamback/push/broadcast", { method: "POST", body: JSON.stringify({ titulo, mensaje, playerId: playerId ?? null, imagenUrl: imagenUrl || null }) }),
+      deleteLog: (id: string) => requestTb(`/teamback/push/log/${id}`, { method: "DELETE" }),
     },
   },
 };

@@ -1390,6 +1390,10 @@ function AvisosTab() {
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
+  // Imagen (13/10/2026, pedido de Leo: "podemos pushear una imagen?") -- va un link a una
+  // imagen ya hosteada en algún lado, no hay upload propio acá.
+  const [imagenUrl, setImagenUrl] = useState("");
+  const [borrandoId, setBorrandoId] = useState<string | null>(null);
 
   async function cargarHistorial() {
     try {
@@ -1409,16 +1413,31 @@ function AvisosTab() {
     setEnviando(true);
     setMsg(null);
     try {
-      const r = await api.teamback.push.broadcast(titulo.trim(), mensaje.trim(), destino || null);
+      const r = await api.teamback.push.broadcast(titulo.trim(), mensaje.trim(), destino || null, imagenUrl.trim() || null);
       setMsg({ ok: true, text: `Enviado -- ${r.pushEnviados} push entregados.` });
       setTitulo("");
       setMensaje("");
       setDestino("");
+      setImagenUrl("");
       cargarHistorial();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo mandar el aviso." });
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function borrarAviso(id: string) {
+    const confirmado = window.confirm("¿Borrar este aviso del historial? (No revoca la notificación ya entregada, solo lo saca de esta lista.)");
+    if (!confirmado) return;
+    setBorrandoId(id);
+    try {
+      await api.teamback.push.deleteLog(id);
+      cargarHistorial();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo borrar el aviso." });
+    } finally {
+      setBorrandoId(null);
     }
   }
 
@@ -1447,6 +1466,10 @@ function AvisosTab() {
           <label>Mensaje</label>
           <input value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej: Torneo 10k Garantizados hoy a las 21hs." maxLength={180} />
         </div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Imagen (opcional) -- link a una imagen ya subida a algún lado</label>
+          <input value={imagenUrl} onChange={(e) => setImagenUrl(e.target.value)} placeholder="https://..." />
+        </div>
         <div className="field" style={{ alignSelf: "flex-end" }}>
           <button className="btn" disabled={enviando} onClick={enviar}>
             {enviando ? "Enviando..." : "🔔 Mandar aviso"}
@@ -1464,6 +1487,7 @@ function AvisosTab() {
             <th>Título</th>
             <th>Mensaje</th>
             <th className="num">Entregados</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -1474,11 +1498,16 @@ function AvisosTab() {
               <td>{h.titulo}</td>
               <td className="muted">{h.mensaje}</td>
               <td className="num">{h.enviado_a}</td>
+              <td>
+                <button className="btn secondary small" disabled={borrandoId === h.id} onClick={() => borrarAviso(h.id)} title="Borrar este aviso del historial">
+                  {borrandoId === h.id ? "..." : "🗑"}
+                </button>
+              </td>
             </tr>
           ))}
           {historial.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">Todavía no mandaste ningún aviso.</td>
+              <td colSpan={6} className="muted">Todavía no mandaste ningún aviso.</td>
             </tr>
           )}
         </tbody>
