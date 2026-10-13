@@ -42,6 +42,13 @@ import {
   listTbUsers,
   crearTbUser,
   actualizarTbUser,
+  guardarPushSubscription,
+  eliminarPushSubscription,
+  getLogNotificaciones,
+  notificarLiquidacionCerrada,
+  notificarLiquidacionPagada,
+  notificarReferidosActivos,
+  enviarBroadcast,
   type ImportRow,
 } from "../repo/teamback.js";
 
@@ -355,5 +362,91 @@ teambackRouter.get("/portal/liquidacion/:weekStart", requireTbAuth, requireTbPla
     res.json(await getLiquidacionIndividual(req.tbUser.playerId, req.params.weekStart));
   } catch (err: any) {
     res.status(404).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Notificaciones push (13/10/2026, pedido de Leo) -- ver lib/push.ts y repo/teamback.ts. Las 4
+// de abajo que mandan push de verdad son TODAS admin-only y TODAS manuales: ninguna se dispara
+// desde /liquidaciones/calcular ni desde /liquidaciones/:id/pagar de arriba, a propósito.
+// ---------------------------------------------------------------------------------------------
+
+const subscribeSchema = z.object({
+  endpoint: z.string(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+});
+teambackRouter.post("/push/subscribe", requireTbAuth, requireTbPlayer, async (req: any, res) => {
+  const parsed = subscribeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    await guardarPushSubscription(req.tbUser.playerId, parsed.data, req.headers["user-agent"] ?? null);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo guardar la suscripción." });
+  }
+});
+
+teambackRouter.post("/push/unsubscribe", requireTbAuth, requireTbPlayer, async (req: any, res) => {
+  const endpoint = req.body?.endpoint;
+  if (!endpoint) return res.status(400).json({ error: "Falta el endpoint." });
+  await eliminarPushSubscription(endpoint);
+  res.json({ ok: true });
+});
+
+teambackRouter.get("/push/log", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    res.json(await getLogNotificaciones(req.query.tipo as string | undefined, req.query.weekStart as string | undefined));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "No se pudo obtener el historial de notificaciones." });
+  }
+});
+
+teambackRouter.post("/push/notificar-liquidacion-cerrada", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  const weekStart = req.body?.weekStart;
+  if (!weekStart) return res.status(400).json({ error: "Falta weekStart." });
+  try {
+    res.json(await notificarLiquidacionCerrada(weekStart, `TeamBack:${req.tbUser.username}`));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo notificar la liquidación cerrada." });
+  }
+});
+
+teambackRouter.post("/push/notificar-liquidacion-pagada/:id", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  try {
+    res.json(await notificarLiquidacionPagada(req.params.id, `TeamBack:${req.tbUser.username}`));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo notificar el pago." });
+  }
+});
+
+teambackRouter.post("/push/notificar-referidos-activos", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  const weekStart = req.body?.weekStart;
+  if (!weekStart) return res.status(400).json({ error: "Falta weekStart." });
+  try {
+    res.json(await notificarReferidosActivos(weekStart, `TeamBack:${req.tbUser.username}`));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo notificar a los referentes." });
+  }
+});
+
+const broadcastSchema = z.object({
+  titulo: z.string().min(1),
+  mensaje: z.string().min(1),
+  playerId: z.string().nullable().optional(),
+});
+teambackRouter.post("/push/broadcast", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  const parsed = broadcastSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(
+      await enviarBroadcast(
+        parsed.data.titulo,
+        parsed.data.mensaje,
+        parsed.data.playerId ?? null,
+        `TeamBack:${req.tbUser.username}`
+      )
+    );
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo mandar el anuncio." });
   }
 });

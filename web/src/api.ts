@@ -1243,5 +1243,29 @@ export const api = {
       // scopeado a uno mismo del lado del backend.
       liquidacionSemana: (weekStart: string) => requestTb(`/teamback/portal/liquidacion/${weekStart}`),
     },
+
+    // Notificaciones push (13/10/2026, pedido de Leo) -- ver notifications.ts (lo usa el
+    // jugador para suscribirse/desuscribirse) y las 4 acciones manuales del admin más abajo.
+    push: {
+      subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+        requestTb("/teamback/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
+      unsubscribe: (endpoint: string) =>
+        requestTb("/teamback/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+      log: (params?: { tipo?: string; weekStart?: string }) => {
+        const qs = new URLSearchParams();
+        if (params?.tipo) qs.set("tipo", params.tipo);
+        if (params?.weekStart) qs.set("weekStart", params.weekStart);
+        const suffix = qs.toString() ? `?${qs.toString()}` : "";
+        return requestTb(`/teamback/push/log${suffix}`);
+      },
+      notificarLiquidacionCerrada: (weekStart: string) =>
+        requestTb("/teamback/push/notificar-liquidacion-cerrada", { method: "POST", body: JSON.stringify({ weekStart }) }),
+      notificarLiquidacionPagada: (liquidacionId: string) =>
+        requestTb(`/teamback/push/notificar-liquidacion-pagada/${liquidacionId}`, { method: "POST" }),
+      notificarReferidosActivos: (weekStart: string) =>
+        requestTb("/teamback/push/notificar-referidos-activos", { method: "POST", body: JSON.stringify({ weekStart }) }),
+      broadcast: (titulo: string, mensaje: string, playerId?: string | null) =>
+        requestTb("/teamback/push/broadcast", { method: "POST", body: JSON.stringify({ titulo, mensaje, playerId: playerId ?? null }) }),
+    },
   },
 };

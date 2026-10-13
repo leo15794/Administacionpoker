@@ -2217,3 +2217,40 @@ CREATE TABLE IF NOT EXISTS grupos_liquidacion (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS grupos_liquidacion_nombre_activo_unico
   ON grupos_liquidacion (name) WHERE active;
+
+-- ===============================================================================================
+-- Notificaciones push de TeamBack Affiliates (13/10/2026, pedido de Leo) -- web push al celular
+-- instalado o al navegador del afiliado. TODO manual: ningún evento dispara un push solo, Leo
+-- aprieta un botón cuando quiere avisar (pidió explícitamente que no sea automático, porque
+-- recalcular una semana podría volver a disparar el aviso por error).
+-- ===============================================================================================
+
+-- Una fila por suscripción del navegador/celular de un jugador (puede tener varias: instaló en
+-- el celu Y entró desde la compu, por ejemplo) -- por eso no es 1-a-1 con tb_players. `endpoint`
+-- es el identificador único que da el propio navegador/SO, por eso es la clave natural acá.
+CREATE TABLE IF NOT EXISTS tb_push_subscriptions (
+  id         TEXT PRIMARY KEY,
+  player_id  TEXT NOT NULL REFERENCES tb_players(id),
+  endpoint   TEXT NOT NULL UNIQUE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tb_push_subs_player ON tb_push_subscriptions(player_id);
+
+-- Historial de notificaciones mandadas -- sirve para que el panel admin pueda mostrar "ya se
+-- notificó esta semana" (evitar duplicados por las dudas) y para tener trazabilidad de qué se
+-- mandó y cuándo. `player_id` NULL = fue un broadcast a todos.
+CREATE TABLE IF NOT EXISTS tb_push_notifications_log (
+  id         TEXT PRIMARY KEY,
+  tipo       TEXT NOT NULL CHECK (tipo IN ('liquidacion_cerrada', 'liquidacion_pagada', 'referido_activo', 'broadcast')),
+  week_start DATE,
+  player_id  TEXT REFERENCES tb_players(id),
+  titulo     TEXT NOT NULL,
+  mensaje    TEXT NOT NULL,
+  enviado_a  INTEGER NOT NULL DEFAULT 0,
+  actor      TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tb_push_log_tipo_semana ON tb_push_notifications_log(tipo, week_start);

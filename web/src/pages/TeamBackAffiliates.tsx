@@ -14,8 +14,9 @@ import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import TbIdleGuard from "../components/TbIdleGuard";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
+import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
-type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet";
+type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos";
 
 const TB_SESSION_KEY = "tb_session";
 
@@ -257,6 +258,11 @@ const tbIcon = {
       <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
     </svg>
   ),
+  avisos: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -294,6 +300,7 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "config", label: "Configuración (plantilla)", icon: "config" },
   { key: "usuarios", label: "Usuarios", icon: "usuarios" },
   { key: "wallet", label: "Wallet (espejo)", icon: "wallet" },
+  { key: "avisos", label: "Avisos", icon: "avisos" },
 ];
 
 // (25/09/2026, pedido de Leo: "hagamos el menu como la administracion de poker") -- mismo
@@ -417,6 +424,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         {tab === "config" && <ConfigTab />}
         {tab === "usuarios" && <UsuariosTab />}
         {tab === "wallet" && <WalletEspejoTab />}
+        {tab === "avisos" && <AvisosTab />}
       </div>
     </div>
   );
@@ -509,6 +517,77 @@ function InstallAppBanner() {
   );
 }
 
+// Activar notificaciones (13/10/2026, pedido de Leo) -- banner separado del de instalar (ver
+// InstallAppBanner arriba): en Android/desktop funciona instalada o no, pero en iPhone Apple
+// exige que la app ya esté instalada en la pantalla de inicio para poder activarlas -- por eso
+// ahí este banner queda oculto hasta que isStandaloneDisplay() sea true (el de instalar ya se
+// encarga de ese paso previo). Una vez que el usuario ya está suscripto, o si el permiso quedó
+// denegado del lado del navegador, no tiene sentido seguir mostrando el botón.
+function NotificationsBanner() {
+  const [estado, setEstado] = useState<"cargando" | "ofrecer" | "suscripto" | "denegado" | "oculto">("cargando");
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("tb_notif_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [activando, setActivando] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      if (!isPushSupported()) return setEstado("oculto");
+      if (isIos() && !isStandaloneDisplay()) return setEstado("oculto"); // iPhone: primero instalar
+      const permiso = getNotificationPermission();
+      if (permiso === "denied") return setEstado("denegado");
+      if (await yaEstaSuscripto()) return setEstado("suscripto");
+      setEstado("ofrecer");
+    })();
+  }, []);
+
+  function onDismiss() {
+    setDismissed(true);
+    try {
+      localStorage.setItem("tb_notif_dismissed", "1");
+    } catch {
+      /* no pasa nada -- solo vuelve a aparecer la próxima vez */
+    }
+  }
+
+  async function onActivar() {
+    setActivando(true);
+    try {
+      const r = await activarNotificaciones();
+      if (r === "ok") setEstado("suscripto");
+      else if (r === "denegado") setEstado("denegado");
+    } finally {
+      setActivando(false);
+    }
+  }
+
+  if (estado === "cargando" || estado === "oculto" || estado === "suscripto" || dismissed) return null;
+
+  return (
+    <div className="tb-install-banner">
+      <button className="tb-install-dismiss" onClick={onDismiss} aria-label="Cerrar">✕</button>
+      <div className="tb-install-icon">🔔</div>
+      <div className="tb-install-text">
+        <div className="t1">{estado === "denegado" ? "Notificaciones bloqueadas" : "Activá las notificaciones"}</div>
+        <div className="t2">
+          {estado === "denegado"
+            ? "Las bloqueaste antes -- para activarlas tenés que habilitarlas desde los ajustes del navegador."
+            : "Enterate apenas se calcule o te paguemos tu liquidación."}
+        </div>
+      </div>
+      {estado === "ofrecer" && (
+        <button className="tb-install-btn" onClick={onActivar} disabled={activando}>
+          {activando ? "..." : "Activar"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [cuenta, setCuenta] = useState<any | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -545,6 +624,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
       </div>
 
       <InstallAppBanner />
+      <NotificationsBanner />
 
       {historial.length > 0 && (
         <div className="kpi-grid">
@@ -755,6 +835,51 @@ function LiquidacionesTab() {
   // se está eligiendo el medio de pago (ver Modal + FormPagarLiquidacion, más abajo). null =
   // ningún modal de pago abierto.
   const [pagando, setPagando] = useState<any | null>(null);
+  // Notificaciones push (13/10/2026, pedido de Leo) -- TODAS manuales, ningún push se manda
+  // solo. notificando guarda qué botón está en curso ("semana" | "referidos" | el id de una
+  // liquidación puntual) para deshabilitar solo ESE botón mientras tarda.
+  const [notificando, setNotificando] = useState<string | null>(null);
+
+  async function notificarLiquidacionSemana() {
+    if (!weekStart) return;
+    setNotificando("semana");
+    setMsg(null);
+    try {
+      const r = await api.teamback.push.notificarLiquidacionCerrada(weekStart);
+      setMsg({ ok: true, text: `Notificados ${r.jugadoresNotificados} jugador(es) -- ${r.pushEnviados} push enviados.` });
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo notificar." });
+    } finally {
+      setNotificando(null);
+    }
+  }
+
+  async function notificarReferidosActivosSemana() {
+    if (!weekStart) return;
+    setNotificando("referidos");
+    setMsg(null);
+    try {
+      const r = await api.teamback.push.notificarReferidosActivos(weekStart);
+      setMsg({ ok: true, text: `Notificados ${r.referentesNotificados} referente(s) -- ${r.pushEnviados} push enviados.` });
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo notificar a los referentes." });
+    } finally {
+      setNotificando(null);
+    }
+  }
+
+  async function notificarPago(f: any) {
+    setNotificando(f.id);
+    setMsg(null);
+    try {
+      const r = await api.teamback.push.notificarLiquidacionPagada(f.id);
+      setMsg({ ok: true, text: `${r.jugador} notificado -- ${r.pushEnviados} push enviados.` });
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo notificar el pago." });
+    } finally {
+      setNotificando(null);
+    }
+  }
 
   async function cargarSemanas() {
     const r = await api.teamback.semanasDisponibles();
@@ -884,6 +1009,30 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
             </button>
           </div>
         )}
+        {weekStart && filas.length > 0 && (
+          <div className="field" style={{ alignSelf: "flex-end" }}>
+            <button
+              className="btn secondary"
+              disabled={notificando === "semana"}
+              onClick={notificarLiquidacionSemana}
+              title="Les manda una notificación push a todos los jugadores con liquidación esta semana -- acción manual, no se dispara sola al calcular."
+            >
+              {notificando === "semana" ? "Notificando..." : "🔔 Notificar liquidación"}
+            </button>
+          </div>
+        )}
+        {weekStart && filas.length > 0 && (
+          <div className="field" style={{ alignSelf: "flex-end" }}>
+            <button
+              className="btn secondary"
+              disabled={notificando === "referidos"}
+              onClick={notificarReferidosActivosSemana}
+              title="Les avisa a los referentes que tengan al menos un referido activo esta semana -- acción manual."
+            >
+              {notificando === "referidos" ? "Notificando..." : "🔔 Notificar referidos activos"}
+            </button>
+          </div>
+        )}
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
 
@@ -946,6 +1095,15 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
                     <span className="badge pos" style={{ marginRight: 6 }} title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>
                       Pagado{f.medio_pago ? ` (${f.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
                     </span>
+                    <button
+                      className="btn secondary small"
+                      disabled={notificando === f.id}
+                      onClick={() => notificarPago(f)}
+                      title="Avisarle a este jugador que le acreditamos el pago -- acción manual."
+                      style={{ marginRight: 6 }}
+                    >
+                      {notificando === f.id ? "..." : "🔔"}
+                    </button>
                     <button className="btn secondary small" disabled={pagandoId === f.id} onClick={() => deshacerPago(f)}>
                       Deshacer
                     </button>
@@ -1220,6 +1378,115 @@ function WalletEspejoTab() {
     </div>
   );
 }
+
+// Avisos (13/10/2026, pedido de Leo: "Nuevo Torneo 10k Garantizados!") -- anuncio libre por push,
+// a todos los jugadores con notificaciones activadas o a uno puntual. Siempre manual, lo manda
+// quien está en este panel cuando quiere, nunca se dispara solo.
+function AvisosTab() {
+  const [jugadores, setJugadores] = useState<any[]>([]);
+  const [titulo, setTitulo] = useState("");
+  const [mensaje, setMensaje] = useState("");
+  const [destino, setDestino] = useState(""); // "" = todos
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [historial, setHistorial] = useState<any[]>([]);
+
+  async function cargarHistorial() {
+    try {
+      setHistorial(await api.teamback.push.log({ tipo: "broadcast" }));
+    } catch {
+      /* si falla, el historial simplemente queda vacío -- no es crítico para poder mandar un aviso nuevo */
+    }
+  }
+
+  useEffect(() => {
+    api.teamback.listPlayers(false).then(setJugadores);
+    cargarHistorial();
+  }, []);
+
+  async function enviar() {
+    if (!titulo.trim() || !mensaje.trim()) return setMsg({ ok: false, text: "Completá título y mensaje." });
+    setEnviando(true);
+    setMsg(null);
+    try {
+      const r = await api.teamback.push.broadcast(titulo.trim(), mensaje.trim(), destino || null);
+      setMsg({ ok: true, text: `Enviado -- ${r.pushEnviados} push entregados.` });
+      setTitulo("");
+      setMensaje("");
+      setDestino("");
+      cargarHistorial();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo mandar el aviso." });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Mandá una notificación push libre -- novedades, torneos, lo que necesites avisar. Solo le
+        llega a quien ya activó las notificaciones en su celular/navegador.
+      </div>
+
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field">
+          <label>Para</label>
+          <select value={destino} onChange={(e) => setDestino(e.target.value)}>
+            <option value="">Todos los jugadores</option>
+            {jugadores.map((j) => (
+              <option key={j.id} value={j.id}>{j.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>Título</label>
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej: ¡Nuevo torneo!" maxLength={80} />
+        </div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Mensaje</label>
+          <input value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej: Torneo 10k Garantizados hoy a las 21hs." maxLength={180} />
+        </div>
+        <div className="field" style={{ alignSelf: "flex-end" }}>
+          <button className="btn" disabled={enviando} onClick={enviar}>
+            {enviando ? "Enviando..." : "🔔 Mandar aviso"}
+          </button>
+        </div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+      <h3 style={{ marginTop: 24, marginBottom: 8, fontSize: 15 }}>Últimos avisos mandados</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Para</th>
+            <th>Título</th>
+            <th>Mensaje</th>
+            <th className="num">Entregados</th>
+          </tr>
+        </thead>
+        <tbody>
+          {historial.map((h) => (
+            <tr key={h.id}>
+              <td className="muted">{dateShort(h.created_at)}</td>
+              <td>{h.player_name || "Todos"}</td>
+              <td>{h.titulo}</td>
+              <td className="muted">{h.mensaje}</td>
+              <td className="num">{h.enviado_a}</td>
+            </tr>
+          ))}
+          {historial.length === 0 && (
+            <tr>
+              <td colSpan={5} className="muted">Todavía no mandaste ningún aviso.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 
 // Formato de liquidación lista para copiar/mandarle al jugador -- compartido entre la vista de
 // admin (LiquidacionIndividual, pide el dato por playerId+weekStart) y el portal del propio

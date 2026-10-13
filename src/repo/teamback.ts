@@ -16,6 +16,7 @@ import {
   type OrigenLiquidacionSemanal,
 } from "../engine/teambackAffiliates.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
+import { enviarPushAUnaSuscripcion, type PushPayload } from "../lib/push.js";
 
 // ---------------------------------------------------------------------------------------------
 // Config
@@ -731,4 +732,198 @@ export async function getHistorialJugadorConNombre(playerId: string) {
     [playerId]
   );
   return r.rows;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Notificaciones push (13/10/2026, pedido de Leo) -- ver lib/push.ts. TODO manual: estas
+// funciones solo se llaman cuando el admin aprieta un botón puntual (routes/teamback.ts), nunca
+// se disparan solas desde acá ni desde calcularYGuardarLiquidacionSemana/marcarLiquidacionPagada
+// de arriba -- pedido explícito de Leo para no arriesgar un aviso de más si se recalcula algo.
+// ---------------------------------------------------------------------------------------------
+
+export async function guardarPushSubscription(
+  playerId: string,
+  sub: { endpoint: string; keys: { p256dh: string; auth: string } },
+  userAgent?: string | null
+) {
+  await pool.query(
+    `INSERT INTO tb_push_subscriptions (id, player_id, endpoint, p256dh, auth, user_agent)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (endpoint) DO UPDATE SET player_id = EXCLUDED.player_id, p256dh = EXCLUDED.p256dh,
+       auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent`,
+    [newId("tbps"), playerId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent ?? null]
+  );
+}
+
+export async function eliminarPushSubscription(endpoint: string) {
+  await pool.query(`DELETE FROM tb_push_subscriptions WHERE endpoint = $1`, [endpoint]);
+}
+
+async function getPushSubscripcionesDeJugador(playerId: string) {
+  const r = await pool.query(
+    `SELECT endpoint, p256dh, auth FROM tb_push_subscriptions WHERE player_id = $1`,
+    [playerId]
+  );
+  return r.rows;
+}
+
+async function getTodasLasPushSubscripciones() {
+  const r = await pool.query(`SELECT endpoint, p256dh, auth FROM tb_push_subscriptions`);
+  return r.rows;
+}
+
+/** Manda el mismo payload a TODAS las suscripciones de un jugador (puede tener más de una: celu
+ * + compu). Si alguna quedó muerta del otro lado (desinstaló, revocó el permiso), la borra de la
+ * base en vez de reintentar -- así no se acumulan suscripciones fantasma para siempre. Devuelve
+ * cuántas recibieron el push de verdad. */
+async function mandarATodasLasSuscripcionesDe(
+  subs: { endpoint: string; p256dh: string; auth: string }[],
+  payload: PushPayload
+) {
+  let enviados = 0;
+  for (const s of subs) {
+    try {
+      await enviarPushAUnaSuscripcion({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+      enviados++;
+    } catch (err: any) {
+      const status = err?.statusCode;
+      if (status === 404 || status === 410) {
+        // El navegador/SO dio de baja esta suscripción del otro lado -- limpiar acá.
+        await eliminarPushSubscription(s.endpoint);
+      }
+      // Cualquier otro error (red, etc.) se ignora para esta suscripción puntual -- no frena el
+      // envío al resto de suscripciones/jugadores.
+    }
+  }
+  return enviados;
+}
+
+async function registrarLogNotificacion(input: {
+  tipo: "liquidacion_cerrada" | "liquidacion_pagada" | "referido_activo" | "broadcast";
+  weekStart?: string | null;
+  playerId?: string | null;
+  titulo: string;
+  mensaje: string;
+  enviadoA: number;
+  actor?: string | null;
+}) {
+  await pool.query(
+    `INSERT INTO tb_push_notifications_log (id, tipo, week_start, player_id, titulo, mensaje, enviado_a, actor)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [newId("tbnl"), input.tipo, input.weekStart ?? null, input.playerId ?? null, input.titulo, input.mensaje, input.enviadoA, input.actor ?? null]
+  );
+}
+
+export async function getLogNotificaciones(tipo?: string, weekStart?: string) {
+  const condiciones: string[] = [];
+  const values: any[] = [];
+  if (tipo) {
+    values.push(tipo);
+    condiciones.push(`tipo = $${values.length}`);
+  }
+  if (weekStart) {
+    values.push(weekStart);
+    condiciones.push(`week_start = $${values.length}::date`);
+  }
+  const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
+  const r = await pool.query(
+    `SELECT l.*, p.name as player_name FROM tb_push_notifications_log l
+     LEFT JOIN tb_players p ON p.id = l.player_id
+     ${where} ORDER BY l.created_at DESC LIMIT 100`,
+    values
+  );
+  return r.rows;
+}
+
+/** Manda "tu liquidación de esta semana ya está calculada" a todos los jugadores que tengan una
+ * fila en tb_weekly_liquidations esa semana. Botón manual en el admin, al lado de "Calcular". */
+export async function notificarLiquidacionCerrada(weekStart: string, actor?: string | null) {
+  const r = await pool.query(
+    `SELECT DISTINCT l.player_id, p.name FROM tb_weekly_liquidations l
+     JOIN tb_players p ON p.id = l.player_id WHERE l.week_start = $1::date`,
+    [weekStart]
+  );
+  const titulo = "Tu liquidación ya está lista";
+  const mensaje = `Ya calculamos tu liquidación de la semana del ${weekStart}. Entrá a la app para verla.`;
+  let totalEnviados = 0;
+  for (const row of r.rows) {
+    const subs = await getPushSubscripcionesDeJugador(row.player_id);
+    totalEnviados += await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+  }
+  await registrarLogNotificacion({ tipo: "liquidacion_cerrada", weekStart, titulo, mensaje, enviadoA: totalEnviados, actor });
+  return { jugadoresNotificados: r.rows.length, pushEnviados: totalEnviados };
+}
+
+/** Manda "te pagamos" a UN jugador puntual, por su liquidación ya marcada como pagada. */
+export async function notificarLiquidacionPagada(liquidacionId: string, actor?: string | null) {
+  const r = await pool.query(
+    `SELECT l.*, p.name as player_name FROM tb_weekly_liquidations l
+     JOIN tb_players p ON p.id = l.player_id WHERE l.id = $1`,
+    [liquidacionId]
+  );
+  const liq = r.rows[0];
+  if (!liq) throw new Error("No se encontró esa liquidación.");
+  const titulo = "Te acreditamos tu pago";
+  const mensaje = `Te pagamos tu comisión de la semana del ${String(liq.week_start).slice(0, 10)}.`;
+  const subs = await getPushSubscripcionesDeJugador(liq.player_id);
+  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+  await registrarLogNotificacion({
+    tipo: "liquidacion_pagada",
+    weekStart: liq.week_start,
+    playerId: liq.player_id,
+    titulo,
+    mensaje,
+    enviadoA: enviados,
+    actor,
+  });
+  return { jugador: liq.player_name, pushEnviados: enviados };
+}
+
+/** Para cada jugador que referenció a alguien que llegó a "activo" ESTA semana (mismo criterio
+ * que el desglose por referido: rake del referido >= umbral del REFERENTE, usando el
+ * config_snapshot ya persistido de la liquidación del referente esa semana), le manda un aviso.
+ * Si un referente tiene más de un referido activo, se le manda UN solo push con el total. */
+export async function notificarReferidosActivos(weekStart: string, actor?: string | null) {
+  const r = await pool.query(
+    `SELECT l.player_id as referrer_id, p.name as referrer_name, COUNT(*) as activos
+     FROM tb_weekly_liquidations l
+     JOIN tb_players p ON p.id = l.player_id
+     JOIN tb_players ref ON ref.referido_por_id = l.player_id
+     LEFT JOIN tb_weekly_stats s ON s.player_id = ref.id AND s.week_start = $1::date
+     WHERE l.week_start = $1::date
+       AND COALESCE(s.rake_bruto, 0) >= (l.config_snapshot->>'umbralReferidoActivoUsd')::numeric
+     GROUP BY l.player_id, p.name`,
+    [weekStart]
+  );
+  let totalEnviados = 0;
+  for (const row of r.rows) {
+    const cantidad = Number(row.activos);
+    const titulo = "¡Uno de tus referidos se activó!";
+    const mensaje =
+      cantidad === 1
+        ? "Uno de tus referidos llegó al umbral de activo esta semana -- sumá su comisión."
+        : `${cantidad} de tus referidos llegaron al umbral de activo esta semana -- sumá sus comisiones.`;
+    const subs = await getPushSubscripcionesDeJugador(row.referrer_id);
+    const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+    totalEnviados += enviados;
+    await registrarLogNotificacion({
+      tipo: "referido_activo",
+      weekStart,
+      playerId: row.referrer_id,
+      titulo,
+      mensaje,
+      enviadoA: enviados,
+      actor,
+    });
+  }
+  return { referentesNotificados: r.rows.length, pushEnviados: totalEnviados };
+}
+
+/** Anuncio libre: a todos los jugadores con alguna suscripción, o a uno puntual si se pasa
+ * playerId. Para torneos, novedades, lo que sea -- pensado para la sección de "Avisos" del admin. */
+export async function enviarBroadcast(titulo: string, mensaje: string, playerId?: string | null, actor?: string | null) {
+  const subs = playerId ? await getPushSubscripcionesDeJugador(playerId) : await getTodasLasPushSubscripciones();
+  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/" });
+  await registrarLogNotificacion({ tipo: "broadcast", playerId: playerId ?? null, titulo, mensaje, enviadoA: enviados, actor });
+  return { pushEnviados: enviados };
 }
