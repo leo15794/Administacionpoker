@@ -1435,8 +1435,11 @@ button.nav-link {
 
 /* ---------- KPI hero (Resumen financiero — las 5 tarjetas principales) ---------- */
 .kpi-hero-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  /* FIX 13/10/2026 (Leo: tarjeta suelta con hueco vacío al lado en ciertos anchos) -- flexbox
+     en vez de grid de columnas fijas, así la última fila reparte el espacio entre sus propias
+     tarjetas en vez de dejarlo vacío. Ver comentario largo más abajo en .kpi-hero-card. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   align-items: stretch;
 }
@@ -1450,6 +1453,9 @@ button.nav-link {
   box-shadow: var(--shadow-soft);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   min-width: 0;
+  /* flex-basis 212px = mismo mínimo que tenía el grid; flex-grow 1 = reparte el sobrante de
+     su fila entre las tarjetas de ESA fila (nunca deja hueco vacío si una queda sola). */
+  flex: 1 1 212px;
 }
 .kpi-hero-card.row-click:hover {
   transform: translateY(-2px);
@@ -1468,12 +1474,13 @@ button.nav-link {
 /* Tarjeta con más protagonismo (Ganancia semanal): ocupa 2 columnas cuando el ancho alcanza,
    monto más grande, y un borde superior más marcado en vez del degradé fino genérico. */
 .kpi-hero-card.featured {
-  grid-column: span 2;
+  /* antes "grid-column: span 2" -- equivalente en flex: el doble de flex-grow/flex-basis. */
+  flex: 2 1 440px;
   border-color: var(--border-strong);
 }
 .kpi-hero-card.featured::before { height: 3px; opacity: 0.9; }
 @media (max-width: 620px) {
-  .kpi-hero-card.featured { grid-column: span 1; }
+  .kpi-hero-card.featured { flex: 1 1 212px; }
 }
 .kpi-hero-label {
   font-size: 12.5px;
