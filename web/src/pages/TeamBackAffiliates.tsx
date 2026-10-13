@@ -13,6 +13,7 @@ import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import TbIdleGuard from "../components/TbIdleGuard";
+import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 
 type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet";
 
@@ -439,6 +440,75 @@ function useIsMobile(breakpoint = 640) {
   return isMobile;
 }
 
+// Instalar como app (13/10/2026, pedido de Leo, ver mockup que aprobó: banner con botón
+// "Instalar" debajo del saludo). En Android/Chrome/Edge dispara el prompt nativo de
+// instalación; Safari/iOS nunca ofrece ese evento, ahí el mismo botón abre instrucciones
+// manuales (Compartir -> Agregar a inicio -> Agregar). No se muestra si ya está instalada
+// (display-mode: standalone / navigator.standalone) ni si el usuario la cerró con la X
+// (se guarda en localStorage, no vuelve a aparecer en ese dispositivo).
+function InstallAppBanner() {
+  const [promptEvent, setPromptEvent] = useState(() => getInstallPromptEvent());
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("tb_install_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [showIosHelp, setShowIosHelp] = useState(false);
+  const standalone = isStandaloneDisplay();
+  const ios = isIos();
+
+  useEffect(() => onInstallPromptChange(setPromptEvent), []);
+
+  if (standalone || dismissed) return null;
+  // Sin el evento de Chrome/Android y sin ser iOS no hay nada que ofrecer (ej. Firefox mobile,
+  // que no soporta instalación) -- no mostrar un botón que no va a hacer nada.
+  if (!ios && !promptEvent) return null;
+
+  async function onInstall() {
+    if (ios) {
+      setShowIosHelp(true);
+      return;
+    }
+    if (!promptEvent) return;
+    await promptEvent.prompt();
+    await promptEvent.userChoice;
+  }
+
+  function onDismiss() {
+    setDismissed(true);
+    try {
+      localStorage.setItem("tb_install_dismissed", "1");
+    } catch {
+      /* localStorage no disponible, no pasa nada -- solo vuelve a aparecer la próxima vez */
+    }
+  }
+
+  return (
+    <>
+      <div className="tb-install-banner">
+        <button className="tb-install-dismiss" onClick={onDismiss} aria-label="Cerrar">✕</button>
+        <div className="tb-install-icon">⬇</div>
+        <div className="tb-install-text">
+          <div className="t1">Instalá la app</div>
+          <div className="t2">Acceso directo desde tu pantalla de inicio, sin abrir el navegador</div>
+        </div>
+        <button className="tb-install-btn" onClick={onInstall}>Instalar</button>
+      </div>
+      {showIosHelp && (
+        <Modal title="Para instalar en iPhone" onClose={() => setShowIosHelp(false)}>
+          <ol style={{ paddingLeft: 18, lineHeight: 1.9, fontSize: 14, margin: 0 }}>
+            <li>Tocá el botón <strong>Compartir</strong> (el ícono con la flecha hacia arriba, en la barra de abajo de Safari)</li>
+            <li>Elegí <strong>"Agregar a inicio"</strong></li>
+            <li>Tocá <strong>"Agregar"</strong> arriba a la derecha</li>
+          </ol>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [cuenta, setCuenta] = useState<any | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -473,6 +543,8 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
           <button className="btn secondary small" onClick={onLogout}>Cerrar sesión</button>
         </div>
       </div>
+
+      <InstallAppBanner />
 
       {historial.length > 0 && (
         <div className="kpi-grid">
@@ -1196,6 +1268,13 @@ function BloqueLiquidacionCopiable({
   soloReferidos?: boolean;
 }) {
   const texto = textoLiquidacion(liquidacion, referidos);
+  // (13/10/2026, pedido de Leo: screenshot del portal mobile -- la tabla de desglose por
+  // referido obliga a arrastrar para el costado en un celular, y lo que queda cortado es
+  // justo "Comisión aportada". En mobile se reemplaza por una tarjeta por referido (mismo
+  // patrón visual que .week-card); en desktop sigue siendo la tabla de siempre. Mismo
+  // componente para el portal del jugador (soloReferidos) y la vista admin
+  // (LiquidacionIndividual) -- el breakpoint de useIsMobile ya vive en este mismo archivo.
+  const isMobile = useIsMobile();
   return (
     <div>
       {!soloReferidos && (
@@ -1221,36 +1300,64 @@ function BloqueLiquidacionCopiable({
           <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
             Desglose por referido -- qué generó cada uno esta semana.
           </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Jugador</th>
-                  <th>ID Suprema</th>
-                  <th className="num">Rake</th>
-                  <th>Estado</th>
-                  <th className="num">Comisión aportada</th>
-                </tr>
-              </thead>
-              <tbody>
-                {referidos.map((r) => (
-                  <tr key={r.playerId}>
-                    <td>{r.playerName}</td>
-                    <td className="muted">{r.supremaPlayerId}</td>
-                    <td className="num">{usd(r.rake)}</td>
-                    <td>
-                      {r.activo ? (
-                        <span className="badge pos">activo</span>
-                      ) : (
-                        <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
-                      )}
-                    </td>
-                    <td className="num">{usd(r.comisionAportada)}</td>
+          {isMobile ? (
+            <div className="tb-ref-list">
+              {referidos.map((r) => (
+                <div className="tb-ref-card" key={r.playerId}>
+                  <div className="tb-ref-head">
+                    <div className="tb-ref-name">{r.playerName}</div>
+                    {r.activo ? (
+                      <span className="badge pos">activo</span>
+                    ) : (
+                      <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
+                    )}
+                  </div>
+                  <div className="tb-ref-id">ID Suprema {r.supremaPlayerId}</div>
+                  <div className="tb-ref-grid">
+                    <div className="tb-ref-item">
+                      <div className="label">Rake</div>
+                      <div className="val">{usd(r.rake)}</div>
+                    </div>
+                    <div className="tb-ref-item">
+                      <div className="label">Comisión aportada</div>
+                      <div className="val">{usd(r.comisionAportada)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Jugador</th>
+                    <th>ID Suprema</th>
+                    <th className="num">Rake</th>
+                    <th>Estado</th>
+                    <th className="num">Comisión aportada</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {referidos.map((r) => (
+                    <tr key={r.playerId}>
+                      <td>{r.playerName}</td>
+                      <td className="muted">{r.supremaPlayerId}</td>
+                      <td className="num">{usd(r.rake)}</td>
+                      <td>
+                        {r.activo ? (
+                          <span className="badge pos">activo</span>
+                        ) : (
+                          <span className="badge neg" title="No llegó al umbral de referido activo esta semana.">inactivo</span>
+                        )}
+                      </td>
+                      <td className="num">{usd(r.comisionAportada)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
