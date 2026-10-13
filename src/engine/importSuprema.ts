@@ -34,6 +34,22 @@
 // ring_game+mtt+sng+tlt dio rake_total=318.308, y con su 70% de rakeback (222.8156) el
 // cierre final=737.3456 -- Leo confirmó que ese número cierra contra lo real. Si el archivo
 // no tiene la columna de stakes (reporte viejo) se cae al valor nativo de "SPIN Total(Local)".
+//
+// FIX 13/10/2026 (Leo: "CORRECCIÓN DEL CÁLCULO DE RODEO -- CIERRES DE AGENTES"): la asunción del
+// FIX 07/10/2026 de arriba -- que "Total Winnings Rodeo(Local)" seguía siendo la misma ganancia
+// NETA de siempre -- era incorrecta. Esa columna es la ganancia BRUTA (lo que el jugador cobró
+// en premios de Rodeo), no el neto. El neto real es stakes - winnings, usando la columna nueva
+// "Total Stakes Rodeo(Local)" que apareció al lado en el mismo cambio de reporte (mismo patrón
+// que "Total Stakes Spin(Local)" del FIX 07/10/2026 #2). Verificado centavo a centavo contra el
+// cierre financiero real que Suprema le manda a Leo (Fénix, semana 239, hoja "FENIX" del archivo
+// Semana_239.xlsx): columna CK (Total Stakes Rodeo) = 1.322,00, columna CL (Total Winnings Rodeo)
+// = 943,14 -> neto = 378,86. Ese neto x 35% = USD 132,60, exacto contra "Ganancia Rodeo" del
+// cierre oficial; x 30% = USD 113,66, exacto contra "Tasa Rodeo" (ambos la misma base neta,
+// confirma la fórmula). Antes de este fix se usaba el winnings crudo como base de la comisión
+// del agente (15% de 943,14 a nivel club en vez de 15% de 378,86) -- de ahí el error reportado
+// por Leo en Mar Bruno y M CHOCO semana 239. Fallback al valor nativo (ya neto) cuando el
+// archivo no trae la columna de stakes, para re-parsear reportes viejos (formato
+// "Total Profit Rodeo(Local)") sin romper nada.
 import ExcelJS from "exceljs";
 
 const REQUIRED_HEADERS = [
@@ -56,6 +72,11 @@ const REQUIRED_HEADERS = [
 const RODEO_HEADER_ALIASES = ["Total Profit Rodeo(Local)", "Total Winnings Rodeo(Local)"] as const;
 const RODEO_KEY = "RODEO";
 
+// Stakes de Rodeo (ver FIX 13/10/2026 arriba): columna nueva de este mismo reporte, necesaria
+// para pasar de ganancia bruta a neta cuando el archivo usa el alias nuevo ("Total Winnings
+// Rodeo(Local)"). Mismo patrón que SPIN_STAKES_HEADER más abajo.
+const RODEO_STAKES_HEADER = "Total Stakes Rodeo(Local)";
+
 // Spin (ver FIX 07/10/2026 #2 arriba): columna nueva de este mismo reporte, usada para
 // reconstruir el rake de Spin a mano porque la nativa viene rota. 8% confirmado por Leo
 // (07/10/2026), verificado contra el cierre real de F coco (TeamBack Suprema, semana 238).
@@ -67,7 +88,7 @@ const SPIN_RAKE_PCT = 0.08;
 // la jerarquía real (Role/Sub Agent) — NUNCA para reagrupar el resultado de un jugador: el
 // resultado siempre se suma por "Agent Name" (el superagente), confirmado explícitamente por el
 // usuario — el Sub Agent es solo información de a quién le reporta puertas adentro.
-const OPTIONAL_HEADERS = ["Role", "Sub Agent ID", "Sub Agent Name", "Total Stakes Spin(Local)"] as const;
+const OPTIONAL_HEADERS = ["Role", "Sub Agent ID", "Sub Agent Name", "Total Stakes Spin(Local)", "Total Stakes Rodeo(Local)"] as const;
 
 const RAKE_HEADERS = [
   "Ring Game Total(Local)",
@@ -201,7 +222,14 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
           ? toNumber(row.getCell(colIndex[SPIN_STAKES_HEADER]).value) * SPIN_RAKE_PCT
           : toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value);
       const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0) + spin;
-      const rodeo = toNumber(row.getCell(colIndex[RODEO_KEY]).value);
+      // Ver FIX 13/10/2026: con el alias nuevo, "Total Winnings Rodeo(Local)" es bruto -- hay
+      // que restarle "Total Stakes Rodeo(Local)" para llegar al neto real. Si el archivo no
+      // trae esa columna (reporte viejo, alias "Total Profit Rodeo(Local)") se usa el valor
+      // nativo tal cual, que ya es neto.
+      const rodeo =
+        colIndex[RODEO_STAKES_HEADER] !== undefined
+          ? toNumber(row.getCell(colIndex[RODEO_STAKES_HEADER]).value) - toNumber(row.getCell(colIndex[RODEO_KEY]).value)
+          : toNumber(row.getCell(colIndex[RODEO_KEY]).value);
       const role = colIndex["Role"] !== undefined ? normText(row.getCell(colIndex["Role"]).value) : null;
       const subAgentIdRaw = colIndex["Sub Agent ID"] !== undefined ? normText(row.getCell(colIndex["Sub Agent ID"]).value) : null;
       const subAgentNameRaw = colIndex["Sub Agent Name"] !== undefined ? normText(row.getCell(colIndex["Sub Agent Name"]).value) : null;
