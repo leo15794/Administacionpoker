@@ -29,7 +29,11 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      // (13/10/2026, Leo probó en Android: el badge quedaba en blanco) -- el badge de Android
+      // TIENE que ser una imagen de solo alfa (silueta blanca sobre transparente); si se le pasa
+      // un ícono a color, como icon-192.png, Chrome no lo puede usar y lo deja vacío. Por eso va
+      // un archivo aparte (badge-96.png), generado a partir del mismo logo pero como silueta.
+      badge: "/badge-96.png",
       data: { url: data.url || "/" },
     })
   );
