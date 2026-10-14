@@ -10,13 +10,14 @@
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, pct, dateShort } from "../fmt";
+import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import TbIdleGuard from "../components/TbIdleGuard";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
-type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos";
+type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos";
 
 const TB_SESSION_KEY = "tb_session";
 
@@ -263,6 +264,11 @@ const tbIcon = {
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   ),
+  pagos: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M6 15h4" />
+    </svg>
+  ),
   logout: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
@@ -301,6 +307,7 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "usuarios", label: "Usuarios", icon: "usuarios" },
   { key: "wallet", label: "Wallet (espejo)", icon: "wallet" },
   { key: "avisos", label: "Avisos", icon: "avisos" },
+  { key: "pagos", label: "Historial de pagos", icon: "pagos" },
 ];
 
 // (25/09/2026, pedido de Leo: "hagamos el menu como la administracion de poker") -- mismo
@@ -425,6 +432,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         {tab === "usuarios" && <UsuariosTab />}
         {tab === "wallet" && <WalletEspejoTab />}
         {tab === "avisos" && <AvisosTab />}
+        {tab === "pagos" && <HistorialPagosTab />}
       </div>
     </div>
   );
@@ -1557,6 +1565,162 @@ function AvisosTab() {
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Historial de pagos (14/10/2026, pedido de Leo: "deberíamos tener en algún lado el historial de
+// pagos, si fueron en USDT o en Fichas") -- junta todos los jugadores y todas las semanas en una
+// sola tabla, con filtro por fecha/jugador/medio de pago y los totales de cada medio arriba. Los
+// totales siempre reflejan el rango de fecha + jugador elegidos, SIN aplicar el filtro de medio
+// de pago (así se ve el desglose completo aunque la tabla esté filtrada a uno solo).
+function HistorialPagosTab() {
+  const [filas, setFilas] = useState<any[]>([]);
+  const [totales, setTotales] = useState<any>(null);
+  const [cargando, setCargando] = useState(true);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [jugador, setJugador] = useState("");
+  const [medioPago, setMedioPago] = useState<"" | "USDT" | "FICHAS" | "PENDIENTE">("");
+
+  async function cargar() {
+    setCargando(true);
+    setMsg(null);
+    try {
+      const r = await api.teamback.historialPagos({
+        desde: desde || undefined,
+        hasta: hasta || undefined,
+        jugador: jugador || undefined,
+        medioPago: medioPago || undefined,
+      });
+      setFilas(r.filas);
+      setTotales(r.totales);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo cargar el historial de pagos." });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function exportar() {
+    exportCsv(
+      "historial_pagos_teamback.csv",
+      filas.map((f) => ({
+        jugador: f.player_name,
+        semana_inicio: dateShort(f.week_start),
+        semana_fin: dateShort(f.week_end),
+        total_liquidado: f.total_acreditado,
+        estado: f.pagado ? (f.medio_pago === "USDT" ? "USDT" : "Fichas") : "Pendiente",
+        fecha_pago: f.paid_at ? dateShort(f.paid_at) : "",
+      }))
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Todos los pagos de TeamBack Affiliates en un solo lugar, cruzando todos los jugadores y
+        todas las semanas -- filtrá por fecha, jugador o medio de pago.
+      </div>
+      {msg && <div className="error">{msg.text}</div>}
+
+      <div className="form-grid" style={{ marginBottom: 16 }}>
+        <div className="field">
+          <label>Desde</label>
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Medio de pago</label>
+          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as any)}>
+            <option value="">Todos</option>
+            <option value="USDT">USDT</option>
+            <option value="FICHAS">Fichas</option>
+            <option value="PENDIENTE">Pendiente</option>
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>Jugador</label>
+          <input type="text" placeholder="Buscar jugador..." value={jugador} onChange={(e) => setJugador(e.target.value)} />
+        </div>
+        <div className="field" style={{ alignSelf: "flex-end" }}>
+          <button className="btn" onClick={cargar} disabled={cargando}>
+            {cargando ? "Buscando..." : "Buscar"}
+          </button>
+        </div>
+        <div className="field" style={{ alignSelf: "flex-end" }}>
+          <button className="btn secondary" onClick={exportar} disabled={filas.length === 0}>
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+
+      {totales && (
+        <div className="kpi-sub-grid" style={{ marginBottom: 20 }}>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Total pagado en USDT</div>
+            <div className="kpi-sub-value" style={{ color: "var(--green)" }}>{usd(totales.total_usdt)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_usdt} pago{totales.count_usdt === "1" ? "" : "s"}</div>
+          </div>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Total pagado en Fichas</div>
+            <div className="kpi-sub-value" style={{ color: "var(--green)" }}>{usd(totales.total_fichas)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_fichas} pago{totales.count_fichas === "1" ? "" : "s"}</div>
+          </div>
+          <div className="kpi-sub-card">
+            <div className="kpi-sub-label">Total pendiente</div>
+            <div className="kpi-sub-value" style={{ color: "var(--amber)" }}>{usd(totales.total_pendiente)}</div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_pendiente} liquidaci{totales.count_pendiente === "1" ? "ón" : "ones"} sin pagar</div>
+          </div>
+        </div>
+      )}
+
+      {cargando ? (
+        <Loading />
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Jugador</th>
+              <th>Semana</th>
+              <th className="num">Total liquidado</th>
+              <th>Medio de pago</th>
+              <th>Fecha de pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((f) => (
+              <tr key={f.id}>
+                <td>{f.player_name}</td>
+                <td>{dateShort(f.week_start)} al {dateShort(f.week_end)}</td>
+                <td className="num">{usd(f.total_acreditado)}</td>
+                <td>
+                  {f.pagado ? (
+                    <span className="badge pos">{f.medio_pago === "USDT" ? "USDT" : "Fichas"}</span>
+                  ) : (
+                    <span className="badge neg">Pendiente</span>
+                  )}
+                </td>
+                <td className="muted">{f.paid_at ? dateShort(f.paid_at) : "—"}</td>
+              </tr>
+            ))}
+            {filas.length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">No hay pagos que coincidan con estos filtros.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

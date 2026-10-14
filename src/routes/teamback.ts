@@ -38,6 +38,7 @@ import {
   getGananciaPorSemana,
   marcarLiquidacionPagada,
   marcarLiquidacionNoPagada,
+  getHistorialPagos,
   getHistorialJugador,
   getHistorialJugadorConNombre,
   getLiquidacionIndividual,
@@ -295,6 +296,21 @@ teambackRouter.delete("/liquidaciones/:id/pagar", requireTbAuth, requireTbAdmin,
     res.json(await marcarLiquidacionNoPagada(req.params.id, `TeamBack:${req.tbUser.username}`));
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo deshacer el pago." });
+  }
+});
+
+// (14/10/2026, pedido de Leo: "deberíamos tener en algún lado el historial de pagos, si fueron
+// en USDT o en Fichas") -- junta TODOS los jugadores y TODAS las semanas, filtrable por fecha,
+// jugador y medio de pago. A diferencia de /liquidaciones/semana (una semana) y
+// /liquidaciones/jugador (un jugador), acá no hace falta elegir ninguno de los dos.
+teambackRouter.get("/liquidaciones/historial-pagos", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    const { desde, hasta, jugador, medioPago } = req.query as Record<string, string | undefined>;
+    const medioPagoValido =
+      medioPago === "USDT" || medioPago === "FICHAS" || medioPago === "PENDIENTE" ? medioPago : null;
+    res.json(await getHistorialPagos({ desde: desde || null, hasta: hasta || null, jugador: jugador || null, medioPago: medioPagoValido }));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo traer el historial de pagos." });
   }
 });
 

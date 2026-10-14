@@ -1231,6 +1231,18 @@ export const api = {
     semanasDisponibles: () => requestTb("/teamback/liquidaciones/semanas"),
     eliminarSemana: (weekStart: string) => requestTb(`/teamback/liquidaciones/semana/${weekStart}`, { method: "DELETE" }),
 
+    // Historial de pagos (14/10/2026, pedido de Leo) -- todos los jugadores y todas las semanas
+    // juntos, filtrable por fecha / jugador / medio de pago.
+    historialPagos: (filtros: { desde?: string; hasta?: string; jugador?: string; medioPago?: string }) => {
+      const params = new URLSearchParams();
+      if (filtros.desde) params.set("desde", filtros.desde);
+      if (filtros.hasta) params.set("hasta", filtros.hasta);
+      if (filtros.jugador) params.set("jugador", filtros.jugador);
+      if (filtros.medioPago) params.set("medioPago", filtros.medioPago);
+      const qs = params.toString();
+      return requestTb(`/teamback/liquidaciones/historial-pagos${qs ? `?${qs}` : ""}`);
+    },
+
     // Ganancia por semana (25/09/2026, pedido de Leo).
     gananciaSemanal: () => requestTb("/teamback/ganancia-semanal"),
 

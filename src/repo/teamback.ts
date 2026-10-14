@@ -593,6 +593,68 @@ export async function marcarLiquidacionNoPagada(id: string, actor?: string | nul
 }
 
 // ---------------------------------------------------------------------------------------------
+// Historial de pagos (14/10/2026, pedido de Leo: "deberíamos tener en algún lado el historial de
+// pagos, si fueron en USDT o en Fichas") -- junta TODOS los jugadores y TODAS las semanas en una
+// sola consulta (a diferencia de getLiquidacionesSemana, que es de una semana puntual, y
+// getHistorialJugador, que es de un jugador puntual). Los totales se calculan con los mismos
+// filtros de fecha/jugador pero IGNORANDO el filtro de medioPago -- así el admin ve el desglose
+// completo (USDT / Fichas / Pendiente) aunque esté filtrando la tabla a uno solo de los tres.
+// ---------------------------------------------------------------------------------------------
+
+export type FiltrosHistorialPagos = {
+  desde?: string | null;
+  hasta?: string | null;
+  jugador?: string | null;
+  medioPago?: "USDT" | "FICHAS" | "PENDIENTE" | null;
+};
+
+export async function getHistorialPagos(filtros: FiltrosHistorialPagos) {
+  await asegurarColumnasPago();
+  const desde = filtros.desde || null;
+  const hasta = filtros.hasta || null;
+  const jugador = filtros.jugador || null;
+
+  const whereComun = `
+    ($1::date IS NULL OR l.week_start >= $1::date)
+    AND ($2::date IS NULL OR l.week_end <= $2::date)
+    AND ($3::text IS NULL OR p.name ILIKE '%' || $3 || '%')
+  `;
+
+  let whereFilas = whereComun;
+  if (filtros.medioPago === "USDT" || filtros.medioPago === "FICHAS") {
+    whereFilas += ` AND l.pagado = true AND l.medio_pago = '${filtros.medioPago}'`;
+  } else if (filtros.medioPago === "PENDIENTE") {
+    whereFilas += ` AND l.pagado = false`;
+  }
+
+  const filas = await pool.query(
+    `SELECT l.id, l.player_id, p.name AS player_name, l.week_start, l.week_end,
+            l.total_acreditado, l.pagado, l.medio_pago, l.paid_at
+     FROM tb_weekly_liquidations l
+     JOIN tb_players p ON p.id = l.player_id
+     WHERE ${whereFilas}
+     ORDER BY l.week_start DESC, p.name ASC`,
+    [desde, hasta, jugador]
+  );
+
+  const totales = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN l.pagado AND l.medio_pago = 'USDT' THEN l.total_acreditado ELSE 0 END), 0) AS total_usdt,
+       COUNT(CASE WHEN l.pagado AND l.medio_pago = 'USDT' THEN 1 END) AS count_usdt,
+       COALESCE(SUM(CASE WHEN l.pagado AND l.medio_pago = 'FICHAS' THEN l.total_acreditado ELSE 0 END), 0) AS total_fichas,
+       COUNT(CASE WHEN l.pagado AND l.medio_pago = 'FICHAS' THEN 1 END) AS count_fichas,
+       COALESCE(SUM(CASE WHEN NOT l.pagado THEN l.total_acreditado ELSE 0 END), 0) AS total_pendiente,
+       COUNT(CASE WHEN NOT l.pagado THEN 1 END) AS count_pendiente
+     FROM tb_weekly_liquidations l
+     JOIN tb_players p ON p.id = l.player_id
+     WHERE ${whereComun}`,
+    [desde, hasta, jugador]
+  );
+
+  return { filas: filas.rows, totales: totales.rows[0] };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Ganancia por semana (25/09/2026, pedido de Leo) -- "el rake total al 80% menos el total (de
 // liquidaciones) esa diferencia es nuestra ganancia". Se calcula al vuelo a partir de
 // tb_weekly_liquidations (nunca se guarda un monto de ganancia aparte, así si se recalcula una
