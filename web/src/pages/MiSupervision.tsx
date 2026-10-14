@@ -35,9 +35,40 @@ export default function MiSupervision() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
 
+  // Cuenta consolidada -- cierre semanal de agentes a cargo, en solo lectura (14/10/2026,
+  // pedido de Leo: "deberia el poder entrar y ver el desglose que esta cargado en
+  // supervisores"). Mismo patrón que la pestaña admin en Supervisores.tsx, pero sin ningún
+  // botón de aplicar -- eso sigue siendo acción exclusiva del admin.
+  const [semanasCierre, setSemanasCierre] = useState<any[] | null>(null);
+  const [weekCierre, setWeekCierre] = useState("");
+  const [cierreSemana, setCierreSemana] = useState<any | null>(null);
+  const [cargandoCierre, setCargandoCierre] = useState(false);
+
   useEffect(() => {
     api.miSupervision().then(setData).catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    if (!data?.supervisor?.usa_cuenta_consolidada) return;
+    api.miSupervisionSemanasCierre().then((semanas: any[]) => {
+      setSemanasCierre(semanas);
+      if (semanas.length > 0) {
+        const ws = String(semanas[0].week_start).slice(0, 10);
+        setWeekCierre(ws);
+        cargarCierreSemana(ws);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.supervisor?.usa_cuenta_consolidada]);
+
+  async function cargarCierreSemana(ws: string) {
+    setCargandoCierre(true);
+    try {
+      setCierreSemana(await api.miSupervisionCierreSemanal(ws));
+    } finally {
+      setCargandoCierre(false);
+    }
+  }
 
   if (error) return <div className="error">No se pudo cargar: {error}</div>;
   if (!data) return <Loading />;
@@ -69,6 +100,101 @@ export default function MiSupervision() {
           <div className="value">{usd(data.saldo_referidos_total ?? 0)}</div>
         </div>
       </div>
+
+      {data.supervisor.usa_cuenta_consolidada && (
+        <div className="panel">
+          <h3>Cuenta consolidada</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+            Desglose de tu cuenta consolidada -- lo mismo que ve el admin en Administración desde
+            Supervisores, filtrado a tu propia cuenta. Solo lectura.
+          </div>
+          <div className="kpi-grid">
+            <div className="kpi-card">
+              <div className="label">Fichas reales</div>
+              <div className={`value ${Number(data.supervisor.fichas_reales) >= 0 ? "pos" : "neg"}`}>{usd(Number(data.supervisor.fichas_reales))}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="label">Cuenta corriente</div>
+              <div className={`value ${Number(data.supervisor.cuenta_corriente) >= 0 ? "pos" : "neg"}`}>{usd(Number(data.supervisor.cuenta_corriente))}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="label">Saldo total</div>
+              <div className={`value ${Number(data.supervisor.fichas_reales) + Number(data.supervisor.cuenta_corriente) >= 0 ? "pos" : "neg"}`}>
+                {usd(Number(data.supervisor.fichas_reales) + Number(data.supervisor.cuenta_corriente))}
+              </div>
+            </div>
+          </div>
+
+          <h4 style={{ margin: "4px 0 6px" }}>Cierre semanal de agentes a cargo</h4>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+            Cada semana, las fichas ganadas en mesas de tus agentes a cargo se suman a Fichas reales, y el
+            rakeback que generan se suma a Cuenta corriente -- el saldo propio de cada agente sigue
+            acumulando igual que siempre, esto es solo el espejo de tu cuenta.
+          </div>
+          {!semanasCierre ? (
+            <Loading />
+          ) : semanasCierre.length === 0 ? (
+            <div className="muted">Todavía no hay ningún cierre semanal cargado para tus agentes a cargo.</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+                <label className="muted" style={{ fontSize: 12 }}>Semana</label>
+                <select
+                  value={weekCierre}
+                  onChange={(e) => {
+                    setWeekCierre(e.target.value);
+                    cargarCierreSemana(e.target.value);
+                  }}
+                >
+                  {semanasCierre.map((s) => {
+                    const ws = String(s.week_start).slice(0, 10);
+                    return (
+                      <option key={ws} value={ws}>
+                        {dateShort(s.week_start)} al {dateShort(s.week_end)}
+                      </option>
+                    );
+                  })}
+                </select>
+                {cierreSemana?.aplicado ? (
+                  <span className="badge pos">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
+                ) : (
+                  <span className="badge neutral">Todavía no aplicada</span>
+                )}
+              </div>
+
+              {cargandoCierre || !cierreSemana ? (
+                <Loading />
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Agente a cargo</th>
+                      <th className="num">Fichas ganadas en la semana</th>
+                      <th className="num">Rakeback generado en la semana</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cierreSemana.lineas.map((l: any) => (
+                      <tr key={l.agent_id}>
+                        <td>{l.agent_name}</td>
+                        <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.result))}</td>
+                        <td className="num">{usd(Number(l.rakeback))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 700 }}>
+                      <td>Total de la semana</td>
+                      <td className="num">{usd(cierreSemana.resultadoTotal)}</td>
+                      <td className="num">{usd(cierreSemana.rakebackTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {data.referidos && data.referidos.length > 0 && (
         <div className="panel">

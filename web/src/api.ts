@@ -161,6 +161,10 @@ export const api = {
   // Vista del rol Supervisor: agentes a cargo + rakeback centralizado (placeholder mínimo
   // hasta tener las reglas de negocio completas del rol).
   miSupervision: () => request("/portal/mi-supervision"),
+  // Cierre semanal consolidado de agentes a cargo, en solo lectura para el propio supervisor
+  // (14/10/2026) -- mismos endpoints que usa el admin en Supervisores, pero atados al login.
+  miSupervisionSemanasCierre: () => request("/portal/mi-supervision/cierre-semanal/semanas"),
+  miSupervisionCierreSemanal: (weekStart: string) => request(`/portal/mi-supervision/cierre-semanal/${weekStart}`),
   // Comisión por referido de supervisor: agente referido + % sobre su rake semanal, auto-
   // acreditado en cada cierre. Cuelga del LOGIN (userId), no de la cuenta principal del
   // usuario — se gestiona desde Usuarios y permisos, dentro de la edición del usuario

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { requireAuth, type AuthedRequest } from "../lib/auth.js";
 import { pool } from "../db/pool.js";
+import { getSemanasDisponiblesSupervisor, getCierreSemanalSupervisor } from "../repo/supervisores.js";
 
 export const portalRouter = Router();
 
@@ -88,15 +89,21 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     // saldo_total (30/09/2026, mismo bug/fix que routes/dashboard.ts GET /agentes -- este
     // SUM(b.amount) crudo no incluía el resultado de mesas de los cierres PREPAGO, así que no
     // coincidía con la columna "Fichas" de Resumen -> Saldos por agente y club).
+    // usa_cuenta_consolidada / consolidar_cierres y el saldo de supervisor_cuentas (14/10/2026,
+    // pedido de Leo: "deberia el poder entrar y ver el desglose que esta cargado en
+    // supervisores") -- el supervisor ve acá el mismo saldo (fichas_reales/cuenta_corriente)
+    // que el admin ve en Administración -> Supervisores, siempre filtrado a su propia cuenta.
     const agent = await pool.query(
-      `SELECT a.id, a.name, a.account_type,
-              COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total
+      `SELECT a.id, a.name, a.account_type, a.usa_cuenta_consolidada, a.consolidar_cierres,
+              COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total,
+              COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente
        FROM agents a
        LEFT JOIN (SELECT agent_id, SUM(amount) as saldo_balance FROM balances GROUP BY agent_id) bal ON bal.agent_id = a.id
        LEFT JOIN (
          SELECT agent_id, SUM(result) as total_mesas FROM weekly_closings
          WHERE system = 'PREPAGO' AND status <> 'REVERTIDO' GROUP BY agent_id
        ) mesas ON mesas.agent_id = a.id
+       LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
        WHERE a.id = $1`,
       [req.user!.agentId]
     );
@@ -179,5 +186,41 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
   } catch (err: any) {
     console.error("Error en /portal/mi-supervision:", err);
     res.status(500).json({ error: err.message || "No se pudo cargar la supervisión." });
+  }
+});
+
+// Cierre semanal consolidado, en versión de solo lectura para el propio supervisor (14/10/2026,
+// pedido de Leo) -- mismo dato que /supervisores/:id/cierre-semanal/* ve el admin, pero SIEMPRE
+// atado a req.user!.agentId (nunca a un :id de la URL): un supervisor jamás puede pedir el
+// desglose de otro. Sin ruta de "aplicar" acá -- esa acción sigue siendo exclusiva del admin.
+portalRouter.get("/mi-supervision/cierre-semanal/semanas", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId]);
+    if (!agent.rows[0] || agent.rows[0].account_type !== "SUPERVISOR") {
+      return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+    }
+    if (!agent.rows[0].usa_cuenta_consolidada) {
+      return res.status(403).json({ error: "Esta cuenta no tiene la cuenta consolidada activada." });
+    }
+    res.json(await getSemanasDisponiblesSupervisor(req.user!.agentId));
+  } catch (err: any) {
+    console.error("Error en /portal/mi-supervision/cierre-semanal/semanas:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar las semanas." });
+  }
+});
+
+portalRouter.get("/mi-supervision/cierre-semanal/:weekStart", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId]);
+    if (!agent.rows[0] || agent.rows[0].account_type !== "SUPERVISOR") {
+      return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+    }
+    if (!agent.rows[0].usa_cuenta_consolidada) {
+      return res.status(403).json({ error: "Esta cuenta no tiene la cuenta consolidada activada." });
+    }
+    res.json(await getCierreSemanalSupervisor(req.user!.agentId, req.params.weekStart));
+  } catch (err: any) {
+    console.error("Error en /portal/mi-supervision/cierre-semanal/:weekStart:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar el cierre de esa semana." });
   }
 });
