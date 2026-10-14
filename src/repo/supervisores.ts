@@ -392,3 +392,154 @@ export async function listMigracionHistorica(supervisorAgentId: string) {
   );
   return r.rows;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Cierre semanal consolidado (14/10/2026, pedido de Leo: "las liquidaciones de sus agentes, sumen
+// su saldo al momento de hacer el cierre" -- confirmado con él: el saldo PROPIO del agente sigue
+// acumulando exactamente igual que siempre (balances/rakeback_pendiente, sin tocar), esto es un
+// espejo automático aparte, mismo criterio que ya usa "Carga/Descarga/Ajuste" manual. Reusa las
+// tablas supervisor_cierres/supervisor_cierre_lineas, que ya estaban en el schema (pensadas para
+// esto) pero sin ningún código que las usara todavía.
+//
+// Fichas ganadas en la semana (weekly_closings.result, el resultado de mesas) -> fichas_reales.
+// Rakeback generado en la semana (weekly_closings.rakeback) -> cuenta_corriente.
+// NUNCA el rebate (es un campo distinto, del mecanismo viejo rebate_destino=RAKEBACK_SUPERVISOR,
+// que convive aparte y no hay que mezclar acá).
+// ---------------------------------------------------------------------------------------------
+
+export async function getSemanasDisponiblesSupervisor(supervisorAgentId: string) {
+  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) return [];
+  const r = await pool.query(
+    `SELECT DISTINCT wc.week_start, wc.week_end
+     FROM weekly_closings wc
+     JOIN agents a ON a.id = wc.agent_id
+     WHERE a.supervisor = $1 AND wc.status <> 'REVERTIDO'
+     ORDER BY wc.week_start DESC LIMIT 52`,
+    [sup.rows[0].name]
+  );
+  return r.rows;
+}
+
+export async function getCierreSemanalSupervisor(supervisorAgentId: string, weekStart: string) {
+  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+
+  const lineas = await pool.query(
+    `SELECT a.id as agent_id, a.name as agent_name,
+            COALESCE(SUM(wc.result), 0) as result,
+            COALESCE(SUM(wc.rakeback), 0) as rakeback
+     FROM agents a
+     LEFT JOIN weekly_closings wc
+       ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
+     WHERE a.supervisor = $1
+     GROUP BY a.id, a.name
+     ORDER BY a.name`,
+    [sup.rows[0].name, weekStart]
+  );
+
+  const aplicado = await pool.query(
+    `SELECT * FROM supervisor_cierres WHERE supervisor_agent_id = $1 AND week_start = $2::date AND status <> 'REVERTIDO'`,
+    [supervisorAgentId, weekStart]
+  );
+
+  const resultadoTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.result), 0));
+  const rakebackTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.rakeback), 0));
+
+  return {
+    lineas: lineas.rows,
+    resultadoTotal,
+    rakebackTotal,
+    aplicado: aplicado.rows[0] ?? null,
+  };
+}
+
+// Aplica el cierre de la semana a la cuenta: suma resultadoTotal a fichas_reales y rakebackTotal a
+// cuenta_corriente, dejando el desglose por agente+club en supervisor_cierre_lineas. Idempotente:
+// el UNIQUE(supervisor_agent_id, week_start) de supervisor_cierres impide aplicar la misma semana
+// dos veces -- tira error claro en vez de sumar de nuevo.
+export async function aplicarCierreConsolidadoSupervisor(
+  supervisorAgentId: string,
+  weekStart: string,
+  weekEnd: string,
+  createdBy?: string | null
+) {
+  const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+  if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
+  if (!sup.rows[0].consolidar_cierres) {
+    throw new Error("Este supervisor tiene desactivada la consolidación automática de cierres.");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const yaAplicado = await client.query(
+      `SELECT id FROM supervisor_cierres WHERE supervisor_agent_id = $1 AND week_start = $2::date AND status <> 'REVERTIDO' FOR UPDATE`,
+      [supervisorAgentId, weekStart]
+    );
+    if (yaAplicado.rows[0]) throw new Error("Esta semana ya fue aplicada a la cuenta de este supervisor.");
+
+    const lineasRes = await client.query(
+      `SELECT wc.id as weekly_closing_id, wc.agent_id, wc.club_id,
+              wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate
+       FROM weekly_closings wc
+       JOIN agents a ON a.id = wc.agent_id
+       WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'`,
+      [sup.rows[0].name, weekStart]
+    );
+    if (lineasRes.rows.length === 0) {
+      throw new Error("No hay ningún cierre cargado para los agentes a cargo en esa semana.");
+    }
+
+    const resultadoTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.result), 0));
+    const rakebackTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rakeback), 0));
+    const rakeTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rake_total), 0));
+    const rebateTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rebate), 0));
+
+    const cuenta = await getCuentaParaUpdate(client, supervisorAgentId);
+    const fichasAntes = Number(cuenta.fichas_reales);
+    const ccAntes = Number(cuenta.cuenta_corriente);
+    const fichasDespues = round2(fichasAntes + resultadoTotal);
+    const ccDespues = round2(ccAntes + rakebackTotal);
+
+    const cierreId = newId("svcierre");
+    await client.query(
+      `INSERT INTO supervisor_cierres
+        (id, supervisor_agent_id, week_start, week_end, resultado_total, rake_total, rakeback_total, rebate_total,
+         fichas_reales_antes, cuenta_corriente_antes, fichas_reales_despues, cuenta_corriente_despues, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        cierreId, supervisorAgentId, weekStart, weekEnd, resultadoTotal, rakeTotal, rakebackTotal, rebateTotal,
+        fichasAntes, ccAntes, fichasDespues, ccDespues, createdBy ?? null,
+      ]
+    );
+
+    for (const l of lineasRes.rows) {
+      await client.query(
+        `INSERT INTO supervisor_cierre_lineas
+          (id, cierre_id, agent_id, club_id, result, rake_total, rakeback_pct, rakeback, rebate_pct, rebate, weekly_closing_origen_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          newId("svcl"), cierreId, l.agent_id, l.club_id, l.result, l.rake_total, l.rakeback_pct, l.rakeback,
+          l.rebate_pct, l.rebate, l.weekly_closing_id,
+        ]
+      );
+    }
+
+    await client.query(
+      `UPDATE supervisor_cuentas SET fichas_reales = $1, cuenta_corriente = $2, updated_at = now() WHERE id = $3`,
+      [fichasDespues, ccDespues, cuenta.id]
+    );
+
+    await client.query("COMMIT");
+    return { cierreId, resultadoTotal, rakebackTotal, fichasAntes, ccAntes, fichasDespues, ccDespues };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+

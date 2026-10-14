@@ -35,6 +35,15 @@ export default function Supervisores() {
   const [mostrarOcultos, setMostrarOcultos] = useState(false);
   const [ocultando, setOcultando] = useState<string | null>(null);
 
+  // Cierre semanal consolidado (14/10/2026, pedido de Leo: "las liquidaciones de sus agentes,
+  // sumen su saldo al momento de hacer el cierre") -- espejo automático aparte, el saldo propio
+  // del agente sigue acumulando igual que siempre, ver repo/supervisores.ts.
+  const [semanasCierre, setSemanasCierre] = useState<any[] | null>(null);
+  const [weekCierre, setWeekCierre] = useState("");
+  const [cierreSemana, setCierreSemana] = useState<any | null>(null);
+  const [cargandoCierre, setCargandoCierre] = useState(false);
+  const [aplicandoCierre, setAplicandoCierre] = useState(false);
+
   function refresh() {
     setError("");
     api.supervisoresConsolidados().then(setSupervisores).catch((e) => setError(e.message));
@@ -51,9 +60,56 @@ export default function Supervisores() {
     setMovimientos(null);
     setMostrarOcultos(false);
     setMigracion(null);
+    setSemanasCierre(null);
+    setWeekCierre("");
+    setCierreSemana(null);
     api.subordinadosSupervisor(s.id).then(setSubordinados);
     api.movimientosSupervisor(s.id).then(setMovimientos);
     api.migracionHistoricaSupervisor(s.id).then(setMigracion);
+    api.semanasCierreSupervisor(s.id).then((r: any[]) => {
+      setSemanasCierre(r);
+      if (r[0]) {
+        const ws = String(r[0].week_start).slice(0, 10);
+        setWeekCierre(ws);
+        cargarCierreSemana(s.id, ws);
+      }
+    });
+  }
+
+  async function cargarCierreSemana(supervisorId: string, ws: string) {
+    if (!ws) return;
+    setCargandoCierre(true);
+    try {
+      setCierreSemana(await api.cierreSemanalSupervisor(supervisorId, ws));
+    } catch (err: any) {
+      setError(err.message || "No se pudo cargar el cierre de esa semana.");
+    } finally {
+      setCargandoCierre(false);
+    }
+  }
+
+  async function aplicarCierre() {
+    if (!seleccionado || !weekCierre || !cierreSemana) return;
+    const semana = semanasCierre?.find((s) => String(s.week_start).slice(0, 10) === weekCierre);
+    const weekEnd = semana ? String(semana.week_end).slice(0, 10) : weekCierre;
+    if (
+      !confirm(
+        `¿Aplicar el cierre de la semana del ${dateShort(weekCierre)} al ${dateShort(weekEnd)}? ` +
+          `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.rakebackTotal)} a Cuenta corriente. ` +
+          `No se puede deshacer aplicando de nuevo -- una vez aplicada, esta semana queda cerrada.`
+      )
+    )
+      return;
+    setAplicandoCierre(true);
+    try {
+      await api.aplicarCierreSupervisor(seleccionado.id, weekCierre, weekEnd);
+      await cargarCierreSemana(seleccionado.id, weekCierre);
+      refrescarSeleccionado();
+    } catch (err: any) {
+      setError(err.message || "No se pudo aplicar el cierre.");
+    } finally {
+      setAplicandoCierre(false);
+    }
   }
 
   async function toggleOcultoAgente(agentId: string, agentName: string, ocultar: boolean) {
@@ -212,6 +268,88 @@ export default function Supervisores() {
                   </tr>
                 </tfoot>
               </table>
+            </>
+          )}
+
+          <h4>Cierre semanal de agentes a cargo</h4>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se
+            suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio
+            del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se
+            puede aplicar una sola vez por semana.
+          </div>
+          {!semanasCierre ? (
+            <Loading />
+          ) : semanasCierre.length === 0 ? (
+            <div className="muted">Todavía no hay ningún cierre semanal cargado para los agentes a cargo.</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+                <label className="muted" style={{ fontSize: 12 }}>Semana</label>
+                <select
+                  value={weekCierre}
+                  onChange={(e) => {
+                    setWeekCierre(e.target.value);
+                    cargarCierreSemana(seleccionado.id, e.target.value);
+                  }}
+                >
+                  {semanasCierre.map((s) => {
+                    const ws = String(s.week_start).slice(0, 10);
+                    return (
+                      <option key={ws} value={ws}>
+                        {dateShort(s.week_start)} al {dateShort(s.week_end)}
+                      </option>
+                    );
+                  })}
+                </select>
+                {cierreSemana?.aplicado ? (
+                  <span className="badge pos">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
+                ) : (
+                  <span className="badge neutral">Todavía no aplicada</span>
+                )}
+              </div>
+
+              {cargandoCierre || !cierreSemana ? (
+                <Loading />
+              ) : (
+                <>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Agente a cargo</th>
+                        <th className="num">Fichas ganadas en la semana</th>
+                        <th className="num">Rakeback generado en la semana</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cierreSemana.lineas.map((l: any) => (
+                        <tr key={l.agent_id}>
+                          <td>{l.agent_name}</td>
+                          <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.result))}</td>
+                          <td className="num">{usd(Number(l.rakeback))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ fontWeight: 700 }}>
+                        <td>Total de la semana</td>
+                        <td className="num">{usd(cierreSemana.resultadoTotal)}</td>
+                        <td className="num">{usd(cierreSemana.rakebackTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+                    <button
+                      className="btn"
+                      disabled={!!cierreSemana.aplicado || aplicandoCierre}
+                      onClick={aplicarCierre}
+                      title={cierreSemana.aplicado ? "Esta semana ya fue aplicada." : undefined}
+                    >
+                      {aplicandoCierre ? "Aplicando..." : cierreSemana.aplicado ? "Ya aplicada" : "Aplicar cierre de esta semana a la cuenta"}
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
 

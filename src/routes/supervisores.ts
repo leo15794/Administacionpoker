@@ -11,6 +11,9 @@ import {
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
   setOcultoSubordinado,
+  getSemanasDisponiblesSupervisor,
+  getCierreSemanalSupervisor,
+  aplicarCierreConsolidadoSupervisor,
 } from "../repo/supervisores.js";
 
 export const supervisoresRouter = Router();
@@ -99,6 +102,39 @@ supervisoresRouter.post("/:id/migracion-historica", requireAuth, requireAdmin, a
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const result = await migrarSaldoHistoricoSupervisor(req.params.id, parsed.data.lineas, req.user?.email);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Cierre semanal consolidado (14/10/2026, pedido de Leo) -- ver repo/supervisores.ts.
+// ---------------------------------------------------------------------------------------------
+
+supervisoresRouter.get("/:id/cierre-semanal/semanas", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await getSemanasDisponiblesSupervisor(req.params.id));
+});
+
+supervisoresRouter.get("/:id/cierre-semanal/:weekStart", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await getCierreSemanalSupervisor(req.params.id, req.params.weekStart));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const aplicarCierreSupervisorSchema = z.object({ weekStart: z.string(), weekEnd: z.string() });
+supervisoresRouter.post("/:id/cierre-semanal/aplicar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = aplicarCierreSupervisorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await aplicarCierreConsolidadoSupervisor(
+      req.params.id,
+      parsed.data.weekStart,
+      parsed.data.weekEnd,
+      req.user?.email
+    );
     res.status(201).json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

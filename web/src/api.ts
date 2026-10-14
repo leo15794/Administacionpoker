@@ -400,6 +400,12 @@ export const api = {
     supervisorId: string,
     data: { lineas: { agentId: string; clubId?: string | null; fichasMigradas: number; pendienteMigrado: number; notes?: string | null }[] }
   ) => request(`/supervisores/${supervisorId}/migracion-historica`, { method: "POST", body: JSON.stringify(data) }),
+  // Cierre semanal consolidado (14/10/2026, pedido de Leo) -- ver repo/supervisores.ts.
+  semanasCierreSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/cierre-semanal/semanas`),
+  cierreSemanalSupervisor: (supervisorId: string, weekStart: string) =>
+    request(`/supervisores/${supervisorId}/cierre-semanal/${weekStart}`),
+  aplicarCierreSupervisor: (supervisorId: string, weekStart: string, weekEnd: string) =>
+    request(`/supervisores/${supervisorId}/cierre-semanal/aplicar`, { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),
