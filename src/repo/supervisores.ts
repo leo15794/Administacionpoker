@@ -397,6 +397,13 @@ export async function setOcultoSubordinado(supervisorAgentId: string, agentId: s
 // false), se junta aparte en una fila "Sin agente asignado" -- nunca se reparte a ciegas entre
 // los agentes -- así el total de esta tabla siempre coincide, centavo a centavo, con
 // supervisor_cuentas (misma garantía que ya probamos a mano con Rodrigo antes de armar esto).
+export interface SaldoPorClubAgente {
+  clubId: string;
+  clubName: string;
+  fichas: number;
+  pendiente: number;
+  saldo: number;
+}
 export interface SaldoPorAgenteSupervisor {
   agentId: string | null;
   agentName: string;
@@ -404,6 +411,16 @@ export interface SaldoPorAgenteSupervisor {
   fichasTiempoReal: number;
   cuentaCorriente: number;
   saldoReal: number;
+  // Desglose por club (15/10/2026, pedido de Leo, caso JereStack en Uriel: "hay forma de ver
+  // ambos clubes?") -- OJO, esto es informativo y EN VIVO, no tiene nada que ver con las tres
+  // columnas de arriba: es el saldo INDIVIDUAL del agente ahora mismo (balance propio + resultado
+  // de mesas + rakeback pendiente activo, mismo cálculo que calcularSaldoActualDeSubordinado,
+  // pero partido por club en vez de sumado) -- nunca se suma a la cuenta consolidada, que solo
+  // cambia con Carga/Descarga/Ajuste/Cierre semanal. Por eso NO tiene por qué coincidir con
+  // fichasTiempoReal/cuentaCorriente/saldoReal de arriba (esos son la foto migrada + movimientos
+  // del pool; esto es lo que el agente tiene hoy jugando). Vacío para la fila "Sin agente
+  // asignado". Sirve para los casos como JereStack, que juega en más de un club.
+  detallePorClub: SaldoPorClubAgente[];
 }
 export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): Promise<SaldoPorAgenteSupervisor[]> {
   const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
@@ -441,6 +458,9 @@ export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): 
   for (const r of movRes.rows) acumular(r.agent_id, Number(r.fichas), Number(r.cc));
   for (const r of clRes.rows) acumular(r.agent_id, Number(r.fichas), Number(r.cc));
 
+  const agentIds = subRes.rows.map((a) => a.id);
+  const detallePorAgente = await calcularDetallePorClub(agentIds);
+
   const filas: SaldoPorAgenteSupervisor[] = subRes.rows.map((a) => {
     const d = porAgente.get(a.id) ?? { fichas: 0, cc: 0 };
     porAgente.delete(a.id);
@@ -451,6 +471,7 @@ export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): 
       fichasTiempoReal: d.fichas,
       cuentaCorriente: d.cc,
       saldoReal: round2(d.fichas + d.cc),
+      detallePorClub: detallePorAgente.get(a.id) ?? [],
     };
   });
 
@@ -471,10 +492,78 @@ export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): 
       fichasTiempoReal: sobranteFichas,
       cuentaCorriente: sobranteCc,
       saldoReal: round2(sobranteFichas + sobranteCc),
+      detallePorClub: [],
     });
   }
 
   return filas;
+}
+
+// Saldo individual de cada agente, EN VIVO, partido por club (ver nota en SaldoPorAgenteSupervisor
+// de arriba). Mismo cálculo exacto que calcularSaldoActualDeSubordinado (balance + resultado de
+// mesas PREPAGO, + rakeback pendiente activo con ABS(amount-consumed) > 0.004), pero agrupado por
+// (agente, club) en vez de sumado por agente -- NUNCA toca ni se mezcla con supervisor_cuentas.
+async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, SaldoPorClubAgente[]>> {
+  const resultado = new Map<string, Map<string, { clubName: string; fichas: number; pendiente: number }>>();
+  if (agentIds.length === 0) return new Map();
+
+  const touch = (agentId: string, clubId: string, clubName: string) => {
+    let porClub = resultado.get(agentId);
+    if (!porClub) {
+      porClub = new Map();
+      resultado.set(agentId, porClub);
+    }
+    if (!porClub.has(clubId)) porClub.set(clubId, { clubName, fichas: 0, pendiente: 0 });
+    return porClub.get(clubId)!;
+  };
+
+  const balRes = await pool.query(
+    `SELECT b.agent_id, b.club_id, c.name as club_name, b.amount
+     FROM balances b JOIN clubs c ON c.id = b.club_id
+     WHERE b.agent_id = ANY($1) AND b.amount <> 0`,
+    [agentIds]
+  );
+  for (const r of balRes.rows) {
+    const e = touch(r.agent_id, r.club_id, r.club_name);
+    e.fichas = round2(e.fichas + Number(r.amount));
+  }
+
+  const mesasRes = await pool.query(
+    `SELECT wc.agent_id, wc.club_id, c.name as club_name, COALESCE(SUM(wc.result), 0) as total
+     FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+     WHERE wc.agent_id = ANY($1) AND wc.system = 'PREPAGO' AND wc.status <> 'REVERTIDO'
+     GROUP BY wc.agent_id, wc.club_id, c.name`,
+    [agentIds]
+  );
+  for (const r of mesasRes.rows) {
+    const e = touch(r.agent_id, r.club_id, r.club_name);
+    e.fichas = round2(e.fichas + Number(r.total));
+  }
+
+  const pendRes = await pool.query(
+    `SELECT rp.agent_id, rp.club_id, c.name as club_name, rp.amount, rp.consumed
+     FROM rakeback_pendiente rp JOIN clubs c ON c.id = rp.club_id
+     WHERE rp.agent_id = ANY($1) AND rp.active = true`,
+    [agentIds]
+  );
+  for (const r of pendRes.rows) {
+    const diff = Number(r.amount) - Number(r.consumed);
+    if (Math.abs(diff) <= 0.004) continue;
+    const e = touch(r.agent_id, r.club_id, r.club_name);
+    e.pendiente = round2(e.pendiente + diff);
+  }
+
+  const final = new Map<string, SaldoPorClubAgente[]>();
+  for (const [agentId, porClub] of resultado) {
+    const filas: SaldoPorClubAgente[] = [];
+    for (const [clubId, v] of porClub) {
+      if (Math.abs(v.fichas) <= 0.004 && Math.abs(v.pendiente) <= 0.004) continue;
+      filas.push({ clubId, clubName: v.clubName, fichas: v.fichas, pendiente: v.pendiente, saldo: round2(v.fichas + v.pendiente) });
+    }
+    filas.sort((a, b) => a.clubName.localeCompare(b.clubName));
+    if (filas.length > 0) final.set(agentId, filas);
+  }
+  return final;
 }
 
 export async function listMigracionHistorica(supervisorAgentId: string) {

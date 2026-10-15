@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
@@ -31,6 +31,7 @@ export default function Supervisores() {
   // Fichas en tiempo real por agente (15/10/2026, pedido de Leo) -- desglose calculado del mismo
   // saldo de arriba, repartido por agente usando el agent_id de movimientos/cierres/migración.
   const [saldosPorAgente, setSaldosPorAgente] = useState<any[] | null>(null);
+  const [clubesExpandidos, setClubesExpandidos] = useState<Record<string, boolean>>({});
   const [showMovimiento, setShowMovimiento] = useState(false);
   // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
   // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
@@ -65,6 +66,7 @@ export default function Supervisores() {
     setMostrarOcultos(false);
     setMigracion(null);
     setSaldosPorAgente(null);
+    setClubesExpandidos({});
     setSemanasCierre(null);
     setWeekCierre("");
     setCierreSemana(null);
@@ -318,23 +320,82 @@ export default function Supervisores() {
           ) : (
             <table className="table-saldo-accent">
               <thead>
-                <tr><th>Agente</th><th className="num">Fichas en tiempo real</th><th className="num">Cuenta corriente</th><th className="num">Saldo real</th></tr>
+                <tr><th></th><th>Agente</th><th className="num">Fichas en tiempo real</th><th className="num">Cuenta corriente</th><th className="num">Saldo real</th></tr>
               </thead>
               <tbody>
-                {saldosPorAgente.map((s) => (
-                  <tr key={s.agentId ?? "sin-agente"} className={s.saldoReal >= 0 ? "row-pos" : "row-neg"} style={s.oculto ? { opacity: 0.6 } : undefined}>
-                    <td>
-                      {s.agentName}
-                      {s.oculto && <span className="muted" style={{ fontSize: 11 }}> (oculto)</span>}
-                    </td>
-                    <td className={`num money ${Number(s.fichasTiempoReal) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.fichasTiempoReal))}</td>
-                    <td className={`num money ${Number(s.cuentaCorriente) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.cuentaCorriente))}</td>
-                    <td className={`num money ${s.saldoReal >= 0 ? "pos" : "neg"}`} style={{ fontWeight: 600 }}>{usd(Number(s.saldoReal))}</td>
-                  </tr>
-                ))}
+                {saldosPorAgente.map((s) => {
+                  const multiClub = (s.detallePorClub?.length ?? 0) > 1;
+                  const expandido = !!clubesExpandidos[s.agentId ?? "sin-agente"];
+                  return (
+                    <Fragment key={s.agentId ?? "sin-agente"}>
+                      <tr className={s.saldoReal >= 0 ? "row-pos" : "row-neg"} style={s.oculto ? { opacity: 0.6 } : undefined}>
+                        <td>
+                          {multiClub && (
+                            <button
+                              className="btn secondary small"
+                              style={{ padding: "1px 7px", fontSize: 11 }}
+                              onClick={() => setClubesExpandidos((prev) => ({ ...prev, [s.agentId]: !prev[s.agentId] }))}
+                              title="Ver el saldo individual de este agente en cada club (informativo)."
+                            >
+                              {expandido ? "▾" : "▸"} clubes
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          {s.agentName}
+                          {multiClub && <span className="muted" style={{ fontSize: 11 }}> ({s.detallePorClub.length} clubes)</span>}
+                          {s.oculto && <span className="muted" style={{ fontSize: 11 }}> (oculto)</span>}
+                        </td>
+                        <td className={`num money ${Number(s.fichasTiempoReal) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.fichasTiempoReal))}</td>
+                        <td className={`num money ${Number(s.cuentaCorriente) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.cuentaCorriente))}</td>
+                        <td className={`num money ${s.saldoReal >= 0 ? "pos" : "neg"}`} style={{ fontWeight: 600 }}>{usd(Number(s.saldoReal))}</td>
+                      </tr>
+                      {multiClub && expandido && (
+                        <tr>
+                          <td colSpan={5} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px", borderLeft: "3px solid var(--gold)" }}>
+                            <div className="muted" style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--gold)" }}>
+                              {s.agentName} -- saldo actual por club (informativo, en vivo)
+                            </div>
+                            <div className="muted" style={{ fontSize: 12, margin: "6px 0 10px", maxWidth: 820 }}>
+                              Esto es lo que {s.agentName} tiene AHORA en cada club (balance propio + resultado de
+                              mesas + rakeback pendiente activo) -- es de referencia, no se suma a la cuenta de{" "}
+                              {seleccionado.name}: la cuenta consolidada solo cambia con Carga/Descarga/Ajuste/Cierre
+                              semanal (columnas de la izquierda). Por eso el total de acá abajo no tiene por qué
+                              coincidir con la fila de arriba.
+                            </div>
+                            <table style={{ margin: 0 }}>
+                              <thead>
+                                <tr><th>Club</th><th className="num">Fichas (balance + mesas)</th><th className="num">Rakeback pendiente activo</th><th className="num">Saldo</th></tr>
+                              </thead>
+                              <tbody>
+                                {s.detallePorClub.map((c: any) => (
+                                  <tr key={c.clubId}>
+                                    <td>{c.clubName}</td>
+                                    <td className="num">{usd(Number(c.fichas))}</td>
+                                    <td className="num">{usd(Number(c.pendiente))}</td>
+                                    <td className="num" style={{ fontWeight: 600 }}>{usd(Number(c.saldo))}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr style={{ fontWeight: 700 }}>
+                                  <td>Total individual hoy</td>
+                                  <td className="num">{usd(s.detallePorClub.reduce((acc: number, c: any) => acc + Number(c.fichas), 0))}</td>
+                                  <td className="num">{usd(s.detallePorClub.reduce((acc: number, c: any) => acc + Number(c.pendiente), 0))}</td>
+                                  <td className="num">{usd(s.detallePorClub.reduce((acc: number, c: any) => acc + Number(c.saldo), 0))}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 700 }}>
+                  <td></td>
                   <td>Total (coincide con las tarjetas de arriba)</td>
                   <td className="num">{usd(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0))}</td>
                   <td className="num">{usd(saldosPorAgente.reduce((s, a) => s + Number(a.cuentaCorriente), 0))}</td>
