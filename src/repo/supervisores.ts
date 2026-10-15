@@ -383,6 +383,100 @@ export async function setOcultoSubordinado(supervisorAgentId: string, agentId: s
   return { fichasMovidas: fichas, pendienteMovido: pendiente };
 }
 
+// Desglose por agente de la cuenta consolidada (15/10/2026, pedido de Leo: "al momento de cargar
+// o descargar fichas de un agente impacte... necesito saber las fichas que tiene en momento
+// real y eso es lo que va a hacer el saldo real"). El pool de supervisor_cuentas sigue siendo UN
+// SOLO número (no se parte de verdad, ver nota arriba de getCuentaParaUpdate/registrarMovimiento
+// Supervisor) -- esto es una VISTA calculada aparte que reparte ese mismo número por agente,
+// usando el agent_id que ya se graba en cada movimiento/línea de cierre/migración histórica
+// (antes el campo era puramente informativo en "Movimientos manuales", ahora también alimenta
+// esto). Fichas en tiempo real de un agente = fichas migradas (alta histórica) + suma de
+// fichas_reales_delta de sus movimientos APLICADOS + suma de "result" de sus líneas de cierre no
+// revertidas. Cuenta corriente = mismo criterio con pendiente_migrado + cuenta_corriente_delta +
+// rakeback. Si algún movimiento quedó sin agente (supervisor con exigir_agente_en_movimientos=
+// false), se junta aparte en una fila "Sin agente asignado" -- nunca se reparte a ciegas entre
+// los agentes -- así el total de esta tabla siempre coincide, centavo a centavo, con
+// supervisor_cuentas (misma garantía que ya probamos a mano con Rodrigo antes de armar esto).
+export interface SaldoPorAgenteSupervisor {
+  agentId: string | null;
+  agentName: string;
+  oculto: boolean;
+  fichasTiempoReal: number;
+  cuentaCorriente: number;
+  saldoReal: number;
+}
+export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): Promise<SaldoPorAgenteSupervisor[]> {
+  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+
+  const subRes = await pool.query(
+    `SELECT id, name, oculto_en_supervisor FROM agents WHERE supervisor = $1 ORDER BY name`,
+    [sup.rows[0].name]
+  );
+  const migRes = await pool.query(
+    `SELECT agent_id, COALESCE(SUM(fichas_migradas), 0) as fichas, COALESCE(SUM(pendiente_migrado), 0) as cc
+     FROM supervisor_migracion_historica WHERE supervisor_agent_id = $1 GROUP BY agent_id`,
+    [supervisorAgentId]
+  );
+  const movRes = await pool.query(
+    `SELECT agent_id, COALESCE(SUM(fichas_reales_delta), 0) as fichas, COALESCE(SUM(cuenta_corriente_delta), 0) as cc
+     FROM supervisor_movimientos WHERE supervisor_agent_id = $1 AND status = 'APLICADO' GROUP BY agent_id`,
+    [supervisorAgentId]
+  );
+  const clRes = await pool.query(
+    `SELECT scl.agent_id, COALESCE(SUM(scl.result), 0) as fichas, COALESCE(SUM(scl.rakeback), 0) as cc
+     FROM supervisor_cierre_lineas scl JOIN supervisor_cierres sc ON sc.id = scl.cierre_id
+     WHERE sc.supervisor_agent_id = $1 AND sc.status <> 'REVERTIDO' GROUP BY scl.agent_id`,
+    [supervisorAgentId]
+  );
+
+  const SIN_AGENTE = "__sin_agente__";
+  const porAgente = new Map<string, { fichas: number; cc: number }>();
+  const acumular = (agentId: string | null, fichas: number, cc: number) => {
+    const key = agentId ?? SIN_AGENTE;
+    const prev = porAgente.get(key) ?? { fichas: 0, cc: 0 };
+    porAgente.set(key, { fichas: round2(prev.fichas + fichas), cc: round2(prev.cc + cc) });
+  };
+  for (const r of migRes.rows) acumular(r.agent_id, Number(r.fichas), Number(r.cc));
+  for (const r of movRes.rows) acumular(r.agent_id, Number(r.fichas), Number(r.cc));
+  for (const r of clRes.rows) acumular(r.agent_id, Number(r.fichas), Number(r.cc));
+
+  const filas: SaldoPorAgenteSupervisor[] = subRes.rows.map((a) => {
+    const d = porAgente.get(a.id) ?? { fichas: 0, cc: 0 };
+    porAgente.delete(a.id);
+    return {
+      agentId: a.id,
+      agentName: a.name,
+      oculto: a.oculto_en_supervisor,
+      fichasTiempoReal: d.fichas,
+      cuentaCorriente: d.cc,
+      saldoReal: round2(d.fichas + d.cc),
+    };
+  });
+
+  // Lo que quede sin consumir (sin agente, o un agent_id que ya no es subordinado de este
+  // supervisor -- ej. se le cambió el campo "Supervisor" después de tener movimientos) se junta
+  // en una sola fila para que el total nunca se pierda nada del pool real.
+  let sobranteFichas = 0;
+  let sobranteCc = 0;
+  for (const [, v] of porAgente) {
+    sobranteFichas = round2(sobranteFichas + v.fichas);
+    sobranteCc = round2(sobranteCc + v.cc);
+  }
+  if (Math.abs(sobranteFichas) > 0.004 || Math.abs(sobranteCc) > 0.004) {
+    filas.push({
+      agentId: null,
+      agentName: "Sin agente asignado",
+      oculto: false,
+      fichasTiempoReal: sobranteFichas,
+      cuentaCorriente: sobranteCc,
+      saldoReal: round2(sobranteFichas + sobranteCc),
+    });
+  }
+
+  return filas;
+}
+
 export async function listMigracionHistorica(supervisorAgentId: string) {
   const r = await pool.query(
     `SELECT smh.*, a.name as agent_name, c.name as club_name

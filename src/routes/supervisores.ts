@@ -10,6 +10,7 @@ import {
   revertirMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
+  listSaldosPorAgenteSupervisor,
   setOcultoSubordinado,
   getSemanasDisponiblesSupervisor,
   getCierreSemanalSupervisor,
@@ -87,6 +88,14 @@ supervisoresRouter.post("/movimientos/:movId/revertir", requireAuth, requireAdmi
 
 supervisoresRouter.get("/:id/migracion-historica", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listMigracionHistorica(req.params.id));
+});
+
+supervisoresRouter.get("/:id/saldos-por-agente", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await listSaldosPorAgenteSupervisor(req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 const migracionSchema = z.object({

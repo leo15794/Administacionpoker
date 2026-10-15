@@ -28,6 +28,9 @@ export default function Supervisores() {
   // repo/supervisores.ts), pero el saldo HISTÓRICO inicial que se migró sí quedó registrado
   // línea por línea en supervisor_migracion_historica -- esto lo muestra.
   const [migracion, setMigracion] = useState<any[] | null>(null);
+  // Fichas en tiempo real por agente (15/10/2026, pedido de Leo) -- desglose calculado del mismo
+  // saldo de arriba, repartido por agente usando el agent_id de movimientos/cierres/migración.
+  const [saldosPorAgente, setSaldosPorAgente] = useState<any[] | null>(null);
   const [showMovimiento, setShowMovimiento] = useState(false);
   // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
   // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
@@ -61,12 +64,14 @@ export default function Supervisores() {
     setMovimientos(null);
     setMostrarOcultos(false);
     setMigracion(null);
+    setSaldosPorAgente(null);
     setSemanasCierre(null);
     setWeekCierre("");
     setCierreSemana(null);
     api.subordinadosSupervisor(s.id).then(setSubordinados);
     api.movimientosSupervisor(s.id).then(setMovimientos);
     api.migracionHistoricaSupervisor(s.id).then(setMigracion);
+    api.saldosPorAgenteSupervisor(s.id).then(setSaldosPorAgente);
     api.semanasCierreSupervisor(s.id).then((r: any[]) => {
       setSemanasCierre(r);
       if (r[0]) {
@@ -162,6 +167,7 @@ export default function Supervisores() {
       setSupervisores((prev) => (prev ?? []).map((x) => (x.id === s.id ? s : x)));
     });
     api.movimientosSupervisor(seleccionado.id).then(setMovimientos);
+    api.saldosPorAgenteSupervisor(seleccionado.id).then(setSaldosPorAgente);
   }
 
   async function onRevertirMovimiento(id: string) {
@@ -296,6 +302,46 @@ export default function Supervisores() {
                 </tfoot>
               </table>
             </>
+          )}
+
+          <h4>Fichas en tiempo real por agente</h4>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá,
+            en su fila -- ya no es solo informativo. El total de esta tabla coincide, centavo a
+            centavo, con las tarjetas de arriba: es el mismo saldo de {seleccionado.name},
+            repartido por agente.
+          </div>
+          {!saldosPorAgente ? (
+            <Loading />
+          ) : saldosPorAgente.length === 0 ? (
+            <div className="muted">Ningún agente tiene "Supervisor" = "{seleccionado.name}" todavía.</div>
+          ) : (
+            <table className="table-saldo-accent">
+              <thead>
+                <tr><th>Agente</th><th className="num">Fichas en tiempo real</th><th className="num">Cuenta corriente</th><th className="num">Saldo real</th></tr>
+              </thead>
+              <tbody>
+                {saldosPorAgente.map((s) => (
+                  <tr key={s.agentId ?? "sin-agente"} className={s.saldoReal >= 0 ? "row-pos" : "row-neg"} style={s.oculto ? { opacity: 0.6 } : undefined}>
+                    <td>
+                      {s.agentName}
+                      {s.oculto && <span className="muted" style={{ fontSize: 11 }}> (oculto)</span>}
+                    </td>
+                    <td className={`num money ${Number(s.fichasTiempoReal) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.fichasTiempoReal))}</td>
+                    <td className={`num money ${Number(s.cuentaCorriente) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.cuentaCorriente))}</td>
+                    <td className={`num money ${s.saldoReal >= 0 ? "pos" : "neg"}`} style={{ fontWeight: 600 }}>{usd(Number(s.saldoReal))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 700 }}>
+                  <td>Total (coincide con las tarjetas de arriba)</td>
+                  <td className="num">{usd(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0))}</td>
+                  <td className="num">{usd(saldosPorAgente.reduce((s, a) => s + Number(a.cuentaCorriente), 0))}</td>
+                  <td className="num">{usd(saldosPorAgente.reduce((s, a) => s + Number(a.saldoReal), 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
           )}
 
           <h4>Cierre semanal de agentes a cargo</h4>

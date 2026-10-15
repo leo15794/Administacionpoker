@@ -396,6 +396,7 @@ export const api = {
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
   migracionHistoricaSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/migracion-historica`),
+  saldosPorAgenteSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/saldos-por-agente`),
   // Ocultar/mostrar un subordinado (01/10/2026, caso Uriel): mueve el pool de Uriel de verdad
   // (resta/suma el saldo actual del agente), ver repo/supervisores.ts setOcultoSubordinado.
   ocultarAgenteSupervisor: (supervisorId: string, agentId: string, ocultar: boolean) =>
