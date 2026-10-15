@@ -546,3 +546,48 @@ export async function aplicarCierreConsolidadoSupervisor(
   }
 }
 
+// Revierte un cierre consolidado aplicado por error (15/10/2026, pedido de Leo) -- LEDGER
+// INMUTABLE, no se borra la fila: resta de la cuenta exactamente lo que ese cierre había sumado
+// (resultado_total de fichas_reales, rakeback_total de cuenta_corriente) y marca REVERTIDO.
+// A diferencia de la memoria de bancados/rodeo (un valor corrido que depende del orden en que
+// se revierte), fichas_reales/cuenta_corriente son una simple suma acumulada de deltas
+// independientes entre sí -- restar el delta de ESTE cierre lo deja correcto sin importar qué
+// otros movimientos/cierres se hayan aplicado antes o después, no hace falta revertir en orden
+// cronológico inverso. Deja la semana libre para volver a aplicarla (índice único parcial en
+// schema.sql que ignora los REVERTIDO, mismo criterio que proveedor_cierres) -- NO borra ni
+// toca supervisor_cierre_lineas, que queda como rastro histórico de lo que decía ese cierre.
+export async function revertirCierreConsolidadoSupervisor(cierreId: string, motivo?: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cierreRes = await client.query(`SELECT * FROM supervisor_cierres WHERE id = $1 FOR UPDATE`, [cierreId]);
+    const cierre = cierreRes.rows[0];
+    if (!cierre) throw new Error("Cierre no encontrado.");
+    if (cierre.status === "REVERTIDO") {
+      throw new Error("Este cierre ya fue revertido antes -- no se puede revertir dos veces.");
+    }
+
+    const cuenta = await getCuentaParaUpdate(client, cierre.supervisor_agent_id);
+    const fichasAnterior = Number(cuenta.fichas_reales);
+    const ccAnterior = Number(cuenta.cuenta_corriente);
+    const fichasNuevo = round2(fichasAnterior - Number(cierre.resultado_total));
+    const ccNuevo = round2(ccAnterior - Number(cierre.rakeback_total));
+
+    await client.query(
+      `UPDATE supervisor_cuentas SET fichas_reales = $1, cuenta_corriente = $2, updated_at = now() WHERE id = $3`,
+      [fichasNuevo, ccNuevo, cuenta.id]
+    );
+    await client.query(
+      `UPDATE supervisor_cierres SET status = 'REVERTIDO', motivo_reversion = $2 WHERE id = $1`,
+      [cierreId, motivo ?? null]
+    );
+    await client.query("COMMIT");
+    return { id: cierreId, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+

@@ -14,6 +14,7 @@ import {
   getSemanasDisponiblesSupervisor,
   getCierreSemanalSupervisor,
   aplicarCierreConsolidadoSupervisor,
+  revertirCierreConsolidadoSupervisor,
 } from "../repo/supervisores.js";
 
 export const supervisoresRouter = Router();
@@ -136,6 +137,18 @@ supervisoresRouter.post("/:id/cierre-semanal/aplicar", requireAuth, requireAdmin
       req.user?.email
     );
     res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const revertirCierreSupervisorSchema = z.object({ motivo: z.string().nullable().optional() });
+supervisoresRouter.post("/cierre-semanal/:cierreId/revertir", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = revertirCierreSupervisorSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await revertirCierreConsolidadoSupervisor(req.params.cierreId, parsed.data.motivo ?? undefined);
+    res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

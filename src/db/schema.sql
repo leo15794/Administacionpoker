@@ -2260,3 +2260,17 @@ CREATE INDEX IF NOT EXISTS idx_tb_push_log_tipo_semana ON tb_push_notifications_
 -- vistosas (ej. flyer de un torneo). Columna agregada a una tabla que Leo ya migró antes -- por
 -- eso ALTER, no se reescribe el CREATE TABLE de arriba.
 ALTER TABLE tb_push_notifications_log ADD COLUMN IF NOT EXISTS imagen_url TEXT;
+
+-- Revertir cierre consolidado de supervisor (15/10/2026, pedido de Leo: "necesito poder
+-- desaplicar en supervisores un cierre semanal") -- hasta ahora aplicarCierreConsolidadoSupervisor
+-- (repo/supervisores.ts) dejaba registro en supervisor_cierres/supervisor_cierre_lineas pero no
+-- tenía ninguna forma de deshacerse (el gap que se había detectado: el único revert que existía,
+-- revertirMovimientoSupervisor, es para Carga/Descarga/Ajuste manual, no para esto). Mismo
+-- arreglo ya aplicado antes a proveedor_cierres: el UNIQUE(supervisor_agent_id, week_start) de
+-- arriba es incondicional y bloquearía volver a aplicar la semana después de revertirla -- se
+-- reemplaza por un índice único parcial que ignora los REVERTIDO.
+ALTER TABLE supervisor_cierres DROP CONSTRAINT IF EXISTS supervisor_cierres_supervisor_agent_id_week_start_key;
+CREATE UNIQUE INDEX IF NOT EXISTS supervisor_cierres_supervisor_week_active_key
+  ON supervisor_cierres(supervisor_agent_id, week_start)
+  WHERE status <> 'REVERTIDO';
+ALTER TABLE supervisor_cierres ADD COLUMN IF NOT EXISTS motivo_reversion TEXT;

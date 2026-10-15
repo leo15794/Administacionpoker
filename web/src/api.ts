@@ -410,6 +410,8 @@ export const api = {
     request(`/supervisores/${supervisorId}/cierre-semanal/${weekStart}`),
   aplicarCierreSupervisor: (supervisorId: string, weekStart: string, weekEnd: string) =>
     request(`/supervisores/${supervisorId}/cierre-semanal/aplicar`, { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
+  revertirCierreSupervisor: (cierreId: string, motivo?: string) =>
+    request(`/supervisores/cierre-semanal/${cierreId}/revertir`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),

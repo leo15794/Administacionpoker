@@ -43,6 +43,7 @@ export default function Supervisores() {
   const [cierreSemana, setCierreSemana] = useState<any | null>(null);
   const [cargandoCierre, setCargandoCierre] = useState(false);
   const [aplicandoCierre, setAplicandoCierre] = useState(false);
+  const [revirtiendoCierre, setRevirtiendoCierre] = useState(false);
 
   function refresh() {
     setError("");
@@ -96,7 +97,7 @@ export default function Supervisores() {
       !confirm(
         `¿Aplicar el cierre de la semana del ${dateShort(weekCierre)} al ${dateShort(weekEnd)}? ` +
           `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.rakebackTotal)} a Cuenta corriente. ` +
-          `No se puede deshacer aplicando de nuevo -- una vez aplicada, esta semana queda cerrada.`
+          `Si te equivocaste se puede desaplicar después desde el botón "Desaplicar".`
       )
     )
       return;
@@ -109,6 +110,26 @@ export default function Supervisores() {
       setError(err.message || "No se pudo aplicar el cierre.");
     } finally {
       setAplicandoCierre(false);
+    }
+  }
+
+  async function onRevertirCierreSupervisor() {
+    if (!seleccionado || !cierreSemana?.aplicado) return;
+    const motivo = prompt(
+      `¿Desaplicar el cierre de la semana del ${dateShort(cierreSemana.aplicado.week_start)} al ${dateShort(cierreSemana.aplicado.week_end)}? ` +
+        `Esto resta ${usd(Number(cierreSemana.aplicado.resultado_total))} a Fichas reales y ${usd(Number(cierreSemana.aplicado.rakeback_total))} a Cuenta corriente ` +
+        `(el efecto contrario de cuando se aplicó). El saldo propio de cada agente no se toca. Motivo (opcional):`
+    );
+    if (motivo === null) return; // canceló el prompt
+    setRevirtiendoCierre(true);
+    try {
+      await api.revertirCierreSupervisor(cierreSemana.aplicado.id, motivo || undefined);
+      await cargarCierreSemana(seleccionado.id, weekCierre);
+      refrescarSeleccionado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo desaplicar el cierre.");
+    } finally {
+      setRevirtiendoCierre(false);
     }
   }
 
@@ -309,7 +330,17 @@ export default function Supervisores() {
                   })}
                 </select>
                 {cierreSemana?.aplicado ? (
-                  <span className="badge pos">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
+                  <>
+                    <span className="badge pos">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
+                    <button
+                      className="btn danger small"
+                      disabled={revirtiendoCierre}
+                      onClick={onRevertirCierreSupervisor}
+                      title="Deshace el efecto de este cierre sobre Fichas reales y Cuenta corriente, y deja la semana libre para volver a aplicarla."
+                    >
+                      {revirtiendoCierre ? "Desaplicando..." : "Desaplicar"}
+                    </button>
+                  </>
                 ) : (
                   <span className="badge neutral">Todavía no aplicada</span>
                 )}
