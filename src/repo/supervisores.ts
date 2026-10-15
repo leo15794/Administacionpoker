@@ -81,16 +81,16 @@ export interface MovimientoSupervisorInput {
   createdBy?: string | null;
 }
 
-// Carga: fichas_reales += importe, cuenta_corriente -= importe. Descarga (corregido 30/09/2026,
-// Leo: "primero se descuenta de su cuenta corriente y luego de las fichas reales" -- NO es la
-// reversa simétrica de una carga): come primero de cuenta_corriente hasta un piso de 0 (si ya
-// estaba en negativo, no la empeora -- todo pasa directo a fichas) y el resto lo descuenta de
-// fichas_reales, que si no alcanza queda en negativo (confirmado por Leo: representa deuda,
-// mismo criterio permisivo que ya tienen los balances de agentes comunes). Ajuste: mueve un solo
-// lado a mano, con el signo que se indique (para correcciones puntuales que no son ni una carga
-// ni una descarga real) y NUNCA mueve Wallet Manos, sin importar qué mande el frontend (mismo
-// criterio que ya usa AJUSTE/SIN_TESORERIA en repo/ledger.ts). Nunca toca balances/
-// ledger_movements de ningún agente.
+// Carga: fichas_reales += importe, cuenta_corriente -= importe. Descarga (corregido 15/10/2026,
+// Leo: "las cargas y descargas son movimientos internos, no ganancias ni pérdidas" -- revierte
+// la corrección del 30/09/2026, que hacía que la descarga comiera primero de cuenta_corriente y
+// terminara bajando el saldo total en vez de ser neutra): es la reversa simétrica EXACTA de la
+// carga, fichas_reales -= importe y cuenta_corriente += importe siempre, sin piso ni condición
+// -- el saldo total (fichas + cuenta corriente) nunca cambia con una carga ni con una descarga,
+// solo con resultado de mesas o cierres reales. Ajuste: mueve un solo lado a mano, con el signo
+// que se indique (para correcciones puntuales que no son ni una carga ni una descarga real) y
+// NUNCA mueve Wallet Manos, sin importar qué mande el frontend (mismo criterio que ya usa
+// AJUSTE/SIN_TESORERIA en repo/ledger.ts). Nunca toca balances/ledger_movements de ningún agente.
 export async function registrarMovimientoSupervisor(input: MovimientoSupervisorInput) {
   const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [input.supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
@@ -127,10 +127,8 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
       fichasDelta = amount;
       ccDelta = -amount;
     } else if (input.type === "DESCARGA") {
-      const montoDeCC = Math.min(amount, Math.max(ccAnterior, 0));
-      const restante = round2(amount - montoDeCC);
-      ccDelta = round2(-montoDeCC);
-      fichasDelta = round2(-restante);
+      fichasDelta = round2(-amount);
+      ccDelta = round2(amount);
     } else {
       const ajusteAmount = round2(input.amount);
       if (input.campoAjuste === "FICHAS") fichasDelta = ajusteAmount;
