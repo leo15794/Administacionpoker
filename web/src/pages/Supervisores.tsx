@@ -187,19 +187,25 @@ export default function Supervisores() {
       ) : (
         <div className="panel">
           <h3>Supervisores</h3>
-          <table>
-            <thead><tr><th>Nombre</th><th>Modelo</th><th>Fichas reales</th><th>Cuenta corriente</th><th>Saldo total</th><th></th></tr></thead>
+          <table className="table-saldo-accent">
+            <thead><tr><th>Nombre</th><th>Modelo</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr></thead>
             <tbody>
               {supervisores.map((s) => {
                 const fichas = Number(s.fichas_reales);
                 const cc = Number(s.cuenta_corriente);
+                const total = fichas + cc;
+                const rowClass = total > 0 ? "row-pos" : total < 0 ? "row-neg" : "";
                 return (
-                  <tr key={s.id} style={seleccionado?.id === s.id ? { outline: "1px solid var(--gold)" } : undefined}>
+                  <tr
+                    key={s.id}
+                    className={rowClass}
+                    style={seleccionado?.id === s.id ? { outline: "1px solid var(--gold)" } : undefined}
+                  >
                     <td>{s.name}</td>
                     <td className="muted">{s.modelo_cuenta ?? "—"}</td>
-                    <td>{usd(fichas)}</td>
-                    <td>{usd(cc)}</td>
-                    <td className={fichas + cc >= 0 ? "pos" : "neg"}>{usd(fichas + cc)}</td>
+                    <td className="num">{usd(fichas)}</td>
+                    <td className="num">{usd(cc)}</td>
+                    <td className={`num ${total >= 0 ? "pos" : "neg"}`}>{usd(total)}</td>
                     <td>
                       <button className="btn secondary small" onClick={() => abrirSupervisor(s)}>Ver cuenta</button>
                     </td>

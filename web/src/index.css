@@ -781,7 +781,10 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
    despues del simbolo de moneda. */
 .money { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+/* 15/10/2026, pedido de Leo ("mejorar visualmente Administración", variante aprobada "Denso /
+   Minimalista"): filas un poco más apretadas en TODA la app -- es un ajuste chico y parejo, no
+   hace falta pedirlo pantalla por pantalla (mismo criterio que el fix de mobile). */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
   text-align: left;
   color: var(--text-dim);
@@ -789,13 +792,28 @@ th {
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--border);
 }
-td { padding: 11px 12px; border-bottom: 1px solid var(--hairline); }
+td { padding: 9px 12px; border-bottom: 1px solid var(--hairline); }
 tbody tr { transition: background 0.12s ease; }
 tbody tr:hover td { background: var(--row-hover); }
 tbody tr:last-child td { border-bottom: none; }
+
+/* Barra de color a la izquierda según el signo del saldo -- SOLO para listas donde cada fila es
+   una cuenta con saldo propio (Agentes, Supervisores), nunca para tablas de eventos/historiales
+   (ahí el signo ya se ve en el badge del monto y la barra sería redundante). Transparente por
+   default para que la columna no salte de ancho entre filas positivas/negativas/neutras. */
+.table-saldo-accent td:first-child { border-left: 3px solid transparent; padding-left: 9px; }
+.table-saldo-accent tr.row-pos td:first-child { border-left-color: var(--green); }
+.table-saldo-accent tr.row-neg td:first-child { border-left-color: var(--red); }
+
+/* Punto de color + texto para "tipo de cuenta" en listas densas -- reemplaza el badge-pill
+   cuando ya hay varias columnas por fila y conviene algo más chico. */
+.acc-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }
+.acc-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.acc-dot.prepago { color: var(--green); }
+.acc-dot.winlose { color: var(--gold); }
 
 /* Tablas densas (muchas columnas — historiales discriminados de banca, etc.): mismo esquema
    visual pero con menos aire, para que entre más sin tener que scrollear tanto en horizontal.
