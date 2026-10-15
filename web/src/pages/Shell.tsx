@@ -152,6 +152,19 @@ const icon = {
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
     </svg>
   ),
+  // Menú hamburguesa / cerrar (15/10/2026, pedido de Leo: responsive mobile) -- abre/cierra el
+  // drawer del sidebar en pantallas chicas (ver .mobile-nav-toggle / .sidebar.mobile-open en
+  // index.css).
+  menu: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M3 12h18M3 18h18" />
+    </svg>
+  ),
+  close: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
 };
 
 type Theme = "dark" | "light";
@@ -245,6 +258,10 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const nav = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  // Drawer del sidebar en mobile (15/10/2026) -- estado aparte de "collapsed" (que es el
+  // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
+  // nunca persistido, que arranca siempre cerrado y se cierra solo al navegar.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
   const [groupsCollapsed, setGroupsCollapsed] = useState<Record<string, boolean>>(getInitialGroupsCollapsed);
@@ -330,6 +347,10 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     applyTheme(theme);
   }, [theme]);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   function toggleTheme() {
     setTheme((v) => {
       const next: Theme = v === "dark" ? "light" : "dark";
@@ -376,9 +397,21 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     });
   }
 
+  const rolLabel = role === "ADMIN" ? "Panel administrativo" : role === "SUPERVISOR" ? "Portal de supervisor" : "Portal de agente";
+
   return (
     <div className="app-shell">
-      <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+      <div className="mobile-topbar">
+        <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
+          {icon.menu}
+        </button>
+        <div className="brand-text">
+          <div className="t1">Poker Gestión</div>
+          <div className="t2">{rolLabel}</div>
+        </div>
+      </div>
+      <div className={`sidebar-backdrop ${mobileOpen ? "show" : ""}`} onClick={() => setMobileOpen(false)} />
+      <div className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
         <button
           className="sidebar-toggle"
           onClick={toggleCollapsed}
@@ -389,11 +422,14 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
 
         <div className="brand">
           {!collapsed && (
-            <div>
-              <h1>Poker Gestión</h1>
-              <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>
-                {role === "ADMIN" ? "Panel administrativo" : role === "SUPERVISOR" ? "Portal de supervisor" : "Portal de agente"}
+            <div style={{ display: "flex", alignItems: "flex-start", width: "100%" }}>
+              <div>
+                <h1>Poker Gestión</h1>
+                <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>{rolLabel}</div>
               </div>
+              <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
+                {icon.close}
+              </button>
             </div>
           )}
         </div>

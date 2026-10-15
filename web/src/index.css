@@ -271,6 +271,104 @@ a { color: inherit; }
   min-width: 0;
 }
 
+/* ---------- responsive (15/10/2026, pedido de Leo: "desde el celular se ve todo muy roto,
+   necesito que sea viable en todo celular y toda pantalla") ----------
+   El sidebar de 244px fijo (sin ningún breakpoint propio) es la causa raíz: en una pantalla de
+   celular empuja el contenido afuera y termina arrastrando TODA la página de costado (el menú
+   incluido), no solo el contenido -- se ve clarísimo en capturas que mandó Leo desde el celular.
+   Este bloque vive en Shell.tsx (compartido por Administración, portal de Agente y portal de
+   Supervisor), así que arregla las ~25 pantallas de una sola vez, no pantalla por pantalla.
+   Salvavidas aparte: ".panel { overflow-x: auto }" en mobile hace que una tabla ancha (ej. el
+   "Cierre semanal" de Supervisores) scrollee sola adentro de su propia tarjeta en vez de
+   arrastrar la página entera -- sin tener que envolver cada <table> de la app a mano. */
+body { overflow-x: hidden; }
+
+.mobile-nav-toggle, .sidebar-backdrop, .mobile-topbar, .mobile-close { display: none; }
+
+@media (max-width: 768px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 40;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .mobile-nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel-2);
+    color: var(--text-dim);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .mobile-topbar .brand-text { line-height: 1.25; }
+  .mobile-topbar .brand-text .t1 { font-size: 13.5px; font-weight: 750; }
+  .mobile-topbar .brand-text .t2 { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+
+  .app-shell { display: block; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    height: 100vh;
+    width: 250px !important;
+    padding: 16px 12px !important;
+    z-index: 55;
+    transform: translateX(-101%);
+    transition: transform 0.2s ease;
+  }
+  .sidebar.mobile-open { transform: translateX(0); box-shadow: var(--shadow-lift); }
+  .sidebar .sidebar-toggle { display: none; } /* el collapse-a-íconos de escritorio no aplica acá -- en mobile el drawer se abre/cierra entero */
+  .sidebar .brand { display: flex !important; }
+  .mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text-dim);
+    cursor: pointer;
+    margin-left: auto;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 18, 14, 0.4);
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .sidebar-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  .main {
+    padding: 70px 14px 40px;
+    max-width: 100%;
+  }
+
+  .kpi-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
+  .kpi-card { padding: 13px 15px; }
+  .kpi-card .value { font-size: 20px; }
+
+  /* Tabla ancha: scrollea SOLO adentro de su tarjeta -- el resto de la pantalla queda fijo. */
+  .panel { overflow-x: auto; padding: 14px; }
+
+  .topbar { flex-wrap: wrap; }
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
