@@ -172,6 +172,12 @@ export const api = {
     request("/portal/mi-supervision/solicitudes-retiro", { method: "POST", body: JSON.stringify(data) }),
   // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- portal de solo lectura, ver routes/portal.ts.
   miProveedor: () => request("/portal/mi-proveedor"),
+  // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
+  // esto mismo para la sección de proveedores") -- ver repo/proveedores.ts. El lado admin
+  // (listar todas, marcar enviada, rechazar) está más abajo.
+  misSolicitudesRetiroProveedor: () => request("/portal/mi-proveedor/solicitudes-retiro"),
+  solicitarRetiroProveedor: (data: { amount: number; nota?: string | null }) =>
+    request("/portal/mi-proveedor/solicitudes-retiro", { method: "POST", body: JSON.stringify(data) }),
   // Comisión por referido de supervisor: agente referido + % sobre su rake semanal, auto-
   // acreditado en cada cierre. Cuelga del LOGIN (userId), no de la cuenta principal del
   // usuario — se gestiona desde Usuarios y permisos, dentro de la edición del usuario
@@ -495,6 +501,8 @@ export const api = {
     origen?: "PAGO_COBRO" | "AJUSTE";
     // custodian (07/10/2026, fix wallet): obligatorio si medio = EFECTIVO.
     custodian?: string;
+    // paymentLink (16/10/2026, pedido de Leo): ver repo/proveedores.ts (PagoProveedorInput).
+    paymentLink?: string | null;
   }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
   revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
   // Líneas con saldo pendiente de un proveedor (30/09/2026) -- para el picker de Pago/Cobro.
@@ -505,6 +513,13 @@ export const api = {
     request(`/proveedores/garantias/historial${proveedorId ? `?proveedorId=${proveedorId}` : ""}`),
   eliminarGarantiaProveedorDefinitivo: (id: string) => request(`/proveedores/garantias/${id}/definitivo`, { method: "DELETE" }),
   eliminarProveedorDefinitivo: (id: string) => request(`/proveedores/${id}`, { method: "DELETE" }),
+  // Solicitudes de retiro/pago de proveedores, lado admin (16/10/2026, pedido de Leo) -- ver
+  // repo/proveedores.ts.
+  solicitudesRetiroPendientesProveedor: () => request("/proveedores/solicitudes-retiro"),
+  marcarSolicitudRetiroEnviadaProveedor: (solicitudId: string, data: { clubId: string; paymentLink: string }) =>
+    request(`/proveedores/solicitudes-retiro/${solicitudId}/marcar-enviado`, { method: "POST", body: JSON.stringify(data) }),
+  rechazarSolicitudRetiroProveedor: (solicitudId: string, motivo?: string | null) =>
+    request(`/proveedores/solicitudes-retiro/${solicitudId}/rechazar`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
 
   // Auto-cierre multi-club (22/09/2026): un proveedor puede tener cualquier cantidad de
   // clubes configurados (ej. Manzur: M CHOCO Y Fénix GG a la vez).

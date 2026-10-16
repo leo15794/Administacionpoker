@@ -30,6 +30,9 @@ import {
   listAutoCierreClubesTodos,
   agregarAutoCierreClub,
   eliminarAutoCierreClub,
+  listSolicitudesRetiroPendientesTodasProveedor,
+  marcarSolicitudRetiroEnviadaProveedor,
+  rechazarSolicitudRetiroProveedor,
 } from "../repo/proveedores.js";
 
 export const proveedoresRouter = Router();
@@ -247,6 +250,9 @@ const pagoSchema = z.object({
   // custodian (07/10/2026, fix wallet): obligatorio cuando medio = EFECTIVO -- ver
   // comentario largo en repo/proveedores.ts (PagoProveedorInput).
   custodian: z.string().nullable().optional(),
+  // paymentLink (16/10/2026, pedido de Leo) -- ver comentario largo en repo/proveedores.ts
+  // (PagoProveedorInput).
+  paymentLink: z.string().nullable().optional(),
 });
 proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = pagoSchema.safeParse(req.body);
@@ -262,6 +268,40 @@ proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRe
 proveedoresRouter.get("/pagos", requireAuth, requireAdmin, async (req, res) => {
   const proveedorId = typeof req.query.proveedorId === "string" && req.query.proveedorId ? req.query.proveedorId : undefined;
   res.json(await listPagosProveedor(proveedorId));
+});
+
+// Solicitudes de retiro/pago de proveedores, lado admin (16/10/2026, pedido de Leo: "necesito
+// todo esto mismo para la sección de proveedores") -- el lado proveedor (crear y ver las
+// propias) vive en routes/portal.ts, GET/POST /mi-proveedor/solicitudes-retiro.
+proveedoresRouter.get("/solicitudes-retiro", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listSolicitudesRetiroPendientesTodasProveedor());
+});
+
+const marcarSolicitudRetiroEnviadaProveedorSchema = z.object({
+  clubId: z.string(),
+  paymentLink: z.string().min(1),
+});
+proveedoresRouter.post("/solicitudes-retiro/:id/marcar-enviado", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = marcarSolicitudRetiroEnviadaProveedorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const row = await marcarSolicitudRetiroEnviadaProveedor(req.params.id, { ...parsed.data, createdBy: req.user?.email });
+    res.json(row);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const rechazarSolicitudRetiroProveedorSchema = z.object({ motivo: z.string().nullable().optional() });
+proveedoresRouter.post("/solicitudes-retiro/:id/rechazar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = rechazarSolicitudRetiroProveedorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const row = await rechazarSolicitudRetiroProveedor(req.params.id, parsed.data.motivo ?? null, req.user?.email);
+    res.json(row);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Líneas con saldo pendiente de un proveedor (30/09/2026, pedido de Leo) -- para el nuevo

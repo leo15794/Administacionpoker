@@ -33,6 +33,10 @@ export default function Proveedores() {
   const [garantias, setGarantias] = useState<any[] | null>(null);
   const [garantiasHistorial, setGarantiasHistorial] = useState<any[] | null>(null);
   const [error, setError] = useState("");
+  // Solicitudes de retiro/pago de los proveedores (16/10/2026, pedido de Leo: "necesito todo
+  // esto mismo para la sección de proveedores") -- siempre visible arriba de todo, no depende
+  // de ninguna pestaña (ver repo/proveedores.ts listSolicitudesRetiroPendientesTodasProveedor).
+  const [solicitudes, setSolicitudes] = useState<any[] | null>(null);
 
   const [showNuevoProveedor, setShowNuevoProveedor] = useState(false);
   const [editandoProveedor, setEditandoProveedor] = useState<any | null>(null);
@@ -57,10 +61,15 @@ export default function Proveedores() {
     api.autoCierreClubesTodos().then(setAutoCierreClubesTodos).catch(() => {});
   }
 
+  function refreshSolicitudes() {
+    api.solicitudesRetiroPendientesProveedor().then(setSolicitudes);
+  }
+
   useEffect(() => {
     refresh();
     api.proveedoresClubes().then(setClubes);
     api.agentesProveedores().then(setAgentes);
+    refreshSolicitudes();
   }, []);
 
   if (error) {
@@ -187,6 +196,38 @@ export default function Proveedores() {
         </div>
       </div>
 
+      <div className="panel" style={{ borderColor: "var(--gold)" }}>
+        <h3>Solicitudes de retiro pendientes</h3>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+          Lo que piden los proveedores desde "Mi proveedor". Al marcarla como enviada se registra
+          el Pago de siempre en el club elegido (misma mecánica que "+ Pago / cobro" de arriba)
+          con el link de pago asentado, para que puedan ver el trackeo reflejado en su propia
+          pantalla.
+        </div>
+        {!solicitudes ? (
+          <Loading />
+        ) : solicitudes.length === 0 ? (
+          <div className="muted">No hay ninguna solicitud pendiente.</div>
+        ) : (
+          <table>
+            <thead><tr><th>Proveedor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
+            <tbody>
+              {solicitudes.map((s) => (
+                <SolicitudRetiroProveedorRow
+                  key={s.id}
+                  solicitud={s}
+                  clubes={clubes}
+                  onDone={() => {
+                    refreshSolicitudes();
+                    refresh();
+                  }}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="label">Proveedores activos</div>
@@ -310,7 +351,7 @@ export default function Proveedores() {
           ) : (
             <table>
               <thead>
-                <tr><th>Fecha</th><th>Proveedor</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Monto</th><th>Saldo resultante</th><th></th></tr>
+                <tr><th>Fecha</th><th>Proveedor</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Monto</th><th>Saldo resultante</th><th>Link de pago</th><th></th></tr>
               </thead>
               <tbody>
                 {pagos.map((p) => (
@@ -322,6 +363,13 @@ export default function Proveedores() {
                     <td>{p.medio}</td>
                     <td>{usd(p.amount)}</td>
                     <td>{usd(p.saldo_nuevo)}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>
+                      {p.payment_link ? (
+                        <a className="link-pago" href={p.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       {p.status !== "REVERTIDO" && (
                         <button className="btn secondary small" onClick={() => onRevertirPago(p.id)}>Revertir</button>
@@ -1076,6 +1124,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
   const [medio, setMedio] = useState<"USDT" | "EFECTIVO" | "ZELLE" | "OTRO">("USDT");
   const [custodio, setCustodio] = useState("");
   const [notes, setNotes] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -1119,6 +1168,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
         direction,
         notes: notes.trim() || undefined,
         custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
+        paymentLink: paymentLink.trim() || null,
       });
       onDone();
     } catch (err: any) {
@@ -1153,6 +1203,7 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
           notes: notes.trim() || undefined,
           cierreLineaId: l.id,
           custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
+          paymentLink: paymentLink.trim() || null,
         });
         exitos++;
       } catch (err: any) {
@@ -1257,6 +1308,10 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
             <label>Notas (opcional)</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
           </div>
+          <div className="field">
+            <label>Link de pago (opcional)</label>
+            <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
+          </div>
           {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
           <button className="btn" disabled={loading || !lineas || lineas.length === 0}>{loading ? "Guardando..." : "Registrar"}</button>
         </form>
@@ -1300,6 +1355,10 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
           <div className="field">
             <label>Notas (opcional)</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
+          </div>
+          <div className="field">
+            <label>Link de pago (opcional)</label>
+            <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
           </div>
           {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
           <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
@@ -1824,5 +1883,88 @@ function GarantiaAjusteForm({
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Aplicar"}</button>
     </form>
+  );
+}
+
+// Fila de resolución de una solicitud de retiro pendiente (ver panel "Solicitudes de retiro
+// pendientes" más arriba) -- mismo mecanismo de siempre (registrarPagoProveedor medio USDT
+// direction PAGO, vía marcarSolicitudRetiroEnviadaProveedor en repo/proveedores.ts), con el
+// link de pago quedando asentado para que el proveedor lo vea en su propio historial. A
+// diferencia de Supervisor, acá el admin SÍ elige el club (el saldo del proveedor está
+// separado por club, no es un pool único).
+function SolicitudRetiroProveedorRow({
+  solicitud,
+  clubes,
+  onDone,
+}: {
+  solicitud: any;
+  clubes: any[];
+  onDone: () => void;
+}) {
+  const [clubId, setClubId] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [rechazando, setRechazando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function onEnviar() {
+    setMsg(null);
+    if (!clubId) return setMsg({ ok: false, text: "Elegí el club." });
+    if (!paymentLink.trim()) return setMsg({ ok: false, text: "Pegá el link de pago." });
+    setEnviando(true);
+    try {
+      await api.marcarSolicitudRetiroEnviadaProveedor(solicitud.id, { clubId, paymentLink: paymentLink.trim() });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo marcar como enviado." });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function onRechazar() {
+    const motivo = prompt(
+      `¿Rechazar la solicitud de ${usd(Number(solicitud.amount))} de ${solicitud.proveedor_name}? Motivo (opcional):`
+    );
+    if (motivo === null) return;
+    setRechazando(true);
+    try {
+      await api.rechazarSolicitudRetiroProveedor(solicitud.id, motivo || undefined);
+      onDone();
+    } catch (err: any) {
+      alert(err.message || "No se pudo rechazar la solicitud.");
+    } finally {
+      setRechazando(false);
+    }
+  }
+
+  return (
+    <tr className="fila-pendiente">
+      <td style={{ fontWeight: 600 }}>{solicitud.proveedor_name}</td>
+      <td><span className="badge neutral">{usd(Number(solicitud.amount))}</span></td>
+      <td className="muted" style={{ fontSize: 12.5 }}>{solicitud.nota || "—"}</td>
+      <td className="muted">{dateShort(solicitud.requested_at)}</td>
+      <td style={{ minWidth: 360 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)} style={{ fontSize: 12.5 }}>
+            <option value="">Club...</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <input
+            placeholder="Pegá el link de pago (tx) acá..."
+            value={paymentLink}
+            onChange={(e) => setPaymentLink(e.target.value)}
+            style={{ flex: 1, minWidth: 160, fontSize: 12.5 }}
+          />
+          <button className="btn small" disabled={enviando} onClick={onEnviar}>
+            {enviando ? "..." : "Marcar como enviado"}
+          </button>
+          <button className="btn danger small" disabled={rechazando} onClick={onRechazar}>
+            {rechazando ? "..." : "Rechazar"}
+          </button>
+        </div>
+        {msg && <div className={msg.ok ? "success" : "error"} style={{ fontSize: 12, marginTop: 4 }}>{msg.text}</div>}
+      </td>
+    </tr>
   );
 }

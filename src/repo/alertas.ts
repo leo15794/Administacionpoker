@@ -28,7 +28,7 @@ const DIAS_VENTANA_REVERSIONES_RECIENTES = 3;
 const DIAS_REVERSION_TARDIA = 4; // más de esto entre el movimiento original y su reversión
 
 export type SeveridadAlerta = "alta" | "media";
-export type TipoAlerta = "SALDO_PENDIENTE" | "MOVIMIENTO_INUSUAL" | "SIN_DEAL" | "REVERSION_TARDIA" | "SOLICITUD_RETIRO";
+export type TipoAlerta = "SALDO_PENDIENTE" | "MOVIMIENTO_INUSUAL" | "SIN_DEAL" | "REVERSION_TARDIA" | "SOLICITUD_RETIRO" | "SOLICITUD_RETIRO_PROVEEDOR";
 
 export interface Alerta {
   id: string;
@@ -227,15 +227,41 @@ async function alertasSolicitudesRetiro(): Promise<Alerta[]> {
   }));
 }
 
+// Solicitudes de retiro de un proveedor, pendientes de que el admin las mande (16/10/2026,
+// pedido de Leo: "necesito todo esto mismo para la sección de proveedores") -- mismo criterio
+// que la de arriba, se recalcula en caliente.
+async function alertasSolicitudesRetiroProveedor(): Promise<Alerta[]> {
+  const res = await pool.query(
+    `SELECT sr.id, sr.amount, sr.requested_at, p.id as proveedor_id, p.name as proveedor_name
+     FROM proveedor_solicitudes_retiro sr
+     JOIN proveedores p ON p.id = sr.proveedor_id
+     WHERE sr.estado = 'PENDIENTE'
+     ORDER BY sr.requested_at ASC`
+  );
+  return res.rows.map((r) => ({
+    id: `solicitud-retiro-proveedor:${r.id}`,
+    tipo: "SOLICITUD_RETIRO_PROVEEDOR" as TipoAlerta,
+    severidad: "alta" as SeveridadAlerta,
+    mensaje: `${r.proveedor_name} solicitó un retiro de US$ ${money(Number(r.amount))}`,
+    agentId: null,
+    agentName: r.proveedor_name,
+    clubId: null,
+    clubName: null,
+    monto: Number(r.amount),
+    fecha: r.requested_at,
+  }));
+}
+
 export async function listarAlertas(): Promise<Alerta[]> {
-  const [saldos, movimientos, sinDeal, reversiones, solicitudesRetiro] = await Promise.all([
+  const [saldos, movimientos, sinDeal, reversiones, solicitudesRetiro, solicitudesRetiroProveedor] = await Promise.all([
     alertasSaldoPendiente(),
     alertasMovimientosInusuales(),
     alertasSinDeal(),
     alertasReversionTardia(),
     alertasSolicitudesRetiro(),
+    alertasSolicitudesRetiroProveedor(),
   ]);
-  const todas = [...saldos, ...movimientos, ...sinDeal, ...reversiones, ...solicitudesRetiro];
+  const todas = [...saldos, ...movimientos, ...sinDeal, ...reversiones, ...solicitudesRetiro, ...solicitudesRetiroProveedor];
   const orden: Record<SeveridadAlerta, number> = { alta: 0, media: 1 };
   todas.sort((a, b) => orden[a.severidad] - orden[b.severidad] || new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   return todas;

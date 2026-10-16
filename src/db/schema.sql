@@ -2323,3 +2323,34 @@ CREATE INDEX IF NOT EXISTS idx_sv_solicitudes_retiro_estado ON supervisor_solici
 -- disponible para cualquier Carga/Descarga manual (no solo las que vienen de una solicitud), así
 -- el admin puede asentarlo siempre que mande una transferencia real de USDT.
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS payment_link TEXT;
+
+-- =================================================================================================
+-- Mismo mecanismo de arriba, ahora para Proveedores (16/10/2026, pedido de Leo: "necesito todo
+-- esto mismo para la sección de proveedores") -- el proveedor pide un monto desde "Mi
+-- proveedor"; el admin la ve en Administración -> Proveedores (y como alerta de la campana) y,
+-- al mandarle los USDT de verdad, la marca como enviada eligiendo el CLUB (a diferencia de
+-- Supervisor, el saldo del proveedor SÍ está separado por club -- no hay un pool único, ver
+-- proveedor_saldos) + el link de pago -- eso crea el Pago de siempre (registrarPagoProveedor,
+-- medio USDT, direction PAGO) y deja el link guardado en proveedor_pagos.payment_link, visible
+-- para el proveedor en su propio historial. Ningún movimiento de plata pasa por esta tabla -- es
+-- solo el "pedido" y su estado, el movimiento real sigue siendo proveedor_pagos.
+CREATE TABLE IF NOT EXISTS proveedor_solicitudes_retiro (
+  id                  TEXT PRIMARY KEY,
+  proveedor_id        TEXT NOT NULL REFERENCES proveedores(id),
+  amount              NUMERIC(18,4) NOT NULL,
+  nota                TEXT,
+  estado              TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','ENVIADO','RECHAZADO')),
+  payment_link        TEXT,
+  pago_id             TEXT REFERENCES proveedor_pagos(id),
+  resolucion_nota     TEXT,
+  requested_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resuelto_at         TIMESTAMPTZ,
+  resuelto_by         TEXT,
+  created_by          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pv_solicitudes_retiro_proveedor ON proveedor_solicitudes_retiro(proveedor_id);
+CREATE INDEX IF NOT EXISTS idx_pv_solicitudes_retiro_estado ON proveedor_solicitudes_retiro(estado);
+
+-- Link de pago/trackeo de un Pago o Cobro (16/10/2026, ver arriba) -- queda disponible para
+-- cualquier Pago/Cobro manual (no solo los que vienen de una solicitud).
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS payment_link TEXT;

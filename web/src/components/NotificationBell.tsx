@@ -19,6 +19,7 @@ const RUTA_POR_TIPO: Record<string, string> = {
   SIN_DEAL: "/dashboard/agentes",
   REVERSION_TARDIA: "/dashboard/resumen-agentes",
   SOLICITUD_RETIRO: "/dashboard/supervisores",
+  SOLICITUD_RETIRO_PROVEEDOR: "/dashboard/proveedores",
 };
 
 function getVistas(): Set<string> {

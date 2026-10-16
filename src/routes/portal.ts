@@ -9,7 +9,13 @@ import {
   crearSolicitudRetiroSupervisor,
   listSolicitudesRetiroSupervisor,
 } from "../repo/supervisores.js";
-import { listSaldosProveedores, listCierresProveedor, listPagosProveedor } from "../repo/proveedores.js";
+import {
+  listSaldosProveedores,
+  listCierresProveedor,
+  listPagosProveedor,
+  crearSolicitudRetiroProveedor,
+  listSolicitudesRetiroProveedor,
+} from "../repo/proveedores.js";
 
 export const portalRouter = Router();
 
@@ -294,4 +300,41 @@ portalRouter.post("/mi-supervision/solicitudes-retiro", requireAuth, async (req:
 portalRouter.get("/mi-supervision/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
   if (req.user!.role !== "SUPERVISOR") return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
   res.json(await listSolicitudesRetiroSupervisor(req.user!.agentId!));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Mismo mecanismo de arriba, ahora para Proveedores (16/10/2026, pedido de Leo: "necesito todo
+// esto mismo para la sección de proveedores") -- el proveedor solo puede crear y ver LAS SUYAS,
+// siempre atado a req.user!.proveedorId, nunca a un :id de la URL. El lado admin (listar
+// pendientes de todos, marcar como enviada eligiendo el club + link de pago) vive en
+// routes/proveedores.ts.
+// ---------------------------------------------------------------------------------------------
+const crearSolicitudRetiroProveedorSchema = z.object({
+  amount: z.number().positive(),
+  nota: z.string().nullable().optional(),
+});
+portalRouter.post("/mi-proveedor/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });
+  }
+  const parsed = crearSolicitudRetiroProveedorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const row = await crearSolicitudRetiroProveedor(
+      req.user!.proveedorId,
+      parsed.data.amount,
+      parsed.data.nota ?? null,
+      req.user!.email
+    );
+    res.status(201).json(row);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+portalRouter.get("/mi-proveedor/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });
+  }
+  res.json(await listSolicitudesRetiroProveedor(req.user!.proveedorId));
 });

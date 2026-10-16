@@ -845,6 +845,10 @@ export interface PagoProveedorInput {
   // treasury_adjustment_id): obligatorio cuando medio = EFECTIVO, mismo criterio BIT-051/052
   // que ya usan los movimientos de agentes (ver ledger.ts) -- quién tiene la plata físicamente.
   custodian?: string | null;
+  // paymentLink (16/10/2026, pedido de Leo: "necesito todo esto mismo para la sección de
+  // proveedores") -- link de pago/trackeo de una transferencia real de USDT, igual que
+  // supervisor_movimientos.payment_link. Opcional, disponible para cualquier Pago/Cobro.
+  paymentLink?: string | null;
 }
 
 /**
@@ -878,8 +882,8 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     const id = newId("ppag");
     const r = await client.query(
       `INSERT INTO proveedor_pagos
-        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by, cierre_linea_id, origen, custodian)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        (id, proveedor_id, club_id, amount, medio, direction, saldo_anterior, saldo_nuevo, notes, created_by, cierre_linea_id, origen, custodian, payment_link)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         id,
         input.proveedorId,
@@ -894,6 +898,7 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
         input.cierreLineaId ?? null,
         origen,
         medio === "EFECTIVO" ? input.custodian?.trim() : null,
+        input.paymentLink ?? null,
       ]
     );
     let pago = r.rows[0];
@@ -1286,4 +1291,99 @@ async function registrarMovimientoGarantia(
       createdBy ?? null,
     ]
   );
+}
+
+// =================================================================================================
+// Solicitudes de retiro/pago de un Proveedor (16/10/2026, pedido de Leo: "necesito todo esto
+// mismo para la sección de proveedores") -- mismo mecanismo que supervisor_solicitudes_retiro
+// (ver repo/supervisores.ts), con una diferencia: el saldo del proveedor SÍ está separado por
+// club (proveedor_saldos), no es un pool único -- por eso el proveedor pide un MONTO TOTAL sin
+// club, y es el admin quien elige de qué club sale al resolver la solicitud (marcarSolicitud-
+// RetiroEnviadaProveedor). Ver repo/alertas.ts para cómo le llega la notificación al admin.
+// =================================================================================================
+
+export async function crearSolicitudRetiroProveedor(
+  proveedorId: string,
+  amount: number,
+  nota: string | null,
+  createdBy?: string | null
+) {
+  const prov = await pool.query(`SELECT id, active FROM proveedores WHERE id = $1`, [proveedorId]);
+  if (!prov.rows[0]) throw new Error("Proveedor no encontrado.");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("El monto debe ser mayor a 0.");
+
+  const id = newId("pvsol");
+  const r = await pool.query(
+    `INSERT INTO proveedor_solicitudes_retiro (id, proveedor_id, amount, nota, created_by)
+     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [id, proveedorId, round2(amount), nota, createdBy ?? null]
+  );
+  return r.rows[0];
+}
+
+export async function listSolicitudesRetiroProveedor(proveedorId: string) {
+  const r = await pool.query(
+    `SELECT * FROM proveedor_solicitudes_retiro WHERE proveedor_id = $1 ORDER BY requested_at DESC`,
+    [proveedorId]
+  );
+  return r.rows;
+}
+
+// Lado admin: todas las pendientes, de cualquier proveedor -- para el panel en Administración
+// -> Proveedores y para la campana de notificaciones (repo/alertas.ts).
+export async function listSolicitudesRetiroPendientesTodasProveedor() {
+  const r = await pool.query(
+    `SELECT sr.*, p.name as proveedor_name
+     FROM proveedor_solicitudes_retiro sr
+     JOIN proveedores p ON p.id = sr.proveedor_id
+     WHERE sr.estado = 'PENDIENTE'
+     ORDER BY sr.requested_at ASC`
+  );
+  return r.rows;
+}
+
+// El admin ya mandó los USDT de verdad: esto crea el Pago de siempre (ledger inmutable,
+// medio USDT, direction PAGO -- mueve Wallet Manos igual que cualquier otro pago real) con el
+// link de pago adentro, y deja la solicitud marcada ENVIADO apuntando a ese pago. No es atómico
+// entre las dos tablas (mismo criterio ya usado en supervisor_solicitudes_retiro) -- si la
+// segunda parte fallara, el pago ya quedó registrado y auditable, se puede enlazar a mano.
+export async function marcarSolicitudRetiroEnviadaProveedor(
+  solicitudId: string,
+  input: { clubId: string; paymentLink: string; createdBy?: string | null }
+) {
+  const sol = await pool.query(`SELECT * FROM proveedor_solicitudes_retiro WHERE id = $1`, [solicitudId]);
+  const solicitud = sol.rows[0];
+  if (!solicitud) throw new Error("Solicitud no encontrada.");
+  if (solicitud.estado !== "PENDIENTE") throw new Error("Esta solicitud ya fue resuelta.");
+  if (!input.paymentLink?.trim()) throw new Error("Falta el link de pago.");
+
+  const pago = await registrarPagoProveedor({
+    proveedorId: solicitud.proveedor_id,
+    clubId: input.clubId,
+    amount: Number(solicitud.amount),
+    medio: "USDT",
+    direction: "PAGO",
+    notes: solicitud.nota ? `Solicitud de retiro del proveedor — ${solicitud.nota}` : "Solicitud de retiro del proveedor.",
+    paymentLink: input.paymentLink.trim(),
+    createdBy: input.createdBy ?? undefined,
+  });
+
+  const r = await pool.query(
+    `UPDATE proveedor_solicitudes_retiro
+     SET estado = 'ENVIADO', payment_link = $1, pago_id = $2, resuelto_at = now(), resuelto_by = $3
+     WHERE id = $4 RETURNING *`,
+    [input.paymentLink.trim(), pago.id, input.createdBy ?? null, solicitudId]
+  );
+  return r.rows[0];
+}
+
+export async function rechazarSolicitudRetiroProveedor(solicitudId: string, motivo: string | null, resueltoBy?: string | null) {
+  const r = await pool.query(
+    `UPDATE proveedor_solicitudes_retiro
+     SET estado = 'RECHAZADO', resolucion_nota = $1, resuelto_at = now(), resuelto_by = $2
+     WHERE id = $3 AND estado = 'PENDIENTE' RETURNING *`,
+    [motivo, resueltoBy ?? null, solicitudId]
+  );
+  if (!r.rows[0]) throw new Error("Solicitud no encontrada o ya resuelta.");
+  return r.rows[0];
 }
