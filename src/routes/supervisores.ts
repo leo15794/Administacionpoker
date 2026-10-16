@@ -16,6 +16,9 @@ import {
   getCierreSemanalSupervisor,
   aplicarCierreConsolidadoSupervisor,
   revertirCierreConsolidadoSupervisor,
+  listSolicitudesRetiroPendientesTodas,
+  marcarSolicitudRetiroEnviada,
+  rechazarSolicitudRetiro,
 } from "../repo/supervisores.js";
 
 export const supervisoresRouter = Router();
@@ -61,6 +64,9 @@ const movimientoSchema = z.object({
   campoAjuste: z.enum(["FICHAS", "CUENTA_CORRIENTE"]).optional(),
   usdtReal: z.boolean().optional(),
   notes: z.string().nullable().optional(),
+  // Link de pago/trackeo (16/10/2026, pedido de Leo) -- opcional, disponible en cualquier
+  // Carga/Descarga manual, no solo las que vienen de resolver una solicitud (ver abajo).
+  paymentLink: z.string().nullable().optional(),
 });
 supervisoresRouter.post("/:id/movimientos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = movimientoSchema.safeParse(req.body);
@@ -157,6 +163,44 @@ supervisoresRouter.post("/cierre-semanal/:cierreId/revertir", requireAuth, requi
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     const result = await revertirCierreConsolidadoSupervisor(req.params.cierreId, parsed.data.motivo ?? undefined);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Solicitudes de retiro/pago (16/10/2026, pedido de Leo) -- lado admin: listar las pendientes
+// de CUALQUIER supervisor, marcar como enviada (dispara la Descarga de siempre con el link de
+// pago) o rechazar. La creación es exclusiva del supervisor, ver routes/portal.ts.
+// ---------------------------------------------------------------------------------------------
+
+supervisoresRouter.get("/solicitudes-retiro", requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await listSolicitudesRetiroPendientesTodas());
+});
+
+const marcarEnviadoSchema = z.object({
+  clubId: z.string(),
+  agentId: z.string().nullable().optional(),
+  paymentLink: z.string().min(1, "Falta el link de pago."),
+});
+supervisoresRouter.post("/solicitudes-retiro/:id/marcar-enviado", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = marcarEnviadoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await marcarSolicitudRetiroEnviada(req.params.id, { ...parsed.data, createdBy: req.user?.email });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const rechazarSolicitudSchema = z.object({ motivo: z.string().nullable().optional() });
+supervisoresRouter.post("/solicitudes-retiro/:id/rechazar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = rechazarSolicitudSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const result = await rechazarSolicitudRetiro(req.params.id, parsed.data.motivo ?? null, req.user?.email);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

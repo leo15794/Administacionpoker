@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import Modal from "../components/Modal";
 
 // Mismas etiquetas que usa el admin en Movimientos (web/src/components/MovimientosHistorial.tsx)
 // -- acá en versión de solo lectura, sin acciones de revertir/eliminar (eso es admin-only).
@@ -44,8 +45,25 @@ export default function MiSupervision() {
   const [cierreSemana, setCierreSemana] = useState<any | null>(null);
   const [cargandoCierre, setCargandoCierre] = useState(false);
 
+  // Solicitudes de retiro/pago del propio supervisor (16/10/2026, pedido de Leo: "le queremos
+  // poner botones para que pueda solicitar retiros/pagos y que nos llegue la notificacion") --
+  // ver routes/portal.ts POST/GET /mi-supervision/solicitudes-retiro. El admin resuelve desde
+  // Administración -> Supervisores (repo/supervisores.ts); acá solo se crea y se ve el estado
+  // propio -- panel separado de "Pagos y movimientos" a propósito, para no mezclar el ledger
+  // inmutable de movimientos con esta capa de "pedido" previa a que el admin lo resuelva.
+  const [misSolicitudes, setMisSolicitudes] = useState<any[] | null>(null);
+  const [showSolicitar, setShowSolicitar] = useState(false);
+
+  function refrescarMisSolicitudes() {
+    api.misSolicitudesRetiro().then(setMisSolicitudes);
+  }
+
   useEffect(() => {
     api.miSupervision().then(setData).catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    refrescarMisSolicitudes();
   }, []);
 
   useEffect(() => {
@@ -80,6 +98,7 @@ export default function MiSupervision() {
           <h2>Hola, {data.supervisor.name}</h2>
           <div className="muted">Resumen de tu grupo de agentes a cargo.</div>
         </div>
+        <button className="btn" onClick={() => setShowSolicitar(true)}>+ Solicitar retiro / pago</button>
       </div>
 
       <div className="kpi-grid">
@@ -100,6 +119,58 @@ export default function MiSupervision() {
           <div className="value">{usd(data.saldo_referidos_total ?? 0)}</div>
         </div>
       </div>
+
+      <div className="panel">
+        <h3>Tus solicitudes de retiro</h3>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+          Lo que vas pidiendo con "+ Solicitar retiro / pago" de arriba. Queda "Pendiente de envío"
+          hasta que te mandemos los USDT -- en ese momento pasa a "Enviado" con el link de pago
+          para que puedas ver el trackeo de la transacción.
+        </div>
+        {!misSolicitudes ? (
+          <Loading />
+        ) : misSolicitudes.length === 0 ? (
+          <div className="muted">Todavía no pediste ningún retiro.</div>
+        ) : (
+          <table>
+            <thead><tr><th>Fecha</th><th>Monto</th><th>Nota</th><th>Estado</th><th>Comprobante</th></tr></thead>
+            <tbody>
+              {misSolicitudes.map((s: any) => (
+                <tr key={s.id} className={s.estado === "PENDIENTE" ? "fila-pendiente" : ""}>
+                  <td className="muted">{dateShort(s.requested_at)}</td>
+                  <td><span className="badge neutral">{usd(Number(s.amount))}</span></td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>{s.nota || "—"}</td>
+                  <td>
+                    {s.estado === "PENDIENTE" && <span className="badge deal">Pendiente de envío</span>}
+                    {s.estado === "ENVIADO" && <span className="badge pos">Enviado el {dateShort(s.resuelto_at)}</span>}
+                    {s.estado === "RECHAZADO" && (
+                      <span className="badge neg" title={s.resolucion_nota || undefined}>Rechazada</span>
+                    )}
+                  </td>
+                  <td>
+                    {s.payment_link ? (
+                      <a className="link-pago" href={s.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showSolicitar && (
+        <Modal title="Solicitar retiro / pago" onClose={() => setShowSolicitar(false)}>
+          <SolicitarRetiroForm
+            onDone={() => {
+              setShowSolicitar(false);
+              refrescarMisSolicitudes();
+            }}
+          />
+        </Modal>
+      )}
 
       {data.supervisor.usa_cuenta_consolidada && (
         <div className="panel">
@@ -291,5 +362,51 @@ export default function MiSupervision() {
         )}
       </div>
     </div>
+  );
+}
+
+function SolicitarRetiroForm({ onDone }: { onDone: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [nota, setNota] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    const amountNum = Number(amount.replace(",", "."));
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      return setMsg({ ok: false, text: "El monto debe ser mayor a 0." });
+    }
+    setLoading(true);
+    try {
+      await api.solicitarRetiro({ amount: amountNum, nota: nota.trim() || null });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo enviar la solicitud." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="field">
+        <label>Monto a retirar (USD)</label>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Ej: 500" />
+      </div>
+      <div className="field">
+        <label>Nota para el admin (opcional)</label>
+        <textarea rows={2} value={nota} onChange={(e) => setNota(e.target.value)} />
+      </div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+        Le llega la notificación al admin apenas enviás esto. Vas a ver en esta pantalla cuándo lo
+        revisan y, cuando te manden los USDT, el link de pago para trackearlo.
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" style={{ width: "100%" }} disabled={loading}>
+        {loading ? "Enviando..." : "Enviar solicitud"}
+      </button>
+    </form>
   );
 }

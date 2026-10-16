@@ -16,7 +16,12 @@ export default function Login() {
     try {
       const { token, role } = await api.login(email, password);
       api.setToken(token);
-      nav(role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : "/mi-cuenta");
+      nav(
+        role === "ADMIN" ? "/dashboard" :
+        role === "SUPERVISOR" ? "/mi-supervision" :
+        role === "PROVEEDOR" ? "/mi-proveedor" :
+        "/mi-cuenta"
+      );
     } catch (err: any) {
       setError(err.message || "No se pudo ingresar.");
     } finally {

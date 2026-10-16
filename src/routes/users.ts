@@ -11,15 +11,21 @@ export const usersRouter = Router();
 // puede tener varios agentes/clubes asociados (agent_user_agents) — se traen todos agregados
 // para que la tabla muestre "TeamBack Suprema, Fénix GG" en vez de un solo nombre.
 usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
+  // LEFT JOIN a los dos (16/10/2026, rol PROVEEDOR): un login ahora puede colgar de un agente
+  // O de un proveedor -- con INNER JOIN de antes, un usuario PROVEEDOR (agent_id NULL) hubiera
+  // desaparecido entero de este listado.
   const r = await pool.query(
-    `SELECT u.id, u.email, u.role, u.active, u.created_at, u.agent_id,
+    `SELECT u.id, u.email, u.role, u.active, u.created_at, u.agent_id, u.proveedor_id,
+            p.name as proveedor_name,
             COALESCE(
               (SELECT json_agg(json_build_object('id', a2.id, 'name', a2.name) ORDER BY a2.name)
                FROM agent_user_agents uax JOIN agents a2 ON a2.id = uax.agent_id
                WHERE uax.user_id = u.id),
-              json_build_array(json_build_object('id', a.id, 'name', a.name))
+              CASE WHEN a.id IS NOT NULL THEN json_build_array(json_build_object('id', a.id, 'name', a.name)) ELSE '[]'::json END
             ) as agentes
-     FROM agent_users u JOIN agents a ON a.id = u.agent_id
+     FROM agent_users u
+     LEFT JOIN agents a ON a.id = u.agent_id
+     LEFT JOIN proveedores p ON p.id = u.proveedor_id
      ORDER BY u.created_at DESC`
   );
   res.json(r.rows);
@@ -29,21 +35,41 @@ usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
 // usuario simple (ej. "juan123"), solo tiene que ser único (ver índice UNIQUE en agent_users.email).
 const usuarioField = z.string().trim().min(3, "Mínimo 3 caracteres.");
 
-const createSchema = z.object({
-  agentIds: z.array(z.string()).min(1, "Elegí al menos un agente."),
-  // Cuenta de acceso por defecto (la que usa el login/JWT al entrar): elegida explícitamente
-  // por el admin, no "la primera que se tildó" — para un login con varios agentes, todos
-  // pesan igual en el selector de arriba, esto es una decisión aparte.
-  defaultAgentId: z.string().min(1),
-  email: usuarioField,
-  password: z.string().min(6),
-  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR"]),
-});
+// Rol PROVEEDOR (16/10/2026, pedido de Leo: "agregarlos como usuarios y darles los permisos
+// como hacemos con los supervisores") -- un login de PROVEEDOR cuelga de proveedorId en vez de
+// agentIds/defaultAgentId (son dos formas mutuamente excluyentes de identidad para el mismo
+// login, ver el superRefine de abajo).
+const createSchema = z
+  .object({
+    role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR"]),
+    email: usuarioField,
+    password: z.string().min(6),
+    agentIds: z.array(z.string()).optional(),
+    // Cuenta de acceso por defecto (la que usa el login/JWT al entrar): elegida explícitamente
+    // por el admin, no "la primera que se tildó" — para un login con varios agentes, todos
+    // pesan igual en el selector de arriba, esto es una decisión aparte.
+    defaultAgentId: z.string().optional(),
+    proveedorId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === "PROVEEDOR") {
+      if (!data.proveedorId) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Elegí un proveedor.", path: ["proveedorId"] });
+      }
+    } else {
+      if (!data.agentIds || data.agentIds.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Elegí al menos un agente.", path: ["agentIds"] });
+      }
+      if (!data.defaultAgentId) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Falta la cuenta de acceso por defecto.", path: ["defaultAgentId"] });
+      }
+    }
+  });
 usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { agentIds, defaultAgentId, email, password, role } = parsed.data;
-  if (!agentIds.includes(defaultAgentId)) {
+  const { role, agentIds, defaultAgentId, proveedorId, email, password } = parsed.data;
+  if (role !== "PROVEEDOR" && agentIds && defaultAgentId && !agentIds.includes(defaultAgentId)) {
     return res.status(400).json({ error: "La cuenta de acceso por defecto tiene que ser uno de los agentes tildados." });
   }
   const client = await pool.connect();
@@ -51,15 +77,22 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
     await client.query("BEGIN");
     const hash = await bcrypt.hash(password, 10);
     const id = newId("user");
-    await client.query(
-      `INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
-      [id, defaultAgentId, email, hash, role]
-    );
-    for (const agentId of agentIds) {
+    if (role === "PROVEEDOR") {
       await client.query(
-        `INSERT INTO agent_user_agents (user_id, agent_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [id, agentId]
+        `INSERT INTO agent_users (id, agent_id, proveedor_id, email, password_hash, role) VALUES ($1,NULL,$2,$3,$4,$5)`,
+        [id, proveedorId, email, hash, role]
       );
+    } else {
+      await client.query(
+        `INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
+        [id, defaultAgentId, email, hash, role]
+      );
+      for (const agentId of agentIds!) {
+        await client.query(
+          `INSERT INTO agent_user_agents (user_id, agent_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [id, agentId]
+        );
+      }
     }
     await client.query("COMMIT");
     res.status(201).json({ id, email, role });
@@ -74,18 +107,20 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
 
 const updateSchema = z.object({
   email: usuarioField.optional(),
-  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR"]).optional(),
+  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR"]).optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
   agentIds: z.array(z.string()).min(1).optional(),
   // Cuenta de acceso por defecto: si se manda agentIds, hay que decir cuál de esos usar como
   // agent_id — ya no se infiere "la primera tildada" (todas pesan igual en ese selector).
   defaultAgentId: z.string().min(1).optional(),
+  // Rol PROVEEDOR (16/10/2026) -- mutuamente excluyente con defaultAgentId, ver abajo.
+  proveedorId: z.string().min(1).optional(),
 });
 usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { email, role, active, password, agentIds, defaultAgentId } = parsed.data;
+  const { email, role, active, password, agentIds, defaultAgentId, proveedorId } = parsed.data;
 
   // Nunca dejar que un admin se saque su propio acceso por error (quedaría el sistema sin admin).
   if (req.params.id === req.user?.userId && (active === false || role === "AGENT")) {
@@ -123,6 +158,14 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
   if (defaultAgentId !== undefined) {
     sets.push(`agent_id = $${i++}`);
     values.push(defaultAgentId);
+    // Mutuamente excluyente con proveedorId (16/10/2026) -- si este login vuelve a ser
+    // AGENT/SUPERVISOR/ADMIN, se suelta cualquier proveedor que tuviera colgado de antes.
+    sets.push(`proveedor_id = NULL`);
+  }
+  if (proveedorId !== undefined) {
+    sets.push(`proveedor_id = $${i++}`);
+    values.push(proveedorId);
+    sets.push(`agent_id = NULL`);
   }
 
   if (sets.length === 0 && agentIds === undefined) return res.status(400).json({ error: "Nada para actualizar." });

@@ -876,6 +876,23 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .badge.deal { background: var(--gold-soft); color: var(--gold); }
 .badge { white-space: nowrap; }
 
+/* Link de pago (16/10/2026, solicitudes de retiro de supervisores) -- link clickeable al
+   comprobante/tx de un pago, usado en Supervisores.tsx y MiSupervision.tsx. */
+.link-pago {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.link-pago:hover { text-decoration: underline; }
+
+/* Fila de solicitud de retiro pendiente/recién resuelta -- resalte sutil para que salte a la
+   vista en "Pagos y movimientos" (MiSupervision.tsx) y en el panel de pendientes del admin
+   (Supervisores.tsx). */
+.fila-pendiente td { background: var(--gold-soft); }
+
 /* ---------- login ----------
    Rediseño pedido por Leo (10/2026): layout partido con glass effect + glow de borde,
    inspirado en una referencia que trajo, pero re-temático a la identidad "club privado de

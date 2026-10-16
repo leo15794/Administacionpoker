@@ -29,6 +29,7 @@ import ResumenAgentes from "./pages/ResumenAgentes";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
+import MiProveedor from "./pages/MiProveedor";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import { api } from "./api";
 
@@ -98,6 +99,17 @@ export default function App() {
           }
         >
           <Route index element={<MiSupervision />} />
+        </Route>
+
+        <Route
+          path="/mi-proveedor"
+          element={
+            <RequireAuth>
+              <Shell role="PROVEEDOR" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MiProveedor />} />
         </Route>
 
         {/* (25/09/2026) TeamBack Affiliates -- sección TOTALMENTE APARTE, con su propio login

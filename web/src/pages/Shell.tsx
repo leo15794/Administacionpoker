@@ -254,7 +254,7 @@ function getInitialNavOrder(): string[] {
   }
 }
 
-export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" }) {
+export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" }) {
   const nav = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
@@ -397,7 +397,11 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     });
   }
 
-  const rolLabel = role === "ADMIN" ? "Panel administrativo" : role === "SUPERVISOR" ? "Portal de supervisor" : "Portal de agente";
+  const rolLabel =
+    role === "ADMIN" ? "Panel administrativo" :
+    role === "SUPERVISOR" ? "Portal de supervisor" :
+    role === "PROVEEDOR" ? "Portal de proveedor" :
+    "Portal de agente";
 
   return (
     <div className="app-shell">
@@ -502,6 +506,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             </>
           ) : role === "SUPERVISOR" ? (
             <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} {!collapsed && "Mi supervisión"}</NavLink>
+          ) : role === "PROVEEDOR" ? (
+            <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} {!collapsed && "Mi proveedor"}</NavLink>
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
           )}

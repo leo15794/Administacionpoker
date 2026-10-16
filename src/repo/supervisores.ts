@@ -78,6 +78,10 @@ export interface MovimientoSupervisorInput {
    * Wallet Manos, pedido explícito de Leo: nunca tocarlo salvo que esto sea true. */
   usdtReal?: boolean;
   notes?: string | null;
+  /** Link de pago/trackeo de la transferencia (16/10/2026, pedido de Leo) -- queda guardado en
+   * supervisor_movimientos.payment_link, visible para el supervisor en su propio historial
+   * (Mi Supervisión). Opcional: una Carga/Descarga manual sigue funcionando igual sin esto. */
+  paymentLink?: string | null;
   createdBy?: string | null;
 }
 
@@ -166,12 +170,13 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     await client.query(
       `INSERT INTO supervisor_movimientos
         (id, supervisor_agent_id, club_id, agent_id, type, amount, fichas_reales_delta, cuenta_corriente_delta,
-         usdt_real, treasury_adjustment_id, saldo_anterior_fichas, saldo_anterior_cc, saldo_nuevo_fichas, saldo_nuevo_cc, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+         usdt_real, treasury_adjustment_id, saldo_anterior_fichas, saldo_anterior_cc, saldo_nuevo_fichas, saldo_nuevo_cc,
+         notes, payment_link, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         id, input.supervisorAgentId, input.clubId, input.agentId ?? null, input.type, round2(input.amount),
         fichasDelta, ccDelta, usdtReal, treasuryAdjustmentId, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo,
-        input.notes ?? null, input.createdBy ?? null,
+        input.notes ?? null, input.paymentLink ?? null, input.createdBy ?? null,
       ]
     );
     await client.query(
@@ -774,3 +779,103 @@ export async function revertirCierreConsolidadoSupervisor(cierreId: string, moti
   }
 }
 
+
+// =================================================================================================
+// Solicitudes de retiro/pago de un Supervisor (16/10/2026, pedido de Leo: "al supervisor le
+// queremos poner botones para que pueda solicitar retiros/pagos y que nos llegue la notificacion
+// a nosotros... al momento de enviarlos en el historial queremos dejar el link de pago para que
+// el pueda ver el trackeo"). Es SOLO el "pedido" y su estado -- ninguna plata se mueve acá. El
+// movimiento real sigue siendo el de siempre (registrarMovimientoSupervisor, DESCARGA +
+// usdtReal=true), disparado recién cuando el admin la marca como enviada (ver
+// marcarSolicitudRetiroEnviada). Ver repo/alertas.ts para cómo le llega la notificación al
+// admin (misma campana del sistema, un tipo de alerta más).
+// =================================================================================================
+
+export async function crearSolicitudRetiroSupervisor(
+  supervisorAgentId: string,
+  amount: number,
+  nota: string | null,
+  createdBy?: string | null
+) {
+  const sup = await pool.query(`SELECT id, usa_cuenta_consolidada FROM agents WHERE id = $1`, [supervisorAgentId]);
+  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+  if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("El monto debe ser mayor a 0.");
+
+  const id = newId("svsol");
+  const r = await pool.query(
+    `INSERT INTO supervisor_solicitudes_retiro (id, supervisor_agent_id, amount, nota, created_by)
+     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [id, supervisorAgentId, round2(amount), nota, createdBy ?? null]
+  );
+  return r.rows[0];
+}
+
+export async function listSolicitudesRetiroSupervisor(supervisorAgentId: string) {
+  const r = await pool.query(
+    `SELECT * FROM supervisor_solicitudes_retiro WHERE supervisor_agent_id = $1 ORDER BY requested_at DESC`,
+    [supervisorAgentId]
+  );
+  return r.rows;
+}
+
+// Lado admin: todas las pendientes, de cualquier supervisor -- para el panel en Administración
+// -> Supervisores y para la campana de notificaciones (repo/alertas.ts).
+export async function listSolicitudesRetiroPendientesTodas() {
+  const r = await pool.query(
+    `SELECT sr.*, a.name as supervisor_name, a.exigir_agente_en_movimientos
+     FROM supervisor_solicitudes_retiro sr
+     JOIN agents a ON a.id = sr.supervisor_agent_id
+     WHERE sr.estado = 'PENDIENTE'
+     ORDER BY sr.requested_at ASC`
+  );
+  return r.rows;
+}
+
+// El admin ya mandó los USDT de verdad: esto crea la Descarga de siempre (ledger inmutable,
+// usdtReal=true -- mueve Wallet Manos igual que cualquier otra) con el link de pago adentro, y
+// deja la solicitud marcada ENVIADO apuntando a ese movimiento. No es atómico entre las dos
+// tablas (mismo criterio ya usado en el resto del sistema para acciones que cruzan subsistemas,
+// ver nota larga en registrarMovimientoSupervisor) -- si la segunda parte fallara, el movimiento
+// ya quedó registrado y auditable, se puede enlazar a mano.
+export async function marcarSolicitudRetiroEnviada(
+  solicitudId: string,
+  input: { clubId: string; agentId?: string | null; paymentLink: string; createdBy?: string | null }
+) {
+  const sol = await pool.query(`SELECT * FROM supervisor_solicitudes_retiro WHERE id = $1`, [solicitudId]);
+  const solicitud = sol.rows[0];
+  if (!solicitud) throw new Error("Solicitud no encontrada.");
+  if (solicitud.estado !== "PENDIENTE") throw new Error("Esta solicitud ya fue resuelta.");
+  if (!input.paymentLink?.trim()) throw new Error("Falta el link de pago.");
+
+  const movimiento = await registrarMovimientoSupervisor({
+    supervisorAgentId: solicitud.supervisor_agent_id,
+    clubId: input.clubId,
+    agentId: input.agentId ?? null,
+    type: "DESCARGA",
+    amount: Number(solicitud.amount),
+    usdtReal: true,
+    notes: solicitud.nota ? `Solicitud de retiro del supervisor — ${solicitud.nota}` : "Solicitud de retiro del supervisor.",
+    paymentLink: input.paymentLink.trim(),
+    createdBy: input.createdBy ?? null,
+  });
+
+  const r = await pool.query(
+    `UPDATE supervisor_solicitudes_retiro
+     SET estado = 'ENVIADO', payment_link = $1, movimiento_id = $2, resuelto_at = now(), resuelto_by = $3
+     WHERE id = $4 RETURNING *`,
+    [input.paymentLink.trim(), movimiento.id, input.createdBy ?? null, solicitudId]
+  );
+  return r.rows[0];
+}
+
+export async function rechazarSolicitudRetiro(solicitudId: string, motivo: string | null, resueltoBy?: string | null) {
+  const r = await pool.query(
+    `UPDATE supervisor_solicitudes_retiro
+     SET estado = 'RECHAZADO', resolucion_nota = $1, resuelto_at = now(), resuelto_by = $2
+     WHERE id = $3 AND estado = 'PENDIENTE' RETURNING *`,
+    [motivo, resueltoBy ?? null, solicitudId]
+  );
+  if (!r.rows[0]) throw new Error("Solicitud no encontrada o ya resuelta.");
+  return r.rows[0];
+}

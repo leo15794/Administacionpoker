@@ -2274,3 +2274,52 @@ CREATE UNIQUE INDEX IF NOT EXISTS supervisor_cierres_supervisor_week_active_key
   ON supervisor_cierres(supervisor_agent_id, week_start)
   WHERE status <> 'REVERTIDO';
 ALTER TABLE supervisor_cierres ADD COLUMN IF NOT EXISTS motivo_reversion TEXT;
+
+-- =================================================================================================
+-- Rol PROVEEDOR de acceso al portal (16/10/2026, pedido de Leo: "necesito que le hagamos una
+-- sección a los proveedores para que puedan ingresar con usuario y contraseña, deberiamos
+-- agregarlos como usuarios y darles los permisos como hacemos con los supervisores") -- un login
+-- de agent_users ahora puede colgar de un PROVEEDOR en vez de un agente. agent_id se vuelve
+-- NULLABLE (antes NOT NULL) y se agrega proveedor_id -- a nivel de aplicación (no CHECK, mismo
+-- criterio laxo que el resto del schema) un login con role='PROVEEDOR' tiene proveedor_id seteado
+-- y agent_id NULL; cualquier otro role sigue como siempre (agent_id obligatorio). Ver
+-- src/routes/auth.ts (login con LEFT JOIN a los dos), src/routes/users.ts y
+-- src/routes/portal.ts (GET /mi-proveedor).
+-- =================================================================================================
+ALTER TABLE agent_users ALTER COLUMN agent_id DROP NOT NULL;
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS proveedor_id TEXT REFERENCES proveedores(id);
+ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
+ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR'));
+
+-- =================================================================================================
+-- Solicitudes de retiro/pago de un Supervisor (16/10/2026, pedido de Leo: "al supervisor le
+-- queremos poner botones para que pueda solicitar retiros/pagos y que nos llegue la notificacion
+-- a nosotros... al momento de enviarlos en el historial queremos dejar el link de pago para que
+-- el pueda ver el trackeo"). El supervisor pide un monto desde "Mi Supervisión"; el admin la ve
+-- en Administración -> Supervisores (y como alerta de la campana, ver repo/alertas.ts) y, al
+-- mandarle los USDT de verdad, la marca como enviada con el link de pago -- eso crea la Descarga
+-- de siempre (registrarMovimientoSupervisor, usdtReal=true) y deja el link guardado en
+-- supervisor_movimientos.payment_link, visible para el supervisor en su propio historial. Ningún
+-- movimiento de plata pasa por esta tabla -- es solo el "pedido" y su estado, el movimiento real
+-- sigue siendo supervisor_movimientos (ledger inmutable de siempre).
+CREATE TABLE IF NOT EXISTS supervisor_solicitudes_retiro (
+  id                  TEXT PRIMARY KEY,
+  supervisor_agent_id TEXT NOT NULL REFERENCES agents(id),
+  amount              NUMERIC(18,4) NOT NULL,
+  nota                TEXT,
+  estado              TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','ENVIADO','RECHAZADO')),
+  payment_link        TEXT,
+  movimiento_id       TEXT REFERENCES supervisor_movimientos(id),
+  resolucion_nota     TEXT,
+  requested_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resuelto_at         TIMESTAMPTZ,
+  resuelto_by         TEXT,
+  created_by          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sv_solicitudes_retiro_supervisor ON supervisor_solicitudes_retiro(supervisor_agent_id);
+CREATE INDEX IF NOT EXISTS idx_sv_solicitudes_retiro_estado ON supervisor_solicitudes_retiro(estado);
+
+-- Link de pago/trackeo de una Carga o Descarga (16/10/2026, pedido de Leo, ver arriba) -- queda
+-- disponible para cualquier Carga/Descarga manual (no solo las que vienen de una solicitud), así
+-- el admin puede asentarlo siempre que mande una transferencia real de USDT.
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS payment_link TEXT;

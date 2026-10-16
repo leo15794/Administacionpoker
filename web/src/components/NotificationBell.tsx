@@ -18,6 +18,7 @@ const RUTA_POR_TIPO: Record<string, string> = {
   MOVIMIENTO_INUSUAL: "/dashboard/movimientos",
   SIN_DEAL: "/dashboard/agentes",
   REVERSION_TARDIA: "/dashboard/resumen-agentes",
+  SOLICITUD_RETIRO: "/dashboard/supervisores",
 };
 
 function getVistas(): Set<string> {

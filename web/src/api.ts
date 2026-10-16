@@ -165,6 +165,13 @@ export const api = {
   // (14/10/2026) -- mismos endpoints que usa el admin en Supervisores, pero atados al login.
   miSupervisionSemanasCierre: () => request("/portal/mi-supervision/cierre-semanal/semanas"),
   miSupervisionCierreSemanal: (weekStart: string) => request(`/portal/mi-supervision/cierre-semanal/${weekStart}`),
+  // Solicitudes de retiro/pago del propio supervisor (16/10/2026, pedido de Leo) -- ver
+  // repo/supervisores.ts. El lado admin (listar todas, marcar enviada, rechazar) está más abajo.
+  misSolicitudesRetiro: () => request("/portal/mi-supervision/solicitudes-retiro"),
+  solicitarRetiro: (data: { amount: number; nota?: string | null }) =>
+    request("/portal/mi-supervision/solicitudes-retiro", { method: "POST", body: JSON.stringify(data) }),
+  // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- portal de solo lectura, ver routes/portal.ts.
+  miProveedor: () => request("/portal/mi-proveedor"),
   // Comisión por referido de supervisor: agente referido + % sobre su rake semanal, auto-
   // acreditado en cada cierre. Cuelga del LOGIN (userId), no de la cuenta principal del
   // usuario — se gestiona desde Usuarios y permisos, dentro de la edición del usuario
@@ -392,6 +399,8 @@ export const api = {
       campoAjuste?: "FICHAS" | "CUENTA_CORRIENTE";
       usdtReal?: boolean;
       notes?: string | null;
+      // Link de pago/trackeo (16/10/2026, pedido de Leo) -- opcional, queda en el historial.
+      paymentLink?: string | null;
     }
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
@@ -413,6 +422,12 @@ export const api = {
     request(`/supervisores/${supervisorId}/cierre-semanal/aplicar`, { method: "POST", body: JSON.stringify({ weekStart, weekEnd }) }),
   revertirCierreSupervisor: (cierreId: string, motivo?: string) =>
     request(`/supervisores/cierre-semanal/${cierreId}/revertir`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
+  // Solicitudes de retiro/pago, lado admin (16/10/2026, pedido de Leo) -- ver repo/supervisores.ts.
+  solicitudesRetiroPendientes: () => request("/supervisores/solicitudes-retiro"),
+  marcarSolicitudRetiroEnviada: (solicitudId: string, data: { clubId: string; agentId?: string | null; paymentLink: string }) =>
+    request(`/supervisores/solicitudes-retiro/${solicitudId}/marcar-enviado`, { method: "POST", body: JSON.stringify(data) }),
+  rechazarSolicitudRetiro: (solicitudId: string, motivo?: string | null) =>
+    request(`/supervisores/solicitudes-retiro/${solicitudId}/rechazar`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
 
   // Garantías: alta/ajuste con historial, separadas del saldo operativo.
   garantias: () => request("/guarantees"),
@@ -838,18 +853,27 @@ export const api = {
   usuarios: () => request("/users"),
   // agentIds: uno o varios — el primero queda como "cuenta principal" (la que usa el login por
   // default), el resto solo agrega opciones al selector de "Mi cuenta" de ese usuario.
-  crearUsuario: (data: { agentIds: string[]; defaultAgentId: string; email: string; password: string; role: "ADMIN" | "AGENT" | "SUPERVISOR" }) =>
-    request("/users", { method: "POST", body: JSON.stringify(data) }),
+  // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- agentIds/defaultAgentId y proveedorId son
+  // mutuamente excluyentes: se manda uno u otro según el role elegido (ver Usuarios.tsx).
+  crearUsuario: (data: {
+    agentIds?: string[];
+    defaultAgentId?: string;
+    proveedorId?: string;
+    email: string;
+    password: string;
+    role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR";
+  }) => request("/users", { method: "POST", body: JSON.stringify(data) }),
   actualizarUsuario: (
     id: string,
     data: {
       email?: string;
-      role?: "ADMIN" | "AGENT" | "SUPERVISOR";
+      role?: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR";
       active?: boolean;
       password?: string;
       agentIds?: string[];
       // Obligatorio si se manda agentIds: cuál de esos usar como cuenta de acceso por defecto.
       defaultAgentId?: string;
+      proveedorId?: string;
     }
   ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   eliminarUsuario: (id: string) => request(`/users/${id}`, { method: "DELETE" }),

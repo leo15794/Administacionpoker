@@ -48,8 +48,15 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: "email y contraseña son requeridos" });
 
+    // LEFT JOIN a los dos (16/10/2026, rol PROVEEDOR): un login puede colgar de un agente O de
+    // un proveedor, nunca los dos -- con INNER JOIN de antes, un login de proveedor (agent_id
+    // NULL) jamás hubiera podido loguearse.
     const r = await pool.query(
-      `SELECT u.*, a.name as agent_name FROM agent_users u JOIN agents a ON a.id = u.agent_id WHERE email = $1`,
+      `SELECT u.*, a.name as agent_name, p.name as proveedor_name
+       FROM agent_users u
+       LEFT JOIN agents a ON a.id = u.agent_id
+       LEFT JOIN proveedores p ON p.id = u.proveedor_id
+       WHERE email = $1`,
       [email]
     );
     const user = r.rows[0];
@@ -61,8 +68,14 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
 
     if (user.active === false) return res.status(403).json({ error: "Este usuario está desactivado." });
 
-    const token = signToken({ userId: user.id, agentId: user.agent_id, role: user.role, email: user.email });
-    res.json({ token, agentName: user.agent_name, role: user.role });
+    const token = signToken({
+      userId: user.id,
+      agentId: user.agent_id,
+      role: user.role,
+      email: user.email,
+      proveedorId: user.proveedor_id,
+    });
+    res.json({ token, agentName: user.agent_name ?? user.proveedor_name, role: user.role });
   } catch (err: any) {
     // (24/09/2026, encontrado en análisis de seguridad) -- antes esto devolvía el mensaje crudo
     // del error (podía ser un error de Postgres con nombres de tabla/columna) al cliente. El

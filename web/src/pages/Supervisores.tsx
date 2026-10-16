@@ -20,6 +20,11 @@ export default function Supervisores() {
   const [supervisores, setSupervisores] = useState<any[] | null>(null);
   const [clubes, setClubes] = useState<any[]>([]);
   const [error, setError] = useState("");
+  // Solicitudes de retiro/pago de los supervisores (16/10/2026, pedido de Leo: "al supervisor le
+  // queremos poner botones para que pueda solicitar retiros/pagos y que nos llegue la
+  // notificacion a nosotros") -- siempre visible arriba de todo, no depende de tener un
+  // supervisor seleccionado (ver repo/supervisores.ts listSolicitudesRetiroPendientesTodas).
+  const [solicitudes, setSolicitudes] = useState<any[] | null>(null);
   const [seleccionado, setSeleccionado] = useState<any | null>(null);
   const [subordinados, setSubordinados] = useState<any[] | null>(null);
   const [movimientos, setMovimientos] = useState<any[] | null>(null);
@@ -54,9 +59,14 @@ export default function Supervisores() {
     api.supervisoresConsolidados().then(setSupervisores).catch((e) => setError(e.message));
   }
 
+  function refreshSolicitudes() {
+    api.solicitudesRetiroPendientes().then(setSolicitudes);
+  }
+
   useEffect(() => {
     refresh();
     api.clubes().then(setClubes);
+    refreshSolicitudes();
   }, []);
 
   function abrirSupervisor(s: any) {
@@ -204,6 +214,38 @@ export default function Supervisores() {
             único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio.
           </div>
         </div>
+      </div>
+
+      <div className="panel" style={{ borderColor: "var(--gold)" }}>
+        <h3>Solicitudes de retiro pendientes</h3>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+          Lo que piden los supervisores desde "Mi Supervisión". Al marcarla como enviada se
+          registra la Descarga de siempre en su historial (misma mecánica que + Carga / Descarga /
+          Ajuste) con el link de pago asentado, para que puedan ver el trackeo reflejado en su
+          propio historial.
+        </div>
+        {!solicitudes ? (
+          <Loading />
+        ) : solicitudes.length === 0 ? (
+          <div className="muted">No hay ninguna solicitud pendiente.</div>
+        ) : (
+          <table>
+            <thead><tr><th>Supervisor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
+            <tbody>
+              {solicitudes.map((s) => (
+                <SolicitudRetiroRow
+                  key={s.id}
+                  solicitud={s}
+                  clubes={clubes}
+                  onDone={() => {
+                    refreshSolicitudes();
+                    refrescarSeleccionado();
+                  }}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {supervisores.length === 0 ? (
@@ -579,7 +621,7 @@ export default function Supervisores() {
             <div className="muted">Todavía no hay movimientos cargados.</div>
           ) : (
             <table>
-              <thead><tr><th>Fecha</th><th>Tipo</th><th>Club</th><th>Agente (informativo)</th><th>Importe</th><th>USDT real</th><th>Notas</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Club</th><th>Agente (informativo)</th><th>Importe</th><th>USDT real</th><th>Notas</th><th>Link de pago</th><th>Estado</th><th></th></tr></thead>
               <tbody>
                 {movimientos.map((m) => (
                   <tr key={m.id} className={m.status === "REVERTIDO" ? "muted" : ""}>
@@ -590,6 +632,13 @@ export default function Supervisores() {
                     <td>{usd(Number(m.amount))}</td>
                     <td className="muted">{m.usdt_real ? "Sí" : "No"}</td>
                     <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>
+                      {m.payment_link ? (
+                        <a className="link-pago" href={m.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>{m.status === "REVERTIDO" ? <span className="badge neutral">Revertido</span> : <span className="badge pos">Aplicado</span>}</td>
                     <td>
                       {m.status !== "REVERTIDO" && (
@@ -639,6 +688,7 @@ function MovimientoForm({
   const [campoAjuste, setCampoAjuste] = useState<"FICHAS" | "CUENTA_CORRIENTE">("CUENTA_CORRIENTE");
   const [usdtReal, setUsdtReal] = useState(false);
   const [notes, setNotes] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -663,6 +713,7 @@ function MovimientoForm({
         campoAjuste: type === "AJUSTE" ? campoAjuste : undefined,
         usdtReal,
         notes: notes.trim() || null,
+        paymentLink: paymentLink.trim() || null,
       });
       onDone();
     } catch (err: any) {
@@ -729,9 +780,116 @@ function MovimientoForm({
           <label>Observación</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+        <div className="field">
+          <label>Link de pago (opcional)</label>
+          <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
+        </div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
     </form>
+  );
+}
+
+// Fila de resolución de una solicitud de retiro pendiente (ver panel "Solicitudes de retiro
+// pendientes" más arriba) -- mismo mecanismo de siempre (registrarMovimientoSupervisor DESCARGA
+// usdtReal=true vía marcarSolicitudRetiroEnviada en repo/supervisores.ts), con el link de pago
+// quedando asentado para que el supervisor lo vea en su propio historial.
+function SolicitudRetiroRow({
+  solicitud,
+  clubes,
+  onDone,
+}: {
+  solicitud: any;
+  clubes: any[];
+  onDone: () => void;
+}) {
+  const [clubId, setClubId] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
+  const [subordinados, setSubordinados] = useState<any[] | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [rechazando, setRechazando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (solicitud.exigir_agente_en_movimientos) {
+      api.subordinadosSupervisor(solicitud.supervisor_agent_id).then(setSubordinados);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solicitud.supervisor_agent_id]);
+
+  async function onEnviar() {
+    setMsg(null);
+    if (!clubId) return setMsg({ ok: false, text: "Elegí el club." });
+    if (solicitud.exigir_agente_en_movimientos && !agentId) {
+      return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
+    }
+    if (!paymentLink.trim()) return setMsg({ ok: false, text: "Pegá el link de pago." });
+    setEnviando(true);
+    try {
+      await api.marcarSolicitudRetiroEnviada(solicitud.id, {
+        clubId,
+        agentId: agentId || null,
+        paymentLink: paymentLink.trim(),
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo marcar como enviado." });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function onRechazar() {
+    const motivo = prompt(
+      `¿Rechazar la solicitud de ${usd(Number(solicitud.amount))} de ${solicitud.supervisor_name}? Motivo (opcional):`
+    );
+    if (motivo === null) return;
+    setRechazando(true);
+    try {
+      await api.rechazarSolicitudRetiro(solicitud.id, motivo || undefined);
+      onDone();
+    } catch (err: any) {
+      alert(err.message || "No se pudo rechazar la solicitud.");
+    } finally {
+      setRechazando(false);
+    }
+  }
+
+  return (
+    <tr className="fila-pendiente">
+      <td style={{ fontWeight: 600 }}>{solicitud.supervisor_name}</td>
+      <td><span className="badge neutral">{usd(Number(solicitud.amount))}</span></td>
+      <td className="muted" style={{ fontSize: 12.5 }}>{solicitud.nota || "—"}</td>
+      <td className="muted">{dateShort(solicitud.requested_at)}</td>
+      <td style={{ minWidth: 380 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)} style={{ fontSize: 12.5 }}>
+            <option value="">Club...</option>
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {solicitud.exigir_agente_en_movimientos && (
+            <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ fontSize: 12.5 }}>
+              <option value="">Agente...</option>
+              {(subordinados ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+          <input
+            placeholder="Pegá el link de pago (tx) acá..."
+            value={paymentLink}
+            onChange={(e) => setPaymentLink(e.target.value)}
+            style={{ flex: 1, minWidth: 160, fontSize: 12.5 }}
+          />
+          <button className="btn small" disabled={enviando} onClick={onEnviar}>
+            {enviando ? "..." : "Marcar como enviado"}
+          </button>
+          <button className="btn danger small" disabled={rechazando} onClick={onRechazar}>
+            {rechazando ? "..." : "Rechazar"}
+          </button>
+        </div>
+        {msg && <div className={msg.ok ? "success" : "error"} style={{ fontSize: 12, marginTop: 4 }}>{msg.text}</div>}
+      </td>
+    </tr>
   );
 }

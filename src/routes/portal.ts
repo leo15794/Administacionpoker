@@ -1,8 +1,15 @@
 import { Router } from "express";
+import { z } from "zod";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { requireAuth, type AuthedRequest } from "../lib/auth.js";
 import { pool } from "../db/pool.js";
-import { getSemanasDisponiblesSupervisor, getCierreSemanalSupervisor } from "../repo/supervisores.js";
+import {
+  getSemanasDisponiblesSupervisor,
+  getCierreSemanalSupervisor,
+  crearSolicitudRetiroSupervisor,
+  listSolicitudesRetiroSupervisor,
+} from "../repo/supervisores.js";
+import { listSaldosProveedores, listCierresProveedor, listPagosProveedor } from "../repo/proveedores.js";
 
 export const portalRouter = Router();
 
@@ -18,7 +25,7 @@ portalRouter.get("/mis-agentes", requireAuth, async (req: AuthedRequest, res) =>
      UNION
      SELECT a.id, a.name FROM agents a WHERE a.id = $2
      ORDER BY name`,
-    [req.user!.userId, req.user!.agentId]
+    [req.user!.userId, req.user!.agentId!]
   );
   res.json(r.rows);
 });
@@ -29,7 +36,7 @@ portalRouter.get("/mis-agentes", requireAuth, async (req: AuthedRequest, res) =>
 // pedido esté entre los que ese login puede ver — nunca confía en el query param a ciegas.
 portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
   const agentIdPedido = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
-  let agentId = req.user!.agentId;
+  let agentId = req.user!.agentId!;
   if (agentIdPedido && agentIdPedido !== agentId) {
     const permitido = await pool.query(
       `SELECT 1 FROM agent_user_agents WHERE user_id = $1 AND agent_id = $2`,
@@ -105,7 +112,7 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
        ) mesas ON mesas.agent_id = a.id
        LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
        WHERE a.id = $1`,
-      [req.user!.agentId]
+      [req.user!.agentId!]
     );
     if (agent.rows.length === 0) return res.status(404).json({ error: "Agente no encontrado" });
     if (agent.rows[0].account_type !== "SUPERVISOR") {
@@ -191,18 +198,18 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
 
 // Cierre semanal consolidado, en versión de solo lectura para el propio supervisor (14/10/2026,
 // pedido de Leo) -- mismo dato que /supervisores/:id/cierre-semanal/* ve el admin, pero SIEMPRE
-// atado a req.user!.agentId (nunca a un :id de la URL): un supervisor jamás puede pedir el
+// atado a req.user!.agentId! (nunca a un :id de la URL): un supervisor jamás puede pedir el
 // desglose de otro. Sin ruta de "aplicar" acá -- esa acción sigue siendo exclusiva del admin.
 portalRouter.get("/mi-supervision/cierre-semanal/semanas", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId]);
+    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId!]);
     if (!agent.rows[0] || agent.rows[0].account_type !== "SUPERVISOR") {
       return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
     }
     if (!agent.rows[0].usa_cuenta_consolidada) {
       return res.status(403).json({ error: "Esta cuenta no tiene la cuenta consolidada activada." });
     }
-    res.json(await getSemanasDisponiblesSupervisor(req.user!.agentId));
+    res.json(await getSemanasDisponiblesSupervisor(req.user!.agentId!));
   } catch (err: any) {
     console.error("Error en /portal/mi-supervision/cierre-semanal/semanas:", err);
     res.status(500).json({ error: err.message || "No se pudo cargar las semanas." });
@@ -211,16 +218,80 @@ portalRouter.get("/mi-supervision/cierre-semanal/semanas", requireAuth, async (r
 
 portalRouter.get("/mi-supervision/cierre-semanal/:weekStart", requireAuth, async (req: AuthedRequest, res) => {
   try {
-    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId]);
+    const agent = await pool.query(`SELECT account_type, usa_cuenta_consolidada FROM agents WHERE id = $1`, [req.user!.agentId!]);
     if (!agent.rows[0] || agent.rows[0].account_type !== "SUPERVISOR") {
       return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
     }
     if (!agent.rows[0].usa_cuenta_consolidada) {
       return res.status(403).json({ error: "Esta cuenta no tiene la cuenta consolidada activada." });
     }
-    res.json(await getCierreSemanalSupervisor(req.user!.agentId, req.params.weekStart));
+    res.json(await getCierreSemanalSupervisor(req.user!.agentId!, req.params.weekStart));
   } catch (err: any) {
     console.error("Error en /portal/mi-supervision/cierre-semanal/:weekStart:", err);
     res.status(500).json({ error: err.message || "No se pudo cargar el cierre de esa semana." });
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Rol PROVEEDOR (16/10/2026, pedido de Leo: "agregarlos como usuarios y darles los permisos
+// como hacemos con los supervisores") -- portal de solo lectura: ve el mismo dato que el admin
+// ve en Administración -> Proveedores (saldo, cierres, pagos) pero SIEMPRE filtrado a sí mismo,
+// vía req.user!.proveedorId (nunca a un :id de la URL) -- mismo criterio que /mi-supervision.
+// ---------------------------------------------------------------------------------------------
+portalRouter.get("/mi-proveedor", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });
+  }
+  try {
+    const proveedorId = req.user!.proveedorId;
+    const prov = await pool.query(`SELECT id, name, active FROM proveedores WHERE id = $1`, [proveedorId]);
+    if (!prov.rows[0]) return res.status(404).json({ error: "Proveedor no encontrado." });
+    const [saldosTodos, cierres, pagos] = await Promise.all([
+      listSaldosProveedores(),
+      listCierresProveedor(proveedorId),
+      listPagosProveedor(proveedorId),
+    ]);
+    res.json({
+      proveedor: prov.rows[0],
+      saldos: saldosTodos.filter((s: any) => s.proveedor_id === proveedorId),
+      cierres,
+      pagos,
+    });
+  } catch (err: any) {
+    console.error("Error en /portal/mi-proveedor:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar tu cuenta." });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Solicitudes de retiro/pago de un Supervisor (16/10/2026, pedido de Leo: "al supervisor le
+// queremos poner botones para que pueda solicitar retiros/pagos y que nos llegue la
+// notificacion a nosotros") -- el supervisor solo puede crear y ver LAS SUYAS, siempre atado a
+// req.user!.agentId!, nunca a un :id de la URL. El lado admin (listar pendientes de todos,
+// marcar como enviada con el link de pago) vive en routes/supervisores.ts.
+// ---------------------------------------------------------------------------------------------
+const crearSolicitudRetiroSchema = z.object({
+  amount: z.number().positive(),
+  nota: z.string().nullable().optional(),
+});
+portalRouter.post("/mi-supervision/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "SUPERVISOR") return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+  const parsed = crearSolicitudRetiroSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const row = await crearSolicitudRetiroSupervisor(
+      req.user!.agentId!,
+      parsed.data.amount,
+      parsed.data.nota ?? null,
+      req.user!.email
+    );
+    res.status(201).json(row);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+portalRouter.get("/mi-supervision/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "SUPERVISOR") return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+  res.json(await listSolicitudesRetiroSupervisor(req.user!.agentId!));
 });
