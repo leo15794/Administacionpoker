@@ -57,9 +57,9 @@ supervisoresRouter.post("/:id/agentes/:agentId/ocultar", requireAuth, requireAdm
 });
 
 const movimientoSchema = z.object({
-  clubId: z.string(),
+  clubId: z.string().nullable().optional(),
   agentId: z.string().nullable().optional(),
-  type: z.enum(["CARGA", "DESCARGA", "AJUSTE"]),
+  type: z.enum(["CARGA", "DESCARGA", "AJUSTE", "PAGO", "COBRO"]),
   amount: z.number(),
   campoAjuste: z.enum(["FICHAS", "CUENTA_CORRIENTE"]).optional(),
   usdtReal: z.boolean().optional(),

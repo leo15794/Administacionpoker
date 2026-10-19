@@ -2354,3 +2354,15 @@ CREATE INDEX IF NOT EXISTS idx_pv_solicitudes_retiro_estado ON proveedor_solicit
 -- Link de pago/trackeo de un Pago o Cobro (16/10/2026, ver arriba) -- queda disponible para
 -- cualquier Pago/Cobro manual (no solo los que vienen de una solicitud).
 ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS payment_link TEXT;
+
+
+-- =================================================================================================
+-- Pagar / Cobrar a un supervisor (19/10/2026, pedido de Leo): dos tipos nuevos de movimiento de la cuenta
+-- consolidada -- PAGO (le mandamos USDT: resta de cuenta_corriente) y COBRO (nos manda USDT: suma a
+-- cuenta_corriente) -- que van directo contra la cuenta corriente del supervisor, sin club (por eso
+-- club_id pasa a ser opcional en supervisor_movimientos). Ver registrarMovimientoSupervisor.
+-- =================================================================================================
+ALTER TABLE supervisor_movimientos ALTER COLUMN club_id DROP NOT NULL;
+ALTER TABLE supervisor_movimientos DROP CONSTRAINT IF EXISTS supervisor_movimientos_type_check;
+ALTER TABLE supervisor_movimientos ADD CONSTRAINT supervisor_movimientos_type_check
+  CHECK (type IN ('CARGA','DESCARGA','AJUSTE','PAGO','COBRO'));

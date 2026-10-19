@@ -399,9 +399,9 @@ export const api = {
   registrarMovimientoSupervisor: (
     supervisorId: string,
     data: {
-      clubId: string;
+      clubId?: string | null; // obligatorio salvo en PAGO/COBRO
       agentId?: string | null;
-      type: "CARGA" | "DESCARGA" | "AJUSTE";
+      type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO";
       amount: number;
       campoAjuste?: "FICHAS" | "CUENTA_CORRIENTE";
       usdtReal?: boolean;

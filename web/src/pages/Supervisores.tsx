@@ -15,7 +15,11 @@ const TIPO_LABEL: Record<string, string> = {
   CARGA: "Carga",
   DESCARGA: "Descarga",
   AJUSTE: "Ajuste manual",
+  PAGO: "Pago USDT",
+  COBRO: "Cobro USDT",
 };
+// Salida de plata de la cuenta (Descarga y Pago) vs entrada (Carga y Cobro): define color y signo en el historial.
+const esSalidaSup = (m: any): boolean => m.type === "DESCARGA" || m.type === "PAGO";
 
 export default function Supervisores() {
   const [supervisores, setSupervisores] = useState<any[] | null>(null);
@@ -39,6 +43,7 @@ export default function Supervisores() {
   const [saldosPorAgente, setSaldosPorAgente] = useState<any[] | null>(null);
   const [clubesExpandidos, setClubesExpandidos] = useState<Record<string, boolean>>({});
   const [showMovimiento, setShowMovimiento] = useState(false);
+  const [pagoCobro, setPagoCobro] = useState<"PAGO" | "COBRO" | null>(null);
   // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
   // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
   // colapsado (false) para no mostrar de entrada una lista larga de ocultos.
@@ -221,7 +226,7 @@ export default function Supervisores() {
   };
   const montoMovSup = (m: any) => {
     const a = Number(m.amount);
-    const signo = m.type === "DESCARGA" ? "−" : a < 0 ? "−" : a > 0 ? "+" : "";
+    const signo = esSalidaSup(m) ? "−" : a < 0 ? "−" : a > 0 ? "+" : "";
     return `${signo}${montoSignoSup(Math.abs(a), true).replace("−", "")}`;
   };
   const supervisoresOrdenados = [...(supervisores ?? [])].sort((a, b) => Math.abs(saldoTotalSup(b)) - Math.abs(saldoTotalSup(a)));
@@ -411,7 +416,9 @@ export default function Supervisores() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button className="btn" onClick={() => setShowMovimiento(true)}>+ Carga / Descarga / Ajuste</button>
+                <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
+                <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
+                <button className="btn secondary" onClick={() => setShowMovimiento(true)}>+ Carga / Descarga / Ajuste</button>
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
             </div>
@@ -722,12 +729,12 @@ export default function Supervisores() {
                           {movsVisibles.map((m) => (
                             <tr key={m.id} style={m.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                               <td className="muted">{dateShort(m.occurred_at)}</td>
-                              <td><span className={`pill ${m.type === "DESCARGA" ? "a" : m.type === "CARGA" ? "g" : ""}`}>{TIPO_LABEL[m.type] ?? m.type}</span></td>
+                              <td><span className={`pill ${esSalidaSup(m) ? "a" : m.type === "CARGA" || m.type === "COBRO" ? "g" : ""}`}>{TIPO_LABEL[m.type] ?? m.type}</span></td>
                               <td>
                                 <div className="saldo-name" style={{ fontWeight: 600 }}>{m.club_name}</div>
                                 <div className="saldo-sub">{m.agent_name ?? "sin agente"}{m.usdt_real ? " · USDT real" : ""}</div>
                               </td>
-                              <td className="num"><span className={`saldo-big ${m.type === "DESCARGA" ? "neg" : Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</span></td>
+                              <td className="num"><span className={`saldo-big ${esSalidaSup(m) ? "neg" : Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</span></td>
                               <td className="muted" style={{ fontSize: 12, maxWidth: 260 }} title={m.notes || undefined}>{m.notes ? (m.notes.length > 70 ? `${m.notes.slice(0, 70)}…` : m.notes) : "—"}</td>
                               <td>
                                 {m.status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>}
@@ -743,11 +750,11 @@ export default function Supervisores() {
                     </div>
                     <div className="ag-cards">
                       {movsVisibles.map((m) => (
-                        <div key={m.id} className={`saldo-card ${m.type === "DESCARGA" || Number(m.amount) < 0 ? "is-neg" : "is-pos"}`} style={m.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                        <div key={m.id} className={`saldo-card ${esSalidaSup(m) || Number(m.amount) < 0 ? "is-neg" : "is-pos"}`} style={m.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                           <div className="saldo-card-body">
                             <div className="saldo-card-top">
                               <div className="saldo-name">{TIPO_LABEL[m.type] ?? m.type}</div>
-                              <div className={`saldo-big ${m.type === "DESCARGA" || Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</div>
+                              <div className={`saldo-big ${esSalidaSup(m) || Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</div>
                             </div>
                             <div className="saldo-card-mid">
                               <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -815,6 +822,21 @@ export default function Supervisores() {
         </div>
       )}
 
+      {pagoCobro && seleccionado && (
+        <Modal title={`${pagoCobro === "PAGO" ? "Pagar a" : "Cobrar a"} ${seleccionado.name}`} onClose={() => setPagoCobro(null)}>
+          <PagoCobroForm
+            tipo={pagoCobro}
+            supervisor={seleccionado}
+            subordinados={subordinados ?? []}
+            onCancel={() => setPagoCobro(null)}
+            onDone={() => {
+              setPagoCobro(null);
+              refrescarSeleccionado();
+            }}
+          />
+        </Modal>
+      )}
+
       {showMovimiento && seleccionado && (
         <Modal title={`Movimiento — ${seleccionado.name}`} onClose={() => setShowMovimiento(false)}>
           <MovimientoForm
@@ -829,6 +851,137 @@ export default function Supervisores() {
         </Modal>
       )}
     </div>
+  );
+}
+
+// Pagar / Cobrar (19/10/2026, pedido de Leo): USDT real contra la cuenta corriente del supervisor, sin club.
+// PAGO = le mandamos USDT (resta de cuenta corriente, egreso de Wallet Manos); COBRO = nos manda USDT (suma a
+// cuenta corriente, ingreso a Wallet Manos). Las fichas reales no se tocan. Ver registrarMovimientoSupervisor.
+function PagoCobroForm({
+  tipo,
+  supervisor,
+  subordinados,
+  onDone,
+  onCancel,
+}: {
+  tipo: "PAGO" | "COBRO";
+  supervisor: any;
+  subordinados: any[];
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
+  const [notes, setNotes] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fichas = Number(supervisor.fichas_reales);
+  const cc = Number(supervisor.cuenta_corriente);
+  const monto = Number(String(amount).replace(",", "."));
+  const montoValido = Number.isFinite(monto) && monto > 0;
+  const signo = tipo === "PAGO" ? -1 : 1;
+  const ccNuevo = montoValido ? Math.round((cc + signo * monto) * 100) / 100 : cc;
+  const totalAntes = fichas + cc;
+  const totalNuevo = fichas + ccNuevo;
+  const fmt = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!montoValido) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
+    if (supervisor.exigir_agente_en_movimientos && !agentId) {
+      return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
+    }
+    setLoading(true);
+    try {
+      await api.registrarMovimientoSupervisor(supervisor.id, {
+        type: tipo,
+        amount: monto,
+        agentId: agentId || null,
+        notes: notes.trim() || null,
+        paymentLink: paymentLink.trim() || null,
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="saldo-sub" style={{ marginBottom: 12 }}>
+        {tipo === "PAGO"
+          ? "Le mandamos USDT: se resta de su cuenta corriente y sale de Wallet Manos."
+          : "Nos manda USDT: se suma a su cuenta corriente y entra a Wallet Manos."}
+      </div>
+      <div className="field">
+        <label>Importe (USDT)</label>
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0,00"
+          inputMode="decimal"
+          autoFocus
+          style={{ fontSize: 24, fontWeight: 750 }}
+        />
+        {tipo === "PAGO" && (
+          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            {cc > 0.004 && (
+              <button type="button" className="chip" onClick={() => setAmount(String(cc))}>
+                Pagar todo ({fmt(cc)})
+              </button>
+            )}
+            <button type="button" className="chip" onClick={() => setAmount("500")}>500</button>
+            <button type="button" className="chip" onClick={() => setAmount("1000")}>1.000</button>
+          </div>
+        )}
+      </div>
+      <div className="field">
+        <label>Agente {supervisor.exigir_agente_en_movimientos ? "" : "(opcional)"}</label>
+        <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+          <option value="">{supervisor.exigir_agente_en_movimientos ? "Elegir..." : "— Ninguno —"}</option>
+          {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label>Link de pago (opcional)</label>
+        <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
+      </div>
+      <div className="field">
+        <label>Observación</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opcional" />
+      </div>
+      <div className="panel" style={{ margin: "6px 0 12px", padding: "12px 14px", background: "var(--panel-2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span className="muted">Cuenta corriente</span>
+          <span>{fmt(cc)} → <b className={ccNuevo < -0.004 ? "neg" : ""}>{fmt(ccNuevo)}</b></span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+          <span className="muted">Fichas reales</span>
+          <span>{fmt(fichas)} <span className="muted">(sin cambios)</span></span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", borderTop: "1px solid var(--border)", marginTop: 4 }}>
+          <b>Saldo total</b>
+          <span>{fmt(totalAntes)} → <b className={totalNuevo > 0.004 ? "pos" : totalNuevo < -0.004 ? "neg" : ""}>{fmt(totalNuevo)}</b></span>
+        </div>
+      </div>
+      {montoValido && ccNuevo < -0.004 && (
+        <div className="warnbox" style={{ marginBottom: 10 }}>
+          {tipo === "PAGO" ? "Supera su cuenta corriente: queda en negativo." : "La cuenta corriente queda en negativo."}
+        </div>
+      )}
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className="btn" disabled={loading || !montoValido}>
+          {loading ? "Guardando..." : tipo === "PAGO" ? "Confirmar pago" : "Confirmar cobro"}
+        </button>
+      </div>
+    </form>
   );
 }
 

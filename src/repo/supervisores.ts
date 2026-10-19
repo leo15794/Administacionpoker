@@ -65,12 +65,15 @@ export async function listSubordinados(supervisorAgentId: string) {
 
 export interface MovimientoSupervisorInput {
   supervisorAgentId: string;
-  clubId: string;
+  /** Obligatorio salvo en PAGO/COBRO (esos van directo contra la cuenta corriente, sin club). */
+  clubId?: string | null;
   /** Informativo únicamente (gateado por agents.exigir_agente_en_movimientos del supervisor) --
    * JAMÁS genera saldo propio para este agente. */
   agentId?: string | null;
-  type: "CARGA" | "DESCARGA" | "AJUSTE";
-  /** CARGA/DESCARGA: siempre > 0 (el signo lo define el type, ver reclasificación de Leo).
+  type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO";
+  /** PAGO/COBRO (19/10/2026, pedido de Leo): USDT real contra la cuenta corriente del supervisor -- PAGO = le mandamos
+   * plata (resta de cuenta_corriente, EGRESO de Wallet Manos), COBRO = nos manda plata (suma a cuenta_corriente,
+   * INGRESO a Wallet Manos). No tocan fichas_reales ni piden club. CARGA/DESCARGA: siempre > 0 (el signo lo define el type, ver reclasificación de Leo).
    * AJUSTE: puede ser positivo o negativo, aplicado directo al campo elegido en campoAjuste. */
   amount: number;
   /** Solo para type AJUSTE: a qué lado de la cuenta pega. */
@@ -110,7 +113,9 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   }
 
   let amount = 0;
-  if (input.type === "CARGA" || input.type === "DESCARGA") {
+  const esPagoCobro = input.type === "PAGO" || input.type === "COBRO";
+  if (!esPagoCobro && !input.clubId) throw new Error("El club es obligatorio.");
+  if (input.type === "CARGA" || input.type === "DESCARGA" || esPagoCobro) {
     if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("El importe debe ser mayor a 0.");
     amount = round2(input.amount);
   } else if (input.type === "AJUSTE") {
@@ -122,7 +127,7 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
 
   // Forzado acá (único punto donde se decide si se abre un asiento de tesorería), no confía en
   // lo que mande el frontend.
-  const usdtReal = input.type !== "AJUSTE" && !!input.usdtReal;
+  const usdtReal = esPagoCobro || (input.type !== "AJUSTE" && !!input.usdtReal);
 
   const client = await pool.connect();
   try {
@@ -136,6 +141,10 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     if (input.type === "CARGA") {
       fichasDelta = amount;
       ccDelta = usdtReal ? 0 : -amount;
+    } else if (input.type === "PAGO") {
+      ccDelta = round2(-amount);
+    } else if (input.type === "COBRO") {
+      ccDelta = amount;
     } else if (input.type === "DESCARGA") {
       fichasDelta = round2(-amount);
       ccDelta = usdtReal ? 0 : round2(amount);
@@ -153,7 +162,7 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     // se puede revertir a mano.
     let treasuryAdjustmentId: string | null = null;
     if (usdtReal) {
-      const direction = input.type === "CARGA" ? "INGRESO" : "EGRESO";
+      const direction = input.type === "CARGA" || input.type === "COBRO" ? "INGRESO" : "EGRESO";
       const { id: adjId } = await registrarAjusteTesoreria({
         ledger: "WALLET_MANOS",
         direction,
@@ -175,7 +184,7 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
          notes, payment_link, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
-        id, input.supervisorAgentId, input.clubId, input.agentId ?? null, input.type, round2(input.amount),
+        id, input.supervisorAgentId, input.clubId ?? null, input.agentId ?? null, input.type, round2(input.amount),
         fichasDelta, ccDelta, usdtReal, treasuryAdjustmentId, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo,
         input.notes ?? null, input.paymentLink ?? null, input.createdBy ?? null,
       ]
@@ -198,7 +207,7 @@ export async function listMovimientosSupervisor(supervisorAgentId: string) {
   const r = await pool.query(
     `SELECT sm.*, c.name as club_name, a.name as agent_name
      FROM supervisor_movimientos sm
-     JOIN clubs c ON c.id = sm.club_id
+     LEFT JOIN clubs c ON c.id = sm.club_id
      LEFT JOIN agents a ON a.id = sm.agent_id
      WHERE sm.supervisor_agent_id = $1
      ORDER BY sm.occurred_at DESC`,
