@@ -44,77 +44,87 @@ export default function Cierres() {
     });
   }
 
-  // Borrado en bloque — mientras se prueba el sistema (mismo BORRADO REAL de "Borrar" arriba,
-  // aplicado a todos los cierres de una semana + club de un saque, en vez de uno por uno).
-  const [semanaABorrar, setSemanaABorrar] = useState("");
-  const [clubABorrar, setClubABorrar] = useState("");
+  // Historial por semana (19/10/2026, mockup aprobado): una semana a la vez (chips), con sus cifras
+  // arriba, filtro por club y los cierres en US$ 0 ocultos. Las cargas manuales y los cierres con
+  // fechas raras (semana de 1 día o que termina antes de empezar) van aparte, en su propio chip,
+  // para que no ensucien el total de la semana a la que dicen pertenecer.
+  const RAROS = "__raros";
+  const [semanaSel, setSemanaSel] = useState<string | null>(null);
+  const [clubFiltro, setClubFiltro] = useState<string>(clubObjetivo ?? "");
+  const [mostrarCero, setMostrarCero] = useState(false);
   const [borrandoSemana, setBorrandoSemana] = useState(false);
-  const semanasDisponibles = Array.from(new Set(cierres.map((c) => c.week_start))).sort().reverse();
 
-  // Colapsar el cierre completo de una semana (todas sus filas), no solo el desglose de una
-  // fila — para que la tabla no se vaya larguisimo para abajo cuando hay muchos agentes/clubes
-  // cargados la misma semana. Por default se abre solo la semana mas reciente y el resto queda
-  // colapsado; una vez que el usuario abre/cierra algo a mano, un refresh() no se lo pisa.
-  const [semanasColapsadas, setSemanasColapsadas] = useState<Set<string>>(new Set());
-  const colapsoInicial = useRef(false);
-  useEffect(() => {
-    if (colapsoInicial.current || cierres.length === 0) return;
-    colapsoInicial.current = true;
-    const semanas = Array.from(new Set(cierres.map((c) => c.week_start)));
-    // La semana objetivo del deep-link queda siempre expandida, sea o no la más reciente.
-    setSemanasColapsadas(new Set(semanas.slice(1).filter((s) => s !== weekObjetivo)));
-  }, [cierres, weekObjetivo]);
+  const esRaro = (c: any) => !!c.is_manual || String(c.week_end).slice(0, 10) <= String(c.week_start).slice(0, 10);
+  const filasRaras = cierres.filter(esRaro);
+  // Cierres ya vienen ordenados por semana desc + nombre desde el backend — solo hace falta
+  // agrupar filas consecutivas de la misma semana, no reordenar nada.
+  const gruposPorSemana: { weekStart: string; weekEnd: string; filas: any[] }[] = [];
+  for (const c of cierres) {
+    if (esRaro(c)) continue;
+    const g = gruposPorSemana.find((x) => x.weekStart === c.week_start);
+    if (g) g.filas.push(c);
+    else gruposPorSemana.push({ weekStart: c.week_start, weekEnd: c.week_end, filas: [c] });
+  }
+  const defectoSemana =
+    (weekObjetivo && gruposPorSemana.some((g) => g.weekStart === weekObjetivo) ? weekObjetivo : null) ??
+    gruposPorSemana[0]?.weekStart ??
+    (filasRaras.length > 0 ? RAROS : null);
+  const semanaActiva =
+    semanaSel && (semanaSel === RAROS ? filasRaras.length > 0 : gruposPorSemana.some((g) => g.weekStart === semanaSel))
+      ? semanaSel
+      : defectoSemana;
+  const grupoActivo = semanaActiva === RAROS ? null : gruposPorSemana.find((g) => g.weekStart === semanaActiva) ?? null;
+  const filasSemana: any[] = semanaActiva === RAROS ? filasRaras : grupoActivo?.filas ?? [];
+  const enCero = (c: any) => c.status !== "REVERTIDO" && Math.abs(Number(c.final_closing)) < 0.005;
+  const clubesDeLaSemana = Array.from(new Set(filasSemana.map((c) => c.club_name)));
+  const filasDelClub = filasSemana.filter((c) => !clubFiltro || c.club_id === clubFiltro);
+  const cantEnCero = filasDelClub.filter(enCero).length;
+  const filasVisibles = filasDelClub
+    .filter((c) => mostrarCero || !enCero(c))
+    .sort((a, b) => Math.abs(Number(b.final_closing)) - Math.abs(Number(a.final_closing)));
+  // Las cifras de arriba no cuentan los cierres revertidos (ya no valen).
+  const vigentes = filasDelClub.filter((c) => c.status !== "REVERTIDO");
+  const sumar = (k: string) => vigentes.reduce((s, c) => s + Number(c[k] ?? 0), 0);
+  const totFinal = sumar("final_closing");
+  const totRake = sumar("rake_total");
+  const totResultado = sumar("result");
+  const totRakeback = sumar("rakeback");
+  const SEMANAS_EN_CHIPS = 8;
+  const semanasChips = gruposPorSemana.slice(0, SEMANAS_EN_CHIPS);
+  const semanasAnteriores = gruposPorSemana.slice(SEMANAS_EN_CHIPS);
+  const dm = (s: string) => {
+    const [, m, d] = String(s).slice(0, 10).split("-");
+    return `${d}/${m}`;
+  };
 
-  // Scroll + resaltado hasta la semana (y club, si vino) del deep-link — una sola vez, apenas
-  // el DOM tiene esa fila renderizada (no antes: la semana recién se expandió arriba).
+  // Scroll hasta la semana del deep-link (una sola vez, apenas hay cierres cargados).
   const yaHizoScroll = useRef(false);
   useEffect(() => {
     if (!weekObjetivo || yaHizoScroll.current || cierres.length === 0) return;
     const id = requestAnimationFrame(() => {
-      const el = document.getElementById(`semana-${weekObjetivo}`);
+      const el = document.getElementById("cierres-semana");
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "start" });
         yaHizoScroll.current = true;
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [cierres, weekObjetivo, semanasColapsadas]);
+  }, [cierres, weekObjetivo]);
 
-  function toggleSemanaColapsada(weekStart: string) {
-    setSemanasColapsadas((prev) => {
-      const next = new Set(prev);
-      if (next.has(weekStart)) next.delete(weekStart);
-      else next.add(weekStart);
-      return next;
-    });
-  }
-
-  // Cierres ya vienen ordenados por semana desc + nombre desde el backend — solo hace falta
-  // agrupar filas consecutivas de la misma semana, no reordenar nada.
-  const gruposPorSemana: { weekStart: string; weekEnd: string; filas: any[] }[] = [];
-  for (const c of cierres) {
-    const ultimo = gruposPorSemana[gruposPorSemana.length - 1];
-    if (ultimo && ultimo.weekStart === c.week_start) ultimo.filas.push(c);
-    else gruposPorSemana.push({ weekStart: c.week_start, weekEnd: c.week_end, filas: [c] });
-  }
-
-  async function borrarSemanaCompleta() {
-    if (!semanaABorrar) return;
-    const club = clubABorrar ? clubes.find((c) => c.id === clubABorrar) : null;
-    const cantidad = cierres.filter(
-      (c) => c.week_start === semanaABorrar && (!clubABorrar || c.club_id === clubABorrar)
-    ).length;
+  async function borrarSemanaCompleta(weekStart: string, clubId?: string) {
+    const club = clubId ? clubes.find((c) => c.id === clubId) : null;
+    const cantidad = cierres.filter((c) => c.week_start === weekStart && (!clubId || c.club_id === clubId)).length;
     if (cantidad === 0) {
       await alertDialog("No hay cierres cargados con ese filtro.");
       return;
     }
     const confirmacion = await promptDialog(
-      `Esto BORRA DEL TODO ${cantidad} cierre(s) de la semana ${dateShort(semanaABorrar)}${club ? ` en ${club.name}` : " (todos los clubes)"} — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
+      `Esto BORRA DEL TODO ${cantidad} cierre(s) de la semana ${dateShort(weekStart)}${club ? ` en ${club.name}` : " (todos los clubes)"} — no queda en ningún historial, a diferencia de "Revertir".\n\nUsalo SOLO para limpiar datos de prueba, nunca sobre plata real ya operada.\n\nEscribí BORRAR para confirmar:`
     );
     if (confirmacion !== "BORRAR") return;
     setBorrandoSemana(true);
     try {
-      const r = await api.eliminarCierresSemanaDefinitivo(semanaABorrar, clubABorrar || undefined);
+      const r = await api.eliminarCierresSemanaDefinitivo(weekStart, clubId || undefined);
       if (r.errores?.length > 0) {
         await alertDialog(`Se borraron ${r.borrados} de ${r.total} cierre(s). ${r.errores.length} no se pudieron borrar automáticamente (revisalos a mano):\n\n${r.errores.map((e: any) => e.message).join("\n")}`);
       }
@@ -125,6 +135,32 @@ export default function Cierres() {
       setBorrandoSemana(false);
     }
   }
+
+  const filaCsv = (c: any) => ({
+    semana_desde: c.week_start,
+    semana_hasta: c.week_end,
+    agente: c.agent_name,
+    club: c.club_name,
+    sistema: c.system,
+    jugadores: c.jugadores ?? "",
+    resultado: c.result,
+    rake: c.rake_total,
+    ring_game: c.ring_game ?? "",
+    mtt: c.mtt ?? "",
+    sng: c.sng ?? "",
+    spin: c.spin ?? "",
+    rakeback: c.rakeback,
+    rodeo: c.rodeo,
+    cierre_final: c.final_closing,
+    regla: c.rule_applied ?? "",
+  });
+
+  // Texto con signo y sin decimales para las columnas (el signo "−" pegado al número).
+  const montoTxt = (n: number | string | null | undefined) => {
+    const v = Number(n ?? 0);
+    return `${v < 0 ? "−" : ""}${usd(Math.abs(v))}`;
+  };
+
 
   function refresh() {
     api.cierres().then(setCierres);
@@ -170,6 +206,53 @@ export default function Cierres() {
     api.adelantos().then(setAdelantos).catch(() => {});
   }, []);
 
+  // Desglose Ring Game/MTT/SNG/Spin: solo existe en cierres de formato Suprema cargados después de
+  // ese cambio — el resto queda en NULL. La cantidad de jugadores va en la fila, no acá.
+  const tieneDesglose = (c: any) => c.ring_game != null || c.mtt != null || c.sng != null || c.spin != null;
+  const desgloseCierre = (c: any) => (
+    <div style={{ display: "flex", gap: 24, padding: "4px 0", flexWrap: "wrap" }}>
+      <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
+      <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
+      <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
+      <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
+      <span>Spin: <strong>{c.spin != null ? usd(c.spin) : "-"}</strong></span>
+    </div>
+  );
+  // "Extra" junta revertido, manual, regla, rodeo y jugadores en una sola celda (en blanco si no hay nada).
+  const extraCierre = (c: any) => (
+    <>
+      {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+      {c.is_manual && (
+        <span className="badge neutral" style={{ marginRight: 6 }} title="Carga manual de rakeback pendiente histórico -- no es un cierre real, no mueve stock ni ledger (ver Rakeback pendiente).">
+          Manual
+        </span>
+      )}
+      {c.rule_applied && <span className="badge neutral" style={{ marginRight: 6 }}>{c.rule_applied}</span>}
+      {c.rodeo != null && Number(c.rodeo) !== 0 && <span className="muted" style={{ marginRight: 6 }}>Rodeo {usd(c.rodeo)}</span>}
+      {c.jugadores != null && <span className="muted">{c.jugadores} jugador{Number(c.jugadores) === 1 ? "" : "es"}</span>}
+      {c.rule_applied === "BANCADO" && (
+        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+          Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
+          {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
+        </div>
+      )}
+    </>
+  );
+  const itemsCierre = (c: any) => [
+    ...(c.status !== "REVERTIDO"
+      ? [{ label: borrando === c.id ? "Revirtiendo..." : "Revertir cierre", onClick: () => revertirCierre(c), disabled: borrando === c.id }]
+      : []),
+    ...(tieneDesglose(c)
+      ? [{ label: expandido.has(c.id) ? "Ocultar desglose" : "Ver desglose", onClick: () => toggleExpandido(c.id) }]
+      : []),
+    {
+      label: borrando === c.id ? "Borrando..." : "Borrar (borrado real, sin rastro)",
+      onClick: () => borrarDefinitivo(c),
+      danger: true,
+      disabled: borrando === c.id,
+    },
+  ];
+
   return (
     <div>
       <div className="topbar">
@@ -204,196 +287,215 @@ export default function Cierres() {
         />
       )}
 
-      <div className="panel">
-        <div className="topbar" style={{ marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+      <div id="cierres-semana" className="panel">
+        <div className="topbar" style={{ marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
           <h3 style={{ margin: 0 }}>Historial de cierres</h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select value={semanaABorrar} onChange={(e) => setSemanaABorrar(e.target.value)}>
-              <option value="">Borrar semana...</option>
-              {semanasDisponibles.map((w) => (
-                <option key={w} value={w}>{dateShort(w)}</option>
-              ))}
-            </select>
-            {semanaABorrar && (
-              <select value={clubABorrar} onChange={(e) => setClubABorrar(e.target.value)}>
-                <option value="">Todos los clubes</option>
-                {clubes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            )}
-            {semanaABorrar && (
-              <button
-                className="btn secondary small"
-                disabled={borrandoSemana}
-                onClick={borrarSemanaCompleta}
-                title="Borrado real de toda la semana (con el filtro de club, si elegiste uno) — solo para datos de prueba."
-                style={{ color: "var(--red)" }}
-              >
-                {borrandoSemana ? "Borrando..." : "Borrar todo"}
-              </button>
-            )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn secondary small"
+              disabled={filasVisibles.length === 0}
+              onClick={() => exportCsv("cierres_semanales.csv", filasDelClub.map(filaCsv))}
+            >
+              Exportar CSV
+            </button>
+            <ActionsMenu
+              title="Más acciones"
+              items={[
+                { label: "Exportar todo el historial (CSV)", onClick: () => exportCsv("cierres_semanales_historial.csv", cierres.map(filaCsv)) },
+                ...(grupoActivo
+                  ? [
+                      ...(clubFiltro
+                        ? [{
+                            label: `Borrar semana en ${clubes.find((c) => c.id === clubFiltro)?.name ?? "este club"}…`,
+                            onClick: () => borrarSemanaCompleta(grupoActivo.weekStart, clubFiltro),
+                            danger: true,
+                            disabled: borrandoSemana,
+                          }]
+                        : []),
+                      {
+                        label: borrandoSemana ? "Borrando..." : "Borrar semana completa…",
+                        onClick: () => borrarSemanaCompleta(grupoActivo.weekStart),
+                        danger: true,
+                        disabled: borrandoSemana,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
-          <button
-            className="btn secondary small"
-            onClick={() =>
-              exportCsv(
-                "cierres_semanales.csv",
-                cierres.map((c) => ({
-                  semana_desde: c.week_start,
-                  semana_hasta: c.week_end,
-                  agente: c.agent_name,
-                  club: c.club_name,
-                  sistema: c.system,
-                  jugadores: c.jugadores ?? "",
-                  resultado: c.result,
-                  rake: c.rake_total,
-                  ring_game: c.ring_game ?? "",
-                  mtt: c.mtt ?? "",
-                  sng: c.sng ?? "",
-                  spin: c.spin ?? "",
-                  rakeback: c.rakeback,
-                  rodeo: c.rodeo,
-                  cierre_final: c.final_closing,
-                  regla: c.rule_applied ?? "",
-                }))
-              )
-            }
-          >
-            Exportar CSV
-          </button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th></th><th>Agente</th><th>Club</th><th>Sistema</th>
-              <th className="num">Resultado</th><th className="num">Rake</th><th className="num">Rakeback</th><th className="num">Cierre final</th><th>Extra</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {gruposPorSemana.map((g) => {
-              const semanaColapsada = semanasColapsadas.has(g.weekStart);
-              const cierreFinalSemana = g.filas.reduce((s, c) => s + Number(c.final_closing), 0);
-              return (
-                <Fragment key={g.weekStart}>
-                  <tr
-                    id={`semana-${g.weekStart}`}
-                    className={`row-click${g.weekStart === weekObjetivo && !clubObjetivo ? " fila-destacada" : ""}`}
-                    onClick={() => toggleSemanaColapsada(g.weekStart)}
-                    style={{ background: "rgba(255,255,255,0.04)" }}
-                  >
-                    <td colSpan={10}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span>{semanaColapsada ? "▸" : "▾"}</span>
-                        <strong>{dateShort(g.weekStart)} - {dateShort(g.weekEnd)}</strong>
-                        <span className="muted">({g.filas.length} cierre{g.filas.length === 1 ? "" : "s"})</span>
-                        <span className="muted" style={{ marginLeft: "auto" }}>
-                          Cierre final: <strong className={cierreFinalSemana >= 0 ? "pos" : "neg"}>{usd(cierreFinalSemana)}</strong>
-                        </span>
-                      </div>
-                    </td>
+
+        {cierres.length === 0 ? (
+          <div className="muted">Todavía no hay cierres cargados.</div>
+        ) : (
+          <>
+            <div className="tb-week-chips" style={{ justifyContent: "flex-start", marginBottom: 14, alignItems: "center" }}>
+              {semanasChips.map((g) => (
+                <button
+                  key={g.weekStart}
+                  className={`chip${semanaActiva === g.weekStart ? " chip-active" : ""}`}
+                  onClick={() => { setSemanaSel(g.weekStart); setClubFiltro(""); }}
+                >
+                  {dm(g.weekStart)} – {dm(g.weekEnd)}
+                </button>
+              ))}
+              {semanasAnteriores.length > 0 && (
+                <select
+                  value={semanasAnteriores.some((g) => g.weekStart === semanaActiva) ? semanaActiva ?? "" : ""}
+                  onChange={(e) => { if (e.target.value) { setSemanaSel(e.target.value); setClubFiltro(""); } }}
+                  style={{ width: "auto" }}
+                >
+                  <option value="">Anteriores…</option>
+                  {semanasAnteriores.map((g) => (
+                    <option key={g.weekStart} value={g.weekStart}>{dm(g.weekStart)} – {dm(g.weekEnd)}</option>
+                  ))}
+                </select>
+              )}
+              {filasRaras.length > 0 && (
+                <button
+                  className={`chip${semanaActiva === RAROS ? " chip-active" : ""}`}
+                  onClick={() => { setSemanaSel(RAROS); setClubFiltro(""); }}
+                  title="Cargas manuales y cierres con fechas raras (semana de un día o que termina antes de empezar)"
+                >
+                  Manuales / fechas raras {filasRaras.length}
+                </button>
+              )}
+            </div>
+
+            <div className="stat-row">
+              <div className="stat-card">
+                <div className="l">Cierre final{semanaActiva === RAROS ? "" : " de la semana"}</div>
+                <div className={`v ${totFinal >= 0 ? "pos" : "neg"}`}>{usd(totFinal)}</div>
+                <div className="s">{grupoActivo ? `${dm(grupoActivo.weekStart)} al ${dm(grupoActivo.weekEnd)}` : "cargas aparte"}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Rake</div>
+                <div className="v">{usd(totRake)}</div>
+                <div className="s">rakeback {usd(totRakeback)}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Resultado de mesas</div>
+                <div className={`v ${totResultado >= 0 ? "pos" : "neg"}`}>{montoTxt(totResultado)}</div>
+                <div className="s">suma de los agentes</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Cierres</div>
+                <div className="v">{vigentes.length}</div>
+                <div className="s">{new Set(vigentes.map((c) => c.club_id)).size} club{new Set(vigentes.map((c) => c.club_id)).size === 1 ? "" : "es"}{filasDelClub.length > vigentes.length ? ` · ${filasDelClub.length - vigentes.length} revertido${filasDelClub.length - vigentes.length === 1 ? "" : "s"}` : ""}</div>
+              </div>
+            </div>
+
+            <div className="ag-toolbar">
+              <span className="seg">
+                <button className={!clubFiltro ? "on" : ""} onClick={() => setClubFiltro("")}>
+                  Todos<span className="n">{filasSemana.length}</span>
+                </button>
+                {clubesDeLaSemana.map((nombre) => {
+                  const id = filasSemana.find((c) => c.club_name === nombre)?.club_id;
+                  return (
+                    <button key={id} className={clubFiltro === id ? "on" : ""} onClick={() => setClubFiltro(id)}>
+                      {nombre}<span className="n">{filasSemana.filter((c) => c.club_id === id).length}</span>
+                    </button>
+                  );
+                })}
+              </span>
+              <span className="ag-toolbar-spacer" />
+              {cantEnCero > 0 && (
+                <label className="switch">
+                  <input type="checkbox" checked={mostrarCero} onChange={(e) => setMostrarCero(e.target.checked)} />
+                  <i />
+                  Mostrar los {cantEnCero} en US$ 0
+                </label>
+              )}
+            </div>
+
+            <div className="ag-table-wrap">
+              <table className="saldos-table">
+                <thead>
+                  <tr>
+                    <th>Agente · club</th><th>Sistema</th>
+                    <th className="num">Resultado</th><th className="num">Rake</th><th className="num">Rakeback</th><th className="num">Cierre final</th><th>Extra</th><th></th>
                   </tr>
-                  {!semanaColapsada &&
-                    g.filas.map((c) => {
-                      // Desglose Jugadores/Ring Game/MTT/SNG: solo existe en cierres de formato
-                      // Suprema (Fenix/TeamBack Suprema) cargados despues de este cambio — el
-                      // resto queda en NULL.
-                      const tieneDesglose =
-                        c.jugadores != null || c.ring_game != null || c.mtt != null || c.sng != null || c.spin != null;
-                      const abierto = expandido.has(c.id);
-                      const esFilaObjetivo = g.weekStart === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
-                      return (
-                        <Fragment key={c.id}>
-                          <tr
-                            className={esFilaObjetivo ? "fila-destacada" : undefined}
-                            style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
-                          >
-                            <td>
-                              {tieneDesglose && (
-                                <button
-                                  className="btn secondary small"
-                                  onClick={() => toggleExpandido(c.id)}
-                                  title={abierto ? "Ocultar desglose" : "Ver desglose (Jugadores / Ring Game / MTT / SNG)"}
-                                  style={{ padding: "2px 8px" }}
-                                >
-                                  {abierto ? "▾" : "▸"}
-                                </button>
-                              )}
-                            </td>
-                            <td>{c.agent_name}</td>
-                            <td>{c.club_name}</td>
-                            <td className="muted">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                            <td className="num money">{usd(c.result)}</td>
-                            <td className="num money">{usd(c.rake_total)}</td>
-                            <td className="num money">{usd(c.rakeback)}</td>
-                            <td className="num"><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
-                            <td>
-                              {/* "Extra" junta Rodeo + Regla + Revertido en una sola columna, en blanco
-                                  cuando no hay nada que mostrar (antes eran dos columnas separadas que
-                                  mostraban "—" en casi todas las filas, puro ruido visual). */}
-                              {c.status === "REVERTIDO" && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
-                              {c.is_manual && (
-                                <span className="badge neutral" style={{ marginRight: 6 }} title="Carga manual de rakeback pendiente histórico -- no es un cierre real, no mueve stock ni ledger (ver Rakeback pendiente).">
-                                  Manual
-                                </span>
-                              )}
-                              {c.rule_applied && <span className="badge neutral">{c.rule_applied}</span>}
-                              {c.rodeo != null && Number(c.rodeo) !== 0 && (
-                                <span className="muted" style={{ marginLeft: c.rule_applied ? 6 : 0 }}>
-                                  Rodeo {usd(c.rodeo)}
-                                </span>
-                              )}
-                              {c.rule_applied === "BANCADO" && (
-                                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                                  Ganancia DigiPlayers: {usd(c.bancado_digiplayers_share)}
-                                  {Number(c.bancado_debt_after) > 0 && <> · Memoria: {usd(c.bancado_debt_before)} → {usd(c.bancado_debt_after)}</>}
-                                </div>
-                              )}
-                            </td>
-                            <td className="row-actions">
-                              {c.status !== "REVERTIDO" && (
-                                <button
-                                  className="btn secondary small"
-                                  disabled={borrando === c.id}
-                                  onClick={() => revertirCierre(c)}
-                                  title="Revertir cierre (genera un ajuste opuesto, no borra nada)"
-                                >
-                                  {borrando === c.id ? "..." : "Revertir"}
-                                </button>
-                              )}
-                              <ActionsMenu
-                                items={[
-                                  {
-                                    label: borrando === c.id ? "Borrando..." : "Borrar (borrado real, sin rastro)",
-                                    onClick: () => borrarDefinitivo(c),
-                                    danger: true,
-                                    disabled: borrando === c.id,
-                                  },
-                                ]}
-                              />
-                            </td>
+                </thead>
+                <tbody>
+                  {filasVisibles.map((c) => {
+                    const final = Number(c.final_closing);
+                    const abierto = expandido.has(c.id);
+                    const resaltada = c.week_start === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
+                    return (
+                      <Fragment key={c.id}>
+                        <tr
+                          className={`${final > 0 ? "row-pos" : final < 0 ? "row-neg" : ""}${resaltada ? " fila-destacada" : ""}`}
+                          style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
+                        >
+                          <td>
+                            <div className="saldo-name">{c.agent_name}</div>
+                            <div className="saldo-sub">{c.club_name}</div>
+                          </td>
+                          <td className="muted">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                          <td className="num money">{montoTxt(c.result)}</td>
+                          <td className="num money">{usd(c.rake_total)}</td>
+                          <td className="num money">{usd(c.rakeback)}</td>
+                          <td className="num"><span className={`saldo-big ${final > 0 ? "pos" : final < 0 ? "neg" : "neutral"}`}>{montoTxt(final)}</span></td>
+                          <td>{extraCierre(c)}</td>
+                          <td style={{ width: 56, textAlign: "right" }}><ActionsMenu items={itemsCierre(c)} /></td>
+                        </tr>
+                        {abierto && tieneDesglose(c) && (
+                          <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
+                            <td colSpan={8}>{desgloseCierre(c)}</td>
                           </tr>
-                          {abierto && tieneDesglose && (
-                            <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
-                              <td colSpan={10}>
-                                <div style={{ display: "flex", gap: 24, padding: "4px 0" }}>
-                                  <span>Jugadores: <strong>{c.jugadores ?? "-"}</strong></span>
-                                  <span>Ring Game: <strong>{c.ring_game != null ? usd(c.ring_game) : "-"}</strong></span>
-                                  <span>MTT: <strong>{c.mtt != null ? usd(c.mtt) : "-"}</strong></span>
-                                  <span>SNG: <strong>{c.sng != null ? usd(c.sng) : "-"}</strong></span>
-                                  <span>Spin: <strong>{c.spin != null ? usd(c.spin) : "-"}</strong></span>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                  {filasVisibles.length === 0 && (
+                    <tr><td colSpan={8} className="muted">No hay cierres para mostrar con estos filtros.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="ag-cards">
+              {filasVisibles.map((c) => {
+                const final = Number(c.final_closing);
+                const abierto = expandido.has(c.id);
+                const resaltada = c.week_start === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
+                return (
+                  <div
+                    key={c.id}
+                    className={`saldo-card ${final > 0 ? "is-pos" : final < 0 ? "is-neg" : ""}${resaltada ? " fila-destacada" : ""}`}
+                    style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
+                  >
+                    <div className="saldo-card-body">
+                      <div className="saldo-card-top">
+                        <div className="saldo-name">{c.agent_name}</div>
+                        <div className={`saldo-big ${final > 0 ? "pos" : final < 0 ? "neg" : "neutral"}`}>{montoTxt(final)}</div>
+                      </div>
+                      <div className="saldo-card-mid">
+                        <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          {c.club_name} · {c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}
+                          {extraCierre(c)}
+                        </div>
+                        <ActionsMenu items={itemsCierre(c)} />
+                      </div>
+                      <div className="saldo-card-foot" style={{ gap: 16 }}>
+                        <span>Resultado <b>{montoTxt(c.result)}</b></span>
+                        <span>Rake <b>{usd(c.rake_total)}</b></span>
+                        <span>Rakeback <b>{usd(c.rakeback)}</b></span>
+                      </div>
+                      {abierto && tieneDesglose(c) && <div className="muted" style={{ marginTop: 8 }}>{desgloseCierre(c)}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+              {filasVisibles.length === 0 && <div className="muted">No hay cierres para mostrar con estos filtros.</div>}
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+              Mostrando {filasVisibles.length} de {filasDelClub.length}
+              {!mostrarCero && cantEnCero > 0 ? ` · ${cantEnCero} en US$ 0 oculto${cantEnCero === 1 ? "" : "s"}` : ""}.
+            </div>
+          </>
+        )}
       </div>
 
       {bancados.length > 0 && (
