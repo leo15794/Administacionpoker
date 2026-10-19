@@ -1,23 +1,25 @@
 :root {
-  --bg: #0b1210;
-  --sidebar-bg: #0e1814;
-  --bg-elevated: #101c17;
-  --panel: #14211b;
-  --panel-2: #1a2b23;
-  --panel-hover: #21362b;
-  --border: #2b3d33;
-  --border-strong: #3b5245;
-  --text: #f1f5f2;
-  --text-dim: #a8b8af;
-  --text-faint: #6e8177;
-  --accent: #2dbe85;
+  --bg: #0d1117;
+  --sidebar-bg: #10151c;
+  --bg-elevated: #12171e;
+  --panel: #161b22;
+  --panel-2: #1d2430;
+  --panel-hover: #252d3a;
+  --border: #2d333b;
+  --border-strong: #444c56;
+  --text: #e6edf3;
+  --text-dim: #9da7b3;
+  --text-faint: #808a96;
+  --accent: #4493f8;
+  --accent-rgb: 68, 147, 248;
+  --green-rgb: 63, 185, 80;
   --accent-2: #c6a66b;
-  --accent-grad: linear-gradient(135deg, #34d399 0%, #229a6c 100%);
-  --accent-ink: #0b1210;
-  --green: #2dbe85;
-  --green-soft: rgba(45, 190, 133, 0.14);
-  --red: #f07178;
-  --red-soft: rgba(240, 113, 120, 0.14);
+  --accent-grad: linear-gradient(135deg, #5aa2ff 0%, #2f7de0 100%);
+  --accent-ink: #06101f;
+  --green: #3fb950;
+  --green-soft: rgba(63, 185, 80, 0.14);
+  --red: #f85149;
+  --red-soft: rgba(248, 81, 73, 0.14);
   --amber: #e3a83b;
   --amber-soft: rgba(227, 168, 59, 0.14);
   --gold: #c6a66b;
@@ -25,9 +27,9 @@
   --radius: 14px;
   --radius-sm: 10px;
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px -8px rgba(0, 0, 0, 0.55);
-  --shadow-lift: 0 4px 10px rgba(0, 0, 0, 0.4), 0 18px 44px -14px rgba(45, 190, 133, 0.22);
-  --hairline: rgba(255, 255, 255, 0.05);
-  --row-hover: rgba(45, 190, 133, 0.06);
+  --shadow-lift: 0 4px 10px rgba(0, 0, 0, 0.4), 0 18px 44px -14px rgba(var(--accent-rgb), 0.18);
+  --hairline: rgba(255, 255, 255, 0.06);
+  --row-hover: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb: rgba(255, 255, 255, 0.12);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -44,6 +46,9 @@
    guarda en localStorage). Mismos nombres de variable que el modo noche de arriba — todo el
    resto del CSS y de los componentes no necesita saber en qué modo está, solo usa var(...). */
 :root[data-theme="light"] {
+  --accent-rgb: 45, 190, 133;
+  --green-rgb: 45, 190, 133;
+  --accent-soft: rgba(21, 122, 87, 0.12);
   --bg: #f4f7f5;
   --sidebar-bg: #eff5f1;
   --bg-elevated: #ffffff;
@@ -86,7 +91,7 @@
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 600px at 12% -10%, rgba(45, 190, 133, 0.10), transparent 60%),
+    radial-gradient(1100px 600px at 12% -10%, rgba(var(--accent-rgb), 0.10), transparent 60%),
     radial-gradient(900px 500px at 100% 0%, rgba(198, 166, 107, 0.05), transparent 55%),
     var(--bg);
   background-attachment: fixed;
@@ -99,7 +104,7 @@ body {
 
 a { color: inherit; }
 
-::selection { background: rgba(45, 190, 133, 0.35); }
+::selection { background: rgba(var(--accent-rgb), 0.35); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -176,7 +181,7 @@ a { color: inherit; }
   font-weight: 800;
   font-size: 15px;
   color: var(--accent-ink);
-  box-shadow: 0 6px 18px -4px rgba(45, 190, 133, 0.55);
+  box-shadow: 0 6px 18px -4px rgba(var(--accent-rgb), 0.55);
   flex-shrink: 0;
 }
 .sidebar h1 {
@@ -214,7 +219,7 @@ a { color: inherit; }
   color: var(--text);
 }
 .nav-link.active {
-  background: var(--green-soft);
+  background: var(--accent-soft);
   color: var(--text);
   box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -346,7 +351,7 @@ body { overflow-x: hidden; }
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(10, 18, 14, 0.4);
+    background: rgba(8, 12, 18, 0.4);
     z-index: 50;
     opacity: 0;
     pointer-events: none;
@@ -505,11 +510,11 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
   font-weight: 600;
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 14px -4px rgba(45, 190, 133, 0.5);
+  box-shadow: 0 4px 14px -4px rgba(var(--accent-rgb), 0.5);
   font-family: inherit;
   white-space: nowrap;
 }
-.btn:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -4px rgba(45, 190, 133, 0.65); }
+.btn:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -4px rgba(var(--accent-rgb), 0.65); }
 .btn:active { transform: translateY(1px) scale(0.99); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; filter: none; box-shadow: none; }
 
@@ -750,7 +755,7 @@ h3 { font-weight: 650; letter-spacing: -0.005em; }
 .chip.chip-active {
   background: var(--accent-grad, #2dbe85);
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-ink, #fff);
 }
 
 /* ---------- panels ---------- */
@@ -905,21 +910,25 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
      por eso redeclara acá las custom properties de color en vez de heredar las que
      pisa ":root[data-theme='light']". Sin esto, con el theme claro activo el fondo
      atmosferico y el panel de vidrio quedaban lavados/blancos (bug reportado por Leo). */
-  --bg: #0b1210;
-  --bg-elevated: #101c17;
-  --panel: #14211b;
-  --panel-2: #1a2b23;
-  --border: #2b3d33;
-  --border-strong: #3b5245;
-  --text: #f1f5f2;
-  --text-dim: #a8b8af;
-  --text-faint: #6e8177;
-  --accent: #2dbe85;
-  --accent-grad: linear-gradient(135deg, #34d399 0%, #229a6c 100%);
-  --accent-ink: #0b1210;
-  --green-soft: rgba(45, 190, 133, 0.14);
-  --red: #f07178;
-  --red-soft: rgba(240, 113, 120, 0.14);
+  --bg: #0d1117;
+  --bg-elevated: #12171e;
+  --panel: #161b22;
+  --panel-2: #1d2430;
+  --border: #2d333b;
+  --border-strong: #444c56;
+  --text: #e6edf3;
+  --text-dim: #9da7b3;
+  --text-faint: #808a96;
+  --accent: #4493f8;
+  --accent-rgb: 68, 147, 248;
+  --green-rgb: 63, 185, 80;
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
+  --accent-grad: linear-gradient(135deg, #5aa2ff 0%, #2f7de0 100%);
+  --accent-ink: #06101f;
+  --green-soft: rgba(63, 185, 80, 0.14);
+  --red: #f85149;
+  --red-soft: rgba(248, 81, 73, 0.14);
   --gold: #c6a66b;
   --gold-soft: rgba(198, 166, 107, 0.14);
 
@@ -931,7 +940,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   overflow: hidden;
   background:
     radial-gradient(900px 600px at 10% 10%, var(--gold-soft), transparent 60%),
-    radial-gradient(900px 700px at 92% 90%, var(--green-soft), transparent 60%),
+    radial-gradient(900px 700px at 92% 90%, var(--accent-soft), transparent 60%),
     var(--bg);
 }
 
@@ -950,14 +959,14 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   0%, 100% {
     box-shadow:
       0 0 0 1px rgba(198, 166, 107, 0.08),
-      0 0 60px -10px rgba(45, 190, 133, 0.35),
+      0 0 60px -10px rgba(var(--accent-rgb), 0.35),
       0 0 90px -20px rgba(198, 166, 107, 0.25),
       0 30px 80px -20px rgba(0, 0, 0, 0.7);
   }
   50% {
     box-shadow:
       0 0 0 1px rgba(198, 166, 107, 0.14),
-      0 0 80px -8px rgba(45, 190, 133, 0.5),
+      0 0 80px -8px rgba(var(--accent-rgb), 0.5),
       0 0 120px -16px rgba(198, 166, 107, 0.38),
       0 30px 80px -20px rgba(0, 0, 0, 0.7);
   }
@@ -993,8 +1002,8 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%);
   background:
     radial-gradient(420px 420px at 15% 10%, rgba(198, 166, 107, 0.30), transparent 65%),
-    radial-gradient(480px 480px at 85% 90%, rgba(45, 190, 133, 0.30), transparent 65%),
-    linear-gradient(165deg, #16261f 0%, #0d1713 60%, #0b1210 100%);
+    radial-gradient(480px 480px at 85% 90%, rgba(var(--accent-rgb), 0.30), transparent 65%),
+    linear-gradient(165deg, #131a24 0%, #0f141c 60%, #0d1117 100%);
   overflow: hidden;
 }
 
@@ -1009,9 +1018,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* cada palo aparece, recorre un arco circular propio y desaparece; delay escalonado para
    que los cuatro bailen fuera de fase en vez de todos juntos */
 .login-suit--1 { top: -20px; left: -10px; font-size: 200px; color: rgba(198, 166, 107, 0.09); animation: login-orbit-1 11s ease-in-out infinite; }
-.login-suit--2 { bottom: -50px; left: 28%; font-size: 170px; color: rgba(45, 190, 133, 0.09); animation: login-orbit-2 13s ease-in-out infinite 2.5s; }
+.login-suit--2 { bottom: -50px; left: 28%; font-size: 170px; color: rgba(var(--accent-rgb), 0.09); animation: login-orbit-2 13s ease-in-out infinite 2.5s; }
 .login-suit--3 { top: 12%; left: 66%; font-size: 120px; color: rgba(198, 166, 107, 0.08); animation: login-orbit-3 10s ease-in-out infinite 5s; }
-.login-suit--4 { bottom: 6%; left: 56%; font-size: 110px; color: rgba(45, 190, 133, 0.08); animation: login-orbit-4 12s ease-in-out infinite 7.5s; }
+.login-suit--4 { bottom: 6%; left: 56%; font-size: 110px; color: rgba(var(--accent-rgb), 0.08); animation: login-orbit-4 12s ease-in-out infinite 7.5s; }
 @keyframes login-orbit-1 {
   0%   { transform: translate(0, 0) rotate(-14deg) scale(0.85); opacity: 0; }
   12%  { opacity: 1; }
@@ -1056,9 +1065,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   filter: blur(1px);
 }
 .login-particle--1 { width: 6px; height: 6px; top: 18%; left: 20%; background: rgba(198, 166, 107, 0.55); animation: login-particle-float 6s ease-in-out infinite; }
-.login-particle--2 { width: 4px; height: 4px; top: 70%; left: 68%; background: rgba(45, 190, 133, 0.6); animation: login-particle-float 7.5s ease-in-out infinite 0.8s; }
+.login-particle--2 { width: 4px; height: 4px; top: 70%; left: 68%; background: rgba(var(--accent-rgb), 0.6); animation: login-particle-float 7.5s ease-in-out infinite 0.8s; }
 .login-particle--3 { width: 8px; height: 8px; top: 38%; left: 78%; background: rgba(198, 166, 107, 0.35); animation: login-particle-float 9s ease-in-out infinite 1.6s; }
-.login-particle--4 { width: 5px; height: 5px; top: 82%; left: 30%; background: rgba(45, 190, 133, 0.4); animation: login-particle-float 8s ease-in-out infinite 0.4s; }
+.login-particle--4 { width: 5px; height: 5px; top: 82%; left: 30%; background: rgba(var(--accent-rgb), 0.4); animation: login-particle-float 8s ease-in-out infinite 0.4s; }
 .login-particle--5 { width: 3px; height: 3px; top: 10%; left: 62%; background: rgba(198, 166, 107, 0.6); animation: login-particle-float 5.5s ease-in-out infinite 1.2s; }
 @keyframes login-particle-float {
   0%, 100% { transform: translate(0, 0); opacity: 0.4; }
@@ -1093,7 +1102,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   line-height: 1;
   opacity: 0;
 }
-.login-card--1 { color: #16231c; animation: login-card-drop-1 0.55s cubic-bezier(.2,.8,.2,1) 0s forwards; }
+.login-card--1 { color: #161c26; animation: login-card-drop-1 0.55s cubic-bezier(.2,.8,.2,1) 0s forwards; }
 .login-card--2 { color: #b1413a; animation: login-card-drop-2 0.55s cubic-bezier(.2,.8,.2,1) 0.12s forwards; }
 @keyframes login-card-drop-1 {
   0%   { opacity: 0; transform: translateY(-46px) rotate(-16deg); }
@@ -1120,7 +1129,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 21px;
   color: var(--accent-ink);
   margin-bottom: 22px;
-  box-shadow: 0 8px 22px -6px rgba(45, 190, 133, 0.6), 0 0 0 4px rgba(198, 166, 107, 0.1);
+  box-shadow: 0 8px 22px -6px rgba(var(--accent-rgb), 0.6), 0 0 0 4px rgba(198, 166, 107, 0.1);
 }
 .login-visual h1 {
   position: relative;
@@ -1268,7 +1277,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .field textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
 }
 .field input::placeholder { color: var(--text-faint); }
 /* Checkboxes/radios sueltos DENTRO de un .field (ej. checklist de agentes en Usuarios y
@@ -1299,7 +1308,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
 }
 :where(input, textarea)::placeholder {
   color: var(--text-faint);
@@ -1373,7 +1382,7 @@ select option {
 .tabs button.active {
   background: var(--accent-grad);
   color: var(--accent-ink);
-  box-shadow: 0 4px 12px -4px rgba(45, 190, 133, 0.55);
+  box-shadow: 0 4px 12px -4px rgba(var(--accent-rgb), 0.55);
 }
 
 /* ---------- modal ---------- */
@@ -1434,14 +1443,14 @@ select option {
 /* ---------- clickable rows / search ---------- */
 
 .row-click { cursor: pointer; }
-.row-click:hover td { background: rgba(45, 190, 133, 0.08) !important; }
+.row-click:hover td { background: rgba(var(--accent-rgb), 0.08) !important; }
 
 /* Fila/bloque marcado al llegar desde un link externo (ej. Resumen financiero → Cierres, con
    ?week=&club= en la URL) — mismo acento que el resto de la UI, con un pulso corto para que el
    ojo lo encuentre apenas carga la pantalla sin quedar parpadeando para siempre. */
 @keyframes fila-destacada-pulso {
-  0%, 100% { background: rgba(45, 190, 133, 0.22); }
-  50% { background: rgba(45, 190, 133, 0.08); }
+  0%, 100% { background: rgba(var(--accent-rgb), 0.22); }
+  50% { background: rgba(var(--accent-rgb), 0.08); }
 }
 .fila-destacada { animation: fila-destacada-pulso 1.4s ease-in-out 3; box-shadow: inset 3px 0 0 var(--accent); }
 .fila-destacada td { position: relative; }
@@ -1461,7 +1470,7 @@ select option {
 .search-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
 }
 
 /* ---------- selector de club buscable (ClubPicker) ---------- */
@@ -1492,7 +1501,7 @@ select option {
 .club-picker-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
 }
 .club-picker-list {
   position: absolute;
@@ -1516,7 +1525,7 @@ select option {
   color: var(--text);
 }
 .club-picker-item:hover { background: var(--panel-hover); }
-.club-picker-item.active { background: rgba(45, 190, 133, 0.16); color: var(--accent-2); font-weight: 600; }
+.club-picker-item.active { background: rgba(var(--accent-rgb), 0.16); color: var(--accent-2); font-weight: 600; }
 .club-picker-empty { padding: 10px 11px; font-size: 13px; color: var(--text-dim); }
 
 /* ---------- TeamBack Affiliates (sección aparte, fuera del Shell -- sin esto ".page" no
@@ -1608,7 +1617,7 @@ button.nav-link {
   font-weight: 600;
   cursor: pointer;
 }
-.period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.22); }
+.period-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22); }
 
 /* Indicador de período honesto (reemplaza al <select> viejo que tenía 5 opciones de 6 que no
    hacían nada): se ve, pero no pretende ser un control funcional -- ningún cursor de mano,
@@ -1846,7 +1855,7 @@ button.nav-link {
   border-radius: 5px;
   transition: width 0.4s ease;
 }
-.club-balance-bar-fill.pos { left: 50%; background: linear-gradient(90deg, rgba(45, 190, 133, 0.55), var(--green)); }
+.club-balance-bar-fill.pos { left: 50%; background: linear-gradient(90deg, rgba(var(--green-rgb), 0.55), var(--green)); }
 .club-balance-bar-fill.neg { right: 50%; background: linear-gradient(270deg, rgba(240, 113, 120, 0.55), var(--red)); }
 .club-balance-bar-fill.neutral { left: 50%; width: 2px !important; background: var(--text-faint); }
 .club-balance-amount { font-size: 13.5px; font-weight: 700; white-space: nowrap; text-align: right; }
@@ -2098,7 +2107,7 @@ button.nav-link {
   background: var(--text-faint);
   transition: transform 0.15s ease, background 0.15s ease;
 }
-.switch input:checked + i { background: var(--green-soft); border-color: var(--accent); }
+.switch input:checked + i { background: var(--accent-soft); border-color: var(--accent); }
 .switch input:checked + i::after { transform: translateX(13px); background: var(--accent); }
 
 .stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
@@ -2371,7 +2380,7 @@ button.nav-link {
 .cstep:last-child { margin-bottom: 0; }
 .cstep h4 { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 700; display: flex; gap: 8px; align-items: center; }
 .cstep h4 .hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-faint); }
-.cstep h4 b { width: 20px; height: 20px; border-radius: 50%; background: var(--green-soft); color: var(--green); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+.cstep h4 b { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
 .cstep h4 b.done { background: var(--accent); color: var(--accent-ink); }
 .tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tile { position: relative; text-align: left; font: inherit; color: var(--text); cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); border-radius: 12px; padding: 12px 13px; min-height: 92px; display: flex; flex-direction: column; gap: 5px; transition: border-color 0.15s ease, background 0.15s ease; }
@@ -2380,7 +2389,7 @@ button.nav-link {
 .tile .t { font-size: 13.5px; font-weight: 700; padding-right: 22px; }
 .tile .d { font-size: 11.5px; color: var(--text-dim); line-height: 1.35; }
 .tile .cnt { position: absolute; top: 10px; right: 11px; font-size: 10.5px; color: var(--text-faint); font-weight: 600; }
-.tile.on { background: var(--green-soft); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tile.on { background: var(--accent-soft); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .ic.g { background: var(--green-soft); color: var(--green); }
 .ic.r { background: var(--red-soft); color: var(--red); }
 .ic.a { background: var(--amber-soft); color: var(--amber); }
@@ -2401,10 +2410,10 @@ button.nav-link {
 .club-chip { text-align: left; font: inherit; color: var(--text); cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: 12px; padding: 9px 13px; min-width: 150px; }
 .club-chip .c { font-size: 13px; font-weight: 700; }
 .club-chip .s { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
-.club-chip.on { border-color: var(--accent); background: var(--green-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.club-chip.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
 .club-chip.dim { opacity: 0.55; border-style: dashed; }
 .club-chip.dim:hover { opacity: 0.9; }
-.bigamt { display: flex; align-items: center; gap: 10px; border: 1px solid var(--accent); background: var(--bg-elevated); border-radius: 12px; padding: 6px 14px; box-shadow: 0 0 0 3px rgba(45, 190, 133, 0.12); max-width: 360px; }
+.bigamt { display: flex; align-items: center; gap: 10px; border: 1px solid var(--accent); background: var(--bg-elevated); border-radius: 12px; padding: 6px 14px; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12); max-width: 360px; }
 .bigamt span { font-size: 15px; color: var(--text-dim); font-weight: 700; }
 .bigamt input { border: none !important; box-shadow: none !important; background: transparent !important; padding: 4px 0 !important; border-radius: 0 !important; -moz-appearance: textfield; appearance: textfield; flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--text); font: inherit; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; padding: 4px 0; }
 .sumrow { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 8px 0; border-bottom: 1px solid var(--hairline); }
@@ -2502,7 +2511,7 @@ button.nav-link {
 .ag-cards { display: none; }
 .stat-row .ag-toolbar-spacer { flex: 1; }
 
-.deals-veil { position: fixed; inset: 0; background: rgba(4, 8, 6, 0.5); z-index: 55; }
+.deals-veil { position: fixed; inset: 0; background: rgba(4, 6, 12, 0.5); z-index: 55; }
 .deals-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100vw; z-index: 60;
   background: var(--panel); border-left: 1px solid var(--border-strong);
