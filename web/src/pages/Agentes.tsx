@@ -1667,7 +1667,7 @@ function NuevoDeal({
   clubes: any[];
   onCreated: () => void;
   fixedAgentId?: string;
-  initial?: { club_id: string; system: "PREPAGO" | "WIN_LOSE"; rakeback_pct: number; rebate_pct: number; notes?: string | null };
+  initial?: { club_id: string; system: "PREPAGO" | "WIN_LOSE"; rakeback_pct: number; rebate_pct: number; notes?: string | null; valid_from?: string | null };
 }) {
   const [agentId, setAgentId] = useState(fixedAgentId ?? "");
   const [clubId, setClubId] = useState(initial?.club_id ?? "");
@@ -1678,7 +1678,8 @@ function NuevoDeal({
   // Por defecto hoy — pero se puede atrasar (backdatear) para que el deal aplique a un cierre de
   // una semana pasada. Sin esto, un deal cargado hoy para una semana anterior no se toma al
   // hacer el cierre (resolverConfigVigente filtra por valid_from <= fin de semana del cierre).
-  const [validFrom, setValidFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  // Al editar un deal puntual arranca con la fecha desde la que ya rige ese deal; sin deal previo, hoy.
+  const [validFrom, setValidFrom] = useState(() => (initial?.valid_from ? String(initial.valid_from).slice(0, 10) : new Date().toISOString().slice(0, 10)));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   // "deal" = este agente YA tiene un % propio cargado para este club (se está mostrando su
@@ -1798,7 +1799,7 @@ function NuevoDeal({
           <label>Vigente desde</label>
           <input value={validFrom} onChange={(e) => setValidFrom(e.target.value)} type="date" />
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Por defecto es hoy. Atrasala si este % ya se venía usando antes (por ejemplo, para que
+            Por defecto es hoy (o la fecha actual del deal, si lo estás editando). Atrasala si este % ya se venía usando antes (por ejemplo, para que
             aplique a un cierre de una semana anterior a hoy) — si no, el cierre de esa semana no
             va a tomar este deal aunque ya esté cargado.
           </div>
