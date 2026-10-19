@@ -10,6 +10,19 @@ export function usd(n: number | string) {
   });
 }
 
+// (19/10/2026, pedido de Leo -- aprobado en el mockup) TeamBack Affiliates maneja montos chicos (una
+// comisión de US$ 0,15 o 9,55) que con la regla de "sin centavos" de usd() se veían "US$ 0" y
+// "US$ 10". Solo esa sección usa esta versión con 2 decimales; el resto de la app sigue con usd().
+export function usdCents(n: number | string) {
+  const v = Number(n);
+  return v.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function pct(n: number | string) {
   return `${(Number(n) * 100).toFixed(2)}%`;
 }

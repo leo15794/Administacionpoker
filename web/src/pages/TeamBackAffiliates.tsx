@@ -8,11 +8,14 @@
 // sección. Dos roles: ADMIN (todo el control, las pestañas de siempre) y PLAYER (portal de
 // autoservicio, ve solo su propia liquidación semana a semana).
 import { Fragment, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
-import { usd, pct, dateShort } from "../fmt";
+// usdCents (19/10/2026): TeamBack maneja montos chicos, se muestran con 2 decimales (ver fmt.ts).
+import { usdCents as usd, pct, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
+import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
@@ -286,6 +289,16 @@ const tbIcon = {
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
     </svg>
   ),
+  menu: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M3 12h18M3 18h18" />
+    </svg>
+  ),
+  close: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
   collapse: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="m14 9-2 3 2 3" />
@@ -327,6 +340,12 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
   const [tab, setTab] = useState<Tab>("resumen");
   const [collapsed, setCollapsed] = useState(getInitialTbCollapsed);
   const [theme, setTheme] = useState<TbTheme>(leerTemaInicial);
+  // Drawer del menú en celular (19/10/2026): hasta hoy esta sección no tenía el botón de menú que
+  // sí tiene el sistema principal (Shell.tsx), así que en <=768px el sidebar quedaba fuera de
+  // pantalla y no había forma de abrirlo. Mismas clases/CSS que Shell (.mobile-topbar, etc.).
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Lugar en el encabezado donde Liquidaciones pone el selector de semanas (ver createPortal).
+  const [topbarSlot, setTopbarSlot] = useState<HTMLElement | null>(null);
   const tabActual = TB_NAV.find((i) => i.key === tab);
 
   useEffect(() => {
@@ -359,7 +378,17 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
 
   return (
     <div className="app-shell">
-      <div className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+      <div className="mobile-topbar">
+        <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
+          {tbIcon.menu}
+        </button>
+        <div className="brand-text">
+          <div className="t1">TeamBack Affiliates</div>
+          <div className="t2">Panel administrativo</div>
+        </div>
+      </div>
+      <div className={`sidebar-backdrop ${mobileOpen ? "show" : ""}`} onClick={() => setMobileOpen(false)} />
+      <div className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
         <button
           className="sidebar-toggle"
           onClick={toggleCollapsed}
@@ -376,6 +405,9 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
               <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
             </div>
           )}
+          <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
+            {tbIcon.close}
+          </button>
         </div>
 
         <nav>
@@ -384,7 +416,10 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
               <button
                 key={item.key}
                 className={`nav-link ${tab === item.key ? "active" : ""}`}
-                onClick={() => setTab(item.key)}
+                onClick={() => {
+                  setTab(item.key);
+                  setMobileOpen(false);
+                }}
                 title={item.label}
               >
                 {tbIcon[item.icon]} {!collapsed && item.label}
@@ -415,16 +450,19 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
       </div>
 
       <div className="main">
-        <div className="topbar">
+        <div className="topbar tb-topbar">
           <div>
             <h2>{tabActual?.label}</h2>
-            <div className="muted" style={{ fontSize: 13 }}>
-              Programa de rakeback + referidos directo al jugador — Suprema Poker. Sección aparte, no toca nada del resto del sistema.
-            </div>
+            {tab !== "resumen" && (
+              <div className="muted" style={{ fontSize: 13 }}>
+                Programa de rakeback + referidos directo al jugador — Suprema Poker. Sección aparte, no toca nada del resto del sistema.
+              </div>
+            )}
           </div>
+          <div className="tb-topbar-slot" ref={setTopbarSlot} />
         </div>
 
-        {tab === "resumen" && <LiquidacionesTab />}
+        {tab === "resumen" && <LiquidacionesTab topbarSlot={topbarSlot} />}
         {tab === "jugadores" && <JugadoresTab />}
         {tab === "import" && <ImportTab />}
         {tab === "ganancia" && <GananciaSemanalTab />}
@@ -613,9 +651,31 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
   const totalHistorico = historial.reduce((acc, l) => acc + Number(l.total_acreditado), 0);
   const totalPagado = historial.filter((l) => l.pagado).reduce((acc, l) => acc + Number(l.total_acreditado), 0);
   const totalPendiente = totalHistorico - totalPagado;
-  const semanasPagadas = historial.filter((l) => l.pagado).length;
   const referidosActivosUltimaSemana = historial[0]?.referidos_activos_count ?? 0;
+  // Próximo escalón de rakeback (19/10/2026): usa los umbrales que ya quedaron guardados en la
+  // liquidación más reciente (config_snapshot) -- nada nuevo en el backend. Hay dos caminos y
+  // alcanza con uno (ver engine/teambackAffiliates.ts, calcularEscalonRakeback).
+  const escalonSiguiente = (() => {
+    const u = historial[0];
+    const c = u?.config_snapshot;
+    if (!u || !c) return null;
+    const actual = Number(u.rakeback_pct);
+    const meta =
+      actual < Number(c.pctTier2) - 1e-9
+        ? { pct: Number(c.pctTier2), refsMeta: Number(c.umbralReferidosTier2), rakeMeta: Number(c.umbralVolumenTier2Usd) }
+        : actual < Number(c.pctTier3) - 1e-9
+          ? { pct: Number(c.pctTier3), refsMeta: Number(c.umbralReferidosTier3), rakeMeta: Number(c.umbralVolumenTier3Usd) }
+          : null;
+    if (!meta) return null;
+    return { ...meta, refs: Number(u.referidos_activos_count), rake: Number(u.rake_propio) };
+  })();
   const isMobile = useIsMobile();
+  // En celular, la semana más reciente arranca desplegada (con el desglose por referido ya a la
+  // vista) -- 19/10/2026, mockup aprobado. Solo la primera vez que llega el historial.
+  useEffect(() => {
+    if (isMobile && historial.length > 0) setExpandida((cur) => cur ?? String(historial[0].week_start).slice(0, 10));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historial, isMobile]);
 
   return (
     <div className="page tb-portal-jugador">
@@ -623,7 +683,6 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
         <div>
           <div className="eyebrow">TeamBack Affiliates</div>
           <h1 className="greeting">¡Hola, {nombreJugador}! 👋</h1>
-          <p className="sub">Acá vas a ver, semana a semana, lo que generás vos y tus referidos -- y si ya se te pagó o todavía está pendiente.</p>
         </div>
         <div className="welcome-actions">
           {cuenta && <span className="id-tag">ID Suprema {cuenta.suprema_player_id}</span>}
@@ -635,34 +694,63 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
       <NotificationsBanner />
 
       {historial.length > 0 && (
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="label">Total histórico</div>
-            <div className="value">{usd(totalHistorico)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
-              {historial.length} semana{historial.length === 1 ? "" : "s"} liquidada{historial.length === 1 ? "" : "s"}
+        <>
+          {/* (19/10/2026, mockup aprobado) Una cifra manda: lo que falta cobrar. Antes eran 4
+              tarjetas del mismo peso y "Pendiente" salía en rojo -- para el jugador es plata a
+              su favor, no un error. */}
+          <div className="tb-hero">
+            <div className="tb-hero-label">{totalPendiente > 0.004 ? "Te falta cobrar" : "Estás al día"}</div>
+            <div className={`tb-hero-amount${totalPendiente > 0.004 ? "" : " ok"}`}>{usd(totalPendiente > 0.004 ? totalPendiente : totalPagado)}</div>
+            <div className="tb-bar">
+              <i style={{ width: `${totalHistorico > 0 ? Math.min(100, (totalPagado / totalHistorico) * 100) : 0}%`, background: "var(--green)" }} />
+            </div>
+            <div className="tb-hero-foot">
+              <span>Cobrado {usd(totalPagado)}</span>
+              <span>
+                {historial.length} semana{historial.length === 1 ? "" : "s"} liquidada{historial.length === 1 ? "" : "s"}
+              </span>
             </div>
           </div>
-          <div className="kpi-card">
-            <div className="label">Pagado</div>
-            <div className="value pos">{usd(totalPagado)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
-              {semanasPagadas} de {historial.length} semana{historial.length === 1 ? "" : "s"}
+          <div className="kpi-grid">
+            <div className="kpi-card">
+              <div className="label">Total histórico</div>
+              <div className="value">{usd(totalHistorico)}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="label">Escalón actual</div>
+              <div className="value">{pctTxt(historial[0].rakeback_pct)}</div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{referidosActivosUltimaSemana} referido{referidosActivosUltimaSemana === 1 ? "" : "s"} activo{referidosActivosUltimaSemana === 1 ? "" : "s"}</div>
             </div>
           </div>
-          <div className="kpi-card kpi-warn">
-            <div className="label">Pendiente</div>
-            <div className="value warn">{usd(totalPendiente)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
-              {historial.length - semanasPagadas} semana{historial.length - semanasPagadas === 1 ? "" : "s"} por cobrar
+          {escalonSiguiente ? (
+            <div className="tb-camino">
+              <div className="tb-camino-head">
+                <div className="t">Camino al {pctTxt(escalonSiguiente.pct)}</div>
+                <span className="pill gold">Próximo escalón</span>
+              </div>
+              <div className="tb-camino-row">
+                <span>Referidos activos</span>
+                <b>{escalonSiguiente.refs} de {escalonSiguiente.refsMeta}</b>
+              </div>
+              <div className="tb-bar"><i style={{ width: `${Math.min(100, (escalonSiguiente.refs / escalonSiguiente.refsMeta) * 100)}%` }} /></div>
+              <div className="tb-camino-row">
+                <span>o rake propio</span>
+                <b>{usd(escalonSiguiente.rake)} de US$ {escalonSiguiente.rakeMeta.toLocaleString("es-AR")}</b>
+              </div>
+              <div className="tb-bar"><i style={{ width: `${Math.min(100, (escalonSiguiente.rake / escalonSiguiente.rakeMeta) * 100)}%` }} /></div>
+              <div className="liq-sub" style={{ marginTop: 8 }}>
+                Según tu última semana liquidada ({diaMes(historial[0].week_start)} al {diaMes(historial[0].week_end)}). Alcanza con cumplir uno de los dos.
+              </div>
             </div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Referidos activos</div>
-            <div className="value">{referidosActivosUltimaSemana}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>esta semana</div>
-          </div>
-        </div>
+          ) : (
+            <div className="tb-camino">
+              <div className="tb-camino-head">
+                <div className="t">¡Estás en el escalón más alto!</div>
+                <span className="pill g">{pctTxt(historial[0].rakeback_pct)}</span>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {isMobile ? (
@@ -671,12 +759,12 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
             const weekKey = String(l.week_start).slice(0, 10);
             const abierta = expandida === weekKey;
             return (
-              <div className={`week-card${abierta ? " open" : ""}`} key={l.id}>
+              <div className={`week-card${abierta ? " open" : ""}${l.pagado ? " pagada" : " pendiente"}`} key={l.id}>
                 <div className="week-head" onClick={() => setExpandida(abierta ? null : weekKey)}>
                   <div className="dates">
                     {dateShort(l.week_start)} al {dateShort(l.week_end)}
                     <span className="foot">
-                      {l.referidos_activos_count} referido{l.referidos_activos_count === 1 ? "" : "s"} · escalón {pct(l.rakeback_pct)}
+                      {l.referidos_activos_count} referido{l.referidos_activos_count === 1 ? "" : "s"} · escalón {pctTxt(l.rakeback_pct)}
                     </span>
                   </div>
                   <div className="right">
@@ -686,11 +774,11 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                 </div>
                 <div className="badge-row">
                   {l.pagado ? (
-                    <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+                    <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
                       Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
                     </span>
                   ) : (
-                    <span className="badge neg">Pendiente</span>
+                    <span className="pill a">Por cobrar</span>
                   )}
                   {l.comision_3pct_pausada && (
                     <span className="badge neg" title="No tuviste actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
@@ -768,11 +856,11 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                       <td className="num"><strong>{usd(l.total_acreditado)}</strong></td>
                       <td>
                         {l.pagado ? (
-                          <span className="badge pos" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+                          <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
                             Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
                           </span>
                         ) : (
-                          <span className="badge neg">Pendiente</span>
+                          <span className="pill a">Por cobrar</span>
                         )}
                       </td>
                       <td>
@@ -828,10 +916,40 @@ function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function LiquidacionesTab() {
+// Helpers de presentación de Liquidaciones / portal (19/10/2026).
+function diaMes(d: string) {
+  const [, m, dd] = String(d).slice(0, 10).split("-");
+  return `${dd}/${m}`;
+}
+function pctTxt(p: number | string) {
+  return `${Number((Number(p) * 100).toFixed(2))}%`;
+}
+function origenEscalon(t: string) {
+  return t === "BASE" ? "base" : t === "VOLUMEN" ? "volumen" : "referidos";
+}
+function EscalonPill({ l }: { l: any }) {
+  return (
+    <span className={`pill${l.tier_alcanzado_por === "BASE" ? "" : " gold"}`} title={`Escalón de rakeback alcanzado por ${origenEscalon(l.tier_alcanzado_por)}`}>
+      {pctTxt(l.rakeback_pct)} · {origenEscalon(l.tier_alcanzado_por)}
+    </span>
+  );
+}
+function EstadoPill({ l }: { l: any }) {
+  return l.pagado ? (
+    <>
+      <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
+        Pagado · {l.medio_pago === "USDT" ? "USDT" : "Fichas"}
+      </span>
+      {l.paid_at && <div className="liq-sub">{diaMes(l.paid_at)}</div>}
+    </>
+  ) : (
+    <span className="pill a">Pendiente de pago</span>
+  );
+}
+
+function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
   const [semanas, setSemanas] = useState<any[]>([]);
   const [weekStart, setWeekStart] = useState("");
-  const [weekEnd, setWeekEnd] = useState("");
   const [filas, setFilas] = useState<any[]>([]);
   const [calculando, setCalculando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -847,6 +965,11 @@ function LiquidacionesTab() {
   // solo. notificando guarda qué botón está en curso ("semana" | "referidos" | el id de una
   // liquidación puntual) para deshabilitar solo ESE botón mientras tarda.
   const [notificando, setNotificando] = useState<string | null>(null);
+  // Vista (19/10/2026, mockup aprobado): filtro por estado de pago y panel de "Semana nueva…".
+  const [filtroEstado, setFiltroEstado] = useState<"todos" | "pendientes" | "pagados">("todos");
+  const [nuevaAbierta, setNuevaAbierta] = useState(false);
+  const [nuevaInicio, setNuevaInicio] = useState("");
+  const [nuevaFin, setNuevaFin] = useState("");
 
   async function notificarLiquidacionSemana() {
     if (!weekStart) return;
@@ -889,12 +1012,16 @@ function LiquidacionesTab() {
     }
   }
 
-  async function cargarSemanas() {
+  // seleccion: semana a dejar elegida (por ejemplo, la que se acaba de recalcular). Sin ella, la más
+  // reciente -- igual que antes.
+  async function cargarSemanas(seleccion?: string) {
     const r = await api.teamback.semanasDisponibles();
     setSemanas(r);
-    if (r[0]) {
-      setWeekStart(String(r[0].week_start).slice(0, 10));
-      cargarFilas(String(r[0].week_start).slice(0, 10));
+    const claves = r.map((x: any) => String(x.week_start).slice(0, 10));
+    const elegida = seleccion && claves.includes(seleccion) ? seleccion : claves[0];
+    if (elegida) {
+      setWeekStart(elegida);
+      cargarFilas(elegida);
     }
   }
 
@@ -907,22 +1034,40 @@ function LiquidacionesTab() {
     cargarSemanas();
   }, []);
 
-  async function calcular() {
-    if (!weekStart || !weekEnd) return setMsg({ ok: false, text: "Elegí fecha de inicio y fin de semana." });
+  async function calcular(ws: string, we: string) {
+    if (!ws || !we) return setMsg({ ok: false, text: "Elegí fecha de inicio y fin de semana." });
     setCalculando(true);
     setMsg(null);
     try {
-      const r = await api.teamback.calcularLiquidaciones(weekStart, weekEnd);
-      setFilas(r.resultados);
+      const r = await api.teamback.calcularLiquidaciones(ws, we);
+      setFiltroEstado("todos");
       setSinConfigurar(r.sinConfigurar ?? []);
       const avisoSinConfigurar = r.sinConfigurar?.length > 0 ? ` (${r.sinConfigurar.length} jugador(es) salteado(s) por no tener % configurado todavía -- ver abajo)` : "";
       setMsg({ ok: true, text: `Calculado -- ${r.resultados.length} jugador(es) con liquidación esta semana.${avisoSinConfigurar}` });
-      cargarSemanas();
+      await cargarSemanas(ws);
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo calcular." });
     } finally {
       setCalculando(false);
     }
+  }
+
+  // "Calcular / recalcular" recalcula la semana elegida arriba (mismas fechas que ya tiene
+  // guardadas); para una semana que todavía no existe se usa "Semana nueva…".
+  function recalcularSeleccionada() {
+    const sem = semanas.find((x) => String(x.week_start).slice(0, 10) === weekStart);
+    if (!sem) {
+      setNuevaAbierta(true);
+      return;
+    }
+    calcular(weekStart, String(sem.week_end).slice(0, 10));
+  }
+
+  async function calcularNueva() {
+    await calcular(nuevaInicio, nuevaFin);
+    setNuevaAbierta(false);
+    setNuevaInicio("");
+    setNuevaFin("");
   }
 
   // (25/09/2026, pedido de Leo: "botones para eliminar cierres de la semana ya que ahora
@@ -944,7 +1089,6 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
       setMsg({ ok: true, text: `Semana eliminada -- ${r.liquidacionesEliminadas} liquidación(es) y ${r.importsEliminados} import(s) borrados.` });
       setFilas([]);
       setWeekStart("");
-      setWeekEnd("");
       cargarSemanas();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo eliminar la semana." });
@@ -976,182 +1120,295 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
   }
 
   const totalGeneral = filas.reduce((acc, f) => acc + Number(f.total_acreditado), 0);
+  const totalPagado = filas.filter((f) => f.pagado).reduce((acc, f) => acc + Number(f.total_acreditado), 0);
+  const totalPendiente = totalGeneral - totalPagado;
+  const nPagadas = filas.filter((f) => f.pagado).length;
+  const nPendientes = filas.length - nPagadas;
+  const referidosActivosTotal = filas.reduce((acc, f) => acc + Number(f.referidos_activos_count || 0), 0);
+  // Pendientes primero (después, de mayor a menor total) -- lo que falta pagar queda a la vista.
+  const filasOrdenadas = [...filas].sort(
+    (a, b) => Number(!!a.pagado) - Number(!!b.pagado) || Number(b.total_acreditado) - Number(a.total_acreditado)
+  );
+  const filasVista = filasOrdenadas.filter((f) => (filtroEstado === "todos" ? true : filtroEstado === "pendientes" ? !f.pagado : !!f.pagado));
+  const pendienteUnico = nPendientes === 1 ? filas.find((f) => !f.pagado) : null;
+
+  function itemsFila(f: any) {
+    const verLiquidacion = {
+      label: "Ver liquidación",
+      onClick: () => setIndividual({ player_name: f.player_name, weekStart: String(f.week_start).slice(0, 10), playerId: f.player_id }),
+    };
+    if (!f.pagado) return [verLiquidacion];
+    return [
+      verLiquidacion,
+      { label: "Avisarle al jugador del pago", disabled: notificando === f.id, onClick: () => notificarPago(f) },
+      { label: "Deshacer pago", danger: true, disabled: pagandoId === f.id, onClick: () => deshacerPago(f) },
+    ];
+  }
 
   return (
-    <div className="panel">
-      <div className="form-grid" style={{ marginBottom: 12 }}>
-        <div className="field">
-          <label>Semana ya calculada</label>
-          <select
-            value={weekStart}
-            onChange={(e) => {
-              setWeekStart(e.target.value);
-              cargarFilas(e.target.value);
-            }}
-          >
-            <option value="">Elegir...</option>
-            {semanas.map((s) => (
-              <option key={s.week_start} value={String(s.week_start).slice(0, 10)}>
-                {dateShort(s.week_start)} al {dateShort(s.week_end)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Calcular semana nueva -- inicio</label>
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>fin</label>
-          <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} max={hoyISO()} />
-        </div>
-        <div className="field" style={{ alignSelf: "flex-end" }}>
-          <button className="btn" disabled={calculando} onClick={calcular}>
-            {calculando ? "Calculando..." : "Calcular / recalcular"}
-          </button>
-        </div>
-        {weekStart && filas.length > 0 && (
-          <div className="field" style={{ alignSelf: "flex-end" }}>
-            <button className="btn secondary" disabled={eliminando} onClick={eliminarSemanaActual} title="Borra la liquidación y el rake importado de esta semana -- para pruebas">
-              {eliminando ? "Eliminando..." : "🗑 Eliminar esta semana"}
-            </button>
-          </div>
+    <div className="tb-liq">
+      {topbarSlot &&
+        semanas.length > 0 &&
+        createPortal(
+          <div className="tb-week-chips">
+            {semanas.map((sm) => {
+              const ws = String(sm.week_start).slice(0, 10);
+              return (
+                <button
+                  key={ws}
+                  className={`chip${ws === weekStart ? " chip-active" : ""}`}
+                  onClick={() => {
+                    setWeekStart(ws);
+                    setSinConfigurar([]);
+                    setMsg(null);
+                    setFiltroEstado("todos");
+                    cargarFilas(ws);
+                  }}
+                >
+                  {diaMes(sm.week_start)} – {diaMes(sm.week_end)}
+                </button>
+              );
+            })}
+          </div>,
+          topbarSlot
         )}
-        {weekStart && filas.length > 0 && (
-          <div className="field" style={{ alignSelf: "flex-end" }}>
-            <button
-              className="btn secondary"
-              disabled={notificando === "semana"}
-              onClick={notificarLiquidacionSemana}
-              title="Les manda una notificación push a todos los jugadores con liquidación esta semana -- acción manual, no se dispara sola al calcular."
-            >
-              {notificando === "semana" ? "Notificando..." : "🔔 Notificar liquidación"}
-            </button>
-          </div>
-        )}
-        {weekStart && filas.length > 0 && (
-          <div className="field" style={{ alignSelf: "flex-end" }}>
-            <button
-              className="btn secondary"
-              disabled={notificando === "referidos"}
-              onClick={notificarReferidosActivosSemana}
-              title="Les avisa a los referentes que tengan al menos un referido activo esta semana -- acción manual."
-            >
-              {notificando === "referidos" ? "Notificando..." : "🔔 Notificar referidos activos"}
-            </button>
-          </div>
-        )}
-      </div>
-      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
 
-      {sinConfigurar.length > 0 && (
-        <div className="error" style={{ marginBottom: 12 }}>
-          {sinConfigurar.length} jugador(es) con rake esta semana pero SIN % configurado todavía -- no se les calculó liquidación. Andá a "Jugadores / árbol" y cargales su % primero, después volvé a calcular esta semana:
-          <ul>
-            {sinConfigurar.map((s) => (
-              <li key={s.playerId}>{s.playerName} ({s.supremaPlayerId})</li>
-            ))}
-          </ul>
+      {filas.length > 0 && (
+        <div className="kpi-grid tb-kpis">
+          <div className="kpi-card">
+            <div className="label">Total de la semana</div>
+            <div className="value">{usd(totalGeneral)}</div>
+            <div className="muted kpi-sub">{filas.length} jugador{filas.length === 1 ? "" : "es"} con liquidación</div>
+          </div>
+          <div className="kpi-card">
+            <div className="label">Pagado</div>
+            <div className="value pos">{usd(totalPagado)}</div>
+            <div className="muted kpi-sub">{nPagadas} de {filas.length} jugador{filas.length === 1 ? "" : "es"}</div>
+          </div>
+          <div className={`kpi-card${nPendientes > 0 ? " kpi-warn" : ""}`}>
+            <div className="label">Pendiente de pago</div>
+            <div className={`value${nPendientes > 0 ? " warn" : ""}`}>{usd(totalPendiente)}</div>
+            <div className="muted kpi-sub">
+              {nPendientes} jugador{nPendientes === 1 ? "" : "es"}
+              {pendienteUnico ? ` · ${pendienteUnico.player_name}` : ""}
+            </div>
+          </div>
+          <div className="kpi-card">
+            <div className="label">Referidos activos</div>
+            <div className="value">{referidosActivosTotal}</div>
+            <div className="muted kpi-sub">sumando todos los jugadores</div>
+          </div>
         </div>
       )}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Jugador</th>
-            <th>ID Suprema</th>
-            <th className="num">Rake propio</th>
-            <th className="num">Referidos activos</th>
-            <th className="num">Escalón</th>
-            <th className="num">Rakeback</th>
-            <th className="num">Rake referidos</th>
-            <th className="num">Comisión 3%</th>
-            <th className="num">Total</th>
-            <th>Pago</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((f) => (
-            <tr key={f.id}>
-              <td>{f.player_name}</td>
-              <td className="muted">{f.suprema_player_id}</td>
-              <td className="num">{usd(f.rake_propio)}</td>
-              <td className="num">{f.referidos_activos_count}</td>
-              <td className="num">
-                {pct(f.rakeback_pct)}{" "}
-                <span className="muted" style={{ fontSize: 11 }}>
-                  ({f.tier_alcanzado_por === "BASE" ? "base" : f.tier_alcanzado_por === "VOLUMEN" ? "volumen" : "referidos"})
-                </span>
-              </td>
-              <td className="num">{usd(f.rakeback_generado)}</td>
-              <td className="num">{usd(f.rake_referidos_directos)}</td>
-              <td className="num">
-                {usd(f.comision_3pct_acreditada)}
-                {f.comision_3pct_pausada && (
-                  <span className="badge neg" style={{ marginLeft: 6, fontSize: 10 }} title="El referente no tuvo actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
-                    pausada
-                  </span>
-                )}
-              </td>
-              <td className="num">
-                <strong>{usd(f.total_acreditado)}</strong>
-              </td>
-              <td>
-                {f.pagado ? (
-                  <>
-                    <span className="badge pos" style={{ marginRight: 6 }} title={f.paid_at ? `Pagada el ${dateShort(f.paid_at)}` : undefined}>
-                      Pagado{f.medio_pago ? ` (${f.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
-                    </span>
-                    <button
-                      className="btn secondary small"
-                      disabled={notificando === f.id}
-                      onClick={() => notificarPago(f)}
-                      title="Avisarle a este jugador que le acreditamos el pago -- acción manual."
-                      style={{ marginRight: 6 }}
-                    >
-                      {notificando === f.id ? "..." : "🔔"}
-                    </button>
-                    <button className="btn secondary small" disabled={pagandoId === f.id} onClick={() => deshacerPago(f)}>
-                      Deshacer
-                    </button>
-                  </>
-                ) : (
-                  <button className="btn small" onClick={() => setPagando(f)}>
-                    Pagar
-                  </button>
-                )}
-              </td>
-              <td>
-                <button className="btn secondary small" onClick={() => setIndividual({ player_name: f.player_name, weekStart: String(f.week_start).slice(0, 10), playerId: f.player_id })}>
-                  Ver liquidación
-                </button>
-              </td>
-            </tr>
-          ))}
-          {filas.length === 0 && (
-            <tr>
-              <td colSpan={11} className="muted">
-                Sin datos para esta semana todavía.
-              </td>
-            </tr>
+      <div className="panel panel-visible">
+        <div className="liq-toolbar">
+          <button className="btn" disabled={calculando} onClick={recalcularSeleccionada}>
+            {calculando ? "Calculando..." : "Calcular / recalcular"}
+          </button>
+          <button className="btn secondary" onClick={() => setNuevaAbierta((v) => !v)} aria-expanded={nuevaAbierta}>
+            Semana nueva…
+          </button>
+          {weekStart && filas.length > 0 && (
+            <ActionsMenu
+              label="🔔 Notificar ▾"
+              align="left"
+              title="Avisos push a los jugadores -- siempre manuales, nunca se mandan solos"
+              items={[
+                {
+                  label: "Notificar liquidación (a todos los jugadores de la semana)",
+                  disabled: notificando === "semana",
+                  onClick: notificarLiquidacionSemana,
+                },
+                {
+                  label: "Notificar referidos activos",
+                  disabled: notificando === "referidos",
+                  onClick: notificarReferidosActivosSemana,
+                },
+              ]}
+            />
           )}
-        </tbody>
-        {filas.length > 0 && (
-          <tfoot>
-            <tr>
-              <td colSpan={8}>
-                <strong>Total general</strong>
-              </td>
-              <td className="num">
-                <strong>{usd(totalGeneral)}</strong>
-              </td>
-              <td></td>
-              <td></td>
-            </tr>
-          </tfoot>
+          {weekStart && filas.length > 0 && (
+            <ActionsMenu
+              items={[
+                {
+                  label: eliminando ? "Eliminando..." : "Eliminar esta semana…",
+                  danger: true,
+                  disabled: eliminando,
+                  onClick: eliminarSemanaActual,
+                },
+              ]}
+            />
+          )}
+          <span className="liq-toolbar-spacer" />
+          {filas.length > 0 && (
+            <div className="seg">
+              <button className={filtroEstado === "todos" ? "on" : ""} onClick={() => setFiltroEstado("todos")}>
+                Todos<span className="n">{filas.length}</span>
+              </button>
+              <button className={filtroEstado === "pendientes" ? "on" : ""} onClick={() => setFiltroEstado("pendientes")}>
+                Pendientes<span className="n">{nPendientes}</span>
+              </button>
+              <button className={filtroEstado === "pagados" ? "on" : ""} onClick={() => setFiltroEstado("pagados")}>
+                Pagados<span className="n">{nPagadas}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {nuevaAbierta && (
+          <div className="liq-nueva">
+            <div className="field">
+              <label>Inicio de la semana</label>
+              <input type="date" value={nuevaInicio} onChange={(e) => setNuevaInicio(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Fin de la semana</label>
+              <input type="date" value={nuevaFin} onChange={(e) => setNuevaFin(e.target.value)} max={hoyISO()} />
+            </div>
+            <div className="field" style={{ alignSelf: "flex-end" }}>
+              <button className="btn" disabled={calculando || !nuevaInicio || !nuevaFin} onClick={calcularNueva}>
+                {calculando ? "Calculando..." : "Calcular semana nueva"}
+              </button>
+            </div>
+          </div>
         )}
-      </table>
+
+        {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+
+        {sinConfigurar.length > 0 && (
+          <div className="error" style={{ marginBottom: 12 }}>
+            {sinConfigurar.length} jugador(es) con rake esta semana pero SIN % configurado todavía -- no se les calculó liquidación. Andá a "Jugadores / árbol" y cargales su % primero, después volvé a calcular esta semana:
+            <ul>
+              {sinConfigurar.map((s) => (
+                <li key={s.playerId}>{s.playerName} ({s.supremaPlayerId})</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="liq-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Jugador</th>
+                <th className="num">Rake propio</th>
+                <th>Escalón</th>
+                <th className="num">Rakeback</th>
+                <th className="num">Comisión 3%</th>
+                <th className="num">Total</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filasVista.map((f) => (
+                <tr key={f.id} className={f.pagado ? "" : "fila-pendiente"}>
+                  <td>
+                    <div className="liq-name">{f.player_name}</div>
+                    <div className="liq-sub">ID {f.suprema_player_id}</div>
+                  </td>
+                  <td className="num">{usd(f.rake_propio)}</td>
+                  <td><EscalonPill l={f} /></td>
+                  <td className="num">{usd(f.rakeback_generado)}</td>
+                  <td className="num">
+                    {usd(f.comision_3pct_acreditada)}
+                    {Number(f.rake_referidos_directos) > 0 && (
+                      <div className="liq-sub">
+                        {f.referidos_activos_count} ref. activo{Number(f.referidos_activos_count) === 1 ? "" : "s"} · rake {usd(f.rake_referidos_directos)}
+                      </div>
+                    )}
+                    {f.comision_3pct_pausada && (
+                      <div>
+                        <span className="pill a" title="El referente no tuvo actividad propia en la ventana de semanas configurada -- comisión pausada esta semana.">
+                          comisión pausada
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="num"><span className="liq-total">{usd(f.total_acreditado)}</span></td>
+                  <td><EstadoPill l={f} /></td>
+                  <td style={{ width: 130 }}>
+                    <div className="row-actions">
+                      {!f.pagado && (
+                        <button className="btn small" onClick={() => setPagando(f)}>
+                          Pagar
+                        </button>
+                      )}
+                      <ActionsMenu items={itemsFila(f)} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filasVista.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="muted">
+                    {filas.length === 0 ? "Sin datos para esta semana todavía." : "Ningún jugador coincide con este filtro."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {filasVista.length > 0 && (
+              <tfoot>
+                <tr>
+                  <td colSpan={5}>
+                    <strong>{filtroEstado === "todos" ? "Total general" : "Total del filtro"}</strong>
+                  </td>
+                  <td className="num">
+                    <strong>{usd(filasVista.reduce((acc, f) => acc + Number(f.total_acreditado), 0))}</strong>
+                  </td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        <div className="liq-cards">
+          {filasVista.map((f) => (
+            <div key={f.id} className={`liq-card${f.pagado ? " pagada" : " pendiente"}`}>
+              <div className="liq-card-body">
+                <div className="liq-card-top">
+                  <div>
+                    <span className="liq-name">{f.player_name}</span> <span className="liq-sub">ID {f.suprema_player_id}</span>
+                  </div>
+                  <div className="liq-total">{usd(f.total_acreditado)}</div>
+                </div>
+                <div className="liq-card-pills">
+                  <div><EstadoPill l={f} /></div>
+                  <EscalonPill l={f} />
+                </div>
+                <div className="liq-card-grid">
+                  <div>Rake propio<b>{usd(f.rake_propio)}</b></div>
+                  <div>Rakeback<b>{usd(f.rakeback_generado)}</b></div>
+                  <div>Comisión 3%<b>{usd(f.comision_3pct_acreditada)}</b></div>
+                </div>
+                <div className="liq-card-actions">
+                  {!f.pagado && (
+                    <>
+                      <button className="btn small" style={{ flex: 1 }} onClick={() => setPagando(f)}>
+                        Pagar
+                      </button>
+                      <button
+                        className="btn secondary small"
+                        style={{ flex: 1 }}
+                        onClick={() => setIndividual({ player_name: f.player_name, weekStart: String(f.week_start).slice(0, 10), playerId: f.player_id })}
+                      >
+                        Ver liquidación
+                      </button>
+                    </>
+                  )}
+                  <ActionsMenu items={itemsFila(f)} />
+                </div>
+              </div>
+            </div>
+          ))}
+          {filasVista.length === 0 && (
+            <div className="muted">{filas.length === 0 ? "Sin datos para esta semana todavía." : "Ningún jugador coincide con este filtro."}</div>
+          )}
+        </div>
+      </div>
 
       {individual && (
         <Modal title={`Liquidación — ${individual.player_name}`} onClose={() => setIndividual(null)}>
@@ -1707,7 +1964,7 @@ function HistorialPagosTab() {
                   {f.pagado ? (
                     <span className="badge pos">{f.medio_pago === "USDT" ? "USDT" : "Fichas"}</span>
                   ) : (
-                    <span className="badge neg">Pendiente</span>
+                    <span className="pill a">Por cobrar</span>
                   )}
                 </td>
                 <td className="muted">{f.paid_at ? dateShort(f.paid_at) : "—"}</td>

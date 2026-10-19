@@ -2065,6 +2065,7 @@ button.nav-link {
 .seg button .n { color: var(--text-faint); font-weight: 600; margin-left: 5px; }
 
 .switch {
+  position: relative; /* contiene el checkbox oculto (position:absolute): si no, en celular ensanchaba toda la página */
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2192,8 +2193,8 @@ button.nav-link {
   cursor: pointer;
 }
 .saldo-card::before { content: ""; width: 4px; flex-shrink: 0; background: var(--border-strong); }
-.saldo-card.pos::before { background: var(--green); }
-.saldo-card.neg::before { background: var(--red); }
+.saldo-card.is-pos::before { background: var(--green); }
+.saldo-card.is-neg::before { background: var(--red); }
 .saldo-card-body { flex: 1; padding: 11px 13px; min-width: 0; }
 .saldo-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .saldo-card-top .saldo-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2261,4 +2262,80 @@ button.nav-link {
     box-shadow: var(--shadow-lift);
   }
   .app-shell:has(.bottom-nav) .main { padding-bottom: 96px; }
+}
+
+/* ---------- TeamBack Affiliates: Liquidaciones (admin) y portal del jugador (19/10/2026) ---------- */
+.tb-topbar { align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+.tb-topbar h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+.tb-week-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.tb-week-chips .chip { white-space: nowrap; }
+.panel-visible { overflow: visible !important; }
+.kpi-sub { font-size: 11.5px; margin-top: 4px; }
+.liq-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.liq-toolbar-spacer { flex: 1; }
+.liq-nueva {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+  padding: 12px 14px; margin-bottom: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2);
+}
+.liq-nueva .field { margin-bottom: 0; }
+.liq-name { font-weight: 650; font-size: 13.5px; }
+.liq-sub { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
+.liq-total { font-size: 14.5px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.liq-cards { display: none; }
+.liq-card { display: flex; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: visible; }
+.liq-card::before { content: ""; width: 4px; flex-shrink: 0; border-radius: 12px 0 0 12px; background: var(--green); }
+.liq-card.pendiente::before { background: var(--amber); }
+.liq-card.pendiente { background: var(--gold-soft); }
+.liq-card-body { flex: 1; padding: 12px 13px; min-width: 0; }
+.liq-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.liq-card-top .liq-total { font-size: 16px; }
+.liq-card-pills { display: flex; justify-content: space-between; align-items: center; margin: 6px 0 9px; gap: 8px; }
+.liq-card-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+  font-size: 11px; color: var(--text-faint); padding-top: 8px; border-top: 1px solid var(--hairline);
+}
+.liq-card-grid b { display: block; font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.liq-card-actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; justify-content: flex-end; }
+
+@media (max-width: 768px) {
+  .liq-table-wrap { display: none; }
+  .liq-cards { display: flex; flex-direction: column; gap: 8px; }
+  .tb-topbar { margin-bottom: 12px; }
+  .tb-topbar h2 { font-size: 20px; }
+  .tb-topbar-slot { width: 100%; }
+  .tb-week-chips { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; margin: 0 -14px; padding: 0 14px 2px; scrollbar-width: none; }
+  .tb-week-chips::-webkit-scrollbar { display: none; }
+  .tb-kpis { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .tb-kpis .kpi-card { padding: 11px 13px; }
+  .tb-kpis .kpi-card .label { font-size: 10px; margin-bottom: 5px; }
+  .tb-kpis .kpi-card .value { font-size: 18px; }
+  .liq-toolbar > .btn:first-child { flex: 1; }
+  .liq-toolbar .seg { max-width: 100%; overflow-x: auto; }
+  .liq-toolbar-spacer { display: none; }
+}
+
+/* Portal del jugador: tarjeta principal, barras de progreso y acento por estado en las semanas. */
+.tb-hero {
+  border-radius: 16px; padding: 16px 16px 14px; border: 1px solid var(--border); margin-bottom: 10px;
+  background: radial-gradient(120% 160% at 100% -20%, var(--gold-soft), transparent 60%), var(--panel);
+}
+.tb-hero-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; }
+.tb-hero-amount { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; color: var(--amber); margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+.tb-hero-amount.ok { color: var(--green); }
+.tb-hero-foot { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-dim); margin-top: 7px; gap: 8px; }
+.tb-bar { height: 7px; border-radius: 6px; background: var(--panel-hover); overflow: hidden; }
+.tb-bar i { display: block; height: 100%; background: var(--accent-grad); border-radius: 6px; }
+.tb-camino { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; margin-bottom: 14px; }
+.tb-camino-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.tb-camino-head .t { font-size: 13px; font-weight: 700; }
+.tb-camino-row { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--text-dim); margin: 10px 0 5px; }
+.tb-camino-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+.week-card::before { content: ""; position: absolute; }
+.week-card { position: relative; }
+.week-card.pendiente { box-shadow: inset 4px 0 0 var(--amber), var(--shadow-soft); }
+.week-card.pagada { box-shadow: inset 4px 0 0 var(--green), var(--shadow-soft); }
+.week-card::before { display: none; }
+@media (max-width: 640px) {
+  .tb-hero-amount { font-size: 32px; }
 }

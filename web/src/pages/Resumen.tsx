@@ -709,7 +709,7 @@ export default function Resumen() {
             return (
               <div
                 key={b.id}
-                className={`saldo-card ${f > 0 ? "pos" : f < 0 ? "neg" : ""}`}
+                className={`saldo-card ${f > 0 ? "is-pos" : f < 0 ? "is-neg" : ""}`}
                 onClick={() => setDetalle({ title: `${b.agent_name} — ${b.club_name}`, agentId: b.agent_id, clubId: b.club_id })}
               >
                 <div className="saldo-card-body">

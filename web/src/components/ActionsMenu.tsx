@@ -16,7 +16,19 @@ export interface ActionsMenuItem {
   disabled?: boolean;
 }
 
-export default function ActionsMenu({ items }: { items: ActionsMenuItem[] }) {
+export default function ActionsMenu({
+  items,
+  label,
+  align = "right",
+  title,
+}: {
+  items: ActionsMenuItem[];
+  /** Texto del botón (por defecto "⋯"). */
+  label?: React.ReactNode;
+  /** De qué lado se abre el menú respecto del botón (por defecto, hacia la izquierda: "right"). */
+  align?: "left" | "right";
+  title?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -46,12 +58,12 @@ export default function ActionsMenu({ items }: { items: ActionsMenuItem[] }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Más acciones"
+        title={title ?? "Más acciones"}
       >
-        ⋯
+        {label ?? "⋯"}
       </button>
       {open && (
-        <div className="actions-menu-popover" role="menu">
+        <div className="actions-menu-popover" role="menu" style={align === "left" ? { left: 0, right: "auto" } : undefined}>
           {items.map((item, i) => (
             <button
               key={i}
