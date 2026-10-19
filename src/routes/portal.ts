@@ -336,6 +336,19 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
                ORDER BY ABS(wc.rake_total) DESC, a.name`,
               [l.club_id, cab.rows[0].week_start]
             );
+      // 19/10/2026 (pedido de Leo: "el rakeback tiene que ser 75 no 65"): en una línea de CLUB el proveedor cobra el
+      // % de la línea (ej. 75%), no el trato propio de cada agente (ej. 65%, que además es info interna de la casa).
+      // Se muestra a cada agente con el % del club y se recalculan rakeback y cierre final para que las filas sumen
+      // exactamente el monto de la línea. En una línea de AGENTE el % ya es el del proveedor, no se toca.
+      let agentes = filas.rows;
+      if (l.tipo === "CLUB" && l.rakeback_pct !== null && l.rakeback_pct !== undefined) {
+        const pct = Number(l.rakeback_pct);
+        agentes = agentes.map((a: any) => {
+          const rakeback = Math.round(Number(a.rake_total) * pct * 10000) / 10000;
+          const final = Math.round((Number(a.result) + rakeback + Number(a.rodeo)) * 10000) / 10000;
+          return { ...a, rakeback_pct: pct, rakeback, final_closing: final };
+        });
+      }
       salida.push({
         id: l.id,
         tipo: l.tipo,
@@ -352,7 +365,7 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
         wc_rake_total: l.wc_rake_total,
         wc_rakeback_pct: l.wc_rakeback_pct,
         wc_rodeo: l.wc_rodeo,
-        agentes: filas.rows,
+        agentes,
       });
     }
     res.json({ cierre: cab.rows[0], lineas: salida });
