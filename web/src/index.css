@@ -2439,3 +2439,55 @@ button.nav-link {
 }
 
 .bigamt input::-webkit-outer-spin-button, .bigamt input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------- Portales de agente / supervisor / proveedor (19/10/2026, mockups aprobados) ---------- */
+.pill.r { background: var(--red-soft); color: var(--red); }
+.pt-top { display: grid; grid-template-columns: 1.5fr repeat(var(--n, 2), 1fr); gap: 12px; margin-bottom: 18px; align-items: start; }
+.pt-minis { display: contents; }
+.pt-hero { margin-bottom: 0; }
+.pt-cta { width: 100%; margin-top: 12px; }
+.pt-kmini { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px; position: relative; overflow: hidden; }
+.pt-kmini::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--accent-grad); opacity: 0.7; }
+.pt-kmini .l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 600; margin-bottom: 5px; }
+.pt-kmini .v { font-size: 18px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pt-kmini .s { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+.pt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.pt-col { min-width: 0; }
+.pt-pane { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 20px; box-shadow: var(--shadow-soft); }
+.pt-h { margin: 0 0 12px; font-size: 14px; }
+.pt-empty { border: 1px dashed var(--border-strong); border-radius: 12px; padding: 14px; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+.pt-card { display: flex; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 8px; }
+.pt-pane .pt-card { background: var(--panel-2); }
+.pt-card::before { content: ""; width: 4px; flex-shrink: 0; background: var(--green); }
+.pt-card.ng::before { background: var(--red); }
+.pt-card.pend::before { background: var(--amber); }
+.pt-card.pend { background: var(--gold-soft); }
+.pt-card.rev { opacity: 0.5; }
+.pt-card .b { flex: 1; padding: 11px 13px; min-width: 0; }
+.pt-card .t1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pt-card .n { font-size: 13.5px; font-weight: 650; }
+.pt-card .amt { font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.pt-card .t2 { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 11.5px; color: var(--text-faint); gap: 8px; }
+.pt-bar { height: 6px; border-radius: 6px; background: var(--panel-hover); position: relative; margin-top: 9px; }
+.pt-bar i { position: absolute; top: 0; bottom: 0; border-radius: 6px; }
+.pt-bar .cero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-faint); }
+.pt-sec { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 700; margin: 14px 0 9px; }
+.pt-tabs { display: none; }
+
+@media (max-width: 768px) {
+  .pt-top { display: block; margin-bottom: 0; }
+  .pt-hero { margin-bottom: 10px; }
+  .pt-minis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pt-tabs { display: flex; margin: 14px 0; }
+  .pt-cols { display: block; }
+  .pt-pane { display: none; background: none; border: none; box-shadow: none; padding: 0; margin: 0; }
+  .pt-pane.activa { display: block; }
+  .pt-pane .pt-h { display: none; }
+  .pt-pane .pt-card { background: var(--panel); }
+  .pt-card.pend { background: var(--gold-soft); }
+}
+
+/* Pestañas de los portales: en celular se deslizan de costado en una sola línea (no se parten en dos). */
+.pt-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.pt-tabs::-webkit-scrollbar { display: none; }
+.pt-tabs button { white-space: nowrap; flex-shrink: 0; }

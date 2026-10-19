@@ -1,30 +1,37 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd, dateShort } from "../fmt";
+import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import Modal from "../components/Modal";
+import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, SolicitudesRetiro, colorSigno, montoSigno } from "../components/PortalUI";
 
 const MEDIO_LABEL: Record<string, string> = {
+  SIN_TESORERIA: "Sin tesorería",
   USDT: "USDT",
   EFECTIVO: "Efectivo",
   ZELLE: "Zelle",
   OTRO: "Otro",
 };
 
-// Portal de solo lectura del rol PROVEEDOR (16/10/2026, pedido de Leo: "agregarlos como
-// usuarios y darles los permisos como hacemos con los supervisores") -- mismo dato que el admin
-// ve en Administración -> Proveedores, filtrado a sí mismo (ver routes/portal.ts GET
-// /mi-proveedor). Sin ninguna acción: ni cierres ni pagos se cargan desde acá, eso sigue siendo
-// exclusivo del admin.
+type Tab = "saldos" | "cierres" | "pagos" | "solicitudes";
+
+// Portal del rol PROVEEDOR (16/10/2026, pedido de Leo: "agregarlos como usuarios y darles los
+// permisos como hacemos con los supervisores") -- mismo dato que el admin ve en Administración ->
+// Proveedores, filtrado a sí mismo (ver routes/portal.ts GET /mi-proveedor). Sin acciones de carga: ni
+// cierres ni pagos se cargan desde acá, eso es exclusivo del admin. Sí puede pedir retiros/pagos.
+//
+// (19/10/2026, pedido de Leo, mockups aprobados) Rediseño: tarjeta principal con el saldo total y el
+// botón de retiro adentro, saldo por club con barra divergente, cierres y pagos como tarjetas/filas
+// (eran 4 tablas), pestañas en celular y todo a la vista en dos columnas en escritorio.
 export default function MiProveedor() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<Tab>("saldos");
 
   // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
-  // esto mismo para la sección de proveedores") -- mismo patrón que MiSupervision.tsx, panel
-  // separado de "Pagos y cobros" a propósito, ver routes/portal.ts POST/GET
-  // /mi-proveedor/solicitudes-retiro. El admin resuelve desde Administración -> Proveedores
-  // (repo/proveedores.ts), eligiendo el club (el saldo del proveedor SÍ está separado por club).
+  // esto mismo para la sección de proveedores") -- ver routes/portal.ts POST/GET
+  // /mi-proveedor/solicitudes-retiro. El admin resuelve desde Administración -> Proveedores,
+  // eligiendo el club (el saldo del proveedor SÍ está separado por club).
   const [misSolicitudes, setMisSolicitudes] = useState<any[] | null>(null);
   const [showSolicitar, setShowSolicitar] = useState(false);
 
@@ -43,69 +50,144 @@ export default function MiProveedor() {
   if (error) return <div className="error">No se pudo cargar: {error}</div>;
   if (!data) return <Loading />;
 
-  const saldoTotal = (data.saldos ?? []).reduce((s: number, x: any) => s + Number(x.amount), 0);
+  const saldos: any[] = data.saldos ?? [];
+  const cierres: any[] = data.cierres ?? [];
+  const pagos: any[] = data.pagos ?? [];
+  const saldoTotal = saldos.reduce((s, x) => s + Number(x.amount), 0);
+  const maxAbs = Math.max(...saldos.map((s) => Math.abs(Number(s.amount))), 1);
+  const ultimoCierre = cierres.find((c) => c.status !== "REVERTIDO");
+  const ultimoPago = pagos.find((p) => p.status !== "REVERTIDO");
+
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "saldos", label: "Saldo por club", count: saldos.length },
+    { key: "cierres", label: "Cierres", count: cierres.length },
+    { key: "pagos", label: "Pagos y cobros", count: pagos.length },
+    { key: "solicitudes", label: "Solicitudes", count: misSolicitudes?.length ?? 0 },
+  ];
+
+  const minis = [
+    ...(ultimoCierre
+      ? [
+          <PortalMini
+            key="c"
+            label="Último cierre"
+            value={montoSigno(Number(ultimoCierre.cierre))}
+            sub={`${dateShort(ultimoCierre.week_start).slice(0, 5)} al ${dateShort(ultimoCierre.week_end).slice(0, 5)}`}
+            color={colorSigno(Number(ultimoCierre.cierre))}
+          />,
+        ]
+      : []),
+    ...(ultimoPago
+      ? [<PortalMini key="p" label="Último movimiento" value={usdCents(Number(ultimoPago.amount))} sub={`${ultimoPago.direction === "PAGO" ? "Pago" : "Cobro"} · ${dateShort(ultimoPago.occurred_at).slice(0, 5)}`} />]
+      : []),
+  ];
+
+  const saldosPane = (
+    <PortalPane activa={tab === "saldos"} titulo="Saldo por club">
+      {saldos.length === 0 ? (
+        <div className="muted">Todavía no tenés saldo cargado en ningún club.</div>
+      ) : (
+        saldos.map((s: any) => <PortalCard key={s.id} titulo={s.club_name} monto={Number(s.amount)} barra={<BarraDivergente monto={Number(s.amount)} max={maxAbs} />} />)
+      )}
+    </PortalPane>
+  );
+
+  const cierresPane = (
+    <PortalPane activa={tab === "cierres"} titulo="Cierres semanales">
+      {cierres.length === 0 ? (
+        <div className="muted">Todavía no hay ningún cierre cargado.</div>
+      ) : (
+        <div style={{ maxHeight: 520, overflowY: "auto" }}>
+          {cierres.map((c: any) => (
+            <PortalCard
+              key={c.id}
+              titulo={`${dateShort(c.week_start).slice(0, 5)} al ${dateShort(c.week_end).slice(0, 5)}`}
+              monto={Number(c.cierre)}
+              izq={c.status === "REVERTIDO" ? "Revertido" : ""}
+              der={c.status === "REVERTIDO" ? undefined : <span className="pill g">Aplicado</span>}
+              rev={c.status === "REVERTIDO"}
+            />
+          ))}
+        </div>
+      )}
+    </PortalPane>
+  );
+
+  const pagosPane = (
+    <PortalPane activa={tab === "pagos"} titulo="Pagos y cobros">
+      {pagos.length === 0 ? (
+        <div className="muted">Todavía no hay ningún pago o cobro registrado.</div>
+      ) : (
+        <div className="mov-list" style={{ maxHeight: 560, overflowY: "auto" }}>
+          {pagos.map((p: any) => (
+            <MovRow
+              key={p.id}
+              type={p.direction === "PAGO" ? "PAGO" : "COBRO"}
+              titulo={p.direction === "PAGO" ? "Pago" : "Cobro"}
+              detalle={`${p.club_name} · ${MEDIO_LABEL[p.medio] ?? p.medio} · ${dateShort(p.occurred_at)}`}
+              monto={Math.abs(Number(p.amount))}
+              atenuada={p.status === "REVERTIDO"}
+              extra={p.status === "REVERTIDO" ? <span className="pill">Revertido</span> : undefined}
+            />
+          ))}
+        </div>
+      )}
+    </PortalPane>
+  );
+
+  const solicitudesPane = (
+    <PortalPane activa={tab === "solicitudes"} titulo="Tus solicitudes de retiro">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+        Lo que vas pidiendo con "+ Solicitar retiro / pago". Queda "Pendiente de envío" hasta que te mandemos los USDT -- en ese momento
+        pasa a "Enviado" con el link de pago para que puedas ver el trackeo de la transacción.
+      </div>
+      <SolicitudesRetiro items={misSolicitudes} />
+    </PortalPane>
+  );
 
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
           <h2>Hola, {data.proveedor.name}</h2>
-          <div className="muted">Tu saldo, cierres semanales y pagos -- solo lectura.</div>
-        </div>
-        <button className="btn" onClick={() => setShowSolicitar(true)}>+ Solicitar retiro / pago</button>
-      </div>
-
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Saldo total</div>
-          <div className={`value ${saldoTotal >= 0 ? "pos" : "neg"}`}>{usd(saldoTotal)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Clubes con saldo</div>
-          <div className="value">{(data.saldos ?? []).length}</div>
+          <div className="muted">Tu saldo, cierres semanales y pagos.</div>
         </div>
       </div>
 
-      <div className="panel">
-        <h3>Tus solicitudes de retiro</h3>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-          Lo que vas pidiendo con "+ Solicitar retiro / pago" de arriba. Queda "Pendiente de envío"
-          hasta que te mandemos los USDT -- en ese momento pasa a "Enviado" con el link de pago
-          para que puedas ver el trackeo de la transacción.
-        </div>
-        {!misSolicitudes ? (
-          <Loading />
-        ) : misSolicitudes.length === 0 ? (
-          <div className="muted">Todavía no pediste ningún retiro.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Fecha</th><th>Monto</th><th>Nota</th><th>Estado</th><th>Comprobante</th></tr></thead>
-            <tbody>
-              {misSolicitudes.map((s: any) => (
-                <tr key={s.id} className={s.estado === "PENDIENTE" ? "fila-pendiente" : ""}>
-                  <td className="muted">{dateShort(s.requested_at)}</td>
-                  <td><span className="badge neutral">{usd(Number(s.amount))}</span></td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>{s.nota || "—"}</td>
-                  <td>
-                    {s.estado === "PENDIENTE" && <span className="badge deal">Pendiente de envío</span>}
-                    {s.estado === "ENVIADO" && <span className="badge pos">Enviado el {dateShort(s.resuelto_at)}</span>}
-                    {s.estado === "RECHAZADO" && (
-                      <span className="badge neg" title={s.resolucion_nota || undefined}>Rechazada</span>
-                    )}
-                  </td>
-                  <td>
-                    {s.payment_link ? (
-                      <a className="link-pago" href={s.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <PortalTop
+        hero={
+          <PortalHero
+            label="Saldo total"
+            amount={montoSigno(saldoTotal)}
+            color={colorSigno(saldoTotal)}
+            foot={
+              <>
+                <span>{saldos.length} club{saldos.length === 1 ? "" : "es"} con saldo</span>
+                <span>{data.proveedor.name}</span>
+              </>
+            }
+            cta={{ label: "+ Solicitar retiro / pago", onClick: () => setShowSolicitar(true) }}
+          />
+        }
+        minis={minis}
+      />
+
+      <PortalTabs tabs={tabs} value={tab} onChange={setTab} />
+
+      <PortalCols
+        left={
+          <>
+            {saldosPane}
+            {cierresPane}
+          </>
+        }
+        right={
+          <>
+            {pagosPane}
+            {solicitudesPane}
+          </>
+        }
+      />
 
       {showSolicitar && (
         <Modal title="Solicitar retiro / pago" onClose={() => setShowSolicitar(false)}>
@@ -113,76 +195,11 @@ export default function MiProveedor() {
             onDone={() => {
               setShowSolicitar(false);
               refrescarMisSolicitudes();
+              setTab("solicitudes");
             }}
           />
         </Modal>
       )}
-
-      <div className="panel">
-        <h3>Saldo por club</h3>
-        {(data.saldos ?? []).length === 0 ? (
-          <div className="muted">Todavía no tenés saldo cargado en ningún club.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Club</th><th className="num">Saldo</th></tr></thead>
-            <tbody>
-              {data.saldos.map((s: any) => (
-                <tr key={s.id}>
-                  <td>{s.club_name}</td>
-                  <td className={`num ${Number(s.amount) >= 0 ? "pos" : "neg"}`}>{usd(Number(s.amount))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="panel">
-        <h3>Cierres semanales</h3>
-        {(data.cierres ?? []).length === 0 ? (
-          <div className="muted">Todavía no hay ningún cierre cargado.</div>
-        ) : (
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
-            <table>
-              <thead><tr><th>Semana</th><th className="num">Cierre</th><th>Estado</th></tr></thead>
-              <tbody>
-                {data.cierres.map((c: any) => (
-                  <tr key={c.id} className={c.status === "REVERTIDO" ? "muted" : ""}>
-                    <td>{dateShort(c.week_start)} al {dateShort(c.week_end)}</td>
-                    <td className={`num ${Number(c.cierre) >= 0 ? "pos" : "neg"}`}>{usd(Number(c.cierre))}</td>
-                    <td>{c.status === "REVERTIDO" ? <span className="badge neutral">Revertido</span> : <span className="badge pos">Aplicado</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <h3>Pagos y cobros</h3>
-        {(data.pagos ?? []).length === 0 ? (
-          <div className="muted">Todavía no hay ningún pago o cobro registrado.</div>
-        ) : (
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
-            <table>
-              <thead><tr><th>Fecha</th><th>Club</th><th>Tipo</th><th>Medio</th><th className="num">Monto</th><th>Estado</th></tr></thead>
-              <tbody>
-                {data.pagos.map((p: any) => (
-                  <tr key={p.id} className={p.status === "REVERTIDO" ? "muted" : ""}>
-                    <td className="muted">{dateShort(p.occurred_at)}</td>
-                    <td>{p.club_name}</td>
-                    <td><span className="badge neutral">{p.direction === "PAGO" ? "Pago" : "Cobro"}</span></td>
-                    <td className="muted">{MEDIO_LABEL[p.medio] ?? p.medio}</td>
-                    <td className="num">{usd(Number(p.amount))}</td>
-                    <td>{p.status === "REVERTIDO" ? <span className="badge neutral">Revertido</span> : <span className="badge pos">Aplicado</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

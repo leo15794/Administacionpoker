@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd, dateShort } from "../fmt";
+import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, colorSigno, montoSigno } from "../components/PortalUI";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
 // sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
@@ -10,11 +11,17 @@ function saldoNeto(b: any): number {
   return Number(b.amount);
 }
 
+type Tab = "saldos" | "cierres" | "movimientos";
 
+// (19/10/2026, pedido de Leo, mockups aprobados) Portal del agente rediseñado: tarjeta principal con
+// el saldo, cierres y movimientos como tarjetas/filas (en celular la tabla de movimientos cortaba la
+// columna Monto y mostraba los tipos con el nombre interno), pestañas en celular y todo a la vista
+// en escritorio. Mismos datos y endpoints de siempre.
 export default function MiCuenta() {
   const [misAgentes, setMisAgentes] = useState<any[]>([]);
   const [agentId, setAgentId] = useState<string>("");
   const [data, setData] = useState<any>(null);
+  const [tab, setTab] = useState<Tab>("cierres");
 
   // La mayoría de los logins tienen una sola cuenta — el selector solo aparece si de verdad hay
   // más de una asociada (ver Usuarios y permisos → "Agentes/clubes que puede ver").
@@ -29,13 +36,72 @@ export default function MiCuenta() {
   if (!data) return <Loading />;
 
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
+  const variosClubes = data.saldos.length > 1;
+  const cierres: any[] = data.cierres ?? [];
+  const ultimos = cierres.slice(0, 4);
+  const sumaUltimos = ultimos.reduce((s, c) => s + Number(c.final_closing), 0);
+  const maxAbs = Math.max(...data.saldos.map((b: any) => Math.abs(saldoNeto(b))), 1);
+  const sistema = data.agente.default_system === "PREPAGO" ? "Prepago" : "Win/Lose";
+
+  // "Saldo por club" solo suma algo cuando hay más de un club -- con uno solo es el mismo número
+  // de la tarjeta principal.
+  const tabActual: Tab = !variosClubes && tab === "saldos" ? "cierres" : tab;
+  const tabs = [
+    ...(variosClubes ? [{ key: "saldos" as Tab, label: "Saldo por club", count: data.saldos.length }] : []),
+    { key: "cierres" as Tab, label: "Cierres", count: cierres.length },
+    { key: "movimientos" as Tab, label: "Movimientos", count: data.movimientos.length },
+  ];
+
+  const minis = [
+    ...(ultimos[0]
+      ? [
+          <PortalMini key="u" label="Último cierre" value={usdCents(ultimos[0].final_closing)} sub={`${dateShort(ultimos[0].week_start).slice(0, 5)} al ${dateShort(ultimos[0].week_end).slice(0, 5)}`} color={colorSigno(Number(ultimos[0].final_closing))} />,
+        ]
+      : []),
+    ...(ultimos.length > 1 ? [<PortalMini key="s" label={`Últimos ${ultimos.length} cierres`} value={montoSigno(sumaUltimos)} sub={`suma de las ${ultimos.length} semanas`} />] : []),
+    ...(data.garantia ? [<PortalMini key="g" label="Garantía vigente" value={usdCents(data.garantia.amount)} />] : []),
+  ];
+
+  const saldosPane = (
+    <PortalPane activa={tabActual === "saldos"} titulo="Mi saldo por club">
+      {data.saldos.map((b: any) => (
+        <PortalCard key={b.id} titulo={b.club_name} monto={saldoNeto(b)} izq={b.system === "PREPAGO" ? "Prepago" : "Win/Lose"} barra={<BarraDivergente monto={saldoNeto(b)} max={maxAbs} />} />
+      ))}
+    </PortalPane>
+  );
+
+  const cierresPane = (
+    <PortalPane activa={tabActual === "cierres"} titulo="Mis últimos cierres semanales">
+      {cierres.length === 0 ? (
+        <div className="muted">Todavía no hay cierres semanales cargados.</div>
+      ) : (
+        cierres.map((c: any) => (
+          <PortalCard key={c.id} titulo={`${dateShort(c.week_start).slice(0, 5)} al ${dateShort(c.week_end).slice(0, 5)}`} monto={Number(c.final_closing)} izq={c.club_name} der="Cierre final" />
+        ))
+      )}
+    </PortalPane>
+  );
+
+  const movimientosPane = (
+    <PortalPane activa={tabActual === "movimientos"} titulo="Mis movimientos recientes">
+      {data.movimientos.length === 0 ? (
+        <div className="muted">Todavía no hay movimientos registrados en el sistema nuevo.</div>
+      ) : (
+        <div className="mov-list">
+          {data.movimientos.map((m: any) => (
+            <MovRow key={m.id} type={m.type} detalle={`${m.club_name} · ${dateShort(m.occurred_at)}`} monto={Number(m.amount)} />
+          ))}
+        </div>
+      )}
+    </PortalPane>
+  );
 
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
           <h2>Hola, {data.agente.name}</h2>
-          <div className="muted">Sistema: {data.agente.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}{data.agente.supervisor ? ` · Supervisor: ${data.agente.supervisor}` : ""}</div>
+          <div className="muted">Sistema: {sistema}{data.agente.supervisor ? ` · Supervisor: ${data.agente.supervisor}` : ""}</div>
         </div>
         {misAgentes.length > 1 && (
           <div className="field" style={{ margin: 0 }}>
@@ -49,70 +115,34 @@ export default function MiCuenta() {
         )}
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Saldo neto total</div>
-          <div className={`value ${totalNeto >= 0 ? "pos" : "neg"}`}>{usd(totalNeto)}</div>
-        </div>
-        {data.garantia && (
-          <div className="kpi-card">
-            <div className="label">Garantía vigente</div>
-            <div className="value">{usd(data.garantia.amount)}</div>
-          </div>
-        )}
-      </div>
+      <PortalTop
+        hero={
+          <PortalHero
+            label="Tu saldo neto"
+            amount={montoSigno(totalNeto)}
+            color={colorSigno(totalNeto)}
+            foot={
+              <>
+                <span>{variosClubes ? `${data.saldos.length} clubes` : data.saldos[0]?.club_name ?? "Sin clubes todavía"}</span>
+                <span>{sistema}</span>
+              </>
+            }
+          />
+        }
+        minis={minis}
+      />
 
-      <div className="panel">
-        <h3>Mi saldo por club</h3>
-        <table>
-          <thead><tr><th>Club</th><th>Saldo</th></tr></thead>
-          <tbody>
-            {data.saldos.map((b: any) => (
-              <tr key={b.id}>
-                <td>{b.club_name}</td>
-                <td><span className={`badge ${saldoNeto(b) > 0 ? "pos" : saldoNeto(b) < 0 ? "neg" : "neutral"}`}>{usd(saldoNeto(b))}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PortalTabs tabs={tabs} value={tabActual} onChange={setTab} />
 
-      <div className="panel">
-        <h3>Mis últimos cierres semanales</h3>
-        <table>
-          <thead><tr><th>Semana</th><th>Club</th><th>Cierre final</th></tr></thead>
-          <tbody>
-            {data.cierres.map((c: any) => (
-              <tr key={c.id}>
-                <td>{dateShort(c.week_start)} - {dateShort(c.week_end)}</td>
-                <td>{c.club_name}</td>
-                <td><span className={`badge ${Number(c.final_closing) >= 0 ? "pos" : "neg"}`}>{usd(c.final_closing)}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="panel">
-        <h3>Mis movimientos recientes</h3>
-        {data.movimientos.length === 0 ? (
-          <div className="muted">Todavía no hay movimientos registrados en el sistema nuevo.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Club</th><th>Monto</th></tr></thead>
-            <tbody>
-              {data.movimientos.map((m: any) => (
-                <tr key={m.id}>
-                  <td>{dateShort(m.occurred_at)}</td>
-                  <td>{m.type}</td>
-                  <td>{m.club_name}</td>
-                  <td>{usd(m.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <PortalCols
+        left={
+          <>
+            {variosClubes && saldosPane}
+            {cierresPane}
+          </>
+        }
+        right={movimientosPane}
+      />
     </div>
   );
 }

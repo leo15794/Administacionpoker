@@ -1,24 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { usd, dateShort } from "../fmt";
+import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import Modal from "../components/Modal";
-
-// Mismas etiquetas que usa el admin en Movimientos (web/src/components/MovimientosHistorial.tsx)
-// -- acá en versión de solo lectura, sin acciones de revertir/eliminar (eso es admin-only).
-const TIPO_MOVIMIENTO_LABEL: Record<string, string> = {
-  CARGA: "Carga",
-  DESCARGA: "Descarga",
-  COBRO: "Cobro",
-  PAGO: "Pago",
-  TRANSFERENCIA_ENTRE_CLUBES: "Transferencia",
-  TICKET_PROMOCIONAL: "Ticket promocional",
-  AJUSTE: "Ajuste",
-  CIERRE_SEMANAL: "Cierre semanal",
-  PAGO_RAKEBACK: "Pago de rakeback pendiente",
-  ADELANTO_RAKEBACK: "Adelanto de rakeback (USDT)",
-  ADELANTO_FICHAS: "Adelanto de fichas",
-};
+import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, PortalEmpty, MovRow, SolicitudesRetiro, colorSigno, montoSigno, tipoVisual } from "../components/PortalUI";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   PREPAGO: "Prepago",
@@ -29,28 +14,32 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   UNION: "Unión",
 };
 
-// Vista mínima del rol Supervisor — mismo dato que la pestaña "Supervisores" que ya ve el admin
-// en Administración, pero filtrado a un solo supervisor (el del login). Placeholder hasta tener
-// las reglas de negocio completas de este rol: por ahora solo muestra, no permite ninguna acción.
+type Tab = "agentes" | "cierre" | "movimientos" | "referidos" | "solicitudes";
+
+// Vista del rol Supervisor — mismo dato que la pestaña "Supervisores" que ya ve el admin en
+// Administración, pero filtrado a un solo supervisor (el del login). Solo muestra, salvo pedir
+// retiros/pagos.
+//
+// (19/10/2026, pedido de Leo, mockups aprobados) Rediseño: una tarjeta principal con el saldo (la de la
+// cuenta consolidada cuando está activa -- antes arriba decía "Saldo propio US$ 0" y recién 1.200 px más
+// abajo aparecía el saldo total), el botón de solicitar retiro pegado a ese saldo, pestañas en celular
+// (antes eran 8 paneles apilados) y todo a la vista en dos columnas en escritorio. Mismos datos.
 export default function MiSupervision() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<Tab>("agentes");
 
   // Cuenta consolidada -- cierre semanal de agentes a cargo, en solo lectura (14/10/2026,
   // pedido de Leo: "deberia el poder entrar y ver el desglose que esta cargado en
-  // supervisores"). Mismo patrón que la pestaña admin en Supervisores.tsx, pero sin ningún
-  // botón de aplicar -- eso sigue siendo acción exclusiva del admin.
+  // supervisores"). Sin ningún botón de aplicar -- eso sigue siendo acción exclusiva del admin.
   const [semanasCierre, setSemanasCierre] = useState<any[] | null>(null);
   const [weekCierre, setWeekCierre] = useState("");
   const [cierreSemana, setCierreSemana] = useState<any | null>(null);
   const [cargandoCierre, setCargandoCierre] = useState(false);
 
-  // Solicitudes de retiro/pago del propio supervisor (16/10/2026, pedido de Leo: "le queremos
-  // poner botones para que pueda solicitar retiros/pagos y que nos llegue la notificacion") --
-  // ver routes/portal.ts POST/GET /mi-supervision/solicitudes-retiro. El admin resuelve desde
-  // Administración -> Supervisores (repo/supervisores.ts); acá solo se crea y se ve el estado
-  // propio -- panel separado de "Pagos y movimientos" a propósito, para no mezclar el ledger
-  // inmutable de movimientos con esta capa de "pedido" previa a que el admin lo resuelva.
+  // Solicitudes de retiro/pago del propio supervisor (16/10/2026, pedido de Leo) -- ver
+  // routes/portal.ts POST/GET /mi-supervision/solicitudes-retiro. El admin resuelve desde
+  // Administración -> Supervisores; acá solo se crea y se ve el estado propio.
   const [misSolicitudes, setMisSolicitudes] = useState<any[] | null>(null);
   const [showSolicitar, setShowSolicitar] = useState(false);
 
@@ -91,75 +80,197 @@ export default function MiSupervision() {
   if (error) return <div className="error">No se pudo cargar: {error}</div>;
   if (!data) return <Loading />;
 
+  const sup = data.supervisor;
+  const consolidada = !!sup.usa_cuenta_consolidada;
+  const fichasReales = Number(sup.fichas_reales);
+  const cuentaCorriente = Number(sup.cuenta_corriente);
+  const saldoPrincipal = consolidada ? fichasReales + cuentaCorriente : Number(sup.saldo_total);
+  const totalGrupo = data.agentes.reduce((s: number, a: any) => s + Number(a.saldo_total), 0);
+  const hayReferidos = (data.referidos?.length ?? 0) > 0 || (data.movimientos_referidos?.length ?? 0) > 0;
+  const movimientos: any[] = data.movimientos_agentes ?? [];
+  const pendientes = (misSolicitudes ?? []).filter((s: any) => s.estado === "PENDIENTE").length;
+
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "agentes", label: "Agentes", count: data.agentes.length },
+    ...(consolidada ? [{ key: "cierre" as Tab, label: "Cierre semanal" }] : []),
+    { key: "movimientos", label: "Movimientos", count: movimientos.length },
+    ...(hayReferidos ? [{ key: "referidos" as Tab, label: "Referidos" }] : []),
+    { key: "solicitudes", label: "Solicitudes", count: misSolicitudes?.length ?? 0 },
+  ];
+  const tabActual: Tab = tabs.some((t) => t.key === tab) ? tab : "agentes";
+
+  const minis = [
+    <PortalMini key="a" label="Agentes a cargo" value={String(data.agentes.length)} sub={`saldo del grupo ${montoSigno(totalGrupo)}`} />,
+    <PortalMini key="r" label="Rakeback centralizado" value={usdCents(data.rakeback_centralizado_acreditado)} sub="acreditado" />,
+    ...(hayReferidos ? [<PortalMini key="c" label="Comisión por referido" value={usdCents(data.saldo_referidos_total ?? 0)} sub="acumulada" />] : []),
+  ];
+
+  const agentesPane = (
+    <PortalPane activa={tabActual === "agentes"} titulo="Agentes a cargo">
+      {data.agentes.length === 0 ? (
+        <div className="muted">Todavía no tenés agentes a cargo.</div>
+      ) : (
+        data.agentes.map((a: any) => (
+          <PortalCard key={a.id} titulo={a.name} monto={Number(a.saldo_total)} izq={<span className="pill">{ACCOUNT_TYPE_LABELS[a.account_type] ?? a.account_type}</span>} der="saldo total" />
+        ))
+      )}
+    </PortalPane>
+  );
+
+  const cierrePane = consolidada && (
+    <PortalPane activa={tabActual === "cierre"} titulo="Cierre semanal de agentes a cargo">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+        Cada semana, las fichas ganadas en mesas de tus agentes a cargo se suman a Fichas reales, y el rakeback que generan se suma a
+        Cuenta corriente -- el saldo propio de cada agente sigue acumulando igual que siempre, esto es solo el espejo de tu cuenta.
+      </div>
+      {!semanasCierre ? (
+        <Loading />
+      ) : semanasCierre.length === 0 ? (
+        <PortalEmpty>Todavía no hay ningún cierre semanal cargado para tus agentes a cargo.</PortalEmpty>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <select
+              value={weekCierre}
+              onChange={(e) => {
+                setWeekCierre(e.target.value);
+                cargarCierreSemana(e.target.value);
+              }}
+            >
+              {semanasCierre.map((s) => {
+                const ws = String(s.week_start).slice(0, 10);
+                return (
+                  <option key={ws} value={ws}>
+                    {dateShort(s.week_start)} al {dateShort(s.week_end)}
+                  </option>
+                );
+              })}
+            </select>
+            {cierreSemana?.aplicado ? (
+              <span className="pill g">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
+            ) : (
+              <span className="pill">Todavía no aplicada</span>
+            )}
+          </div>
+          {cargandoCierre || !cierreSemana ? (
+            <Loading />
+          ) : (
+            <>
+              {cierreSemana.lineas.map((l: any) => (
+                <PortalCard key={l.agent_id} titulo={l.agent_name} monto={Number(l.result)} izq="Fichas ganadas en la semana" der={`Rakeback ${usdCents(Number(l.rakeback))}`} />
+              ))}
+              <div className="sumrow" style={{ fontWeight: 700 }}>
+                <span>Total de la semana</span>
+                <b>{montoSigno(Number(cierreSemana.resultadoTotal))} · rakeback {usdCents(Number(cierreSemana.rakebackTotal))}</b>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </PortalPane>
+  );
+
+  const movimientosPane = (
+    <PortalPane activa={tabActual === "movimientos"} titulo="Pagos y movimientos del grupo">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+        Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y descargas de fichas, transferencias entre clubes y
+        ajustes -- para que puedan ver de un vistazo cuándo les mandamos plata o hicimos algún cambio.
+      </div>
+      {movimientos.length === 0 ? (
+        <div className="muted">Todavía no hay movimientos.</div>
+      ) : (
+        <div className="mov-list" style={{ maxHeight: 560, overflowY: "auto" }}>
+          {movimientos.map((m: any) => (
+            <MovRow key={m.id} type={m.type} titulo={`${tipoVisual(m.type).label} · ${m.agent_name}`} detalle={`${m.club_name} · ${dateShort(m.occurred_at)}`} monto={Number(m.amount)} obs={m.observation} />
+          ))}
+        </div>
+      )}
+    </PortalPane>
+  );
+
+  const referidosPane = hayReferidos && (
+    <PortalPane activa={tabActual === "referidos"} titulo="Comisiones por referido">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+        % fijo sobre el rake semanal de cada agente, acreditado automáticamente en cada cierre suyo — saldo separado de su propia liquidación.
+      </div>
+      {(data.referidos ?? []).map((r: any) => (
+        <PortalCard key={r.id} titulo={r.agente_referido_name} monto={Number(r.saldo)} izq={`${r.porcentaje}% del rake`} der="saldo acumulado" />
+      ))}
+      {(data.movimientos_referidos ?? []).length > 0 && (
+        <>
+          <div className="pt-sec">Historial de comisiones</div>
+          <div className="mov-list" style={{ maxHeight: 320, overflowY: "auto" }}>
+            {data.movimientos_referidos.map((m: any) => (
+              <MovRow
+                key={m.id}
+                type={m.type === "COMISION" ? "CARGA" : m.type === "PAGO" ? "PAGO" : "AJUSTE"}
+                titulo={`${m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"} · ${m.agente_referido_name}`}
+                detalle={`${m.week_start ? `Semana ${m.week_start} al ${m.week_end} · ` : ""}${new Date(m.occurred_at).toLocaleDateString("es-AR")} · saldo ${usdCents(m.resulting_saldo)}`}
+                monto={Number(m.amount)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </PortalPane>
+  );
+
+  const solicitudesPane = (
+    <PortalPane activa={tabActual === "solicitudes"} titulo="Tus solicitudes de retiro">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+        Lo que vas pidiendo con "+ Solicitar retiro / pago". Queda "Pendiente de envío" hasta que te mandemos los USDT -- en ese momento
+        pasa a "Enviado" con el link de pago para que puedas ver el trackeo de la transacción.
+      </div>
+      <SolicitudesRetiro items={misSolicitudes} />
+    </PortalPane>
+  );
+
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
-          <h2>Hola, {data.supervisor.name}</h2>
-          <div className="muted">Resumen de tu grupo de agentes a cargo.</div>
-        </div>
-        <button className="btn" onClick={() => setShowSolicitar(true)}>+ Solicitar retiro / pago</button>
-      </div>
-
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Saldo propio</div>
-          <div className={`value ${Number(data.supervisor.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(data.supervisor.saldo_total)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Rakeback centralizado acreditado</div>
-          <div className="value">{usd(data.rakeback_centralizado_acreditado)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Agentes a cargo</div>
-          <div className="value">{data.agentes.length}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Comisión por referido acumulada</div>
-          <div className="value">{usd(data.saldo_referidos_total ?? 0)}</div>
+          <h2>Hola, {sup.name}</h2>
+          <div className="muted">Resumen de tu grupo de agentes a cargo.{pendientes > 0 ? ` Tenés ${pendientes} solicitud${pendientes === 1 ? "" : "es"} pendiente${pendientes === 1 ? "" : "s"} de envío.` : ""}</div>
         </div>
       </div>
 
-      <div className="panel">
-        <h3>Tus solicitudes de retiro</h3>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-          Lo que vas pidiendo con "+ Solicitar retiro / pago" de arriba. Queda "Pendiente de envío"
-          hasta que te mandemos los USDT -- en ese momento pasa a "Enviado" con el link de pago
-          para que puedas ver el trackeo de la transacción.
-        </div>
-        {!misSolicitudes ? (
-          <Loading />
-        ) : misSolicitudes.length === 0 ? (
-          <div className="muted">Todavía no pediste ningún retiro.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Fecha</th><th>Monto</th><th>Nota</th><th>Estado</th><th>Comprobante</th></tr></thead>
-            <tbody>
-              {misSolicitudes.map((s: any) => (
-                <tr key={s.id} className={s.estado === "PENDIENTE" ? "fila-pendiente" : ""}>
-                  <td className="muted">{dateShort(s.requested_at)}</td>
-                  <td><span className="badge neutral">{usd(Number(s.amount))}</span></td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>{s.nota || "—"}</td>
-                  <td>
-                    {s.estado === "PENDIENTE" && <span className="badge deal">Pendiente de envío</span>}
-                    {s.estado === "ENVIADO" && <span className="badge pos">Enviado el {dateShort(s.resuelto_at)}</span>}
-                    {s.estado === "RECHAZADO" && (
-                      <span className="badge neg" title={s.resolucion_nota || undefined}>Rechazada</span>
-                    )}
-                  </td>
-                  <td>
-                    {s.payment_link ? (
-                      <a className="link-pago" href={s.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <PortalTop
+        hero={
+          <PortalHero
+            label={consolidada ? "Saldo de tu cuenta consolidada" : "Saldo propio"}
+            amount={montoSigno(saldoPrincipal)}
+            color={colorSigno(saldoPrincipal)}
+            foot={
+              consolidada ? (
+                <>
+                  <span>Fichas reales {montoSigno(fichasReales)}</span>
+                  <span>Cuenta corriente {montoSigno(cuentaCorriente)}</span>
+                </>
+              ) : undefined
+            }
+            cta={{ label: "+ Solicitar retiro / pago", onClick: () => setShowSolicitar(true) }}
+          />
+        }
+        minis={minis}
+      />
+
+      <PortalTabs tabs={tabs} value={tabActual} onChange={setTab} />
+
+      <PortalCols
+        left={
+          <>
+            {agentesPane}
+            {cierrePane}
+            {solicitudesPane}
+          </>
+        }
+        right={
+          <>
+            {movimientosPane}
+            {referidosPane}
+          </>
+        }
+      />
 
       {showSolicitar && (
         <Modal title="Solicitar retiro / pago" onClose={() => setShowSolicitar(false)}>
@@ -167,200 +278,11 @@ export default function MiSupervision() {
             onDone={() => {
               setShowSolicitar(false);
               refrescarMisSolicitudes();
+              setTab("solicitudes");
             }}
           />
         </Modal>
       )}
-
-      {data.supervisor.usa_cuenta_consolidada && (
-        <div className="panel">
-          <h3>Cuenta consolidada</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-            Desglose de tu cuenta consolidada -- lo mismo que ve el admin en Administración desde
-            Supervisores, filtrado a tu propia cuenta. Solo lectura.
-          </div>
-          <div className="kpi-grid">
-            <div className="kpi-card">
-              <div className="label">Fichas reales</div>
-              <div className={`value ${Number(data.supervisor.fichas_reales) >= 0 ? "pos" : "neg"}`}>{usd(Number(data.supervisor.fichas_reales))}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="label">Cuenta corriente</div>
-              <div className={`value ${Number(data.supervisor.cuenta_corriente) >= 0 ? "pos" : "neg"}`}>{usd(Number(data.supervisor.cuenta_corriente))}</div>
-            </div>
-            <div className="kpi-card">
-              <div className="label">Saldo total</div>
-              <div className={`value ${Number(data.supervisor.fichas_reales) + Number(data.supervisor.cuenta_corriente) >= 0 ? "pos" : "neg"}`}>
-                {usd(Number(data.supervisor.fichas_reales) + Number(data.supervisor.cuenta_corriente))}
-              </div>
-            </div>
-          </div>
-
-          <h4 style={{ margin: "4px 0 6px" }}>Cierre semanal de agentes a cargo</h4>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-            Cada semana, las fichas ganadas en mesas de tus agentes a cargo se suman a Fichas reales, y el
-            rakeback que generan se suma a Cuenta corriente -- el saldo propio de cada agente sigue
-            acumulando igual que siempre, esto es solo el espejo de tu cuenta.
-          </div>
-          {!semanasCierre ? (
-            <Loading />
-          ) : semanasCierre.length === 0 ? (
-            <div className="muted">Todavía no hay ningún cierre semanal cargado para tus agentes a cargo.</div>
-          ) : (
-            <>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-                <label className="muted" style={{ fontSize: 12 }}>Semana</label>
-                <select
-                  value={weekCierre}
-                  onChange={(e) => {
-                    setWeekCierre(e.target.value);
-                    cargarCierreSemana(e.target.value);
-                  }}
-                >
-                  {semanasCierre.map((s) => {
-                    const ws = String(s.week_start).slice(0, 10);
-                    return (
-                      <option key={ws} value={ws}>
-                        {dateShort(s.week_start)} al {dateShort(s.week_end)}
-                      </option>
-                    );
-                  })}
-                </select>
-                {cierreSemana?.aplicado ? (
-                  <span className="badge pos">Aplicada el {dateShort(cierreSemana.aplicado.created_at)}</span>
-                ) : (
-                  <span className="badge neutral">Todavía no aplicada</span>
-                )}
-              </div>
-
-              {cargandoCierre || !cierreSemana ? (
-                <Loading />
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Agente a cargo</th>
-                      <th className="num">Fichas ganadas en la semana</th>
-                      <th className="num">Rakeback generado en la semana</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cierreSemana.lineas.map((l: any) => (
-                      <tr key={l.agent_id}>
-                        <td>{l.agent_name}</td>
-                        <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.result))}</td>
-                        <td className="num">{usd(Number(l.rakeback))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ fontWeight: 700 }}>
-                      <td>Total de la semana</td>
-                      <td className="num">{usd(cierreSemana.resultadoTotal)}</td>
-                      <td className="num">{usd(cierreSemana.rakebackTotal)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {data.referidos && data.referidos.length > 0 && (
-        <div className="panel">
-          <h3>Comisiones por referido</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-            % fijo sobre el rake semanal de cada agente, acreditado automáticamente en cada cierre suyo — saldo separado de su propia liquidación.
-          </div>
-          <table>
-            <thead><tr><th>Agente referido</th><th>%</th><th>Saldo acumulado</th></tr></thead>
-            <tbody>
-              {data.referidos.map((r: any) => (
-                <tr key={r.id}>
-                  <td>{r.agente_referido_name}</td>
-                  <td>{r.porcentaje}%</td>
-                  <td>{usd(r.saldo)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {data.movimientos_referidos && data.movimientos_referidos.length > 0 && (
-        <div className="panel">
-          <h3>Historial de comisiones por referido</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-            Detalle de cada acreditación, semana por semana.
-          </div>
-          <div style={{ maxHeight: 320, overflowY: "auto" }}>
-            <table>
-              <thead><tr><th>Fecha</th><th>Agente</th><th>Semana del cierre</th><th>Tipo</th><th>Monto</th><th>Saldo resultante</th></tr></thead>
-              <tbody>
-                {data.movimientos_referidos.map((m: any) => (
-                  <tr key={m.id}>
-                    <td className="muted">{new Date(m.occurred_at).toLocaleDateString("es-AR")}</td>
-                    <td>{m.agente_referido_name}</td>
-                    <td className="muted">{m.week_start ? `${m.week_start} al ${m.week_end}` : "—"}</td>
-                    <td><span className={`badge ${m.type === "COMISION" ? "pos" : "neutral"}`}>{m.type === "COMISION" ? "Comisión" : m.type === "PAGO" ? "Pago" : "Corrección"}</span></td>
-                    <td className={Number(m.amount) >= 0 ? "pos" : "neg"}>{usd(m.amount)}</td>
-                    <td>{usd(m.resulting_saldo)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {data.movimientos_agentes && data.movimientos_agentes.length > 0 && (
-        <div className="panel">
-          <h3>Pagos y movimientos</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-            Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y
-            descargas de fichas, transferencias entre clubes y ajustes -- para que puedan ver de
-            un vistazo cuándo les mandamos plata o hicimos algún cambio.
-          </div>
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
-            <table>
-              <thead><tr><th>Fecha</th><th>Tipo</th><th>Agente</th><th>Club</th><th>Monto</th><th>Observación</th></tr></thead>
-              <tbody>
-                {data.movimientos_agentes.map((m: any) => (
-                  <tr key={m.id}>
-                    <td className="muted">{dateShort(m.occurred_at)}</td>
-                    <td><span className="badge neutral">{TIPO_MOVIMIENTO_LABEL[m.type] ?? m.type}</span></td>
-                    <td>{m.agent_name}</td>
-                    <td>{m.club_name}</td>
-                    <td><span className={`badge ${Number(m.amount) > 0 ? "pos" : Number(m.amount) < 0 ? "neg" : "neutral"}`}>{usd(m.amount)}</span></td>
-                    <td className="muted" style={{ fontSize: 12 }}>{m.observation || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <div className="panel">
-        <h3>Agentes a cargo</h3>
-        {data.agentes.length === 0 ? (
-          <div className="muted">Todavía no tenés agentes a cargo.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Agente</th><th>Tipo de cuenta</th><th>Saldo</th></tr></thead>
-            <tbody>
-              {data.agentes.map((a: any) => (
-                <tr key={a.id}>
-                  <td>{a.name}</td>
-                  <td><span className="badge neutral">{ACCOUNT_TYPE_LABELS[a.account_type] ?? a.account_type}</span></td>
-                  <td><span className={`badge ${Number(a.saldo_total) >= 0 ? "pos" : "neg"}`}>{usd(a.saldo_total)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }
