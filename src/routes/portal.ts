@@ -325,12 +325,12 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
       const filas =
         l.tipo === "AGENTE" && l.weekly_closing_id
           ? await pool.query(
-              `SELECT a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
+              `SELECT wc.id as closing_id, a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
                FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id WHERE wc.id = $1`,
               [l.weekly_closing_id]
             )
           : await pool.query(
-              `SELECT a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
+              `SELECT wc.id as closing_id, a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
                FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id
                WHERE wc.club_id = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
                ORDER BY ABS(wc.rake_total) DESC, a.name`,
@@ -349,6 +349,40 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
           return { ...a, rakeback_pct: pct, rakeback, final_closing: final };
         });
       }
+      // Jugadores de cada agente esa semana (19/10/2026, pedido de Leo: que el proveedor pueda ver los jugadores de
+      // cada agente). Solo existen para cierres aplicados desde que se guarda el detalle; si no hay, el agente
+      // queda sin jugadores y el front no ofrece desplegarlo. Se devuelve SOLO lo que el proveedor necesita
+      // (nombre, ID, resultado, rake) y el rakeback se calcula con el % que cobra el proveedor: nada del trato propio
+      // de la casa con el agente ni del subagente.
+      const ids = agentes.map((a: any) => a.closing_id).filter(Boolean);
+      const jugRows = ids.length
+        ? (
+            await pool.query(
+              `SELECT closing_id, player_external_id, player_name, resultado, rake
+               FROM weekly_closing_player_details WHERE closing_id = ANY($1::text[])
+               ORDER BY rake DESC, player_name`,
+              [ids]
+            )
+          ).rows
+        : [];
+      agentes = agentes.map((a: any) => {
+        const pct = Number(a.rakeback_pct);
+        const jugadores_detalle = jugRows
+          .filter((j: any) => j.closing_id === a.closing_id)
+          .map((j: any) => {
+            const rakeback = Math.round(Number(j.rake) * pct * 10000) / 10000;
+            return {
+              id: j.player_external_id,
+              nombre: j.player_name,
+              resultado: Number(j.resultado),
+              rake: Number(j.rake),
+              rakeback,
+              cierre: Math.round((Number(j.resultado) + rakeback) * 10000) / 10000,
+            };
+          });
+        const { closing_id, ...resto } = a;
+        return { ...resto, jugadores_detalle };
+      });
       salida.push({
         id: l.id,
         tipo: l.tipo,
