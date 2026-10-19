@@ -1662,6 +1662,85 @@ export default function Liquidaciones() {
     { label: borrandoHist === h.id ? "Eliminando..." : "Eliminar del historial…", onClick: () => eliminarDelHistorial(h), danger: true, disabled: borrandoHist === h.id },
   ];
 
+  // ---- Detalle (19/10/2026, mockup aprobado): acciones de arriba a funciones, cifras y filas en tarjetas ----
+  const pendienteTotalFilas = data
+    ? data.filas.reduce((s: number, f: any) => s + (f.rakebackPendienteId ? Number(f.rakebackPendienteDisponible) : 0), 0)
+    : 0;
+  async function guardarEnHistorial() {
+    if (!data) return;
+    setGuardando(true);
+    try {
+      await api.guardarLiquidacion({
+        nombreGrupo: nombreGrupo || "Liquidación",
+        agentIds: seleccionados,
+        weekStart: data.weekStart,
+        weekEnd: data.weekEnd,
+        filas: filasConAjustes,
+        total: data.total,
+        adelantosAplicados: aplicado,
+        adelantosManual,
+        cargasAplicadas: aplicadoCarga,
+        totalAPagar,
+        nota,
+        adelantoMovIds: movIdsAdelantosSesion,
+        cargaMovIds: movIdsCargasSesion,
+        pagoPendienteMovIds: movIdsPagosPendienteSesion,
+        pagoLedgerMovIds: movIdsPagosGenericoSesion,
+        reemplazarId: reemplazarId ?? undefined,
+      });
+      setGuardado(true);
+      setReemplazarId(null);
+      refrescarHistorial();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo guardar la liquidación.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+  async function descargarPdfActual() {
+    if (!data) return;
+    setGenerandoPdf(true);
+    try {
+      await generarPdf({
+        nombreGrupo: nombreGrupo || "Liquidación",
+        weekStart: data.weekStart,
+        weekEnd: data.weekEnd,
+        filas: filasConAjustes,
+        multiAgente: data.agentes.length > 1,
+        total: data.total,
+        adelantosAplicados: aplicado,
+        adelantosManual,
+        cargasAplicadas: aplicadoCarga,
+        ventasTickets: totalVentasTickets,
+        nota,
+      });
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo generar el PDF.");
+    } finally {
+      setGenerandoPdf(false);
+    }
+  }
+  const inputVentasTickets = (f: any, key: string, cual: "ventas" | "tickets", conPlaceholderTexto = false) => {
+    const valores = cual === "ventas" ? ventasPorFila : ticketsPorFila;
+    const setter = cual === "ventas" ? setVentasPorFila : setTicketsPorFila;
+    return (
+      <input
+        type="number"
+        step="0.01"
+        min={0}
+        value={valores[key] ?? ""}
+        placeholder={conPlaceholderTexto ? (cual === "ventas" ? "Ventas" : "Tickets") : "0"}
+        onChange={(e) => {
+          setGuardado(false);
+          const v = Number(e.target.value) || 0;
+          setter((prev) => ({ ...prev, [key]: v }));
+        }}
+        style={conPlaceholderTexto ? { flex: 1, minWidth: 0 } : { width: 90, textAlign: "right" }}
+        title={`${cual === "ventas" ? "Ventas" : "Tickets promocionales"} cargados solo a ${f.agentName} (${f.clubName}) -- se descuenta de su parte, no de toda la liquidación.`}
+      />
+    );
+  };
+
   return (
     <div>
       <h2>Liquidaciones</h2>
@@ -1835,16 +1914,12 @@ export default function Liquidaciones() {
 
       {data && (
         <div className="panel" style={{ marginTop: 16 }}>
-          <div className="topbar" style={{ marginBottom: 14 }}>
-            <div>
-              <strong>{nombreGrupo || data.agentes.map((a: any) => a.name).join(" + ")}</strong>
-              <span className="muted" style={{ marginLeft: 10, fontSize: 13 }}>
-                Cierre {dateShort(data.weekStart)} - {dateShort(data.weekEnd)}
-              </span>
+          <div className="topbar" style={{ marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <h3 style={{ margin: 0, fontSize: 20 }}>{nombreGrupo || data.agentes.map((a: any) => a.name).join(" + ")}</h3>
               {soloRevision && (
                 <span
-                  className={revisandoEstado === "PAGADA" ? "badge pos" : "badge neutral"}
-                  style={{ marginLeft: 10 }}
+                  className={revisandoEstado === "PAGADA" ? "pill g" : "pill gold"}
                   title={
                     revisandoEstado === "PAGADA"
                       ? "Esto ya está Pagada -- se puede mirar/ajustar, pero no se autoguarda nada hasta que apretés Guardar"
@@ -1854,193 +1929,172 @@ export default function Liquidaciones() {
                   Revisando · {revisandoEstado === "PAGADA" ? "Pagada" : "Cerrada"}
                 </span>
               )}
+              <span className="muted" style={{ fontSize: 13 }}>
+                Cierre {dateShort(data.weekStart)} - {dateShort(data.weekEnd)} · {data.agentes.length} agente{data.agentes.length === 1 ? "" : "s"}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {soloRevision && revisandoId && revisandoEstado === "PAGADA" && (
-                <button className="btn secondary small" disabled={liberandoCruces} onClick={liberarCrucesLiquidacion} title="Deshace los adelantos/cargas que quedaron descontados por esta liquidación puntual, para poder recalcularla y cruzarlos distinto">
-                  {liberandoCruces ? "Liberando..." : "Liberar cruces de esta liquidación"}
-                </button>
-              )}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {soloRevision && revisandoId && revisandoEstado === "CERRADA" && (
-                <button className="btn secondary small" disabled={reabriendo} onClick={reabrirLiquidacionCerrada} title="La vuelve a Pendiente de pago para poder seguir editándola antes de mandar el pago">
+                <button className="btn secondary" disabled={reabriendo} onClick={reabrirLiquidacionCerrada} title="La vuelve a Pendiente de pago para poder seguir editándola antes de mandar el pago">
                   {reabriendo ? "Reabriendo..." : "Reabrir para editar"}
                 </button>
               )}
               {!soloRevision && (
-                <button className="btn secondary small" disabled={cerrando} onClick={() => cerrarLiquidacion(true)} title="Arma y guarda la liquidación sin mandar ni recibir ningún pago todavía">
+                <button className="btn secondary" disabled={cerrando} onClick={() => cerrarLiquidacion(true)} title="Arma y guarda la liquidación sin mandar ni recibir ningún pago todavía">
                   {cerrando ? "Cerrando..." : "Cerrar liquidación"}
                 </button>
               )}
-              <button
-                className="btn secondary small"
-                disabled={guardando}
-                onClick={async () => {
-                  setGuardando(true);
-                  try {
-                    await api.guardarLiquidacion({
-                      nombreGrupo: nombreGrupo || "Liquidación",
-                      agentIds: seleccionados,
-                      weekStart: data.weekStart,
-                      weekEnd: data.weekEnd,
-                      filas: filasConAjustes,
-                      total: data.total,
-                      adelantosAplicados: aplicado,
-                      adelantosManual,
-                      cargasAplicadas: aplicadoCarga,
-                      totalAPagar,
-                      nota,
-                      adelantoMovIds: movIdsAdelantosSesion,
-                      cargaMovIds: movIdsCargasSesion,
-                      pagoPendienteMovIds: movIdsPagosPendienteSesion,
-                      pagoLedgerMovIds: movIdsPagosGenericoSesion,
-                      reemplazarId: reemplazarId ?? undefined,
-                    });
-                    setGuardado(true);
-                    setReemplazarId(null);
-                    refrescarHistorial();
-                  } catch (err: any) {
-                    await alertDialog(err.message || "No se pudo guardar la liquidación.");
-                  } finally {
-                    setGuardando(false);
-                  }
-                }}
-                title="Deja esta liquidación guardada en el historial de abajo, tal cual está ahora"
-              >
-                {guardando ? "Guardando..." : guardado ? "✓ Guardada" : "Guardar en historial"}
-              </button>
-              <button
-                className="btn secondary small"
-                disabled={generandoPdf}
-                onClick={async () => {
-                  setGenerandoPdf(true);
-                  try {
-                    await generarPdf({
-                      nombreGrupo: nombreGrupo || "Liquidación",
-                      weekStart: data.weekStart,
-                      weekEnd: data.weekEnd,
-                      filas: filasConAjustes,
-                      multiAgente: data.agentes.length > 1,
-                      total: data.total,
-                      adelantosAplicados: aplicado,
-                      adelantosManual,
-                      cargasAplicadas: aplicadoCarga,
-                      ventasTickets: totalVentasTickets,
-                      nota,
-                    });
-                  } catch (err: any) {
-                    await alertDialog(err.message || "No se pudo generar el PDF.");
-                  } finally {
-                    setGenerandoPdf(false);
-                  }
-                }}
-              >
-                {generandoPdf ? "Generando..." : "Descargar PDF"}
-              </button>
+              <ActionsMenu
+                title="Más acciones"
+                items={[
+                  ...(soloRevision && revisandoId && revisandoEstado === "PAGADA"
+                    ? [{ label: liberandoCruces ? "Liberando..." : "Liberar cruces de esta liquidación…", onClick: liberarCrucesLiquidacion, disabled: liberandoCruces }]
+                    : []),
+                  { label: guardando ? "Guardando..." : guardado ? "✓ Guardada en historial" : "Guardar en historial", onClick: guardarEnHistorial, disabled: guardando },
+                  { label: generandoPdf ? "Generando..." : "Descargar PDF", onClick: descargarPdfActual, disabled: generandoPdf },
+                ]}
+              />
             </div>
           </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Club</th>
-                {data.agentes.length > 1 && <th>Agente</th>}
-                <th className="num">Ganancias/Pérdidas</th>
-                <th className="num">Rake</th>
-                <th className="num">Rakeback bruto</th>
-                <th className="num">Rebate</th>
-                <th className="num">Rakeback neto</th>
-                <th className="num">Rakeback pendiente</th>
-                <th className="num">Ventas</th>
-                <th className="num">Tickets</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.filas.map((f: any) => {
-                const key = filaKey(f);
-                return (
-                  <tr key={key}>
-                    <td>{f.clubName}</td>
-                    {data.agentes.length > 1 && <td className="muted">{f.agentName}</td>}
-                    <td className={`num ${Number(f.resultado) >= 0 ? "pos" : "neg"}`}>{usd(f.resultado)}</td>
-                    <td className="num money">{usd(f.rakeTotal)}</td>
-                    <td className="num money">{usd(f.rakebackBruto)}</td>
-                    <td className="num money">{usd(f.rebate)}</td>
-                    <td className="num"><strong>{usd(f.rakebackNeto)}</strong></td>
-                    <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo, o cruzando un adelanto de este agente (\"Cruzar pendientes\" más abajo, si tiene)." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
-                      {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
-                      {/* Pendiente NEGATIVO (el agente quedó debiendo en este club, 05/10/2026):
-                          "Enviar" no sirve (pagarPendiente exige disponible positivo) -- esto es
-                          para el caso en que otra fila de este mismo agente, en esta misma
-                          liquidación, ya lo cubre (ver compensarPendienteNegativo más arriba). */}
-                      {f.rakebackPendienteId && Number(f.rakebackPendienteDisponible) < -0.004 && (
-                        <div>
-                          <button
-                            type="button"
-                            className="btn secondary small"
-                            disabled={compensandoPendiente === f.rakebackPendienteId}
-                            onClick={() => compensarPendienteNegativo(f)}
-                            title="Saldar esta deuda contra el sobrante de otra fila de este agente en esta misma liquidación -- sin mandar ni recibir plata nueva."
-                          >
-                            {compensandoPendiente === f.rakebackPendienteId ? "Compensando..." : "Compensar"}
-                          </button>
-                        </div>
+          <div className="stat-row">
+            <div className="stat-card">
+              <div className="l">Rakeback final</div>
+              <div className="v">{usd(data.total)}</div>
+              <div className="s">{data.filas.length} fila{data.filas.length === 1 ? "" : "s"}</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Descuentos</div>
+              <div className="v">{totalDescontar > 0 ? "−" : ""}{usd(totalDescontar)}</div>
+              <div className="s">adelantos, cargas, manual, ventas</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Total a pagar</div>
+              <div className={`v ${totalAPagar >= 0 ? "pos" : "neg"}`}>{totalAPagar < 0 ? "−" : ""}{usd(Math.abs(totalAPagar))}</div>
+              <div className="s">{totalAPagar < 0 ? "el agente nos debe" : "a pagarle al agente"}</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Rakeback pendiente</div>
+              <div className="v">{usd(pendienteTotalFilas)}</div>
+              <div className="s">todavía sin pagar</div>
+            </div>
+          </div>
+
+          <div className="ag-table-wrap">
+            <table className="saldos-table">
+              <thead>
+                <tr>
+                  <th>Agente · club</th>
+                  <th className="num">Ganancias/Pérdidas</th>
+                  <th className="num">Rake</th>
+                  <th className="num">Rakeback neto</th>
+                  <th className="num">Pendiente</th>
+                  <th className="num">Ventas</th>
+                  <th className="num">Tickets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.filas.map((f: any) => {
+                  const key = filaKey(f);
+                  return (
+                    <tr key={key}>
+                      <td>
+                        <div className="saldo-name">{f.agentName}</div>
+                        <div className="saldo-sub">{f.clubName}</div>
+                      </td>
+                      <td className={`num ${Number(f.resultado) >= 0 ? "pos" : "neg"}`}>{montoSignoLiq(Number(f.resultado))}</td>
+                      <td className="num money">{usd(f.rakeTotal)}</td>
+                      <td className="num">
+                        <strong>{usd(f.rakebackNeto)}</strong>
+                        <div className="saldo-sub">bruto {usd(f.rakebackBruto)} · rebate {usd(f.rebate)}</div>
+                      </td>
+                      <td className="num muted" title={f.rakebackPendienteId ? "Lo que todavía no se pagó de esta fila -- pagalo con el botón \"Enviar\" de abajo, o cruzando un adelanto de este agente (\"Cruzar pendientes\" más abajo, si tiene)." : "Cierre viejo (de antes de separar el stock del rakeback pendiente) -- no tiene fila propia acá."}>
+                        {f.rakebackPendienteId ? usd(f.rakebackPendienteDisponible) : "—"}
+                        {/* Pendiente NEGATIVO (el agente quedó debiendo en este club, 05/10/2026):
+                            "Enviar" no sirve (pagarPendiente exige disponible positivo) -- esto es
+                            para el caso en que otra fila de este mismo agente, en esta misma
+                            liquidación, ya lo cubre (ver compensarPendienteNegativo más arriba). */}
+                        {f.rakebackPendienteId && Number(f.rakebackPendienteDisponible) < -0.004 && (
+                          <div>
+                            <button
+                              type="button"
+                              className="btn secondary small"
+                              disabled={compensandoPendiente === f.rakebackPendienteId}
+                              onClick={() => compensarPendienteNegativo(f)}
+                              title="Saldar esta deuda contra el sobrante de otra fila de este agente en esta misma liquidación -- sin mandar ni recibir plata nueva."
+                            >
+                              {compensandoPendiente === f.rakebackPendienteId ? "Compensando..." : "Compensar"}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td>{inputVentasTickets(f, key, "ventas")}</td>
+                      <td>{inputVentasTickets(f, key, "tickets")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ fontWeight: 700 }}>
+                  <td>TOTAL</td>
+                  <td></td>
+                  <td></td>
+                  <td className="num">{usd(data.total)}</td>
+                  <td className="num">{usd(pendienteTotalFilas)}</td>
+                  <td className="num">{usd(totalVentasFilas)}</td>
+                  <td className="num">{usd(totalTicketsFilas)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="ag-cards">
+            {data.filas.map((f: any) => {
+              const key = filaKey(f);
+              return (
+                <div key={key} className={`saldo-card ${Number(f.resultado) < 0 ? "is-neg" : "is-pos"}`}>
+                  <div className="saldo-card-body">
+                    <div className="saldo-card-top">
+                      <div className="saldo-name">{f.agentName}</div>
+                      <div className="saldo-big pos">{usd(f.rakebackNeto)}</div>
+                    </div>
+                    <div className="saldo-card-mid">
+                      <div className="saldo-sub">{f.clubName} · rakeback neto</div>
+                      {f.rakebackPendienteId && Math.abs(Number(f.rakebackPendienteDisponible)) >= 0.005 && (
+                        <span className="pill a">Pendiente {usd(f.rakebackPendienteDisponible)}</span>
                       )}
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={ventasPorFila[key] ?? ""}
-                        placeholder="0"
-                        onChange={(e) => {
-                          setGuardado(false);
-                          const v = Number(e.target.value) || 0;
-                          setVentasPorFila((prev) => ({ ...prev, [key]: v }));
-                        }}
-                        style={{ width: 90, textAlign: "right" }}
-                        title={`Ventas cargadas solo a ${f.agentName} (${f.clubName}) -- se descuenta de su parte, no de toda la liquidación.`}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={ticketsPorFila[key] ?? ""}
-                        placeholder="0"
-                        onChange={(e) => {
-                          setGuardado(false);
-                          const v = Number(e.target.value) || 0;
-                          setTicketsPorFila((prev) => ({ ...prev, [key]: v }));
-                        }}
-                        style={{ width: 90, textAlign: "right" }}
-                        title={`Tickets promocionales cargados solo a ${f.agentName} (${f.clubName}) -- se descuenta de su parte, no de toda la liquidación.`}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr style={{ fontWeight: 700 }}>
-                <td>TOTAL</td>
-                {data.agentes.length > 1 && <td></td>}
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td>{usd(data.total)}</td>
-                <td>{usd(data.filas.reduce((s: number, f: any) => s + (f.rakebackPendienteId ? Number(f.rakebackPendienteDisponible) : 0), 0))}</td>
-                <td>{usd(totalVentasFilas)}</td>
-                <td>{usd(totalTicketsFilas)}</td>
-              </tr>
-            </tbody>
-          </table>
+                    </div>
+                    <div className="saldo-card-foot" style={{ gap: 14 }}>
+                      <span>G/P <b>{montoSignoLiq(Number(f.resultado))}</b></span>
+                      <span>Rake <b>{usd(f.rakeTotal)}</b></span>
+                      <span>Rebate <b>{usd(f.rebate)}</b></span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+                      {inputVentasTickets(f, key, "ventas", true)}
+                      {inputVentasTickets(f, key, "tickets", true)}
+                    </div>
+                    {f.rakebackPendienteId && Number(f.rakebackPendienteDisponible) < -0.004 && (
+                      <button
+                        type="button"
+                        className="btn secondary small"
+                        style={{ marginTop: 8 }}
+                        disabled={compensandoPendiente === f.rakebackPendienteId}
+                        onClick={() => compensarPendienteNegativo(f)}
+                      >
+                        {compensandoPendiente === f.rakebackPendienteId ? "Compensando..." : "Compensar"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <h3 style={{ margin: 0 }}>Cruzar pendientes</h3>
               {(data.adelantos.length > 0 || data.cargas.length > 0) && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <button type="button" className="btn secondary small" onClick={seleccionarTodosCruces}>
                     Seleccionar todos
                   </button>
@@ -2072,13 +2126,13 @@ export default function Liquidaciones() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {data.adelantos.map((a: any) => (
-                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <input
                       type="checkbox"
                       checked={!!seleccionCruce[a.id]}
                       onChange={() => toggleSeleccionCruce(a.id)}
                     />
-                    <span style={{ minWidth: 260 }}>
+                    <span style={{ flex: "1 1 220px", minWidth: 0 }}>
                       {/* kind (29/09/2026): distingue un adelanto de rakeback de un "Adelanto de
                           fichas" pendiente de cobro -- cruzarlo genera un cobro real, no es
                           puramente contable como el de rakeback (ver repo/advances.ts). */}
@@ -2110,13 +2164,13 @@ export default function Liquidaciones() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {data.cargas.map((cg: any) => (
-                    <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div key={cg.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <input
                         type="checkbox"
                         checked={!!seleccionCruce[cg.id]}
                         onChange={() => toggleSeleccionCruce(cg.id)}
                       />
-                      <span style={{ minWidth: 260, flex: 1 }}>
+                      <span style={{ flex: "1 1 220px", minWidth: 0 }}>
                         {cg.agentName} ({cg.clubName}) — pendiente {usd(cg.pendiente)}
                         {cg.createdAt && <span className="muted"> ({dateShort(cg.createdAt)})</span>}
                       </span>
@@ -2200,7 +2254,7 @@ export default function Liquidaciones() {
                 <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
                   Pagos/cobros ya registrados de verdad para estos agentes en esta semana — a dónde fueron y con qué medio.
                 </div>
-                <table>
+                <div style={{ overflowX: "auto" }}><table>
                   <thead>
                     <tr>
                       <th>Fecha</th><th>Agente</th><th>Club</th><th>Tipo</th><th>Medio</th><th className="num">Importe</th><th>Observación</th><th></th>
@@ -2257,7 +2311,7 @@ export default function Liquidaciones() {
                       );
                     })}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             )}
 
