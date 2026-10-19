@@ -56,6 +56,29 @@ function formatearHoraActualizacion(d: Date) {
   return esHoy ? `Hoy ${hora}` : `${dateShort(d.toISOString())} ${hora}`;
 }
 
+// Presentación de la tabla/tarjetas de "Saldos por agente y club" (19/10/2026) -- solo formato.
+function numFicha(n: number | string) {
+  const v = Number(n);
+  if (Math.abs(v) < 0.5) return "0";
+  return (v < 0 ? "−" : "") + Math.abs(v).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+}
+function numFichaSigno(n: number | string) {
+  const v = Number(n);
+  if (Math.abs(v) < 0.5) return "0";
+  return (v < 0 ? "−" : "+") + Math.abs(v).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+}
+function SistemaDot({ system }: { system: string }) {
+  return <span className={`acc-dot ${system === "PREPAGO" ? "prepago" : "winlose"}`}>{system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span>;
+}
+function IconLapiz() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 export default function Resumen() {
   const nav = useNavigate();
   const [data, setData] = useState<any>(null);
@@ -156,6 +179,50 @@ export default function Resumen() {
       return b.agent_name.toLowerCase().includes(q) || b.club_name.toLowerCase().includes(q);
     })
     .sort((a: any, b: any) => fichasTotal(b) - fichasTotal(a));
+
+  // Contadores de los selectores (19/10/2026): cada grupo cuenta sobre el resto de los filtros
+  // (búsqueda + "mostrar en 0" + el OTRO selector), así los números siempre cuadran con lo que
+  // quedaría en la tabla al elegir esa opción.
+  const baseBusqueda = data.balances
+    .filter((b: any) => mostrarEnCero || fichasTotal(b) !== 0)
+    .filter((b: any) => {
+      const q = filtro.trim().toLowerCase();
+      if (!q) return true;
+      return b.agent_name.toLowerCase().includes(q) || b.club_name.toLowerCase().includes(q);
+    });
+  const cuentaSigno = (signo: FiltroSigno) =>
+    baseBusqueda.filter((b: any) => filtroSistema === "todos" || b.system === filtroSistema).filter((b: any) => pasaFiltroSigno(fichasTotal(b), signo)).length;
+  const cuentaSistema = (sistema: FiltroSistema) =>
+    baseBusqueda.filter((b: any) => pasaFiltroSigno(fichasTotal(b), filtroSigno)).filter((b: any) => sistema === "todos" || b.system === sistema).length;
+  const filasWinLose = balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE");
+  const filasPrepago = balancesFiltrados.filter((b: any) => b.system === "PREPAGO");
+  const totalWinLose = filasWinLose.reduce((s: number, b: any) => s + fichasTotal(b), 0);
+  const totalPrepago = filasPrepago.reduce((s: number, b: any) => s + fichasTotal(b), 0);
+  const nWinLose = filasWinLose.length;
+  const nPrepago = filasPrepago.length;
+
+  // Se llama como función (no como <Componente/>) a propósito: definido adentro del render, un
+  // componente se remontaría en cada tecla y el input perdería el foco.
+  const editorFichas = (b: any) => {
+    return (
+      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+        <input
+          type="number"
+          step="0.01"
+          autoFocus
+          value={editandoFichasValor}
+          onChange={(e) => setEditandoFichasValor(e.target.value)}
+          style={{ width: 100 }}
+        />
+        <button className="btn small" disabled={guardandoFichas} onClick={() => guardarFichas(b)}>
+          Guardar
+        </button>
+        <button className="btn secondary small" disabled={guardandoFichas} onClick={() => setEditandoFichasId(null)}>
+          Cancelar
+        </button>
+      </div>
+    );
+  }
 
   // Win/Lose vs Prepago para los KPIs "Agentes nos deben"/"Debemos a agentes" (30/09/2026,
   // corrección confirmada por Leo -- reemplaza el cálculo anterior con fichasTotal(data.balances),
@@ -467,13 +534,17 @@ export default function Resumen() {
         </div>
       )}
 
+      {/* (19/10/2026, pedido de Leo: "mejorar visualmente" -- aprobado el mockup) Saldos por agente y
+          club: MISMOS datos, filtros, edición manual y detalle que antes, solo cambia cómo se
+          dibuja. En escritorio, tabla con "Fichas" como protagonista; en celular (<=768px), una
+          tarjeta por cuenta (ver .saldos-table-wrap / .saldos-cards en index.css). */}
       <div className="panel" ref={tablaSaldosRef}>
-        <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
+        <div className="topbar" style={{ marginBottom: 12, alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0 }}>Saldos por agente y club</h3>
-            <div className="muted" style={{ marginTop: 2 }}>Positivo = a favor del agente</div>
+            <div className="muted" style={{ marginTop: 2 }}>Positivo = a favor del agente · Negativo = a favor nuestro</div>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="saldos-tools">
             <input
               className="search-input"
               placeholder="Buscar agente o club..."
@@ -502,136 +573,193 @@ export default function Resumen() {
             </button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button className={`chip${filtroSigno === "todos" ? " chip-active" : ""}`} onClick={() => setFiltroSigno("todos")}>
-            Todos
-          </button>
-          <button className={`chip${filtroSigno === "nosDeben" ? " chip-active" : ""}`} onClick={() => setFiltroSigno("nosDeben")}>
-            Nos deben
-          </button>
-          <button className={`chip${filtroSigno === "debemos" ? " chip-active" : ""}`} onClick={() => setFiltroSigno("debemos")}>
-            Debemos
-          </button>
+
+        <div className="saldos-filters">
+          <div className="seg">
+            <button className={filtroSigno === "todos" ? "on" : ""} onClick={() => setFiltroSigno("todos")}>
+              Todos<span className="n">{cuentaSigno("todos")}</span>
+            </button>
+            <button className={filtroSigno === "nosDeben" ? "on" : ""} onClick={() => setFiltroSigno("nosDeben")}>
+              Nos deben<span className="n">{cuentaSigno("nosDeben")}</span>
+            </button>
+            <button className={filtroSigno === "debemos" ? "on" : ""} onClick={() => setFiltroSigno("debemos")}>
+              Debemos<span className="n">{cuentaSigno("debemos")}</span>
+            </button>
+          </div>
+          <div className="seg">
+            <button className={filtroSistema === "todos" ? "on" : ""} onClick={() => setFiltroSistema("todos")}>
+              Todos
+            </button>
+            <button className={filtroSistema === "WIN_LOSE" ? "on" : ""} onClick={() => setFiltroSistema("WIN_LOSE")}>
+              Win/Lose<span className="n">{cuentaSistema("WIN_LOSE")}</span>
+            </button>
+            <button className={filtroSistema === "PREPAGO" ? "on" : ""} onClick={() => setFiltroSistema("PREPAGO")}>
+              Prepago<span className="n">{cuentaSistema("PREPAGO")}</span>
+            </button>
+          </div>
+          <span className="saldos-filters-spacer" />
+          <label className="switch" title="Para buscar un agente y hacer un ajuste aunque no tenga fichas">
+            <input type="checkbox" checked={mostrarEnCero} onChange={(e) => setMostrarEnCero(e.target.checked)} />
+            <i />
+            Mostrar saldos en US$ 0
+          </label>
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button className={`chip${filtroSistema === "todos" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("todos")}>
-            Todos los sistemas
-          </button>
-          <button className={`chip${filtroSistema === "WIN_LOSE" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("WIN_LOSE")}>
-            Win/Lose
-          </button>
-          <button className={`chip${filtroSistema === "PREPAGO" ? " chip-active" : ""}`} onClick={() => setFiltroSistema("PREPAGO")}>
-            Prepago
-          </button>
+
+        <div className="stat-row">
+          <div className="stat-card">
+            <div className="l">Fichas Prepago</div>
+            <div className="v">{usd(totalPrepago)}</div>
+            <div className="s">{nPrepago} cuenta{nPrepago === 1 ? "" : "s"}</div>
+          </div>
+          <div className="stat-card">
+            <div className="l">Saldo Win/Lose</div>
+            <div className="v">{usd(totalWinLose)}</div>
+            <div className="s">{nWinLose} cuenta{nWinLose === 1 ? "" : "s"}</div>
+          </div>
         </div>
-        <label className="muted" style={{ fontSize: 12, marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <input type="checkbox" checked={mostrarEnCero} onChange={(e) => setMostrarEnCero(e.target.checked)} />
-          Mostrar también saldos en US$ 0,00 (para buscar un agente y hacer un ajuste aunque no tenga fichas)
-        </label>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-          Saldo Win/Lose {usd(balancesFiltrados.filter((b: any) => b.system === "WIN_LOSE").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
-          {" · "}
-          Fichas Prepago {usd(balancesFiltrados.filter((b: any) => b.system === "PREPAGO").reduce((s: number, b: any) => s + fichasTotal(b), 0))}
-        </div>
-        <div className="table-scroll">
-        <table className="table-compact">
-          <thead>
-            <tr><th>Agente</th><th>Club</th><th>Sistema</th><th className="num">Cierre última semana</th><th className="num">Cargado</th><th className="num">Descargado</th><th className="num">Fichas ganadas en mesas</th><th className="num">Fichas</th></tr>
-          </thead>
-          <tbody>
-            {balancesFiltrados.map((b: any) => (
-              <tr
-                key={b.id}
-                className="row-click"
-                onClick={() => setDetalle({ title: `${b.agent_name} — ${b.club_name}`, agentId: b.agent_id, clubId: b.club_id })}
-              >
-                <td>{b.agent_name}</td>
-                <td>{b.club_name}</td>
-                <td><span className="badge neutral">{b.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span></td>
-                <td className="num">
-                  {/* Solo Win/Lose (24/09/2026, pedido de Leo: "Todos los agentes WIN/LOSE en su
-                      resumen deberia aparecer el cierre final de la semana") -- el cierre de la
-                      última semana cerrada de ESTE agente+club, puramente informativo: el Saldo
-                      de al lado ya lo tiene sumado y sigue moviéndose solo con lo que pase la
-                      semana que viene (pagos/cobros/retiros), este número no. */}
-                  {b.system === "WIN_LOSE" && b.ultimo_cierre_monto !== null ? (
-                    <span title={`Semana ${dateShort(b.ultimo_cierre_week_start)} - ${dateShort(b.ultimo_cierre_week_end)}`}>
-                      <span className={`badge ${Number(b.ultimo_cierre_monto) > 0 ? "pos" : Number(b.ultimo_cierre_monto) < 0 ? "neg" : "neutral"}`}>
-                        {usd(b.ultimo_cierre_monto)}
-                      </span>
-                      <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{dateShort(b.ultimo_cierre_week_end)}</span>
-                    </span>
-                  ) : (
-                    <span className="muted">—</span>
-                  )}
-                </td>
-                <td className="num">
-                  {/* Cargado/Descargado (24/09/2026, pedido de Leo: "3 columnas... la suma y la
-                      resta de eso") -- solo tiene sentido para PREPAGO: ahí CARGA y DESCARGA son
-                      los ÚNICOS movimientos que tocan el balance (ver repo/closings.ts y
-                      repo/rakebackPendiente.ts), así que Cargado - Descargado = Saldo siempre.
-                      Para WIN_LOSE el balance también incluye el cierre semanal -- mostrar estas
-                      columnas ahí confundiría más de lo que aclara, así que se dejan vacías. */}
-                  {b.system === "PREPAGO" ? <span className="badge pos">{usd(b.total_cargado)}</span> : <span className="muted">—</span>}
-                </td>
-                <td className="num">
-                  {b.system === "PREPAGO" ? <span className="badge neg">{usd(-Math.abs(Number(b.total_descargado)))}</span> : <span className="muted">—</span>}
-                </td>
-                <td className="num">
-                  {/* Fichas ganadas en mesas (24/09/2026, pedido de Leo): "Cargado - Descargado +
-                      Fichas ganadas en las mesas = Fichas". Solo informativo -- referencia para
-                      saber qué compone el número de Fichas, que abajo se puede editar a mano. */}
-                  {b.system === "PREPAGO" ? (
-                    <span className={`badge ${Number(b.total_fichas_ganadas_mesas) >= 0 ? "pos" : "neg"}`}>
-                      {usd(b.total_fichas_ganadas_mesas)}
-                    </span>
-                  ) : (
-                    <span className="muted">—</span>
-                  )}
-                </td>
-                <td className="num" onClick={(e) => e.stopPropagation()}>
-                  {/* Fichas = balance + fichas ganadas en mesas para PREPAGO (24/09/2026,
-                      aclaración de Leo: el número mostrado TIENE que ser la suma de las 3
-                      columnas, no solo tenerla al lado de referencia -- ver fichasTotal() arriba).
-                      100% editable a mano SOLO para PREPAGO (pedido de Leo: "por temas internos")
-                      -- guarda un AJUSTE por la diferencia sobre el balance real, nunca pisa el
-                      número directo, así queda auditado (ver guardarFichas() arriba). */}
-                  {b.system === "PREPAGO" && editandoFichasId === b.id ? (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input
-                        type="number"
-                        step="0.01"
-                        autoFocus
-                        value={editandoFichasValor}
-                        onChange={(e) => setEditandoFichasValor(e.target.value)}
-                        style={{ width: 100 }}
-                      />
-                      <button className="btn small" disabled={guardandoFichas} onClick={() => guardarFichas(b)}>
-                        Guardar
-                      </button>
-                      <button className="btn secondary small" disabled={guardandoFichas} onClick={() => setEditandoFichasId(null)}>
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <span className={`badge ${fichasTotal(b) > 0 ? "pos" : "neg"}`}>{usd(fichasTotal(b))}</span>
-                      {b.system === "PREPAGO" && (
-                        <button
-                          className="btn secondary small"
-                          title="Editar fichas a mano"
-                          onClick={() => empezarEdicionFichas(b)}
-                        >
-                          ✎
+
+        <div className="table-scroll saldos-table-wrap">
+          <table className="table-compact table-saldo-accent saldos-table">
+            <thead>
+              <tr>
+                <th>Agente · club</th>
+                <th>Sistema</th>
+                <th>Cierre últ. semana</th>
+                <th className="num">Cargado</th>
+                <th className="num op">− Descargado</th>
+                <th className="num op">+ Mesas</th>
+                <th className="num">= Fichas</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {balancesFiltrados.map((b: any) => {
+                const f = fichasTotal(b);
+                const pre = b.system === "PREPAGO";
+                return (
+                  <tr
+                    key={b.id}
+                    className={`row-click ${f > 0 ? "row-pos" : f < 0 ? "row-neg" : ""}`}
+                    onClick={() => setDetalle({ title: `${b.agent_name} — ${b.club_name}`, agentId: b.agent_id, clubId: b.club_id })}
+                  >
+                    <td>
+                      <div className="saldo-name">{b.agent_name}</div>
+                      <div className="saldo-sub">{b.club_name}</div>
+                    </td>
+                    <td><SistemaDot system={b.system} /></td>
+                    <td>
+                      {/* Solo Win/Lose (24/09/2026, pedido de Leo: "Todos los agentes WIN/LOSE en su
+                          resumen deberia aparecer el cierre final de la semana") -- el cierre de la
+                          última semana cerrada de ESTE agente+club, puramente informativo: el saldo
+                          ya lo tiene sumado y sigue moviéndose solo con lo que pase la semana que
+                          viene (pagos/cobros/retiros), este número no. */}
+                      {!pre && b.ultimo_cierre_monto !== null ? (
+                        <span title={`Semana ${dateShort(b.ultimo_cierre_week_start)} - ${dateShort(b.ultimo_cierre_week_end)}`}>
+                          <span className={`badge ${Number(b.ultimo_cierre_monto) > 0 ? "pos" : Number(b.ultimo_cierre_monto) < 0 ? "neg" : "neutral"}`}>
+                            {usd(b.ultimo_cierre_monto)}
+                          </span>
+                          <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{dateShort(b.ultimo_cierre_week_end)}</span>
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    {/* Cargado - Descargado + Mesas = Fichas (24/09/2026, pedido de Leo). Solo
+                        PREPAGO: ahí CARGA y DESCARGA son los ÚNICOS movimientos que tocan el
+                        balance (ver repo/closings.ts y repo/rakebackPendiente.ts). Para WIN_LOSE el
+                        balance también incluye el cierre semanal -- mostrar estas columnas ahí
+                        confundiría más de lo que aclara, así que se dejan vacías. */}
+                    <td className="num">{pre ? <span className="fx">{numFicha(b.total_cargado)}</span> : <span className="muted">—</span>}</td>
+                    <td className="num">{pre ? <span className={`fx ${Number(b.total_descargado) !== 0 ? "neg" : ""}`}>{numFicha(-Math.abs(Number(b.total_descargado)))}</span> : <span className="muted">—</span>}</td>
+                    <td className="num">{pre ? <span className={`fx ${Number(b.total_fichas_ganadas_mesas) < 0 ? "neg" : ""}`}>{numFichaSigno(b.total_fichas_ganadas_mesas)}</span> : <span className="muted">—</span>}</td>
+                    <td className="num" onClick={(e) => e.stopPropagation()}>
+                      {/* Fichas = balance + fichas ganadas en mesas para PREPAGO (24/09/2026,
+                          aclaración de Leo: el número mostrado TIENE que ser la suma de las 3
+                          columnas -- ver fichasTotal() arriba). 100% editable a mano SOLO para
+                          PREPAGO (pedido de Leo: "por temas internos") -- guarda un AJUSTE por la
+                          diferencia sobre el balance real, nunca pisa el número directo, así queda
+                          auditado (ver guardarFichas() arriba). */}
+                      {pre && editandoFichasId === b.id ? (
+                        editorFichas(b)
+                      ) : (
+                        <span className={`saldo-big ${f > 0 ? "pos" : f < 0 ? "neg" : "neutral"}`}>{usd(f)}</span>
+                      )}
+                    </td>
+                    <td className="saldo-edit-cell" onClick={(e) => e.stopPropagation()}>
+                      {pre && editandoFichasId !== b.id && (
+                        <button className="icon-btn" title="Editar fichas a mano" onClick={() => empezarEdicionFichas(b)}>
+                          <IconLapiz />
                         </button>
                       )}
-                    </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {balancesFiltrados.length === 0 && (
+                <tr><td colSpan={8} className="muted">Ninguna cuenta coincide con estos filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="saldos-cards">
+          {balancesFiltrados.map((b: any) => {
+            const f = fichasTotal(b);
+            const pre = b.system === "PREPAGO";
+            return (
+              <div
+                key={b.id}
+                className={`saldo-card ${f > 0 ? "pos" : f < 0 ? "neg" : ""}`}
+                onClick={() => setDetalle({ title: `${b.agent_name} — ${b.club_name}`, agentId: b.agent_id, clubId: b.club_id })}
+              >
+                <div className="saldo-card-body">
+                  <div className="saldo-card-top">
+                    <div className="saldo-name">{b.agent_name}</div>
+                    {pre && editandoFichasId === b.id ? null : (
+                      <div className={`saldo-big ${f > 0 ? "pos" : f < 0 ? "neg" : "neutral"}`}>{usd(f)}</div>
+                    )}
+                  </div>
+                  <div className="saldo-card-mid">
+                    <div className="saldo-sub">
+                      {b.club_name} · <SistemaDot system={b.system} />
+                    </div>
+                    {pre && editandoFichasId !== b.id && (
+                      <button
+                        className="icon-btn"
+                        title="Editar fichas a mano"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          empezarEdicionFichas(b);
+                        }}
+                      >
+                        <IconLapiz />
+                      </button>
+                    )}
+                  </div>
+                  {pre && editandoFichasId === b.id && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
+                      {editorFichas(b)}
+                    </div>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <div className="saldo-card-foot">
+                    {pre ? (
+                      <>
+                        <span>Carg. <b className="fx">{numFicha(b.total_cargado)}</b></span>
+                        <span>Desc. <b className="fx">{numFicha(b.total_descargado)}</b></span>
+                        <span>Mesas <b className={`fx ${Number(b.total_fichas_ganadas_mesas) < 0 ? "neg" : ""}`}>{numFichaSigno(b.total_fichas_ganadas_mesas)}</b></span>
+                      </>
+                    ) : (
+                      <span>
+                        Cierre {b.ultimo_cierre_week_end ? dateShort(b.ultimo_cierre_week_end) : "—"}:{" "}
+                        <b className="fx">{b.ultimo_cierre_monto !== null ? usd(b.ultimo_cierre_monto) : "—"}</b>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {balancesFiltrados.length === 0 && <div className="muted">Ninguna cuenta coincide con estos filtros.</div>}
         </div>
       </div>
 

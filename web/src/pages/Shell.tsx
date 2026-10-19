@@ -541,6 +541,23 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         )}
         <Outlet key={`${location.pathname}:${refreshKey}`} />
       </div>
+      {/* (19/10/2026, pedido de Leo, mockup aprobado) Barra inferior SOLO en celular y SOLO para el
+          admin: 4 accesos de uso diario + "Más", que abre el mismo menú lateral de siempre (que
+          sigue teniendo los ~18 ítems). Se oculta por CSS arriba de 768px (ver .bottom-nav). */}
+      {role === "ADMIN" && (
+        <nav className="bottom-nav" aria-label="Accesos rápidos">
+          <NavLink to="/dashboard" end className="bottom-nav-item">{icon.resumen}<span>Resumen</span></NavLink>
+          <NavLink to="/dashboard/agentes" className="bottom-nav-item">{icon.agentes}<span>Administración</span></NavLink>
+          <NavLink to="/dashboard/movimientos" className="bottom-nav-fab" title="Cargar movimiento" aria-label="Cargar movimiento">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          </NavLink>
+          <NavLink to="/dashboard/cierres" className="bottom-nav-item">{icon.cierres}<span>Cierres</span></NavLink>
+          <button type="button" className="bottom-nav-item" onClick={() => setMobileOpen(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+            <span>Más</span>
+          </button>
+        </nav>
+      )}
       <IdleGuard />
     </div>
   );
