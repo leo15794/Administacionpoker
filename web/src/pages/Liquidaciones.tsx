@@ -4,6 +4,7 @@ import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Modal from "../components/Modal";
+import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
@@ -1573,6 +1574,94 @@ export default function Liquidaciones() {
     }
   }
 
+  // ---- Historial (19/10/2026, mockup aprobado): filtros por estado y semana, tarjetas en celu, ⋯ ----
+  const [histFiltro, setHistFiltro] = useState<"porPagar" | "PENDIENTE" | "CERRADA" | "PAGADA" | "todas">("porPagar");
+  const [histSemana, setHistSemana] = useState("");
+  const [histBusqueda, setHistBusqueda] = useState("");
+  const diaMesLiq = (s: string) => {
+    const [, m, d] = String(s).slice(0, 10).split("-");
+    return `${d}/${m}`;
+  };
+  const montoSignoLiq = (n: number) => `${n < 0 ? "−" : ""}${usd(Math.abs(n))}`;
+  const descontadoHist = (h: any) => Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0);
+  const accionHist = (estado: string) => (estado === "PENDIENTE" ? "Retomar" : estado === "CERRADA" ? "Retomar para pagar" : "Revisar");
+  const histResumen = useMemo(() => {
+    const r: Record<string, { n: number; pagar: number; cobrar: number }> = {
+      PENDIENTE: { n: 0, pagar: 0, cobrar: 0 }, CERRADA: { n: 0, pagar: 0, cobrar: 0 }, PAGADA: { n: 0, pagar: 0, cobrar: 0 },
+    };
+    for (const h of historial ?? []) {
+      const e = r[h.estado];
+      if (!e) continue;
+      const t = Number(h.total_a_pagar);
+      e.n++;
+      if (t > 0) e.pagar += t;
+      else e.cobrar += -t;
+    }
+    return r;
+  }, [historial]);
+  const histSemanas = useMemo(() => {
+    const m = new Map<string, { ws: string; we: string; n: number }>();
+    for (const h of historial ?? []) {
+      const ws = String(h.week_start).slice(0, 10);
+      const x = m.get(ws);
+      if (x) x.n++;
+      else m.set(ws, { ws, we: String(h.week_end).slice(0, 10), n: 1 });
+    }
+    return Array.from(m.values()).sort((a, b) => b.ws.localeCompare(a.ws));
+  }, [historial]);
+  const histVisible = (historial ?? []).filter((h) => {
+    if (histFiltro === "porPagar" ? h.estado === "PAGADA" : histFiltro !== "todas" && h.estado !== histFiltro) return false;
+    if (histSemana && String(h.week_start).slice(0, 10) !== histSemana) return false;
+    const q = histBusqueda.trim().toLowerCase();
+    return !q || String(h.nombre_grupo).toLowerCase().includes(q);
+  });
+  function EstadoHist({ estado }: { estado: string }) {
+    if (estado === "PENDIENTE") return <span className="pill a" title="Se calculó pero todavía no se registró ningún pago ni cobro para este grupo/semana">Pendiente de pago</span>;
+    if (estado === "CERRADA") return <span className="pill gold" title="Armada y guardada, pero todavía no se mandó ni recibió ningún pago -- elegila para recién ahí pagar">Cerrada</span>;
+    return <span className="pill g">Pagada</span>;
+  }
+  async function pdfDesdeHistorial(h: any) {
+    try {
+      await generarPdf({
+        nombreGrupo: h.nombre_grupo,
+        weekStart: h.week_start,
+        weekEnd: h.week_end,
+        filas: h.filas,
+        multiAgente: h.agent_ids.length > 1,
+        total: Number(h.total),
+        adelantosAplicados: Number(h.adelantos_aplicados),
+        adelantosManual: Number(h.adelantos_manual),
+        cargasAplicadas: Number(h.cargas_aplicadas ?? 0),
+        ventasTickets: (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0),
+        nota: h.nota || "",
+      });
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo generar el PDF.");
+    }
+  }
+  async function eliminarDelHistorial(h: any) {
+    if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto borra el registro/foto Y revierte los cruces de adelantos/cargas Y los pagos reales (Enviar/Recibir) que se hayan aplicado en esta liquidación puntual — no toca ningún cierre.`))) return;
+    setBorrandoHist(h.id);
+    try {
+      const r = await api.eliminarLiquidacionGuardada(h.id);
+      const erroresTotales = [...(r?.cruces?.errores ?? []), ...(r?.pagos?.errores ?? [])];
+      if (erroresTotales.length > 0) {
+        await alertDialog(
+          `Se borró la liquidación. Se revirtieron ${r?.cruces?.liberados ?? 0} cruce(s) y ${r?.pagos?.revertidos ?? 0} pago(s), pero ${erroresTotales.length} no se pudieron deshacer (revisalos a mano en Adelantos/Movimientos/Liquidaciones):\n\n${erroresTotales.join("\n")}`
+        );
+      }
+      refrescarHistorial();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar.");
+    } finally {
+      setBorrandoHist(null);
+    }
+  }
+  const itemsHist = (h: any) => [
+    { label: "Descargar PDF", onClick: () => pdfDesdeHistorial(h) },
+    { label: borrandoHist === h.id ? "Eliminando..." : "Eliminar del historial…", onClick: () => eliminarDelHistorial(h), danger: true, disabled: borrandoHist === h.id },
+  ];
+
   return (
     <div>
       <h2>Liquidaciones</h2>
@@ -2541,84 +2630,124 @@ export default function Liquidaciones() {
         ) : historial.length === 0 ? (
           <div className="muted">Todavía no se guardó ninguna liquidación.</div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th><th>Estado</th><th>Nombre</th><th>Semana</th><th className="num">Rakeback total</th>
-                <th className="num">Descontado</th><th className="num">Total pagado</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {historial.map((h) => (
-                <tr key={h.id}>
-                  <td className="muted">{dateShort(h.created_at)}</td>
-                  <td>
-                    {h.estado === "PENDIENTE" ? (
-                      <span className="badge neg" title="Se calculó pero todavía no se registró ningún pago ni cobro para este grupo/semana">Pendiente de pago</span>
-                    ) : h.estado === "CERRADA" ? (
-                      <span className="badge neutral" title="Armada y guardada, pero todavía no se mandó ni recibió ningún pago -- elegila para recién ahí pagar">Cerrada</span>
-                    ) : (
-                      <span className="badge pos">Pagada</span>
-                    )}
-                  </td>
-                  <td>{h.nombre_grupo}</td>
-                  <td className="muted">{dateShort(h.week_start)} - {dateShort(h.week_end)}</td>
-                  <td className="num money">{usd(h.total)}</td>
-                  <td className="num money">-{usd(Number(h.adelantos_aplicados) + Number(h.adelantos_manual) + Number(h.cargas_aplicadas ?? 0) + (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0))}</td>
-                  <td className="num"><strong>{usd(h.total_a_pagar)}</strong></td>
-                  <td style={{ display: "flex", gap: 6 }}>
-                    <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>
-                      {h.estado === "PENDIENTE" ? "Retomar" : h.estado === "CERRADA" ? "Retomar para pagar" : "Revisar"}
-                    </button>
-                    <button
-                      className="btn secondary small"
-                      onClick={() =>
-                        generarPdf({
-                          nombreGrupo: h.nombre_grupo,
-                          weekStart: h.week_start,
-                          weekEnd: h.week_end,
-                          filas: h.filas,
-                          multiAgente: h.agent_ids.length > 1,
-                          total: Number(h.total),
-                          adelantosAplicados: Number(h.adelantos_aplicados),
-                          adelantosManual: Number(h.adelantos_manual),
-                          cargasAplicadas: Number(h.cargas_aplicadas ?? 0),
-                          ventasTickets: (h.filas || []).reduce((s: number, f: any) => s + (Number(f.ventas) || 0) + (Number(f.tickets) || 0), 0),
-                          nota: h.nota || "",
-                        }).catch((err: any) => alertDialog(err.message || "No se pudo generar el PDF."))
-                      }
-                    >
-                      Descargar PDF
-                    </button>
-                    <button
-                      className="btn danger small"
-                      disabled={borrandoHist === h.id}
-                      onClick={async () => {
-                        if (!(await confirmDialog(`¿Eliminar del historial la liquidación de "${h.nombre_grupo}" (${dateShort(h.week_start)})? Esto borra el registro/foto Y revierte los cruces de adelantos/cargas Y los pagos reales (Enviar/Recibir) que se hayan aplicado en esta liquidación puntual — no toca ningún cierre.`))) return;
-                        setBorrandoHist(h.id);
-                        try {
-                          const r = await api.eliminarLiquidacionGuardada(h.id);
-                          const erroresTotales = [...(r?.cruces?.errores ?? []), ...(r?.pagos?.errores ?? [])];
-                          if (erroresTotales.length > 0) {
-                            await alertDialog(
-                              `Se borró la liquidación. Se revirtieron ${r?.cruces?.liberados ?? 0} cruce(s) y ${r?.pagos?.revertidos ?? 0} pago(s), pero ${erroresTotales.length} no se pudieron deshacer (revisalos a mano en Adelantos/Movimientos/Liquidaciones):\n\n${erroresTotales.join("\n")}`
-                            );
-                          }
-                          refrescarHistorial();
-                        } catch (err: any) {
-                          await alertDialog(err.message || "No se pudo eliminar.");
-                        } finally {
-                          setBorrandoHist(null);
-                        }
-                      }}
-                    >
-                      {borrandoHist === h.id ? "..." : "Eliminar"}
-                    </button>
-                  </td>
-                </tr>
+          <>
+            <div className="stat-row">
+              <div className="stat-card">
+                <div className="l">Pendientes de pago</div>
+                <div className="v">{histResumen.PENDIENTE.n}</div>
+                <div className="s">a pagar {usd(histResumen.PENDIENTE.pagar)} · a cobrar {usd(histResumen.PENDIENTE.cobrar)}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Cerradas (sin pagar)</div>
+                <div className="v">{histResumen.CERRADA.n}</div>
+                <div className="s">a pagar {usd(histResumen.CERRADA.pagar)} · a cobrar {usd(histResumen.CERRADA.cobrar)}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Pagadas</div>
+                <div className="v">{histResumen.PAGADA.n}</div>
+                <div className="s">ya registradas</div>
+              </div>
+            </div>
+
+            <div className="ag-toolbar" style={{ marginBottom: 10 }}>
+              <span className="seg">
+                {([
+                  ["porPagar", "Por pagar", histResumen.PENDIENTE.n + histResumen.CERRADA.n],
+                  ["PENDIENTE", "Pendientes", histResumen.PENDIENTE.n],
+                  ["CERRADA", "Cerradas", histResumen.CERRADA.n],
+                  ["PAGADA", "Pagadas", histResumen.PAGADA.n],
+                  ["todas", "Todas", historial.length],
+                ] as const).map(([k, label, n]) => (
+                  <button key={k} className={histFiltro === k ? "on" : ""} onClick={() => setHistFiltro(k)}>
+                    {label}<span className="n">{n}</span>
+                  </button>
+                ))}
+              </span>
+              <span className="ag-toolbar-spacer" />
+              <input
+                className="ag-search"
+                placeholder="Buscar por nombre…"
+                value={histBusqueda}
+                onChange={(e) => setHistBusqueda(e.target.value)}
+              />
+            </div>
+            <div className="tb-week-chips" style={{ justifyContent: "flex-start", marginBottom: 12 }}>
+              <button className={`chip${histSemana === "" ? " chip-active" : ""}`} onClick={() => setHistSemana("")}>Todas las semanas</button>
+              {histSemanas.map((s) => (
+                <button key={s.ws} className={`chip${histSemana === s.ws ? " chip-active" : ""}`} onClick={() => setHistSemana(s.ws)}>
+                  {diaMesLiq(s.ws)} – {diaMesLiq(s.we)} <span style={{ opacity: 0.6 }}>{s.n}</span>
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+
+            <div className="ag-table-wrap">
+              <table className="saldos-table">
+                <thead>
+                  <tr>
+                    <th>Liquidación</th><th>Estado</th><th className="num">Rakeback</th><th className="num">Descontado</th><th className="num">Total</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {histVisible.map((h) => {
+                    const total = Number(h.total_a_pagar);
+                    const desc = descontadoHist(h);
+                    return (
+                      <tr key={h.id} className={total > 0 ? "row-pos" : total < 0 ? "row-neg" : ""}>
+                        <td>
+                          <div className="saldo-name">{h.nombre_grupo}</div>
+                          <div className="saldo-sub">{h.agent_ids.length} agente{h.agent_ids.length === 1 ? "" : "s"} · {diaMesLiq(h.week_start)} – {diaMesLiq(h.week_end)}</div>
+                        </td>
+                        <td><EstadoHist estado={h.estado} /></td>
+                        <td className="num money">{montoSignoLiq(Number(h.total))}</td>
+                        <td className="num money">{desc ? montoSignoLiq(-desc) : "—"}</td>
+                        <td className="num">
+                          <span className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoLiq(total)}</span>
+                          <div className="saldo-sub">{total < 0 ? "a cobrar" : total > 0 ? "a pagar" : ""}</div>
+                        </td>
+                        <td style={{ width: 230, textAlign: "right", whiteSpace: "nowrap" }}>
+                          <button className="btn small" onClick={() => retomarLiquidacionPendiente(h)}>{accionHist(h.estado)}</button>{" "}
+                          <ActionsMenu items={itemsHist(h)} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {histVisible.length === 0 && <tr><td colSpan={6} className="muted">No hay liquidaciones con estos filtros.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="ag-cards">
+              {histVisible.map((h) => {
+                const total = Number(h.total_a_pagar);
+                const desc = descontadoHist(h);
+                return (
+                  <div key={h.id} className={`saldo-card ${total > 0 ? "is-pos" : total < 0 ? "is-neg" : ""}`}>
+                    <div className="saldo-card-body">
+                      <div className="saldo-card-top">
+                        <div className="saldo-name">{h.nombre_grupo}</div>
+                        <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoLiq(total)}</div>
+                      </div>
+                      <div className="saldo-card-mid">
+                        <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <EstadoHist estado={h.estado} /> {h.agent_ids.length} ag. · {diaMesLiq(h.week_start)} – {diaMesLiq(h.week_end)}
+                        </div>
+                        <span className="saldo-sub">{total < 0 ? "a cobrar" : total > 0 ? "a pagar" : ""}</span>
+                      </div>
+                      <div className="saldo-card-foot" style={{ gap: 14, alignItems: "center" }}>
+                        <span>Rakeback <b>{montoSignoLiq(Number(h.total))}</b></span>
+                        {desc !== 0 && <span>Descontado <b>{montoSignoLiq(-desc)}</b></span>}
+                        <span style={{ flex: 1 }} />
+                        <button className="btn small" style={{ padding: "5px 11px" }} onClick={() => retomarLiquidacionPendiente(h)}>{accionHist(h.estado)}</button>
+                        <ActionsMenu items={itemsHist(h)} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {histVisible.length === 0 && <div className="muted">No hay liquidaciones con estos filtros.</div>}
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>Mostrando {histVisible.length} de {historial.length}.</div>
+          </>
         )}
       </div>
 
