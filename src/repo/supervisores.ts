@@ -639,6 +639,32 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
     [sup.rows[0].name, weekStart]
   );
 
+  // Desglose por club de cada agente (19/10/2026, pedido de Leo: que el supervisor pueda desplegar de dónde sale
+  // el cierre de cada agente) -- una fila por weekly_closing real de esa semana, solo lectura, nunca recalcula nada.
+  const detalle = await pool.query(
+    `SELECT wc.agent_id, c.name as club_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback
+     FROM weekly_closings wc
+     JOIN agents a ON a.id = wc.agent_id
+     JOIN clubs c ON c.id = wc.club_id
+     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
+     ORDER BY c.name`,
+    [sup.rows[0].name, weekStart]
+  );
+  const detallePorAgente = new Map<string, any[]>();
+  for (const d of detalle.rows) {
+    const arr = detallePorAgente.get(d.agent_id) ?? [];
+    arr.push({
+      club_name: d.club_name,
+      system: d.system,
+      jugadores: d.jugadores,
+      result: Number(d.result),
+      rake_total: Number(d.rake_total),
+      rakeback_pct: Number(d.rakeback_pct),
+      rakeback: Number(d.rakeback),
+    });
+    detallePorAgente.set(d.agent_id, arr);
+  }
+
   const aplicado = await pool.query(
     `SELECT * FROM supervisor_cierres WHERE supervisor_agent_id = $1 AND week_start = $2::date AND status <> 'REVERTIDO'`,
     [supervisorAgentId, weekStart]
@@ -648,7 +674,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
   const rakebackTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.rakeback), 0));
 
   return {
-    lineas: lineas.rows,
+    lineas: lineas.rows.map((l) => ({ ...l, detalle: detallePorAgente.get(l.agent_id) ?? [] })),
     resultadoTotal,
     rakebackTotal,
     aplicado: aplicado.rows[0] ?? null,
