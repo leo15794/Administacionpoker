@@ -3,6 +3,7 @@ import { api } from "../api";
 import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
+import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
@@ -22,7 +23,8 @@ const GARANTIA_TIPO_LABEL: Record<string, string> = {
 type Tab = "saldos" | "cierres" | "pagos" | "garantias";
 
 export default function Proveedores() {
-  const [tab, setTab] = useState<Tab>("saldos");
+  const [tab, setTab] = useState<Tab>("cierres");
+  const [verRevertidos, setVerRevertidos] = useState(false);
   const [proveedores, setProveedores] = useState<any[] | null>(null);
   const [clubes, setClubes] = useState<any[]>([]);
   const [agentes, setAgentes] = useState<any[]>([]);
@@ -177,219 +179,278 @@ export default function Proveedores() {
     }
   }
 
+  // ---- Pantalla (19/10/2026, mockup aprobado): cierres y pagos con revertidos ocultos, menú ⋯ por fila ----
+  const cierresVisibles = (cierres ?? []).filter((c) => verRevertidos || c.status !== "REVERTIDO");
+  const pagosVisibles = (pagos ?? []).filter((p) => verRevertidos || p.status !== "REVERTIDO");
+  const medioPagoTxt = (m: string) => ({ SIN_TESORERIA: "Sin tesorería", OTRO: "Otro", USDT: "USDT", EFECTIVO: "Efectivo", ZELLE: "Zelle" } as Record<string, string>)[m] ?? m;
+  const itemsPago = (p: any) => [
+    ...(p.status !== "REVERTIDO" ? [{ label: "Revertir", onClick: () => onRevertirPago(p.id) }] : []),
+    { label: "Eliminar (borrado real)…", onClick: () => onEliminarPago(p.id), danger: true },
+  ];
+
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2>Proveedores</h2>
           <div className="muted">
-            Cuentas separadas de Agentes -- para relaciones donde alguien nos entrega un % del rake TOTAL de un club
-            (no de sus propios jugadores), ej. Manzur en Fénix GG.
+            Cuentas separadas de Agentes: alguien nos entrega un % del rake TOTAL de un club (no de sus propios
+            jugadores), ej. Manzur en Fénix GG.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn secondary" onClick={() => setShowNuevoProveedor(true)}>+ Nuevo proveedor</button>
-          <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
           <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>
-          <button className="btn secondary" onClick={() => setShowAjuste(true)} disabled={proveedores.length === 0}>+ Ajuste manual</button>
-          <button className="btn secondary" onClick={() => setShowLiquidacion(true)} disabled={proveedores.length === 0}>+ Liquidación PDF</button>
+          <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
+          <ActionsMenu
+            title="Más acciones"
+            items={[
+              { label: "+ Nuevo proveedor", onClick: () => setShowNuevoProveedor(true) },
+              { label: "+ Ajuste manual", onClick: () => setShowAjuste(true), disabled: proveedores.length === 0 },
+              { label: "+ Liquidación PDF", onClick: () => setShowLiquidacion(true), disabled: proveedores.length === 0 },
+            ]}
+          />
         </div>
       </div>
 
-      <div className="panel" style={{ borderColor: "var(--gold)" }}>
-        <h3>Solicitudes de retiro pendientes</h3>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-          Lo que piden los proveedores desde "Mi proveedor". Al marcarla como enviada se registra
-          el Pago de siempre en el club elegido (misma mecánica que "+ Pago / cobro" de arriba)
-          con el link de pago asentado, para que puedan ver el trackeo reflejado en su propia
-          pantalla.
+      {solicitudes && solicitudes.length > 0 && (
+        <div className="panel" style={{ borderColor: "var(--gold)" }}>
+          <h3>Solicitudes de retiro pendientes</h3>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+            Lo que piden los proveedores desde "Mi proveedor". Al marcarla como enviada se registra
+            el Pago de siempre en el club elegido (misma mecánica que "+ Pago / cobro" de arriba)
+            con el link de pago asentado, para que puedan ver el trackeo reflejado en su propia
+            pantalla.
+          </div>
+          <div className="ag-table-wrap" style={{ display: "block", overflowX: "auto" }}>
+            <table>
+              <thead><tr><th>Proveedor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
+              <tbody>
+                {solicitudes.map((s) => (
+                  <SolicitudRetiroProveedorRow
+                    key={s.id}
+                    solicitud={s}
+                    clubes={clubes}
+                    onDone={() => {
+                      refreshSolicitudes();
+                      refresh();
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        {!solicitudes ? (
-          <Loading />
-        ) : solicitudes.length === 0 ? (
-          <div className="muted">No hay ninguna solicitud pendiente.</div>
-        ) : (
-          <table>
-            <thead><tr><th>Proveedor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
-            <tbody>
-              {solicitudes.map((s) => (
-                <SolicitudRetiroProveedorRow
-                  key={s.id}
-                  solicitud={s}
-                  clubes={clubes}
-                  onDone={() => {
-                    refreshSolicitudes();
-                    refresh();
-                  }}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
+      )}
+
+      <div className="stat-row">
+        <div className="stat-card">
+          <div className="l">Nos deben</div>
+          <div className="v">{usd(totalAFavorNuestro)}</div>
+          <div className="s">saldos a favor nuestro</div>
+        </div>
+        <div className="stat-card">
+          <div className="l">Les debemos</div>
+          <div className="v">{usd(totalAFavorProveedor)}</div>
+          <div className="s">saldos a favor de proveedores</div>
+        </div>
+        <div className="stat-card">
+          <div className="l">Proveedores activos</div>
+          <div className="v">{proveedores.length}</div>
+          <div className="s">con auto-cierre en {autoCierreClubesTodos.length} club{autoCierreClubesTodos.length === 1 ? "" : "es"}</div>
+        </div>
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Proveedores activos</div>
-          <div className="value">{proveedores.length}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">A favor del proveedor (le debemos)</div>
-          <div className="value">{usd(totalAFavorProveedor)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">A favor nuestro (nos debe)</div>
-          <div className="value">{usd(totalAFavorNuestro)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Garantizado</div>
-          <div className="value">{usd(totalGarantizado)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Garantía pendiente</div>
-          <div className="value">{usd(totalGarantiaPendiente)}</div>
-        </div>
+      <div className="pv-grid">
+        {proveedores.map((p) => {
+          const deuda = deudaTotalProveedor(p.id);
+          const saldosDelProv = (saldos ?? []).filter((s) => s.proveedor_id === p.id);
+          const autos = autoCierreClubesTodos.filter((c) => c.proveedorId === p.id);
+          return (
+            <div key={p.id} className="panel" style={{ margin: 0, padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 17, fontWeight: 750, letterSpacing: "-0.01em" }}>{p.name}</div>
+                  <div className="saldo-sub" style={{ marginTop: 2 }} title={p.notes || undefined}>
+                    {p.notes ? `${p.notes} · ` : ""}
+                    {saldosDelProv.length > 0 ? `${saldosDelProv.length} club${saldosDelProv.length === 1 ? "" : "es"} con saldo` : "sin movimientos todavía"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ textAlign: "right" }} title="Deuda operativa (todos sus clubes) + garantía vigente">
+                    <div className="saldo-big" style={{ fontSize: 20, color: deuda > 0.004 ? "var(--amber)" : deuda < -0.004 ? "var(--red)" : "var(--text-dim)" }}>
+                      {usd(Math.abs(deuda))}
+                    </div>
+                    <div className="saldo-sub">{deuda > 0.004 ? "nos debe" : deuda < -0.004 ? "le debemos" : "al día"}</div>
+                  </div>
+                  <ActionsMenu
+                    items={[
+                      { label: "Editar", onClick: () => setEditandoProveedor(p) },
+                      { label: "Eliminar…", onClick: () => onEliminarProveedor(p.id, p.name), danger: true },
+                    ]}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0", alignItems: "center" }}>
+                <span className="saldo-sub" style={{ margin: "0 4px 0 0" }}>Auto-cierre</span>
+                {autos.length === 0 ? (
+                  <span className="muted" style={{ fontSize: 12 }}>sin auto-cierre</span>
+                ) : (
+                  autos.map((c) => <span key={c.id} className="pill gold">{c.clubName} · {pct(c.rakebackPct)}</span>)
+                )}
+              </div>
+              {saldosDelProv.length > 0 && (
+                <div style={{ borderTop: "1px solid var(--border)" }}>
+                  {saldosDelProv.map((s) => <ClubSaldoRow key={s.id} saldo={s} />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="muted" style={{ fontSize: 12, margin: "10px 0 16px" }}>
+        Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Los saldos se actualizan solos con cada
+        cierre semanal y cada pago/cobro -- nunca se editan a mano. Tocá un club para ver los movimientos que arman ese saldo.
       </div>
 
       <div className="panel">
-        <h3>Proveedores</h3>
-        <table>
-          <thead><tr><th>Nombre</th><th>Deuda</th><th>Auto-cierre</th><th>Notas</th><th></th></tr></thead>
-          <tbody>
-            {proveedores.map((p) => {
-              const deuda = deudaTotalProveedor(p.id);
-              return (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td className={deuda >= 0 ? "pos" : "neg"} title="Deuda operativa (todos sus clubes) + garantía vigente">
-                  {usd(deuda)}
-                </td>
-                <td className="muted" style={{ fontSize: 12 }}>
-                  {autoCierreClubesTodos.filter((c) => c.proveedorId === p.id).length === 0
-                    ? "Sin auto-cierre"
-                    : autoCierreClubesTodos
-                        .filter((c) => c.proveedorId === p.id)
-                        .map((c) => `${c.clubName} · ${pct(c.rakebackPct)}`)
-                        .join(" + ")}
-                </td>
-                <td className="muted" style={{ fontSize: 12 }} title={p.notes || undefined}>{p.notes || "—"}</td>
-                <td>
-                  <button className="btn secondary small" onClick={() => setEditandoProveedor(p)}>Editar</button>{" "}
-                  <button className="btn danger small" onClick={() => onEliminarProveedor(p.id, p.name)}>Eliminar</button>
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="tabs" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        <button className={`btn small ${tab === "saldos" ? "" : "secondary"}`} onClick={() => setTab("saldos")}>Saldos</button>
-        <button className={`btn small ${tab === "cierres" ? "" : "secondary"}`} onClick={() => setTab("cierres")}>Cierres semanales</button>
-        <button className={`btn small ${tab === "pagos" ? "" : "secondary"}`} onClick={() => setTab("pagos")}>Pagos / cobros</button>
-        <button className={`btn small ${tab === "garantias" ? "" : "secondary"}`} onClick={() => setTab("garantias")}>Garantías</button>
-      </div>
-
-      {tab === "saldos" && (
-        <div className="panel">
-          <h3>Saldo operativo por proveedor+club</h3>
-          {!saldos ? (
-            <Loading />
-          ) : saldos.length === 0 ? (
-            <div className="muted">Todavía no hay saldos -- se generan solos con el primer cierre o pago.</div>
-          ) : (
-            <table>
-              <thead><tr><th>Proveedor</th><th>Club</th><th>Saldo</th><th>Actualizado</th></tr></thead>
-              <tbody>
-                {saldos.map((s) => <SaldoRow key={s.id} saldo={s} />)}
-              </tbody>
-            </table>
-          )}
-          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Se actualiza solo con
-            cada cierre semanal y cada pago/cobro -- nunca se edita a mano. Tocá una fila para ver el detalle de los
-            movimientos que arman ese saldo.
-          </div>
-        </div>
-      )}
-
-      {tab === "cierres" && (
-        <div className="panel">
-          <h3>Historial de cierres semanales</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-            Un cierre puede tener varias líneas (club y/o agente) -- tocá una fila para ver el detalle.
-          </div>
-          {!cierres ? (
-            <Loading />
-          ) : cierres.length === 0 ? (
-            <div className="muted">Todavía no hay cierres cargados.</div>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Semana</th><th>Proveedor</th><th>Cierre</th><th>Saldo resultante</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {cierres.map((c) => (
-                  <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
-                ))}
-              </tbody>
-            </table>
+        <div className="ag-toolbar" style={{ marginBottom: 12 }}>
+          <span className="seg">
+            <button className={tab === "cierres" ? "on" : ""} onClick={() => setTab("cierres")}>Cierres<span className="n">{cierres?.length ?? 0}</span></button>
+            <button className={tab === "pagos" ? "on" : ""} onClick={() => setTab("pagos")}>Pagos / cobros<span className="n">{pagos?.length ?? 0}</span></button>
+            <button className={tab === "garantias" ? "on" : ""} onClick={() => setTab("garantias")}>Garantías<span className="n">{garantias?.length ?? 0}</span></button>
+          </span>
+          <span className="ag-toolbar-spacer" />
+          {(tab === "cierres" || tab === "pagos") && (
+            <label className="switch">
+              <input type="checkbox" checked={verRevertidos} onChange={(e) => setVerRevertidos(e.target.checked)} />
+              <i />
+              Mostrar revertidos
+            </label>
           )}
         </div>
-      )}
 
-      {tab === "pagos" && (
-        <div className="panel">
-          <h3>Historial de pagos / cobros</h3>
-          {!pagos ? (
-            <Loading />
-          ) : pagos.length === 0 ? (
-            <div className="muted">Todavía no hay pagos/cobros cargados.</div>
-          ) : (
-            <table>
-              <thead>
-                <tr><th>Fecha</th><th>Proveedor</th><th>Club</th><th>Tipo</th><th>Medio</th><th>Monto</th><th>Saldo resultante</th><th>Link de pago</th><th></th></tr>
-              </thead>
-              <tbody>
-                {pagos.map((p) => (
-                  <tr key={p.id} style={p.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
-                    <td>{dateShort(p.occurred_at)}</td>
-                    <td>{p.proveedor_name}</td>
-                    <td>{p.club_name}</td>
-                    <td><span className="badge neutral">{p.direction === "PAGO" ? "Pago (le dimos)" : "Cobro (nos dio)"}</span></td>
-                    <td>{p.medio}</td>
-                    <td>{usd(p.amount)}</td>
-                    <td>{usd(p.saldo_nuevo)}</td>
-                    <td className="muted" style={{ fontSize: 12 }}>
-                      {p.payment_link ? (
-                        <a className="link-pago" href={p.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      {p.status !== "REVERTIDO" && (
-                        <button className="btn secondary small" onClick={() => onRevertirPago(p.id)}>Revertir</button>
-                      )}
-                      {p.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}{" "}
-                      <button className="btn danger small" onClick={() => onEliminarPago(p.id)}>Eliminar</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+        {tab === "cierres" && (
+          <>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Un cierre puede tener varias líneas (club y/o agente) -- tocá una fila para ver el detalle.
+            </div>
+            {!cierres ? (
+              <Loading />
+            ) : cierres.length === 0 ? (
+              <div className="muted">Todavía no hay cierres cargados.</div>
+            ) : (
+              <>
+                <div className="ag-table-wrap">
+                  <table className="saldos-table">
+                    <thead>
+                      <tr><th>Semana</th><th>Estado</th><th className="num">Cierre</th><th className="num">Saldo resultante</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {cierresVisibles.map((c) => (
+                        <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="ag-cards">
+                  {cierresVisibles.map((c) => (
+                    <CierreCard key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
+                  ))}
+                </div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+                  Mostrando {cierresVisibles.length} de {cierres.length}
+                  {!verRevertidos && cierres.length > cierresVisibles.length ? ` · ${cierres.length - cierresVisibles.length} revertido${cierres.length - cierresVisibles.length === 1 ? "" : "s"} oculto${cierres.length - cierresVisibles.length === 1 ? "" : "s"}` : ""}.
+                </div>
+              </>
+            )}
+          </>
+        )}
 
-      {tab === "garantias" && (
-        <>
-          <div className="panel">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3>Garantías activas</h3>
+        {tab === "pagos" && (
+          <>
+            {!pagos ? (
+              <Loading />
+            ) : pagos.length === 0 ? (
+              <div className="muted">Todavía no hay pagos/cobros cargados.</div>
+            ) : (
+              <>
+                <div className="ag-table-wrap">
+                  <table className="saldos-table">
+                    <thead>
+                      <tr><th>Fecha</th><th>Proveedor · club</th><th>Tipo</th><th>Medio</th><th className="num">Monto</th><th className="num">Saldo resultante</th><th>Link</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {pagosVisibles.map((p) => (
+                        <tr key={p.id} style={p.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                          <td className="muted">{dateShort(p.occurred_at)}</td>
+                          <td>
+                            <div className="saldo-name">{p.club_name}</div>
+                            <div className="saldo-sub">{p.proveedor_name}</div>
+                          </td>
+                          <td>
+                            <span className={`pill ${p.direction === "PAGO" ? "a" : "g"}`}>{p.direction === "PAGO" ? "Pago · le dimos" : "Cobro · nos dio"}</span>
+                            {p.status === "REVERTIDO" && <span className="pill r" style={{ marginLeft: 6 }}>Revertido</span>}
+                          </td>
+                          <td className="muted">{medioPagoTxt(p.medio)}</td>
+                          <td className="num"><span className={`saldo-big ${p.direction === "COBRO" ? "pos" : "neg"}`}>{p.direction === "COBRO" ? "+" : "−"}{usd(p.amount)}</span></td>
+                          <td className="num money">{usd(p.saldo_nuevo)}</td>
+                          <td className="muted" style={{ fontSize: 12 }}>
+                            {p.payment_link ? <a className="link-pago" href={p.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a> : "—"}
+                          </td>
+                          <td style={{ width: 60, textAlign: "right" }}><ActionsMenu items={itemsPago(p)} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="ag-cards">
+                  {pagosVisibles.map((p) => (
+                    <div key={p.id} className={`saldo-card ${p.direction === "COBRO" ? "is-pos" : "is-neg"}`} style={p.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                      <div className="saldo-card-body">
+                        <div className="saldo-card-top">
+                          <div className="saldo-name">{p.club_name}</div>
+                          <div className={`saldo-big ${p.direction === "COBRO" ? "pos" : "neg"}`}>{p.direction === "COBRO" ? "+" : "−"}{usd(p.amount)}</div>
+                        </div>
+                        <div className="saldo-card-mid">
+                          <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <span className={`pill ${p.direction === "PAGO" ? "a" : "g"}`}>{p.direction === "PAGO" ? "Pago · le dimos" : "Cobro · nos dio"}</span>
+                            {p.status === "REVERTIDO" && <span className="pill r">Revertido</span>}
+                            {medioPagoTxt(p.medio)} · {dateShort(p.occurred_at)}
+                          </div>
+                          <ActionsMenu items={itemsPago(p)} />
+                        </div>
+                        <div className="saldo-card-foot">
+                          <span>{p.proveedor_name} · saldo resultante <b>{usd(p.saldo_nuevo)}</b></span>
+                          {p.payment_link && <a className="link-pago" href={p.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+                  Mostrando {pagosVisibles.length} de {pagos.length}
+                  {!verRevertidos && pagos.length > pagosVisibles.length ? ` · ${pagos.length - pagosVisibles.length} revertido${pagos.length - pagosVisibles.length === 1 ? "" : "s"} oculto${pagos.length - pagosVisibles.length === 1 ? "" : "s"}` : ""}.
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {tab === "garantias" && (
+          <>
+            <div className="stat-row">
+              <div className="stat-card">
+                <div className="l">Garantizado</div>
+                <div className="v">{usd(totalGarantizado)}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Garantía pendiente</div>
+                <div className="v">{usd(totalGarantiaPendiente)}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>Garantías activas</h3>
               <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({})}>+ Ajustar garantía</button>
             </div>
             {!garantias ? (
@@ -397,53 +458,55 @@ export default function Proveedores() {
             ) : garantias.length === 0 ? (
               <div className="muted">Todavía no hay garantías activas.</div>
             ) : (
-              <table>
-                <thead><tr><th>Proveedor</th><th>Garantizado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th></th></tr></thead>
-                <tbody>
-                  {garantias.map((g) => (
-                    <tr key={g.id}>
-                      <td>{g.proveedor_name}</td>
-                      <td>{usd(g.amount)}</td>
-                      <td>{usd(g.consumed)}</td>
-                      <td><span className="badge neutral">{usd(Number(g.amount) - Number(g.consumed))}</span></td>
-                      <td className="muted" style={{ fontSize: 12 }} title={g.notes || undefined}>{g.notes || "—"}</td>
-                      <td>
-                        <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({ proveedorId: g.proveedor_id })}>Ajustar</button>{" "}
-                        <button className="btn danger small" onClick={() => onEliminarGarantia(g.id)}>Eliminar</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>Proveedor</th><th>Garantizado</th><th>Consumido</th><th>Pendiente</th><th>Notas</th><th></th></tr></thead>
+                  <tbody>
+                    {garantias.map((g) => (
+                      <tr key={g.id}>
+                        <td>{g.proveedor_name}</td>
+                        <td>{usd(g.amount)}</td>
+                        <td>{usd(g.consumed)}</td>
+                        <td><span className="badge neutral">{usd(Number(g.amount) - Number(g.consumed))}</span></td>
+                        <td className="muted" style={{ fontSize: 12 }} title={g.notes || undefined}>{g.notes || "—"}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({ proveedorId: g.proveedor_id })}>Ajustar</button>{" "}
+                          <button className="btn danger small" onClick={() => onEliminarGarantia(g.id)}>Eliminar</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-          <div className="panel">
-            <h3>Historial de garantías</h3>
+            <h3 style={{ margin: "18px 0 8px" }}>Historial de garantías</h3>
             {!garantiasHistorial ? (
               <Loading />
             ) : garantiasHistorial.length === 0 ? (
               <div className="muted">Todavía no hay movimientos.</div>
             ) : (
-              <table>
-                <thead><tr><th>Fecha</th><th>Proveedor</th><th>Tipo</th><th>Monto</th><th>Resultante</th><th>Consumido</th><th>Notas</th></tr></thead>
-                <tbody>
-                  {garantiasHistorial.map((m) => (
-                    <tr key={m.id}>
-                      <td>{dateShort(m.occurred_at)}</td>
-                      <td>{m.proveedor_name}</td>
-                      <td><span className="badge neutral">{GARANTIA_TIPO_LABEL[m.type] ?? m.type}</span></td>
-                      <td>{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
-                      <td>{usd(m.resulting_amount)}</td>
-                      <td>{usd(m.resulting_consumed)}</td>
-                      <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>Fecha</th><th>Proveedor</th><th>Tipo</th><th>Monto</th><th>Resultante</th><th>Consumido</th><th>Notas</th></tr></thead>
+                  <tbody>
+                    {garantiasHistorial.map((m) => (
+                      <tr key={m.id}>
+                        <td>{dateShort(m.occurred_at)}</td>
+                        <td>{m.proveedor_name}</td>
+                        <td><span className="badge neutral">{GARANTIA_TIPO_LABEL[m.type] ?? m.type}</span></td>
+                        <td>{m.type === "BAJA" ? "—" : usd(m.amount)}</td>
+                        <td>{usd(m.resulting_amount)}</td>
+                        <td>{usd(m.resulting_consumed)}</td>
+                        <td className="muted" style={{ fontSize: 12 }} title={m.notes || undefined}>{m.notes || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
 
       {showNuevoProveedor && (
         <Modal title="Nuevo proveedor" onClose={() => setShowNuevoProveedor(false)}>
@@ -511,11 +574,11 @@ export default function Proveedores() {
   );
 }
 
-// Fila expandible de saldo (22/09/2026, pedido de Leo: "en algun lado tendria que tener el
-// saldo que van sumando y restando, porque asi queda muy mezclado") -- al tocarla, trae el
-// historial de movimientos (cierres de club/agente + pagos/cobros) de ESE proveedor+club
-// puntual, con el saldo antes/después de cada uno, para ver de dónde sale el número final.
-function SaldoRow({ saldo }: { saldo: any }) {
+// Fila de club dentro de la tarjeta de un proveedor (22/09/2026, pedido de Leo: "en algun lado
+// tendria que tener el saldo que van sumando y restando, porque asi queda muy mezclado") -- al
+// tocarla, trae el historial de movimientos (cierres de club/agente + pagos/cobros) de ESE
+// proveedor+club puntual, con el saldo antes/después de cada uno, para ver de dónde sale el número.
+function ClubSaldoRow({ saldo }: { saldo: any }) {
   const [abierto, setAbierto] = useState(false);
   const [movimientos, setMovimientos] = useState<any[] | null>(null);
 
@@ -527,48 +590,155 @@ function SaldoRow({ saldo }: { saldo: any }) {
     }
   }
 
+  const monto = Number(saldo.amount);
+  return (
+    <div style={{ borderTop: "1px solid var(--border)" }}>
+      <div onClick={toggle} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 2px", cursor: "pointer" }}>
+        <div>
+          <div className="saldo-name" style={{ fontWeight: 600 }}>{saldo.club_name}</div>
+          <div className="saldo-sub">actualizado {dateShort(saldo.updated_at)}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className={`saldo-big ${monto > 0 ? "pos" : monto < 0 ? "neg" : "neutral"}`}>{monto < 0 ? "−" : ""}{usd(Math.abs(monto))}</span>
+          <span style={{ color: "var(--text-faint)", fontSize: 12 }}>{abierto ? "▴" : "▾"}</span>
+        </div>
+      </div>
+      {abierto && (
+        <div style={{ background: "rgba(255,255,255,0.02)", padding: 6, overflowX: "auto" }}>
+          {!movimientos ? (
+            <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando movimientos...</div>
+          ) : movimientos.length === 0 ? (
+            <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin movimientos registrados para este club.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th><th>Movimiento</th><th>Delta</th><th>Saldo antes</th><th>Saldo después</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movimientos.map((m) => (
+                  <tr key={m.id} style={m.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
+                    <td className="muted">{dateShort(m.fecha)}</td>
+                    <td>{m.label}</td>
+                    <td>
+                      <span className={`badge ${m.delta > 0 ? "pos" : m.delta < 0 ? "neg" : "neutral"}`}>{usd(m.delta)}</span>
+                    </td>
+                    <td className="muted">{usd(m.saldoAnterior)}</td>
+                    <td className="muted">{usd(m.saldoNuevo)}</td>
+                    <td className="muted">{m.status === "REVERTIDO" ? "Revertido" : "Aplicado"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EstadoCierre({ status }: { status: string }) {
+  return status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>;
+}
+
+function LineasCierre({ lineas }: { lineas: any[] | null }) {
+  if (!lineas) return <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando líneas...</div>;
+  if (lineas.length === 0) return <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin líneas registradas (cierre del formato anterior).</div>;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ margin: "4px 0" }}>
+        <thead>
+          <tr>
+            <th>Tipo</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>%</th>
+            <th>Rebate club</th><th>Rodeo</th><th>Monto bruto</th><th>Aplicado al saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lineas.map((l) => {
+            // Las líneas tipo AGENTE no guardan su propio resultado/rake/rakeback/rodeo
+            // (solo el weekly_closing_id de referencia) -- listLineasCierreProveedor
+            // trae ese desglose con un LEFT JOIN a weekly_closings (wc_*), se muestra
+            // tal cual quedó aplicado en Cierres semanales, nunca se recalcula acá.
+            const esAgente = l.tipo === "AGENTE";
+            const resultado = esAgente ? l.wc_result : l.resultado_total;
+            const rakeTotal = esAgente ? l.wc_rake_total : l.rake_total;
+            const rodeo = esAgente ? l.wc_rodeo : l.impacto_rodeo;
+            return (
+              <tr key={l.id}>
+                <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
+                <td>{l.club_name}</td>
+                <td>{l.agent_name ?? "—"}</td>
+                <td>{resultado !== null && resultado !== undefined ? usd(resultado) : "—"}</td>
+                <td>{rakeTotal !== null && rakeTotal !== undefined ? usd(rakeTotal) : "—"}</td>
+                <td>{(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== null && (esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== undefined ? pct(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) : "—"}</td>
+                <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
+                <td>{rodeo !== null && rodeo !== undefined ? usd(rodeo) : "—"}</td>
+                <td>{usd(l.monto_crudo)}</td>
+                <td><b>{usd(l.monto_aplicado)}</b></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type CierreProps = {
+  cierre: any;
+  onRevertir: (id: string) => void;
+  onRecalcular: (id: string) => void;
+  onEliminar: (id: string) => void;
+};
+
+function itemsCierreProveedor({ cierre, onRevertir, onRecalcular, onEliminar }: CierreProps) {
+  return [
+    ...(cierre.status !== "REVERTIDO"
+      ? [
+          { label: "Recalcular", onClick: () => onRecalcular(cierre.id) },
+          { label: "Revertir", onClick: () => onRevertir(cierre.id) },
+        ]
+      : []),
+    { label: "Eliminar (borrado real)…", onClick: () => onEliminar(cierre.id), danger: true },
+  ];
+}
+
+function useLineasCierre(cierreId: string) {
+  const [abierto, setAbierto] = useState(false);
+  const [lineas, setLineas] = useState<any[] | null>(null);
+  function toggle() {
+    const next = !abierto;
+    setAbierto(next);
+    if (next && !lineas) {
+      api.lineasCierreProveedor(cierreId).then(setLineas).catch(() => setLineas([]));
+    }
+  }
+  return { abierto, lineas, toggle };
+}
+
+function CierreRow(props: CierreProps) {
+  const { cierre } = props;
+  const { abierto, lineas, toggle } = useLineasCierre(cierre.id);
+  const monto = Number(cierre.cierre);
   return (
     <>
-      <tr style={{ cursor: "pointer" }} onClick={toggle}>
-        <td>{saldo.proveedor_name}</td>
-        <td>{saldo.club_name}</td>
+      <tr style={{ cursor: "pointer", ...(cierre.status === "REVERTIDO" ? { opacity: 0.55 } : {}) }} onClick={toggle}>
         <td>
-          <span className={`badge ${Number(saldo.amount) > 0 ? "pos" : Number(saldo.amount) < 0 ? "neg" : "neutral"}`}>
-            {usd(saldo.amount)}
-          </span>
+          <div className="saldo-name">{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</div>
+          <div className="saldo-sub">{cierre.proveedor_name}{cierre.notes ? ` · ${cierre.notes}` : ""}</div>
         </td>
-        <td className="muted">{dateShort(saldo.updated_at)}</td>
+        <td><EstadoCierre status={cierre.status} /></td>
+        <td className="num"><span className={`saldo-big ${monto > 0 ? "pos" : monto < 0 ? "neg" : "neutral"}`}>{monto < 0 ? "−" : ""}{usd(Math.abs(monto))}</span></td>
+        <td className="num money">{usd(cierre.saldo_nuevo)}</td>
+        <td style={{ width: 60, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+          <ActionsMenu items={itemsCierreProveedor(props)} />
+        </td>
       </tr>
       {abierto && (
         <tr>
-          <td colSpan={4} style={{ background: "rgba(255,255,255,0.02)" }}>
-            {!movimientos ? (
-              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando movimientos...</div>
-            ) : movimientos.length === 0 ? (
-              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin movimientos registrados para este club.</div>
-            ) : (
-              <table style={{ margin: 8 }}>
-                <thead>
-                  <tr>
-                    <th>Fecha</th><th>Movimiento</th><th>Delta</th><th>Saldo antes</th><th>Saldo después</th><th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movimientos.map((m) => (
-                    <tr key={m.id} style={m.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
-                      <td className="muted">{dateShort(m.fecha)}</td>
-                      <td>{m.label}</td>
-                      <td>
-                        <span className={`badge ${m.delta > 0 ? "pos" : m.delta < 0 ? "neg" : "neutral"}`}>{usd(m.delta)}</span>
-                      </td>
-                      <td className="muted">{usd(m.saldoAnterior)}</td>
-                      <td className="muted">{usd(m.saldoNuevo)}</td>
-                      <td className="muted">{m.status === "REVERTIDO" ? "Revertido" : "Aplicado"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <td colSpan={5} style={{ background: "rgba(255,255,255,0.02)" }}>
+            <LineasCierre lineas={lineas} />
           </td>
         </tr>
       )}
@@ -576,96 +746,28 @@ function SaldoRow({ saldo }: { saldo: any }) {
   );
 }
 
-function CierreRow({
-  cierre,
-  onRevertir,
-  onRecalcular,
-  onEliminar,
-}: {
-  cierre: any;
-  onRevertir: (id: string) => void;
-  onRecalcular: (id: string) => void;
-  onEliminar: (id: string) => void;
-}) {
-  const [abierto, setAbierto] = useState(false);
-  const [lineas, setLineas] = useState<any[] | null>(null);
-
-  function toggle() {
-    const next = !abierto;
-    setAbierto(next);
-    if (next && !lineas) {
-      api.lineasCierreProveedor(cierre.id).then(setLineas).catch(() => setLineas([]));
-    }
-  }
-
+function CierreCard(props: CierreProps) {
+  const { cierre } = props;
+  const { abierto, lineas, toggle } = useLineasCierre(cierre.id);
+  const monto = Number(cierre.cierre);
   return (
-    <>
-      <tr
-        style={{ cursor: "pointer", ...(cierre.status === "REVERTIDO" ? { opacity: 0.55 } : {}) }}
-        onClick={toggle}
-      >
-        <td>{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</td>
-        <td>{cierre.proveedor_name}</td>
-        <td><span className={`badge ${Number(cierre.cierre) > 0 ? "pos" : Number(cierre.cierre) < 0 ? "neg" : "neutral"}`}>{usd(cierre.cierre)}</span></td>
-        <td>{usd(cierre.saldo_nuevo)}</td>
-        <td>
-          {cierre.status !== "REVERTIDO" && (
-            <>
-              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRecalcular(cierre.id); }}>Recalcular</button>{" "}
-              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); onRevertir(cierre.id); }}>Revertir</button>{" "}
-            </>
-          )}
-          {cierre.status === "REVERTIDO" && <span className="badge neg">Revertido</span>}{" "}
-          <button className="btn danger small" onClick={(e) => { e.stopPropagation(); onEliminar(cierre.id); }}>Eliminar</button>
-        </td>
-      </tr>
-      {abierto && (
-        <tr>
-          <td colSpan={5} style={{ background: "rgba(255,255,255,0.02)" }}>
-            {!lineas ? (
-              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Cargando líneas...</div>
-            ) : lineas.length === 0 ? (
-              <div className="muted" style={{ fontSize: 12, padding: 8 }}>Sin líneas registradas (cierre del formato anterior).</div>
-            ) : (
-              <table style={{ margin: "4px 0" }}>
-                <thead>
-                  <tr>
-                    <th>Tipo</th><th>Club</th><th>Agente</th><th>Resultado</th><th>Rake</th><th>%</th>
-                    <th>Rebate club</th><th>Rodeo</th><th>Monto bruto</th><th>Aplicado al saldo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineas.map((l) => {
-                    // Las líneas tipo AGENTE no guardan su propio resultado/rake/rakeback/rodeo
-                    // (solo el weekly_closing_id de referencia) -- listLineasCierreProveedor
-                    // trae ese desglose con un LEFT JOIN a weekly_closings (wc_*), se muestra
-                    // tal cual quedó aplicado en Cierres semanales, nunca se recalcula acá.
-                    const esAgente = l.tipo === "AGENTE";
-                    const resultado = esAgente ? l.wc_result : l.resultado_total;
-                    const rakeTotal = esAgente ? l.wc_rake_total : l.rake_total;
-                    const rodeo = esAgente ? l.wc_rodeo : l.impacto_rodeo;
-                    return (
-                      <tr key={l.id}>
-                        <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
-                        <td>{l.club_name}</td>
-                        <td>{l.agent_name ?? "—"}</td>
-                        <td>{resultado !== null && resultado !== undefined ? usd(resultado) : "—"}</td>
-                        <td>{rakeTotal !== null && rakeTotal !== undefined ? usd(rakeTotal) : "—"}</td>
-                        <td>{(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== null && (esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== undefined ? pct(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) : "—"}</td>
-                        <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
-                        <td>{rodeo !== null && rodeo !== undefined ? usd(rodeo) : "—"}</td>
-                        <td>{usd(l.monto_crudo)}</td>
-                        <td><b>{usd(l.monto_aplicado)}</b></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
+    <div className={`saldo-card ${monto > 0 ? "is-pos" : monto < 0 ? "is-neg" : ""}`} style={cierre.status === "REVERTIDO" ? { opacity: 0.55 } : undefined} onClick={toggle}>
+      <div className="saldo-card-body">
+        <div className="saldo-card-top">
+          <div className="saldo-name">{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</div>
+          <div className={`saldo-big ${monto > 0 ? "pos" : monto < 0 ? "neg" : "neutral"}`}>{monto < 0 ? "−" : ""}{usd(Math.abs(monto))}</div>
+        </div>
+        <div className="saldo-card-mid">
+          <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center" }}>{cierre.proveedor_name} <EstadoCierre status={cierre.status} /></div>
+          <div onClick={(e) => e.stopPropagation()}><ActionsMenu items={itemsCierreProveedor(props)} /></div>
+        </div>
+        <div className="saldo-card-foot">
+          <span>Saldo antes <b>{usd(cierre.saldo_anterior)}</b></span>
+          <span>Saldo después <b>{usd(cierre.saldo_nuevo)}</b></span>
+        </div>
+        {abierto && <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}><LineasCierre lineas={lineas} /></div>}
+      </div>
+    </div>
   );
 }
 

@@ -2541,3 +2541,9 @@ button.nav-link {
     padding: 18px 16px 24px; box-shadow: 0 -20px 48px -10px rgba(0, 0, 0, 0.8);
   }
 }
+
+/* ---------- Proveedores (19/10/2026, mockup aprobado) ---------- */
+.pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 768px) {
+  .pv-grid { grid-template-columns: 1fr; }
+}
