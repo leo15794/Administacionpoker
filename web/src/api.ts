@@ -268,13 +268,14 @@ export const api = {
   eliminarLiquidacionGuardada: (id: string) => request(`/catalog/liquidacion/historial/${id}`, { method: "DELETE" }),
 
   // Drill-down de movimientos y tesorería
-  movimientos: (params: { agentId?: string; clubId?: string; type?: string; desde?: string; hasta?: string } = {}) => {
+  movimientos: (params: { agentId?: string; clubId?: string; type?: string; desde?: string; hasta?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.agentId) qs.set("agentId", params.agentId);
     if (params.clubId) qs.set("clubId", params.clubId);
     if (params.type) qs.set("type", params.type);
     if (params.desde) qs.set("desde", params.desde);
     if (params.hasta) qs.set("hasta", params.hasta);
+    if (params.limit) qs.set("limit", String(params.limit));
     const q = qs.toString();
     return request(`/dashboard/movimientos${q ? `?${q}` : ""}`);
   },
