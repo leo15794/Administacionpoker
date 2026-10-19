@@ -51,6 +51,8 @@ export default function Supervisores() {
   const [ocultando, setOcultando] = useState<string | null>(null);
   const [tabDet, setTabDet] = useState<"resumen" | "cierre" | "agentes" | "movs" | "origen">("resumen");
   const [verRevertidos, setVerRevertidos] = useState(false);
+  // Desglose por club de cada agente en el cierre semanal (19/10/2026, pedido de Leo: igual que en Mi supervisión).
+  const [cierreAbiertos, setCierreAbiertos] = useState<Set<string>>(new Set());
 
   // Cierre semanal consolidado (14/10/2026, pedido de Leo: "las liquidaciones de sus agentes,
   // sumen su saldo al momento de hacer el cierre") -- espejo automático aparte, el saldo propio
@@ -584,6 +586,7 @@ export default function Supervisores() {
                             className={`chip${weekCierre === ws ? " chip-active" : ""}`}
                             onClick={() => {
                               setWeekCierre(ws);
+                              setCierreAbiertos(new Set());
                               cargarCierreSemana(seleccionado.id, ws);
                             }}
                           >
@@ -608,6 +611,18 @@ export default function Supervisores() {
                       ) : (
                         <span className="pill">Todavía no aplicada</span>
                       )}
+                      <span style={{ flex: 1 }} />
+                      {cierreSemana?.lineas?.length > 0 && (
+                        <a
+                          style={{ fontSize: 12.5, color: "var(--accent)", cursor: "pointer" }}
+                          onClick={() => {
+                            const todas = cierreSemana.lineas.every((l: any) => cierreAbiertos.has(l.agent_id));
+                            setCierreAbiertos(todas ? new Set() : new Set(cierreSemana.lineas.map((l: any) => l.agent_id)));
+                          }}
+                        >
+                          {cierreSemana.lineas.every((l: any) => cierreAbiertos.has(l.agent_id)) ? "Contraer todo" : "Expandir todo"}
+                        </a>
+                      )}
                     </div>
                     {cargandoCierre || !cierreSemana ? (
                       <Loading />
@@ -623,13 +638,61 @@ export default function Supervisores() {
                               </tr>
                             </thead>
                             <tbody>
-                              {cierreSemana.lineas.map((l: any) => (
-                                <tr key={l.agent_id}>
-                                  <td><div className="saldo-name">{l.agent_name}</div></td>
-                                  <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{montoSignoSup(Number(l.result), true)}</td>
-                                  <td className="num">{usd(Number(l.rakeback))}</td>
-                                </tr>
-                              ))}
+                              {cierreSemana.lineas.map((l: any) => {
+                                const abierto = cierreAbiertos.has(l.agent_id);
+                                return (
+                                  <Fragment key={l.agent_id}>
+                                    <tr
+                                      className="row-click"
+                                      onClick={() =>
+                                        setCierreAbiertos((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(l.agent_id)) next.delete(l.agent_id);
+                                          else next.add(l.agent_id);
+                                          return next;
+                                        })
+                                      }
+                                    >
+                                      <td><div className="saldo-name"><span style={{ color: "var(--text-faint)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>{l.agent_name}</div></td>
+                                      <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{montoSignoSup(Number(l.result), true)}</td>
+                                      <td className="num">{usd(Number(l.rakeback))}</td>
+                                    </tr>
+                                    {abierto && (
+                                      <tr>
+                                        <td colSpan={3} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px" }}>
+                                          {(l.detalle ?? []).length === 0 ? (
+                                            <div className="saldo-sub">Sin cierres cargados para este agente en esta semana.</div>
+                                          ) : (
+                                            <div style={{ overflowX: "auto" }}>
+                                              <table style={{ margin: 0 }}>
+                                                <thead>
+                                                  <tr><th>Club</th><th>Sistema</th><th className="num">Jugadores</th><th className="num">Resultado de mesas</th><th className="num">Rake generado</th><th className="num">% rakeback</th><th className="num">Rakeback</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                  {l.detalle.map((d: any) => (
+                                                    <tr key={d.club_name}>
+                                                      <td>{d.club_name}</td>
+                                                      <td className="muted">{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                                                      <td className="num muted">{d.jugadores ?? "-"}</td>
+                                                      <td className={`num ${Number(d.result) >= 0 ? "pos" : "neg"}`}>{montoSignoSup(Number(d.result), true)}</td>
+                                                      <td className="num">{usd(Number(d.rake_total))}</td>
+                                                      <td className="num muted">{Math.round(Number(d.rakeback_pct) * 10000) / 100}%</td>
+                                                      <td className="num">{usd(Number(d.rakeback))}</td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          )}
+                                          <div className="saldo-sub" style={{ marginTop: 8 }}>
+                                            Se suma a la cuenta: fichas reales <b>{montoSignoSup(Number(l.result), true)}</b> · cuenta corriente <b>{montoSignoSup(Number(l.rakeback), true)}</b>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </tbody>
                             <tfoot>
                               <tr style={{ fontWeight: 700 }}>
