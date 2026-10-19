@@ -2491,3 +2491,53 @@ button.nav-link {
 .pt-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
 .pt-tabs::-webkit-scrollbar { display: none; }
 .pt-tabs button { white-space: nowrap; flex-shrink: 0; }
+
+/* ---------- Administración -> Lista de agentes (19/10/2026, mockup aprobado) ---------- */
+.solo-mobile { display: none; }
+.ag-head-actions { display: flex; gap: 8px; align-items: center; }
+.ag-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ag-toolbar-spacer { flex: 1; }
+.ag-search { min-width: 200px; }
+.ag-orden { display: flex; align-items: center; gap: 8px; align-self: flex-end; }
+.ag-cards { display: none; }
+.stat-row .ag-toolbar-spacer { flex: 1; }
+
+.deals-veil { position: fixed; inset: 0; background: rgba(4, 8, 6, 0.5); z-index: 55; }
+.deals-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100vw; z-index: 60;
+  background: var(--panel); border-left: 1px solid var(--border-strong);
+  box-shadow: -24px 0 48px -18px rgba(0, 0, 0, 0.7);
+  padding: 20px; overflow-y: auto;
+}
+.deals-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.deals-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 700; }
+.deals-name { font-size: 18px; font-weight: 750; letter-spacing: -0.01em; }
+.dealc { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 9px; }
+.dealc .t { display: flex; justify-content: space-between; align-items: center; }
+.dealc .n { font-weight: 700; font-size: 14px; }
+.dealc .p { display: flex; gap: 18px; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.dealc .p b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+.tabs-scroll { max-width: 100%; }
+
+@media (max-width: 768px) {
+  .solo-desktop { display: none; }
+  .solo-mobile { display: inline-block; }
+  .ag-table-wrap { display: none; }
+  .ag-cards { display: flex; flex-direction: column; gap: 8px; }
+  .ag-search { flex: 1; min-width: 0; width: 100%; order: -1; }
+  .ag-toolbar { flex-wrap: wrap; }
+  .ag-toolbar .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .ag-toolbar .seg::-webkit-scrollbar { display: none; }
+  .ag-toolbar-spacer { display: none; }
+  .ag-orden { display: none; }
+  .tabs-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tabs-scroll::-webkit-scrollbar { display: none; }
+  .tabs-scroll button { white-space: nowrap; flex-shrink: 0; }
+  /* Hoja inferior en celular: por arriba de la barra de accesos de abajo. */
+  .deals-drawer {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 85vh;
+    border-left: none; border-top: 1px solid var(--border-strong); border-radius: 18px 18px 0 0;
+    padding: 18px 16px 24px; box-shadow: 0 -20px 48px -10px rgba(0, 0, 0, 0.8);
+  }
+}

@@ -18,6 +18,20 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   UNION: "Unión",
 };
 
+function TipoDot({ a }: { a: any }) {
+  const tipo = (a.account_type as AccountType) ?? a.default_system;
+  const dotClass = tipo === "PREPAGO" ? "prepago" : tipo === "WIN_LOSE" ? "winlose" : "";
+  return <span className={"acc-dot " + dotClass}>{ACCOUNT_TYPE_LABELS[tipo as AccountType] ?? a.account_type}</span>;
+}
+
+function DealsChip({ n }: { n: number }) {
+  return n > 0 ? (
+    <span className="pill" title="Ver/editar los deals de este agente">{n} {n === 1 ? "club" : "clubes"}</span>
+  ) : (
+    <span className="pill a" title="Sin deal propio en ningún club — usa el default de cada club. Click para asignarle uno.">Sin deal</span>
+  );
+}
+
 export default function Agentes() {
   const { confirmDialog, alertDialog } = useConfirmDialog();
   const [agentes, setAgentes] = useState<any[]>([]);
@@ -43,7 +57,11 @@ export default function Agentes() {
   // AGREGADO 05/10/2026 (rediseno visual de Administracion, pedido de Leo): filtro rapido
   // para las tarjetas resumen de arriba -- no agrega filas nuevas a la tabla, solo acota
   // las que ya estaban.
-  const [soloSinDeal, setSoloSinDeal] = useState(false);
+  // Vista de la lista (19/10/2026, mockup aprobado): "Con saldo" por defecto -- antes la lista era
+  // alfabética y más de la mitad de las filas estaban en US$ 0, así que los que tienen plata quedaban
+  // enterrados. Reemplaza al filtro "solo sin deal" de las tarjetas resumen de antes.
+  const [vista, setVista] = useState<"todos" | "conSaldo" | "sinDeal" | "sinId">("conSaldo");
+  const [orden, setOrden] = useState<"saldo" | "nombre">("saldo");
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
@@ -122,35 +140,80 @@ export default function Agentes() {
     }
   }
 
-  const agentesFiltrados = agentes
-    .filter((a) => a.name.toLowerCase().includes(filtro.trim().toLowerCase()))
-    .filter((a) => !soloSinDeal || (dealsPorAgente[a.id]?.length ?? 0) === 0);
+  const q = filtro.trim().toLowerCase();
+  const tieneSaldo = (a: any) => Math.abs(Number(a.saldo_total ?? 0)) >= 0.005;
+  const sinDealDe = (a: any) => (dealsPorAgente[a.id]?.length ?? 0) === 0;
+  const base = agentes.filter((a) => a.name.toLowerCase().includes(q));
+  // Contadores de los filtros (sobre la búsqueda actual, así siempre cuadran con lo que se ve).
+  const cuentas = {
+    todos: base.length,
+    conSaldo: base.filter(tieneSaldo).length,
+    sinDeal: base.filter(sinDealDe).length,
+    sinId: base.filter((a) => !a.external_id).length,
+    conSaldoTotal: agentes.filter(tieneSaldo).length,
+  };
+  const agentesFiltrados = base
+    .filter((a) => (vista === "conSaldo" ? tieneSaldo(a) : vista === "sinDeal" ? sinDealDe(a) : vista === "sinId" ? !a.external_id : true))
+    .sort((a, b) =>
+      orden === "saldo"
+        ? Math.abs(Number(b.saldo_total ?? 0)) - Math.abs(Number(a.saldo_total ?? 0)) || a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name)
+    );
+  const saldoNetoTotal = agentes.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
 
-  // Tarjetas resumen (rediseno visual de Administracion, 05/10/2026): mismos numeros que
-  // ya estaban disponibles en la lista, solo que de un vistazo -- ningun calculo nuevo.
-  const totalActivos = agentesFiltrados.filter((a) => a.active !== false).length;
-  const totalDadosDeBaja = agentesFiltrados.filter((a) => a.active === false).length;
-  const totalSinDeal = agentesFiltrados.filter((a) => (dealsPorAgente[a.id]?.length ?? 0) === 0).length;
-  const saldoNetoTotal = agentesFiltrados.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
+  // "sin ID de plataforma" es clickeable: abre la edición para cargarlo (igual que antes).
+  const subLineaAgente = (a: any) => (
+    <>
+      {a.external_id ? (
+        <>ID {a.external_id}</>
+      ) : (
+        <span
+          style={{ opacity: 0.75, cursor: "pointer" }}
+          title="Sin ID de plataforma cargado: si el nombre del archivo no matchea exacto, la importación puede no reconocer a este agente o crear uno duplicado. Click para cargarlo."
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditando(a);
+          }}
+        >
+          sin ID de plataforma
+        </span>
+      )}
+      {a.supervisor ? " · Sup. " + a.supervisor : ""}
+    </>
+  );
+
+  const itemsAgente = (a: any) => [
+    { label: "Ver deals", onClick: () => open(a) },
+    { label: "Reglas especiales", onClick: () => setReglasAgent({ id: a.id, name: a.name }) },
+    { label: "Estado de cuenta", onClick: () => setHistorialAgent({ id: a.id, name: a.name }) },
+    { label: "Editar", onClick: () => setEditando(a) },
+    ...(a.active === false
+      ? [
+          { label: "Reactivar", onClick: () => reactivarAgente(a) },
+          { label: "Eliminar", onClick: () => eliminarAgente(a), danger: true },
+        ]
+      : [{ label: "Dar de baja", onClick: () => darDeBajaAgente(a) }]),
+  ];
 
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
           <h2>Administración</h2>
-          <div className="muted">Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050).</div>
+          <div className="muted" title="Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050).">Agentes, clubes, deals y reglas.</div>
         </div>
-        {/* AGREGADO 05/10/2026 (rediseno visual, pedido de Leo): separadas de las pestanas de
-            navegacion -- antes "+ Nuevo agente"/"+ Nuevo club" vivian como una pestana mas al
-            lado de "Lista"/"Configurar clubes", mezclando "crear algo nuevo" con "ir a ver algo
-            que ya existe". */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn secondary small" onClick={() => setTab(tab === "nuevo-club" ? "lista" : "nuevo-club")}>+ Nuevo club</button>
+        {/* "+ Nuevo club" / "+ Nuevo agente" separadas de las pestañas (05/10/2026). En celular el club va
+            dentro de un menú ⋯ para que el encabezado no ocupe media pantalla. */}
+        <div className="ag-head-actions">
+          <button className="btn secondary small solo-desktop" onClick={() => setTab(tab === "nuevo-club" ? "lista" : "nuevo-club")}>+ Nuevo club</button>
           <button className="btn small" onClick={() => setTab(tab === "nuevo-agente" ? "lista" : "nuevo-agente")}>+ Nuevo agente</button>
+          <span className="solo-mobile">
+            <ActionsMenu items={[{ label: "+ Nuevo club", onClick: () => setTab(tab === "nuevo-club" ? "lista" : "nuevo-club") }]} />
+          </span>
         </div>
       </div>
 
-      <div className="tabs">
+      <div className="tabs tabs-scroll">
         <button className={tab === "lista" ? "active" : ""} onClick={() => setTab("lista")}>Lista</button>
         <button className={tab === "clubes" ? "active" : ""} onClick={() => setTab("clubes")}>Configurar clubes</button>
         <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
@@ -167,238 +230,235 @@ export default function Agentes() {
 
       {tab === "lista" && (
         <>
-          <div className="dash-section">
-            <div className="dash-section-title">Resumen</div>
-            <div className="dash-section-subtitle">Mismos numeros que la lista de abajo -- de un vistazo, antes de filtrar o buscar.</div>
-          </div>
-          <div className="kpi-hero-grid" style={{ marginBottom: 20 }}>
-            <div className="kpi-hero-card">
-              <div className="kpi-hero-label">Activos</div>
-              <div className="kpi-hero-amount neutral">{totalActivos}</div>
+          {/* (19/10/2026, pedido de Leo, mockup aprobado) Lista de agentes: vista "Con saldo" por defecto
+              y ordenada por saldo (antes alfabética, con más de la mitad de las filas en US$ 0), filtros
+              con contadores en lugar de las tarjetas resumen, supervisor visible en la fila, deals en un
+              cajón lateral (hoja inferior en celular) y tarjetas por agente en celular. Mismas acciones,
+              mismos datos. */}
+          <div className="panel panel-visible">
+            <div className="ag-toolbar">
+              <div className="seg">
+                <button className={vista === "todos" ? "on" : ""} onClick={() => setVista("todos")}>Todos<span className="n">{cuentas.todos}</span></button>
+                <button className={vista === "conSaldo" ? "on" : ""} onClick={() => setVista("conSaldo")}>Con saldo<span className="n">{cuentas.conSaldo}</span></button>
+                <button className={vista === "sinDeal" ? "on" : ""} onClick={() => setVista("sinDeal")} title="Sin deal propio: usan el default de cada club">Sin deal<span className="n">{cuentas.sinDeal}</span></button>
+                <button className={vista === "sinId" ? "on" : ""} onClick={() => setVista("sinId")} title="Sin ID de plataforma: si el nombre del archivo no matchea exacto, la importación puede no reconocerlos">Sin ID de plataforma<span className="n">{cuentas.sinId}</span></button>
+              </div>
+              <span className="ag-toolbar-spacer" />
+              <label className="switch" title="Los dados de baja no reciben cierres nuevos, pero conservan su historial">
+                <input type="checkbox" checked={verDadosDeBaja} onChange={(e) => setVerDadosDeBaja(e.target.checked)} />
+                <i />
+                Ver dados de baja
+              </label>
+              <input className="search-input ag-search" placeholder="Buscar agente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+              <button
+                className="btn secondary small"
+                onClick={() =>
+                  exportCsv(
+                    "agentes.csv",
+                    agentesFiltrados.map((a) => ({
+                      nombre: a.name,
+                      sistema: a.default_system,
+                      saldo_total: a.saldo_total,
+                      garantia_monto: a.garantia_monto ?? "",
+                      garantia_consumida: a.garantia_consumida ?? "",
+                    }))
+                  )
+                }
+              >
+                Exportar CSV
+              </button>
             </div>
-            <div
-              className={`kpi-hero-card row-click${verDadosDeBaja ? " kpi-active" : ""}`}
-              onClick={() => setVerDadosDeBaja(!verDadosDeBaja)}
-              title="Click para mostrar u ocultar los agentes dados de baja en la lista de abajo"
-            >
-              <div className="kpi-hero-label">Dados de baja</div>
-              <div className="kpi-hero-amount neutral">{verDadosDeBaja ? totalDadosDeBaja : "—"}</div>
-              <div className="kpi-hero-sub">{verDadosDeBaja ? "Mostrando" : "Click para mostrar"}</div>
-            </div>
-            <div
-              className={`kpi-hero-card row-click${soloSinDeal ? " kpi-active" : ""}`}
-              onClick={() => setSoloSinDeal(!soloSinDeal)}
-              title="Click para ver solo los agentes sin deal propio asignado (usan el default de cada club)"
-            >
-              <div className="kpi-hero-label">Sin deal asignado</div>
-              <div className="kpi-hero-amount neutral">{totalSinDeal}</div>
-              <div className="kpi-hero-sub">{soloSinDeal ? "Filtrando" : "Click para filtrar"}</div>
-            </div>
-            <div className="kpi-hero-card">
-              <div className="kpi-hero-label">Saldo neto total</div>
-              <div className={`kpi-hero-amount ${saldoNetoTotal > 0 ? "pos" : saldoNetoTotal < 0 ? "neg" : "neutral"}`}>{usd(saldoNetoTotal)}</div>
-            </div>
-          </div>
 
-        <div style={{ display: "flex", gap: 20 }}>
-          <div className="panel" style={{ flex: 1 }}>
-            <div className="topbar" style={{ marginBottom: 14, alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Todos los agentes ({agentesFiltrados.length})</h3>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, whiteSpace: "nowrap" }}>
-                  <input type="checkbox" checked={verDadosDeBaja} onChange={(e) => setVerDadosDeBaja(e.target.checked)} />
-                  Ver dados de baja
-                </label>
-                <input className="search-input" placeholder="Buscar agente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-                <button
-                  className="btn secondary small"
-                  onClick={() =>
-                    exportCsv(
-                      "agentes.csv",
-                      agentesFiltrados.map((a) => ({
-                        nombre: a.name,
-                        sistema: a.default_system,
-                        saldo_total: a.saldo_total,
-                        garantia_monto: a.garantia_monto ?? "",
-                        garantia_consumida: a.garantia_consumida ?? "",
-                      }))
-                    )
-                  }
-                >
-                  Exportar CSV
-                </button>
+            <div className="stat-row">
+              <div className="stat-card">
+                <div className="l">Saldo neto total</div>
+                <div className="v" style={{ color: saldoNetoTotal > 0 ? "var(--green)" : saldoNetoTotal < 0 ? "var(--red)" : undefined }}>{usd(saldoNetoTotal)}</div>
+                <div className="s">{agentes.length} agentes{verDadosDeBaja ? " (con dados de baja)" : " activos"}</div>
+              </div>
+              <div className="stat-card">
+                <div className="l">Con saldo</div>
+                <div className="v">{cuentas.conSaldoTotal}</div>
+                <div className="s">{agentes.length - cuentas.conSaldoTotal} están en US$ 0</div>
+              </div>
+              <span className="ag-toolbar-spacer" />
+              <div className="ag-orden">
+                <span className="muted" style={{ fontSize: 12 }}>Orden:</span>
+                <div className="seg">
+                  <button className={orden === "saldo" ? "on" : ""} onClick={() => setOrden("saldo")}>Mayor saldo</button>
+                  <button className={orden === "nombre" ? "on" : ""} onClick={() => setOrden("nombre")}>Nombre</button>
+                </div>
               </div>
             </div>
+
             {/* 15/10/2026, pedido de Leo ("mejorar visualmente Administración" -> aprobó la variante
-                "Denso / Minimalista"): se fusiona "Sistema" + "Tipo de cuenta" en una sola columna con
-                punto de color (account_type es el dato más específico de los dos -- "Sistema" era
-                redundante para PREPAGO/WIN_LOSE y no decía nada nuevo para BANCADO/INTERNO/UNION), y
-                "% Rakeback / Rebate" pasa de N badges que se envolvían en varias líneas a un chip
-                compacto con la cantidad -- el detalle completo (los % por club) se sigue viendo igual
-                que antes al abrir "Ver deals", no se pierde info, solo se saca de la fila. */}
-            <table className="table-saldo-accent">
-              <thead>
-                <tr><th>Agente</th><th>Tipo de cuenta</th><th>Deals</th><th className="num">Saldo total</th><th className="num">Garantía</th><th></th></tr>
-              </thead>
-              <tbody>
-                {agentesFiltrados.map((a) => {
-                  const saldo = Number(a.saldo_total);
-                  const rowClass = a.active === false ? "" : saldo > 0 ? "row-pos" : saldo < 0 ? "row-neg" : "";
-                  const tipo = (a.account_type as AccountType) ?? a.default_system;
-                  const dotClass = tipo === "PREPAGO" ? "prepago" : tipo === "WIN_LOSE" ? "winlose" : "";
-                  const nDeals = dealsPorAgente[a.id]?.length ?? 0;
-                  return (
-                    <tr key={a.id} className={rowClass} style={{ verticalAlign: "top", ...(a.active === false ? { opacity: 0.55 } : {}) }}>
-                      <td>
-                        {a.name}
-                        {a.active === false && <span className="badge neutral" style={{ marginLeft: 8 }}>Dado de baja</span>}
-                        <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-                          {a.external_id ? (
-                            <>ID plataforma: {a.external_id}</>
-                          ) : (
-                            <span
-                              className="badge neutral"
-                              style={{ cursor: "pointer" }}
-                              title="Sin ID de plataforma cargado: si el nombre del archivo no matchea exacto, la importación puede no reconocer a este agente o crear uno duplicado. Click para cargarlo."
-                              onClick={() => setEditando(a)}
-                            >
-                              Sin ID de plataforma
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td><span className={`acc-dot ${dotClass}`}>{ACCOUNT_TYPE_LABELS[tipo] ?? a.account_type}</span></td>
-                      <td>
-                        {nDeals > 0 ? (
-                          <span
-                            className="badge neutral"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => open(a)}
-                            title="Ver/editar los deals de este agente"
-                          >
-                            {nDeals} {nDeals === 1 ? "club" : "clubes"} con deal
-                          </span>
-                        ) : (
-                          <span
-                            className="badge neutral"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => open(a)}
-                            title="Sin deal propio en ningún club — usa el default de cada club. Click para asignarle uno."
-                          >
-                            Sin deal (default club)
-                          </span>
-                        )}
-                      </td>
-                      <td className="num"><span className={`badge ${saldo > 0 ? "pos" : saldo < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
-                      <td className="num">
-                        {a.garantia_monto != null ? (
-                          <span className="muted" style={{ fontSize: 12.5 }}>
-                            {usd(a.garantia_consumida)} / {usd(a.garantia_monto)}
-                          </span>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="row-actions">
-                          <button className="btn secondary small" onClick={() => open(a)}>Ver deals</button>
-                          <ActionsMenu
-                            items={[
-                              { label: "Reglas especiales", onClick: () => setReglasAgent({ id: a.id, name: a.name }) },
-                              { label: "Estado de cuenta", onClick: () => setHistorialAgent({ id: a.id, name: a.name }) },
-                              { label: "Editar", onClick: () => setEditando(a) },
-                              ...(a.active === false
-                                ? [
-                                    { label: "Reactivar", onClick: () => reactivarAgente(a) },
-                                    {
-                                      label: "Eliminar",
-                                      onClick: () => eliminarAgente(a),
-                                      danger: true,
-                                    },
-                                  ]
-                                : [{ label: "Dar de baja", onClick: () => darDeBajaAgente(a) }]),
-                            ]}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {selected && (
-            <div className="panel" style={{ width: 420 }}>
-              <div className="topbar" style={{ marginBottom: 10 }}>
-                <h3 style={{ margin: 0 }}>Deals de {selected.name}</h3>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {historialDeals === null ? (
-                    <button className="btn secondary small" onClick={verHistorialDeals}>Ver historial completo</button>
-                  ) : (
-                    <button className="btn secondary small" onClick={() => setHistorialDeals(null)}>Ocultar historial</button>
-                  )}
-                  <button className="btn secondary small" onClick={() => setEditandoDeal("new")}>+ Agregar deal</button>
-                </div>
-              </div>
-              {editandoDeal && (
-                <div style={{ marginBottom: 14 }}>
-                  <NuevoDeal
-                    agentes={agentes}
-                    clubes={clubes}
-                    fixedAgentId={selected.id}
-                    initial={editandoDeal === "new" ? undefined : editandoDeal}
-                    onCreated={async () => { setEditandoDeal(null); setDeals(await api.agentDeals(selected.id)); }}
-                  />
-                  <button className="btn secondary small" style={{ marginTop: 6 }} onClick={() => setEditandoDeal(null)}>Cancelar</button>
-                </div>
-              )}
-              <table>
-                <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th></th></tr></thead>
+                "Denso / Minimalista"): "Sistema" + "Tipo de cuenta" fusionados en una sola columna con
+                punto de color (account_type es el dato más específico de los dos). El detalle de los % por
+                club se sigue viendo igual que antes al abrir los deals. */}
+            <div className="ag-table-wrap">
+              <table className="table-saldo-accent">
+                <thead>
+                  <tr><th>Agente</th><th>Tipo de cuenta</th><th>Deals</th><th className="num">Saldo total</th><th className="num">Garantía</th><th></th></tr>
+                </thead>
                 <tbody>
-                  {deals.map((d) => (
-                    <tr key={d.id}>
-                      <td>{d.club_name}</td>
-                      <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                      <td>{pct(d.rakeback_pct)}</td>
-                      <td>{pct(d.rebate_pct)}</td>
-                      <td><button className="btn secondary small" onClick={() => setEditandoDeal(d)}>Editar</button></td>
-                    </tr>
-                  ))}
+                  {agentesFiltrados.map((a) => {
+                    const saldo = Number(a.saldo_total);
+                    const rowClass = a.active === false ? "" : saldo > 0 ? "row-pos" : saldo < 0 ? "row-neg" : "";
+                    return (
+                      <tr key={a.id} className={`row-click ${rowClass}`} style={a.active === false ? { opacity: 0.55 } : undefined} onClick={() => open(a)}>
+                        <td>
+                          <div className="saldo-name">
+                            {a.name}
+                            {a.active === false && <span className="pill" style={{ marginLeft: 8 }}>Dado de baja</span>}
+                          </div>
+                          <div className="saldo-sub">{subLineaAgente(a)}</div>
+                        </td>
+                        <td><TipoDot a={a} /></td>
+                        <td><DealsChip n={dealsPorAgente[a.id]?.length ?? 0} /></td>
+                        <td className="num"><span className={`saldo-big ${saldo > 0 ? "pos" : saldo < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
+                        <td className="num">
+                          {a.garantia_monto != null ? (
+                            <span className="muted" style={{ fontSize: 12.5 }}>{usd(a.garantia_consumida)} / {usd(a.garantia_monto)}</span>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td style={{ width: 56, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                          <ActionsMenu items={itemsAgente(a)} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {agentesFiltrados.length === 0 && (
+                    <tr><td colSpan={6} className="muted">Ningún agente coincide con estos filtros.</td></tr>
+                  )}
                 </tbody>
               </table>
-              {deals.some((d) => d.notes) && (
-                <div className="muted" style={{ marginTop: 10, fontSize: 12.5 }}>
-                  {deals.filter((d) => d.notes).map((d) => <div key={d.id}>{d.club_name}: {d.notes}</div>)}
+            </div>
+
+            <div className="ag-cards">
+              {agentesFiltrados.map((a) => {
+                const saldo = Number(a.saldo_total);
+                return (
+                  <div key={a.id} className={`saldo-card ${a.active === false ? "" : saldo > 0 ? "is-pos" : saldo < 0 ? "is-neg" : ""}`} style={a.active === false ? { opacity: 0.55 } : undefined} onClick={() => open(a)}>
+                    <div className="saldo-card-body">
+                      <div className="saldo-card-top">
+                        <div className="saldo-name">
+                          {a.name}
+                          {a.active === false && <span className="pill" style={{ marginLeft: 8 }}>Baja</span>}
+                        </div>
+                        <div className={`saldo-big ${saldo > 0 ? "pos" : saldo < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</div>
+                      </div>
+                      <div className="saldo-card-mid">
+                        <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <TipoDot a={a} />
+                          <DealsChip n={dealsPorAgente[a.id]?.length ?? 0} />
+                          {a.supervisor && <span>Sup. {a.supervisor}</span>}
+                        </div>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ActionsMenu items={itemsAgente(a)} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {agentesFiltrados.length === 0 && <div className="muted">Ningún agente coincide con estos filtros.</div>}
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+              Mostrando {agentesFiltrados.length} de {agentes.length}
+              {vista === "conSaldo" && cuentas.todos > cuentas.conSaldo ? ` · el resto (${cuentas.todos - cuentas.conSaldo}) está en US$ 0, se ve con "Todos"` : ""}.
+            </div>
+          </div>
+
+          {/* Deals del agente elegido: cajón lateral (hoja inferior en celular) que se abre ENCIMA de la
+              lista -- antes era un panel fijo de 420 px al costado que ensanchaba la página más allá de
+              la pantalla y en celular aplastaba la lista. */}
+          {selected && (
+            <>
+              <div className="deals-veil" onClick={() => setSelected(null)} />
+              <aside className="deals-drawer">
+                <div className="deals-head">
+                  <div>
+                    <div className="deals-eyebrow">Deals de</div>
+                    <div className="deals-name">{selected.name}</div>
+                    <div className="saldo-sub" style={{ marginTop: 3 }}>
+                      <TipoDot a={selected} />
+                      {selected.external_id ? ` · ID ${selected.external_id}` : ""} · saldo{" "}
+                      <b style={{ color: Number(selected.saldo_total) < 0 ? "var(--red)" : "var(--green)" }}>{usd(selected.saldo_total)}</b>
+                    </div>
+                  </div>
+                  <button className="icon-btn" onClick={() => setSelected(null)} aria-label="Cerrar">✕</button>
                 </div>
-              )}
-              {historialDeals !== null && (
-                <div style={{ marginTop: 16 }}>
-                  <h4 style={{ margin: "0 0 6px" }}>Historial completo</h4>
-                  {historialDeals.filter((d) => d.valid_to).length === 0 ? (
-                    <div className="muted" style={{ fontSize: 12.5 }}>Este agente no tiene deals cerrados anteriores -- el de arriba es el único que tuvo.</div>
+
+                {editandoDeal && (
+                  <div style={{ marginBottom: 14 }}>
+                    <NuevoDeal
+                      agentes={agentes}
+                      clubes={clubes}
+                      fixedAgentId={selected.id}
+                      initial={editandoDeal === "new" ? undefined : editandoDeal}
+                      onCreated={async () => { setEditandoDeal(null); setDeals(await api.agentDeals(selected.id)); }}
+                    />
+                    <button className="btn secondary small" style={{ marginTop: 6 }} onClick={() => setEditandoDeal(null)}>Cancelar</button>
+                  </div>
+                )}
+
+                {deals.length === 0 && !editandoDeal && (
+                  <div className="pt-empty" style={{ marginBottom: 10 }}>Sin deal propio en ningún club: usa el default de cada club. Agregá uno con "+ Agregar deal".</div>
+                )}
+                {deals.map((d) => (
+                  <div key={d.id} className="dealc">
+                    <div className="t">
+                      <span className="n">{d.club_name}</span>
+                      <button className="btn secondary small" onClick={() => setEditandoDeal(d)}>Editar</button>
+                    </div>
+                    <div className="p">
+                      <div>Rakeback<b>{pct(d.rakeback_pct)}</b></div>
+                      <div>Rebate<b style={Number(d.rebate_pct) < 0 ? { color: "var(--red)" } : undefined}>{pct(d.rebate_pct)}</b></div>
+                      <div>Sistema<b style={{ fontSize: 13, marginTop: 4 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</b></div>
+                    </div>
+                    {d.notes && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{d.notes}</div>}
+                  </div>
+                ))}
+
+                <div style={{ display: "flex", gap: 8, margin: "6px 0 4px" }}>
+                  <button className="btn small" style={{ flex: 1 }} onClick={() => setEditandoDeal("new")}>+ Agregar deal</button>
+                  {historialDeals === null ? (
+                    <button className="btn secondary small" style={{ flex: 1 }} onClick={verHistorialDeals}>Ver historial completo</button>
                   ) : (
-                    <table>
-                      <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th>Vigente desde</th><th>Vigente hasta</th></tr></thead>
-                      <tbody>
-                        {historialDeals.map((d) => (
-                          <tr key={d.id} style={d.valid_to ? { opacity: 0.6 } : undefined}>
-                            <td>{d.club_name}</td>
-                            <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                            <td>{pct(d.rakeback_pct)}</td>
-                            <td>{pct(d.rebate_pct)}</td>
-                            <td>{dateShort(d.valid_from)}</td>
-                            <td>{d.valid_to ? dateShort(d.valid_to) : <span className="muted">Vigente</span>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <button className="btn secondary small" style={{ flex: 1 }} onClick={() => setHistorialDeals(null)}>Ocultar historial</button>
                   )}
                 </div>
-              )}
-            </div>
+
+                {historialDeals !== null && (
+                  <div style={{ marginTop: 16 }}>
+                    <h4 style={{ margin: "0 0 6px" }}>Historial completo</h4>
+                    {historialDeals.filter((d) => d.valid_to).length === 0 ? (
+                      <div className="muted" style={{ fontSize: 12.5 }}>Este agente no tiene deals cerrados anteriores -- el de arriba es el único que tuvo.</div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table>
+                          <thead><tr><th>Club</th><th>Sistema</th><th>% RB</th><th>% Rebate</th><th>Vigente desde</th><th>Vigente hasta</th></tr></thead>
+                          <tbody>
+                            {historialDeals.map((d) => (
+                              <tr key={d.id} style={d.valid_to ? { opacity: 0.6 } : undefined}>
+                                <td>{d.club_name}</td>
+                                <td className="muted" style={{ fontSize: 12 }}>{d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
+                                <td>{pct(d.rakeback_pct)}</td>
+                                <td>{pct(d.rebate_pct)}</td>
+                                <td>{dateShort(d.valid_from)}</td>
+                                <td>{d.valid_to ? dateShort(d.valid_to) : <span className="muted">Vigente</span>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </aside>
+            </>
           )}
-        </div>
         </>
       )}
 
