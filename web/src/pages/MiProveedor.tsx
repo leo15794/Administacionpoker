@@ -29,6 +29,7 @@ export default function MiProveedor() {
   const [tab, setTab] = useState<Tab>("saldos");
   const [cierresAbiertos, setCierresAbiertos] = useState<Set<string>>(new Set());
   const [lineasPorCierre, setLineasPorCierre] = useState<Record<string, any[]>>({});
+  const [errorLineas, setErrorLineas] = useState<Record<string, string>>({});
 
   // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
   // esto mismo para la sección de proveedores") -- ver routes/portal.ts POST/GET
@@ -109,7 +110,7 @@ export default function MiProveedor() {
       api
         .miProveedorLineasCierre(id)
         .then((l: any[]) => setLineasPorCierre((prev) => ({ ...prev, [id]: l })))
-        .catch(() => setLineasPorCierre((prev) => ({ ...prev, [id]: [] })));
+        .catch((e: any) => setErrorLineas((prev) => ({ ...prev, [id]: e?.message || "error desconocido" })));
     }
   }
   const cierresPane = (
@@ -136,7 +137,9 @@ export default function MiProveedor() {
                   </div>
                   {abierto && (
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }} onClick={(e) => e.stopPropagation()}>
-                      {!lineas ? (
+                      {errorLineas[c.id] ? (
+                        <div className="saldo-sub">No se pudo cargar el detalle de este cierre ({errorLineas[c.id]}).</div>
+                      ) : !lineas ? (
                         <div className="saldo-sub">Cargando detalle…</div>
                       ) : lineas.length === 0 ? (
                         <div className="saldo-sub">Este cierre no tiene detalle cargado (formato anterior).</div>
