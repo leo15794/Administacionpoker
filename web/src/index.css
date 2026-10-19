@@ -2567,3 +2567,23 @@ button.nav-link {
   .rf-grid { grid-template-columns: 1fr; }
   .rf-rango { justify-content: flex-start; }
 }
+
+/* ---------- Resumen de Rodeo: agentes desplegables semana por semana (19/10/2026) ---------- */
+.rd-ag { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); margin-bottom: 10px; overflow: hidden; }
+.rd-ag.ab { border-color: rgba(var(--accent-rgb), 0.45); }
+.rd-cab { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+.rd-cab .chev { width: 22px; height: 22px; }
+.rd-cab .chev svg { width: 12px; height: 12px; }
+.rd-cab .chev.on { transform: rotate(180deg); background: var(--accent-grad); color: var(--accent-ink); }
+.rd-nums { display: flex; gap: 26px; text-align: right; }
+.rd-det { padding: 2px 16px 14px; background: var(--panel-2); }
+.rd-tabla td, .rd-tabla th { white-space: nowrap; }
+.rd-tabla td:last-child { white-space: normal; min-width: 220px; }
+.rd-lista { display: none; }
+.rd-sem { padding: 10px 0; border-top: 1px solid var(--border); }
+@media (max-width: 768px) {
+  .rd-tabla { display: none; }
+  .rd-lista { display: block; }
+  .rd-cab { flex-wrap: wrap; }
+  .rd-nums { width: 100%; justify-content: space-between; text-align: left; gap: 10px; }
+}

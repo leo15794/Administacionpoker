@@ -77,6 +77,23 @@ export interface ResumenRodeoAgente {
   rodeoPagadoAgenteTotal: number;
   rodeoClubTotal: number;
   ultimaSemana: string | null;
+  // Detalle semana por semana (19/10/2026, pedido de Leo: "un desplegable para ver las diferentes semanas"),
+  // de la más nueva a la más vieja, sin cierres revertidos. Si la semana vino de un rodeo cargado a mano
+  // (rodeoManual, sin rodeo_detalle) bruto/memoria quedan en null y manual = true.
+  semanas: SemanaRodeoAgente[];
+}
+
+export interface SemanaRodeoAgente {
+  weekStart: string;
+  weekEnd: string;
+  manual: boolean;
+  rodeoBruto: number | null; // suma del base de todos los jugadores (positivo = perdieron)
+  memoriaAntes: number | null;
+  aRepartir: number | null; // bruto - memoria antes, si es positivo (0 si no alcanzó)
+  memoriaDespues: number | null;
+  rodeoAgente: number; // lo que se sumó al cierre del agente
+  rodeoClub: number; // informativo
+  jugadores: { id: string; nombre: string; base: number }[];
 }
 
 export async function listResumenRodeo(): Promise<ResumenRodeoAgente[]> {
@@ -105,6 +122,54 @@ export async function listResumenRodeo(): Promise<ResumenRodeoAgente[]> {
      GROUP BY k.agent_id, a.name, k.club_id, c.name, rm.memory
      ORDER BY a.name, c.name`
   );
+
+  // Semanas de todos los agente+club en una sola consulta; el nombre de cada jugador sale de players
+  // (el detalle solo guarda el ID externo del proveedor).
+  const sem = await pool.query(
+    `SELECT wc.agent_id, wc.club_id, wc.week_start, wc.week_end, wc.rodeo, wc.rodeo_club_share, wc.rodeo_detalle
+     FROM weekly_closings wc
+     WHERE wc.status <> 'REVERTIDO' AND (wc.rodeo <> 0 OR wc.rodeo_club_share <> 0 OR wc.rodeo_detalle IS NOT NULL)
+     ORDER BY wc.week_start DESC`
+  );
+  const ids = new Set<string>();
+  for (const s of sem.rows) for (const j of s.rodeo_detalle?.jugadores ?? []) ids.add(String(j.playerExternalId));
+  const nombres = new Map<string, string>();
+  if (ids.size) {
+    const pl = await pool.query(
+      `SELECT DISTINCT ON (club_id, external_id) club_id, external_id, display_name
+       FROM players WHERE external_id = ANY($1::text[]) ORDER BY club_id, external_id, created_at DESC`,
+      [[...ids]]
+    );
+    for (const p of pl.rows) nombres.set(`${p.club_id}|${p.external_id}`, p.display_name || p.external_id);
+  }
+  const porClave = new Map<string, SemanaRodeoAgente[]>();
+  for (const s of sem.rows) {
+    const det = s.rodeo_detalle;
+    const jug = (det?.jugadores ?? []).map((j: any) => ({
+      id: String(j.playerExternalId),
+      nombre: nombres.get(`${s.club_id}|${j.playerExternalId}`) ?? String(j.playerExternalId),
+      base: Number(j.baseRodeo),
+    }));
+    const bruto = det ? jug.reduce((t: number, j: { base: number }) => t + j.base, 0) : null;
+    const antes = det ? Number(det.memoriaAnterior ?? 0) : null;
+    const item: SemanaRodeoAgente = {
+      weekStart: String(s.week_start).slice(0, 10),
+      weekEnd: String(s.week_end).slice(0, 10),
+      manual: !det,
+      rodeoBruto: bruto,
+      memoriaAntes: antes,
+      aRepartir: bruto !== null && antes !== null ? Math.max(0, bruto - antes) : null,
+      memoriaDespues: det ? Number(det.memoriaNueva ?? 0) : null,
+      rodeoAgente: Number(s.rodeo),
+      rodeoClub: Number(s.rodeo_club_share),
+      jugadores: jug,
+    };
+    const k = `${s.agent_id}|${s.club_id}`;
+    const arr = porClave.get(k);
+    if (arr) arr.push(item);
+    else porClave.set(k, [item]);
+  }
+
   return r.rows.map((row) => ({
     agentId: row.agent_id,
     agentName: row.agent_name,
@@ -115,6 +180,7 @@ export async function listResumenRodeo(): Promise<ResumenRodeoAgente[]> {
     rodeoPagadoAgenteTotal: Number(row.rodeo_pagado_agente_total),
     rodeoClubTotal: Number(row.rodeo_club_total),
     ultimaSemana: row.ultima_semana ? String(row.ultima_semana).slice(0, 10) : null,
+    semanas: porClave.get(`${row.agent_id}|${row.club_id}`) ?? [],
   }));
 }
 
