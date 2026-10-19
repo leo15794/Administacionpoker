@@ -27,6 +27,8 @@ export default function MiProveedor() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("saldos");
+  const [cierresAbiertos, setCierresAbiertos] = useState<Set<string>>(new Set());
+  const [lineasPorCierre, setLineasPorCierre] = useState<Record<string, any[]>>({});
 
   // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
   // esto mismo para la sección de proveedores") -- ver routes/portal.ts POST/GET
@@ -92,22 +94,85 @@ export default function MiProveedor() {
     </PortalPane>
   );
 
+  // Cada cierre semanal se despliega con un toque y muestra sus líneas (club y/o agente) con el desglose que ya
+  // ve el admin (19/10/2026, pedido de Leo -- igual que el cierre del supervisor). Solo lectura: las líneas
+  // se piden al servidor recién al abrir, y el servidor solo las entrega si el cierre es del propio proveedor.
+  function toggleCierre(id: string) {
+    const abrir = !cierresAbiertos.has(id);
+    setCierresAbiertos((prev) => {
+      const next = new Set(prev);
+      if (abrir) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    if (abrir && !lineasPorCierre[id]) {
+      api
+        .miProveedorLineasCierre(id)
+        .then((l: any[]) => setLineasPorCierre((prev) => ({ ...prev, [id]: l })))
+        .catch(() => setLineasPorCierre((prev) => ({ ...prev, [id]: [] })));
+    }
+  }
   const cierresPane = (
     <PortalPane activa={tab === "cierres"} titulo="Cierres semanales">
       {cierres.length === 0 ? (
         <div className="muted">Todavía no hay ningún cierre cargado.</div>
       ) : (
-        <div style={{ maxHeight: 520, overflowY: "auto" }}>
-          {cierres.map((c: any) => (
-            <PortalCard
-              key={c.id}
-              titulo={`${dateShort(c.week_start).slice(0, 5)} al ${dateShort(c.week_end).slice(0, 5)}`}
-              monto={Number(c.cierre)}
-              izq={c.status === "REVERTIDO" ? "Revertido" : ""}
-              der={c.status === "REVERTIDO" ? undefined : <span className="pill g">Aplicado</span>}
-              rev={c.status === "REVERTIDO"}
-            />
-          ))}
+        <div style={{ maxHeight: 640, overflowY: "auto" }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Tocá una semana para ver de dónde sale ese cierre.</div>
+          {cierres.map((c: any) => {
+            const abierto = cierresAbiertos.has(c.id);
+            const monto = Number(c.cierre);
+            const lineas: any[] | undefined = lineasPorCierre[c.id];
+            return (
+              <div key={c.id} className={`pt-card${monto < 0 ? " ng" : ""}${c.status === "REVERTIDO" ? " rev" : ""}`} style={{ cursor: "pointer" }} onClick={() => toggleCierre(c.id)}>
+                <div className="b">
+                  <div className="t1">
+                    <span className="n"><span style={{ color: "var(--text-faint)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>{dateShort(c.week_start).slice(0, 5)} al {dateShort(c.week_end).slice(0, 5)}</span>
+                    <span className="amt" style={{ color: colorSigno(monto) }}>{montoSigno(monto)}</span>
+                  </div>
+                  <div className="t2">
+                    <span>{c.status === "REVERTIDO" ? "Revertido" : ""}</span>
+                    <span>{c.status === "REVERTIDO" ? undefined : <span className="pill g">Aplicado</span>}</span>
+                  </div>
+                  {abierto && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }} onClick={(e) => e.stopPropagation()}>
+                      {!lineas ? (
+                        <div className="saldo-sub">Cargando detalle…</div>
+                      ) : lineas.length === 0 ? (
+                        <div className="saldo-sub">Este cierre no tiene detalle cargado (formato anterior).</div>
+                      ) : (
+                        lineas.map((l: any, i: number) => {
+                          const esAgente = l.tipo === "AGENTE";
+                          const resultado = esAgente ? l.wc_result : l.resultado_total;
+                          const rake = esAgente ? l.wc_rake_total : l.rake_total;
+                          const pctRb = esAgente ? l.wc_rakeback_pct : l.rakeback_pct;
+                          const rodeo = esAgente ? l.wc_rodeo : l.impacto_rodeo;
+                          const dato = (x: any) => (x !== null && x !== undefined);
+                          return (
+                            <div key={l.id ?? i} style={{ marginTop: i ? 12 : 0, paddingTop: i ? 12 : 0, borderTop: i ? "1px dashed var(--border)" : undefined }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                                <div style={{ fontWeight: 650 }}>{l.club_name}{esAgente && l.agent_name ? ` · ${l.agent_name}` : ""}</div>
+                                <span className="pill">{esAgente ? "Agente" : "Club total"}</span>
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 14px", fontSize: 12.5, marginTop: 8 }}>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>Resultado</div><b>{dato(resultado) ? usdCents(Number(resultado)) : "—"}</b></div>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>Rake</div><b>{dato(rake) ? usdCents(Number(rake)) : "—"}</b></div>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>% rakeback</div><b>{dato(pctRb) ? `${Math.round(Number(pctRb) * 10000) / 100}%` : "—"}</b></div>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>Rebate del club</div><b>{dato(l.club_rebate) ? usdCents(Number(l.club_rebate)) : "—"}</b></div>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>Rodeo</div><b>{dato(rodeo) ? usdCents(Number(rodeo)) : "—"}</b></div>
+                                <div><div className="saldo-sub" style={{ margin: 0 }}>Monto bruto</div><b>{usdCents(Number(l.monto_crudo))}</b></div>
+                              </div>
+                              <div className="saldo-sub" style={{ marginTop: 8 }}>Aplicado a tu saldo: <b style={{ color: colorSigno(Number(l.monto_aplicado)) }}>{montoSigno(Number(l.monto_aplicado))}</b></div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </PortalPane>

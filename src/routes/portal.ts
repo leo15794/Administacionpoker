@@ -13,6 +13,7 @@ import {
   listSaldosProveedores,
   listCierresProveedor,
   listPagosProveedor,
+  listLineasCierreProveedor,
   crearSolicitudRetiroProveedor,
   listSolicitudesRetiroProveedor,
 } from "../repo/proveedores.js";
@@ -266,6 +267,41 @@ portalRouter.get("/mi-proveedor", requireAuth, async (req: AuthedRequest, res) =
   } catch (err: any) {
     console.error("Error en /portal/mi-proveedor:", err);
     res.status(500).json({ error: err.message || "No se pudo cargar tu cuenta." });
+  }
+});
+
+// Desglose de un cierre semanal del propio proveedor (19/10/2026, pedido de Leo: que pueda desplegar la semana).
+// Solo si el cierre es SUYO (proveedor_id = el de su login) -- nunca se pide por un id de proveedor de la URL.
+portalRouter.get("/mi-proveedor/cierres/:id/lineas", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });
+  }
+  try {
+    const propio = await pool.query(`SELECT 1 FROM proveedor_cierres WHERE id = $1 AND proveedor_id = $2`, [req.params.id, req.user!.proveedorId]);
+    if (!propio.rows[0]) return res.status(404).json({ error: "Cierre no encontrado." });
+    const lineas = await listLineasCierreProveedor(req.params.id);
+    res.json(
+      lineas.map((l: any) => ({
+        id: l.id,
+        tipo: l.tipo,
+        club_name: l.club_name,
+        agent_name: l.agent_name,
+        resultado_total: l.resultado_total,
+        rake_total: l.rake_total,
+        rakeback_pct: l.rakeback_pct,
+        club_rebate: l.club_rebate,
+        impacto_rodeo: l.impacto_rodeo,
+        monto_crudo: l.monto_crudo,
+        monto_aplicado: l.monto_aplicado,
+        wc_result: l.wc_result,
+        wc_rake_total: l.wc_rake_total,
+        wc_rakeback_pct: l.wc_rakeback_pct,
+        wc_rodeo: l.wc_rodeo,
+      }))
+    );
+  } catch (err: any) {
+    console.error("Error en /portal/mi-proveedor/cierres/:id/lineas:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar el detalle del cierre." });
   }
 });
 
