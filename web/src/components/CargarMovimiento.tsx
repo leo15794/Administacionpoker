@@ -408,6 +408,17 @@ export default function CargarMovimiento({
   }, [recientes, type, agentId, clubId]);
   const mismoImporte = parecido && importeResuelto && Math.abs(Number(parecido.amount)) === Math.abs(montoNum);
 
+  // Numeración de pasos: solo cuentan los que existen para este tipo (antes saltaba del 4 al 6).
+  let k = 3 + (type === "TRANSFERENCIA_ENTRE_CLUBES" ? 1 : 0);
+  const nImporte = ++k;
+  const nMedioAdelanto = type === "ADELANTO_RAKEBACK" ? ++k : 0;
+  const nFicha = !esAdelanto && esFichas ? ++k : 0;
+  const hayMedioPago = !esAdelanto && type !== "AJUSTE";
+  const nMedio = hayMedioPago ? ++k : 0;
+  const nCustodio = hayMedioPago && paymentMethod === "EFECTIVO" ? ++k : 0;
+  const nFecha = !esAdelanto ? ++k : 0;
+  const nObs = ++k;
+
   const signoTitular = delta === null ? "" : delta >= 0 ? "+" : "−";
   const colorTitular = delta === null ? "var(--text)" : delta >= 0 ? "var(--green)" : "var(--red)";
   const sistemaAgente = cuenta ? Object.values(cuenta)[0]?.system : undefined;
@@ -442,8 +453,8 @@ export default function CargarMovimiento({
           )}
           {parecido && (
             <div className="warnbox">
-              <b>{mismoImporte ? "Mismo importe: ¿es la misma carga?" : "¿Es otra carga?"}</b> El {dateTime(parecido.occurred_at)} ya se cargó {TIPO_LABEL[parecido.type]?.toLowerCase() ?? parecido.type} de{" "}
-              <b>{usdCents(Math.abs(Number(parecido.amount)))}</b> a {parecido.agent_name} en {parecido.club_name}.
+              <b>{mismoImporte ? "Mismo importe: ¿es el mismo movimiento?" : "¿Es otro movimiento igual?"}</b> Último parecido: {TIPO_LABEL[parecido.type] ?? parecido.type} de{" "}
+              <b>{usdCents(Math.abs(Number(parecido.amount)))}</b> a {parecido.agent_name} en {parecido.club_name} ({dateTime(parecido.occurred_at)}).
             </div>
           )}
         </>
@@ -492,7 +503,7 @@ export default function CargarMovimiento({
                   <div className={`ic ${t.cls}`}>{t.glyph}</div>
                   <div className="t">{t.label}</div>
                   <div className="d">{t.desc}</div>
-                  <div className="n">{usoPorTipo[t.value] ?? 0}</div>
+                  <div className="cnt">{usoPorTipo[t.value] ?? 0}</div>
                 </button>
               ))}
               {tiposMas.length > 0 && !(verMas || tipoEnMas) && (
@@ -600,7 +611,7 @@ export default function CargarMovimiento({
 
           {pasoImporte && (
             <div className="cstep">
-              <h4><b>{type === "TRANSFERENCIA_ENTRE_CLUBES" ? "5" : "4"}</b>{esAdelanto ? "Monto adelantado" : "Importe"}</h4>
+              <h4><b>{nImporte}</b>{esAdelanto ? "Monto adelantado" : "Importe"}</h4>
               <div className="bigamt">
                 <span>US$</span>
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" inputMode="decimal" placeholder="0,00" autoFocus />
@@ -611,7 +622,7 @@ export default function CargarMovimiento({
 
           {pasoSiguienteAImporte && type === "ADELANTO_RAKEBACK" && (
             <div className="cstep">
-              <h4><b>5</b>Medio</h4>
+              <h4><b>{nMedioAdelanto}</b>Medio</h4>
               <div className="seg">
                 <button type="button" className={medioAdelanto === "" ? "on" : ""} onClick={() => setMedioAdelanto("")}>Sin especificar</button>
                 <button type="button" className={medioAdelanto === "FICHAS" ? "on" : ""} onClick={() => setMedioAdelanto("FICHAS")}>Fichas</button>
@@ -625,7 +636,7 @@ export default function CargarMovimiento({
 
           {pasoSiguienteAImporte && !esAdelanto && esFichas && (
             <div className="cstep">
-              <h4><b>5</b>Valor de la ficha (USD)</h4>
+              <h4><b>{nFicha}</b>Valor de la ficha (USD)</h4>
               <div style={{ display: "flex", gap: 6, maxWidth: 360 }}>
                 <input value={valorFicha} onChange={(e) => setValorFicha(e.target.value)} type="number" step="0.01" style={{ flex: 1 }} />
                 {esTiny && (
@@ -647,7 +658,7 @@ export default function CargarMovimiento({
 
           {pasoSiguienteAImporte && !esAdelanto && type !== "AJUSTE" && (
             <div className="cstep">
-              <h4><b>6</b>Medio de pago</h4>
+              <h4><b>{nMedio}</b>Medio de pago</h4>
               <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
                 <div className="seg" style={{ maxWidth: "100%", overflowX: "auto" }}>
                   {MEDIOS.map((m) => (
@@ -668,14 +679,14 @@ export default function CargarMovimiento({
 
           {pasoSiguienteAImporte && !esAdelanto && type !== "AJUSTE" && paymentMethod === "EFECTIVO" && (
             <div className="cstep">
-              <h4><b>6</b>Custodio del efectivo</h4>
+              <h4><b>{nCustodio}</b>Custodio del efectivo</h4>
               <input className="search-input" style={{ width: "100%" }} value={custodian} onChange={(e) => setCustodian(e.target.value)} placeholder="Quién tiene la plata físicamente" />
             </div>
           )}
 
           {pasoSiguienteAImporte && !esAdelanto && (
             <div className="cstep">
-              <h4><b>7</b>Cuándo</h4>
+              <h4><b>{nFecha}</b>Cuándo</h4>
               <div className="chips-row">
                 <button type="button" className={`chipx${fechaModo === "ahora" ? " on" : ""}`} onClick={() => setFechaModo("ahora")}>Ahora</button>
                 <button type="button" className={`chipx${fechaModo === "ayer" ? " on" : ""}`} onClick={() => setFechaModo("ayer")}>Ayer</button>
@@ -687,7 +698,7 @@ export default function CargarMovimiento({
 
           {pasoSiguienteAImporte && (
             <div className="cstep">
-              <h4><b>8</b>{esAdelanto ? "Notas (opcional)" : "Observación (opcional)"}</h4>
+              <h4><b>{nObs}</b>{esAdelanto ? "Notas (opcional)" : "Observación (opcional)"}</h4>
               <input className="search-input" style={{ width: "100%" }} value={observation} onChange={(e) => setObservation(e.target.value)} placeholder={esAdelanto ? "Motivo, referencia..." : "Motivo, referencia..."} />
             </div>
           )}
