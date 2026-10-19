@@ -22,6 +22,7 @@ const CATEGORIA_LABEL: Record<string, string> = {
   CIERRE_SEMANAL: "Cierre semanal (agentes)",
   BANCADO: "Jugadores bancados",
   COMISION_REFERIDO: "Comisión por referido",
+  TEAMBACK_AFFILIATES: "TeamBack Afiliados",
 };
 
 function hoyIso() {
@@ -135,6 +136,7 @@ export default function ResumenFinanciero() {
   const columnasExtraPeriodo =
     serie.some((f: any) => Number(f.gananciaBancados) !== 0) || serie.some((f: any) => Number(f.comisionesAcreditadas) !== 0 || Number(f.comisionesPagadas) !== 0);
   const hayBancadosPorClub = !!data?.porClub?.some((c: any) => Number(c.gananciaBancados) !== 0);
+  const hayTeamback = serie.some((f: any) => Number(f.gananciaTeamback ?? 0) !== 0);
   const serieVisible = verTodosPeriodos ? serie : serie.slice(0, 7);
   const abrirPeriodo = (f: any) => (granularidad === "semana" && f.gananciaCierres !== 0 ? () => nav(`/dashboard/cierres?week=${f.periodo}`) : undefined);
   const eventosVisibles = eventosFiltrados.slice(0, limiteEventos);
@@ -241,6 +243,13 @@ export default function ResumenFinanciero() {
               <div className={`v ${cls(Number(data.totales.walletNeto))}`}>{usdSigno(Number(data.totales.walletNeto))}</div>
               <div className="s">ingresos {usd(data.totales.walletIngresos)} · egresos {usd(data.totales.walletEgresos)}</div>
             </div>
+            {Number(data.totales.gananciaTeamback ?? 0) !== 0 && (
+              <div className="stat-card row-click" onClick={() => nav("/teamback")} title="Ver TeamBack Afiliados">
+                <div className="l">Ganancia TeamBack Afiliados</div>
+                <div className={`v ${cls(Number(data.totales.gananciaTeamback))}`}>{usdCents(Number(data.totales.gananciaTeamback))}</div>
+                <div className="s">rake × 80% − liquidado a los jugadores</div>
+              </div>
+            )}
             {hayBancadosOComisiones && (
               <>
                 <div className="stat-card">
@@ -356,6 +365,7 @@ export default function ResumenFinanciero() {
                       <thead>
                         <tr>
                           <th>Período</th><th className="num">Ingresos</th><th className="num">Egresos</th><th className="num">Neto Wallet</th><th className="num">Cierres</th>
+                          {hayTeamback && <th className="num">TeamBack</th>}
                           {columnasExtraPeriodo && <><th className="num">Bancados</th><th className="num">Comis. acreditadas</th><th className="num">Comis. pagadas</th></>}
                         </tr>
                       </thead>
@@ -369,6 +379,7 @@ export default function ResumenFinanciero() {
                               <td className="num money neg">{usd(f.walletEgresos)}</td>
                               <td className="num"><span className={`saldo-big ${cls(neto)}`}>{usdSigno(neto)}</span></td>
                               <td className="num money">{f.gananciaCierres ? usd(f.gananciaCierres) : "—"}</td>
+                              {hayTeamback && <td className="num money pos">{Number(f.gananciaTeamback) ? usdCents(f.gananciaTeamback) : "—"}</td>}
                               {columnasExtraPeriodo && <><td className="num">{usd(f.gananciaBancados)}</td><td className="num muted">{usd(f.comisionesAcreditadas)}</td><td className="num muted">{usd(f.comisionesPagadas)}</td></>}
                             </tr>
                           );
@@ -390,6 +401,7 @@ export default function ResumenFinanciero() {
                               <span>Ingresos <b className="pos">{usd(f.walletIngresos)}</b></span>
                               <span>Egresos <b className="neg">{usd(f.walletEgresos)}</b></span>
                               {f.gananciaCierres !== 0 && <span>Cierres <b>{usd(f.gananciaCierres)}</b></span>}
+                              {Number(f.gananciaTeamback) !== 0 && <span>TeamBack <b className="pos">{usdCents(f.gananciaTeamback)}</b></span>}
                             </div>
                           </div>
                         </div>
@@ -442,7 +454,7 @@ export default function ResumenFinanciero() {
                             <div className="saldo-name" style={{ fontWeight: 600 }}>{e.subcategoria}</div>
                             <div className="saldo-sub" title={e.detalle}>{e.detalle}</div>
                           </td>
-                          <td className="num"><span className={`saldo-big ${cls(Number(e.monto))}`}>{Number(e.monto) < 0 ? "−" : "+"}{usd(Math.abs(Number(e.monto)))}</span></td>
+                          <td className="num"><span className={`saldo-big ${cls(Number(e.monto))}`}>{Number(e.monto) < 0 ? "−" : "+"}{e.categoria === "TEAMBACK_AFFILIATES" ? usdCents(Math.abs(Number(e.monto))) : usd(Math.abs(Number(e.monto)))}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -458,7 +470,7 @@ export default function ResumenFinanciero() {
                       <div className="saldo-card-body">
                         <div className="saldo-card-top">
                           <div className="saldo-name" style={{ fontWeight: 600 }}>{String(e.subcategoria).replace("Ajuste manual — ", "")}</div>
-                          <div className={`saldo-big ${cls(Number(e.monto))}`}>{Number(e.monto) < 0 ? "−" : "+"}{usd(Math.abs(Number(e.monto)))}</div>
+                          <div className={`saldo-big ${cls(Number(e.monto))}`}>{Number(e.monto) < 0 ? "−" : "+"}{e.categoria === "TEAMBACK_AFFILIATES" ? usdCents(Math.abs(Number(e.monto))) : usd(Math.abs(Number(e.monto)))}</div>
                         </div>
                         <div className="saldo-card-mid">
                           <div className="saldo-sub">{new Date(e.fecha + "T00:00:00").toLocaleDateString("es-AR")} · {CATEGORIA_LABEL[e.categoria] ?? e.categoria}</div>

@@ -663,6 +663,9 @@ export async function getHistorialPagos(filtros: FiltrosHistorialPagos) {
 // todas las semanas.
 // ---------------------------------------------------------------------------------------------
 
+/** Parte del rake que le queda a la casa antes de pagar liquidaciones (80%, fijo desde 25/09/2026). */
+export const TB_PCT_RAKE_CASA = 0.8;
+
 export interface GananciaSemana {
   week_start: string;
   week_end: string;
@@ -694,7 +697,7 @@ export async function getGananciaPorSemana(): Promise<GananciaPorSemanaResultado
   );
   const semanas: GananciaSemana[] = r.rows.map((row) => {
     const rakePropioTotal = Number(row.rake_propio_total);
-    const rakeAl80 = rakePropioTotal * 0.8;
+    const rakeAl80 = rakePropioTotal * TB_PCT_RAKE_CASA;
     const totalLiquidado = Number(row.total_liquidado);
     return {
       week_start: row.week_start,
@@ -715,6 +718,33 @@ export async function getGananciaPorSemana(): Promise<GananciaPorSemanaResultado
     { rake_propio_total: 0, rake_al_80_pct: 0, total_liquidado: 0, ganancia: 0 }
   );
   return { semanas, acumulado };
+}
+
+/** Ganancia de TeamBack Afiliados por semana liquidada con week_start en [desde, hastaExclusivo) -- misma cuenta que
+ * getGananciaPorSemana (rake * 80% - total acreditado), la usa Resumen financiero (19/10/2026, pedido de Leo). */
+export async function getGananciaTeamBackEnRango(desde: string, hastaExclusivo: string) {
+  const r = await pool.query(
+    `SELECT l.week_start, MAX(l.week_end) as week_end, COUNT(*) as jugadores,
+            SUM(l.rake_propio) as rake_propio_total, SUM(l.total_acreditado) as total_liquidado
+     FROM tb_weekly_liquidations l
+     WHERE l.week_start >= $1 AND l.week_start < $2
+     GROUP BY l.week_start
+     ORDER BY l.week_start`,
+    [desde, hastaExclusivo]
+  );
+  return r.rows.map((row) => {
+    const rake = Number(row.rake_propio_total);
+    const liquidado = Number(row.total_liquidado);
+    return {
+      week_start: row.week_start as string | Date,
+      week_end: row.week_end as string | Date,
+      jugadores: Number(row.jugadores),
+      rake,
+      rakeAl80: rake * TB_PCT_RAKE_CASA,
+      liquidado,
+      ganancia: rake * TB_PCT_RAKE_CASA - liquidado,
+    };
+  });
 }
 
 export async function getHistorialJugador(playerId: string) {

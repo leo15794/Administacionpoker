@@ -14,6 +14,9 @@
 //    retirado a Wallet todavía.
 //  - BANCADO: la ganancia de cada cierre semanal de banca (ganancia_banca_mesas, que ya incluye
 //    el Rakeback Banca — ver engine/bancados.ts).
+//  - TEAMBACK_AFFILIATES (19/10/2026, pedido de Leo): la ganancia de cada semana liquidada de TeamBack Afiliados
+//    (rake de los jugadores * 80% - total liquidado a los jugadores, ver repo/teamback.ts), en el rango por la
+//    fecha de inicio de la semana, igual que los cierres. Va APARTE, nunca sumada a los cierres.
 //  - COMISION_REFERIDO: cada acreditación (COMISION), corrección (CORRECCION) o pago (PAGO) de
 //    comisión por referido a un supervisor.
 //
@@ -24,11 +27,12 @@
 // eso el front nunca sonda todo junto en un solo total, siempre por categoría.
 import { pool } from "../db/pool.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
+import { getGananciaTeamBackEnRango } from "./teamback.js";
 
 export interface ResumenFinancieroEvento {
   id: string;
   fecha: string; // YYYY-MM-DD
-  categoria: "WALLET" | "CIERRE_SEMANAL" | "BANCADO" | "COMISION_REFERIDO";
+  categoria: "WALLET" | "CIERRE_SEMANAL" | "BANCADO" | "COMISION_REFERIDO" | "TEAMBACK_AFFILIATES";
   subcategoria: string;
   tipo: "INGRESO" | "EGRESO" | "GANANCIA" | "CORRECCION";
   monto: number; // siempre con signo: positivo = a favor, negativo = en contra
@@ -122,6 +126,21 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
 
   const eventos: ResumenFinancieroEvento[] = [];
 
+  const teamback = await getGananciaTeamBackEnRango(desde, hastaParam);
+  for (const w of teamback) {
+    const ws = toFecha(w.week_start);
+    eventos.push({
+      id: `tb_${ws}`,
+      fecha: ws,
+      categoria: "TEAMBACK_AFFILIATES",
+      subcategoria: `TeamBack Afiliados — semana ${ws} al ${toFecha(w.week_end)}`,
+      tipo: "GANANCIA",
+      monto: round2(w.ganancia),
+      detalle: `${w.jugadores} jugador(es) — rake ${round2(w.rake)} × 80% = ${round2(w.rakeAl80)} − liquidado ${round2(w.liquidado)}`,
+      enlace: "/teamback",
+    });
+  }
+
   for (const row of ajustes.rows) {
     eventos.push({
       id: row.id,
@@ -202,6 +221,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     walletNeto: sum("WALLET"),
     gananciaCierres: sum("CIERRE_SEMANAL"),
     gananciaBancados: sum("BANCADO"),
+    gananciaTeamback: sum("TEAMBACK_AFFILIATES"),
     comisionesAcreditadas: sum("COMISION_REFERIDO", (e) => e.tipo === "GANANCIA"),
     comisionesPagadas: round2(
       eventos
@@ -215,7 +235,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
   function agrupar(clave: (fecha: string) => string) {
     const map = new Map<
       string,
-      { periodo: string; walletIngresos: number; walletEgresos: number; gananciaCierres: number; gananciaBancados: number; comisionesAcreditadas: number; comisionesPagadas: number }
+      { periodo: string; walletIngresos: number; walletEgresos: number; gananciaCierres: number; gananciaBancados: number; gananciaTeamback: number; comisionesAcreditadas: number; comisionesPagadas: number }
     >();
     for (const e of eventos) {
       const k = clave(e.fecha);
@@ -226,6 +246,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
           walletEgresos: 0,
           gananciaCierres: 0,
           gananciaBancados: 0,
+          gananciaTeamback: 0,
           comisionesAcreditadas: 0,
           comisionesPagadas: 0,
         });
@@ -238,6 +259,8 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
         fila.gananciaCierres += e.monto;
       } else if (e.categoria === "BANCADO") {
         fila.gananciaBancados += e.monto;
+      } else if (e.categoria === "TEAMBACK_AFFILIATES") {
+        fila.gananciaTeamback += e.monto;
       } else if (e.categoria === "COMISION_REFERIDO") {
         if (e.tipo === "GANANCIA") fila.comisionesAcreditadas += e.monto;
         else if (e.tipo === "EGRESO") fila.comisionesPagadas += Math.abs(e.monto);
@@ -250,6 +273,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
         walletEgresos: round2(f.walletEgresos),
         gananciaCierres: round2(f.gananciaCierres),
         gananciaBancados: round2(f.gananciaBancados),
+        gananciaTeamback: round2(f.gananciaTeamback),
         comisionesAcreditadas: round2(f.comisionesAcreditadas),
         comisionesPagadas: round2(f.comisionesPagadas),
       }))
