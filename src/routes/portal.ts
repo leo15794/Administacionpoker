@@ -305,6 +305,63 @@ portalRouter.get("/mi-proveedor/cierres/:id/lineas", requireAuth, async (req: Au
   }
 });
 
+// Desglose COMPLETO de un cierre del propio proveedor (19/10/2026, pedido de Leo: página aparte para no cargar el
+// panel): por cada línea del cierre, los agentes del club esa semana (línea de club) o el agente de la línea (línea
+// de agente), con lo que cada uno generó. Mismos datos que ve el admin en Cierres semanales. Solo si el cierre es SUYO.
+portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });
+  }
+  try {
+    const cab = await pool.query(
+      `SELECT id, week_start, week_end, cierre, saldo_anterior, saldo_nuevo, status
+       FROM proveedor_cierres WHERE id = $1 AND proveedor_id = $2`,
+      [req.params.id, req.user!.proveedorId]
+    );
+    if (!cab.rows[0]) return res.status(404).json({ error: "Cierre no encontrado." });
+    const lineas = await listLineasCierreProveedor(req.params.id);
+    const salida = [];
+    for (const l of lineas as any[]) {
+      const filas =
+        l.tipo === "AGENTE" && l.weekly_closing_id
+          ? await pool.query(
+              `SELECT a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
+               FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id WHERE wc.id = $1`,
+              [l.weekly_closing_id]
+            )
+          : await pool.query(
+              `SELECT a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
+               FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id
+               WHERE wc.club_id = $1 AND wc.week_start = $2::date AND wc.status <> REVERTIDO
+               ORDER BY ABS(wc.rake_total) DESC, a.name`,
+              [l.club_id, cab.rows[0].week_start]
+            );
+      salida.push({
+        id: l.id,
+        tipo: l.tipo,
+        club_name: l.club_name,
+        agent_name: l.agent_name,
+        resultado_total: l.resultado_total,
+        rake_total: l.rake_total,
+        rakeback_pct: l.rakeback_pct,
+        club_rebate: l.club_rebate,
+        impacto_rodeo: l.impacto_rodeo,
+        monto_crudo: l.monto_crudo,
+        monto_aplicado: l.monto_aplicado,
+        wc_result: l.wc_result,
+        wc_rake_total: l.wc_rake_total,
+        wc_rakeback_pct: l.wc_rakeback_pct,
+        wc_rodeo: l.wc_rodeo,
+        agentes: filas.rows,
+      });
+    }
+    res.json({ cierre: cab.rows[0], lineas: salida });
+  } catch (err: any) {
+    console.error("Error en /portal/mi-proveedor/cierres/:id/detalle:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar el desglose del cierre." });
+  }
+});
+
 // ---------------------------------------------------------------------------------------------
 // Solicitudes de retiro/pago de un Supervisor (16/10/2026, pedido de Leo: "al supervisor le
 // queremos poner botones para que pueda solicitar retiros/pagos y que nos llegue la

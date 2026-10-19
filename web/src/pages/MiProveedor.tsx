@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
@@ -26,6 +27,7 @@ type Tab = "saldos" | "cierres" | "pagos" | "solicitudes";
 export default function MiProveedor() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
+  const nav = useNavigate();
   const [tab, setTab] = useState<Tab>("saldos");
   const [cierresAbiertos, setCierresAbiertos] = useState<Set<string>>(new Set());
   const [lineasPorCierre, setLineasPorCierre] = useState<Record<string, any[]>>({});
@@ -137,6 +139,9 @@ export default function MiProveedor() {
                   </div>
                   {abierto && (
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }} onClick={(e) => e.stopPropagation()}>
+                      <button className="btn secondary small" style={{ marginBottom: 10 }} onClick={() => nav(`/mi-proveedor/cierre/${c.id}`)}>
+                        Ver desglose completo →
+                      </button>
                       {errorLineas[c.id] ? (
                         <div className="saldo-sub">No se pudo cargar el detalle de este cierre ({errorLineas[c.id]}).</div>
                       ) : !lineas ? (

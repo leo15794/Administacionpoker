@@ -30,6 +30,7 @@ import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
 import MiProveedor from "./pages/MiProveedor";
+import MiProveedorCierre from "./pages/MiProveedorCierre";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import { api } from "./api";
 
@@ -110,6 +111,7 @@ export default function App() {
           }
         >
           <Route index element={<MiProveedor />} />
+          <Route path="cierre/:id" element={<MiProveedorCierre />} />
         </Route>
 
         {/* (25/09/2026) TeamBack Affiliates -- sección TOTALMENTE APARTE, con su propio login

@@ -172,6 +172,7 @@ export const api = {
     request("/portal/mi-supervision/solicitudes-retiro", { method: "POST", body: JSON.stringify(data) }),
   // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- portal de solo lectura, ver routes/portal.ts.
   miProveedor: () => request("/portal/mi-proveedor"),
+  miProveedorDetalleCierre: (cierreId: string) => request(`/portal/mi-proveedor/cierres/${cierreId}/detalle`),
   miProveedorLineasCierre: (cierreId: string) => request(`/portal/mi-proveedor/cierres/${cierreId}/lineas`),
   // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
   // esto mismo para la sección de proveedores") -- ver repo/proveedores.ts. El lado admin
