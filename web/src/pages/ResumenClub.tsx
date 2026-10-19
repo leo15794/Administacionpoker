@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { cargarLibreriasPdf } from "../pdfLibs";
-import { usd, pct, dateShort } from "../fmt";
+import { usd, usdCents, pct, dateShort } from "../fmt";
+import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { ClubPicker } from "../components/ClubPicker";
 
@@ -304,24 +305,125 @@ export default function ResumenClub() {
     }
   }
 
+  // ---- Pantalla (19/10/2026, mockup aprobado): ganancia neta arriba, agentes ordenados, detalle plegable ----
+  const [verSinMov, setVerSinMov] = useState(false);
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
+  const [agentesAbiertos, setAgentesAbiertos] = useState<Set<string>>(new Set());
+  function toggleAgenteRc(id: string) {
+    setAgentesAbiertos((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  const diaMesRc = (s: string) => {
+    const [, m, d] = String(s).slice(0, 10).split("-");
+    return `${d}/${m}`;
+  };
+  const cls = (n: number) => (n > 0.004 ? "pos" : n < -0.004 ? "neg" : "neutral");
+  const usdSigno = (n: number) => `${n < -0.004 ? "−" : ""}${usd(Math.abs(n))}`;
+  const nuestraParteRc = resumen ? Number(resumen.gananciaPorRake) + Number(resumen.comisionesAgentes) : 0;
+  const ingresosRc: { label: string; monto: number }[] = [];
+  const egresosRc: { label: string; monto: number }[] = [];
+  if (resumen) {
+    // gananciaPorRake ya viene neto (rake*ratio - rakeback) sumado de todos los agentes —
+    // se reconstruye la parte bruta (rake*ratio, "nuestra parte del rake") sumándole de
+    // vuelta el rakeback, así se puede mostrar cada lado por separado sin duplicar nada.
+    ingresosRc.push({ label: "Rake generado — nuestra parte", monto: nuestraParteRc });
+    if (Number(resumen.gananciaRodeoClub) !== 0) ingresosRc.push({ label: "Ganancia Rodeo Club", monto: Number(resumen.gananciaRodeoClub) });
+    if (Number(resumen.ingresoPorVentas) !== 0) ingresosRc.push({ label: "Ajuste manual Promociones", monto: Number(resumen.ingresoPorVentas) });
+    if (Number(resumen.tasaSemanalFija) > 0) ingresosRc.push({ label: "Tasa semanal fija", monto: Number(resumen.tasaSemanalFija) });
+    egresosRc.push({ label: "Rakeback pagado a agentes", monto: Number(resumen.comisionesAgentes) });
+    if (Number(resumen.tasaSemanalFija) < 0) egresosRc.push({ label: "Tasa semanal fija", monto: Math.abs(Number(resumen.tasaSemanalFija)) });
+  }
+  const totalIngresosRc = ingresosRc.reduce((s, f) => s + f.monto, 0);
+  const totalEgresosRc = egresosRc.reduce((s, f) => s + f.monto, 0);
+  const sinMov = (f: any) => !(Number(f.rakeTotal) > 0) && Math.abs(Number(f.resultado)) <= 0.005;
+  const sinMovimientoRc = resumen ? resumen.filas.filter(sinMov).length : 0;
+  const filasRc = resumen
+    ? [...resumen.filas]
+        .filter((f: any) => verSinMov || !sinMov(f))
+        .sort((a: any, b: any) => Math.abs(Number(b.cierreFinalAgente)) - Math.abs(Number(a.cierreFinalAgente)))
+    : [];
+  // Desglose que antes eran columnas sueltas de la tabla (Ring Game/MTT/SNG/Spin/comisión plataforma/rodeo/rebate).
+  const desgloseAgenteRc = (f: any) => (
+    <div style={{ display: "flex", gap: 22, flexWrap: "wrap", padding: "6px 2px", fontSize: 13 }}>
+      {resumen.clubFamily === "SUPREMA" ? (
+        <>
+          <span className="muted">Ring Game <b>{f.ringGame !== null ? usd(f.ringGame) : "-"}</b></span>
+          <span className="muted">MTT <b>{f.mtt !== null ? usd(f.mtt) : "-"}</b></span>
+          <span className="muted">SNG <b>{f.sng !== null ? usd(f.sng) : "-"}</b></span>
+          <span className="muted">Spin <b>{f.spin !== null ? usd(f.spin) : "-"}</b></span>
+          <span className="muted">Comisión plataforma <b>{usd(f.comisionPlataforma)}</b></span>
+          <span className="muted">Rodeo agente <b>{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</b></span>
+        </>
+      ) : (
+        <>
+          <span className="muted">Comisión plataforma <b>{usd(f.comisionPlataforma)}</b></span>
+          <span className="muted">Rebate <b>{f.rebate !== 0 ? usd(f.rebate) : "-"}</b></span>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div>
-      <div className="topbar" style={{ marginBottom: 14, flexWrap: "wrap" }}>
+      <div className="topbar" style={{ marginBottom: 12, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0 }}>Resumen por club</h2>
+        {resumen && (
+          <ActionsMenu
+            title="Más acciones"
+            items={[
+              {
+                label: generandoPdf ? "Generando PDF..." : "Descargar PDF",
+                disabled: generandoPdf,
+                onClick: async () => {
+                  setGenerandoPdf(true);
+                  try {
+                    await generarPdfResumenClub(resumen, tinyExtra);
+                  } catch (err: any) {
+                    await alertDialog(err.message || "No se pudo generar el PDF.");
+                  } finally {
+                    setGenerandoPdf(false);
+                  }
+                },
+              },
+            ]}
+          />
+        )}
       </div>
-      <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
-        <ClubPicker clubes={clubes} value={clubId} onChange={setClubId} />
-        <div className="field" style={{ margin: 0, minWidth: 240 }}>
-          <label>Semana</label>
-          <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)}>
-            {semanas.length === 0 && <option value="">Sin cierres cargados</option>}
-            {semanas.map((s) => (
-              <option key={s.week_start} value={s.week_start}>
-                {dateShort(s.week_start)} - {dateShort(s.week_end)}
-              </option>
+
+      {clubes.length > 0 && clubes.length <= 8 ? (
+        <div className="tb-week-chips" style={{ justifyContent: "flex-start", marginBottom: 8 }}>
+          {clubes.map((c) => (
+            <button key={c.id} className={`chip${clubId === c.id ? " chip-active" : ""}`} onClick={() => setClubId(c.id)}>{c.name}</button>
+          ))}
+        </div>
+      ) : (
+        <div style={{ marginBottom: 8 }}>
+          <ClubPicker clubes={clubes} value={clubId} onChange={setClubId} />
+        </div>
+      )}
+      <div className="tb-week-chips" style={{ justifyContent: "flex-start", marginBottom: 14, alignItems: "center" }}>
+        {semanas.length === 0 && <span className="muted">Sin cierres cargados</span>}
+        {semanas.slice(0, 8).map((s) => (
+          <button key={s.week_start} className={`chip${weekStart === s.week_start ? " chip-active" : ""}`} onClick={() => setWeekStart(s.week_start)}>
+            {diaMesRc(s.week_start)} – {diaMesRc(s.week_end)}
+          </button>
+        ))}
+        {semanas.length > 8 && (
+          <select
+            value={semanas.slice(8).some((s) => s.week_start === weekStart) ? weekStart : ""}
+            onChange={(e) => e.target.value && setWeekStart(e.target.value)}
+            style={{ width: "auto" }}
+          >
+            <option value="">Anteriores…</option>
+            {semanas.slice(8).map((s) => (
+              <option key={s.week_start} value={s.week_start}>{diaMesRc(s.week_start)} – {diaMesRc(s.week_end)}</option>
             ))}
           </select>
-        </div>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -329,232 +431,242 @@ export default function ResumenClub() {
 
       {resumen && (
         <>
-          <div className="topbar" style={{ marginBottom: 10 }}>
-            <div />
-            <button
-              className="btn secondary small"
-              disabled={generandoPdf}
-              onClick={async () => {
-                setGenerandoPdf(true);
-                try {
-                  await generarPdfResumenClub(resumen, tinyExtra);
-                } catch (err: any) {
-                  await alertDialog(err.message || "No se pudo generar el PDF.");
-                } finally {
-                  setGenerandoPdf(false);
-                }
-              }}
-              title="Exporta este resumen a PDF para comparar contra el cierre que nos manda el club/plataforma"
-            >
-              {generandoPdf ? "Generando..." : "Descargar PDF"}
-            </button>
-          </div>
-          <div className="panel">
-            <h3>Cierres de la semana ({resumen.filas.length} agente{resumen.filas.length === 1 ? "" : "s"})</h3>
-            {resumen.filas.length === 0 ? (
-              <div className="muted">Sin cierres cargados para este club en esta semana.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                {resumen.clubFamily === "SUPREMA" ? (
-                  <table className="table-compact">
-                    <thead>
-                      <tr>
-                        <th>Agente</th><th className="num">Jugadores</th><th className="num">Resultado</th><th className="num">Ring Game</th><th className="num">MTT</th><th className="num">SNG</th><th className="num">Spin</th>
-                        <th className="num">Rake total</th><th className="num">% Rakeback</th><th className="num">Comisión agente</th><th className="num">Comisión plataforma</th>
-                        <th className="num">Ganancia por rake</th><th className="num">Rodeo agente</th><th className="num">Cierre final agente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resumen.filas.map((f: any) => (
-                        <tr key={f.agentId}>
-                          <td>{f.agentName}</td>
-                          <td className="num muted">{f.jugadores ?? "-"}</td>
-                          <td className="num money">{usd(f.resultado)}</td>
-                          <td className="num muted">{f.ringGame !== null ? usd(f.ringGame) : "-"}</td>
-                          <td className="num muted">{f.mtt !== null ? usd(f.mtt) : "-"}</td>
-                          <td className="num muted">{f.sng !== null ? usd(f.sng) : "-"}</td>
-                          <td className="num muted">{f.spin !== null ? usd(f.spin) : "-"}</td>
-                          <td className="num money">{usd(f.rakeTotal)}</td>
-                          <td className="num muted">{pct(f.rakebackPct)}</td>
-                          <td className="num money">{usd(f.rakebackAgente)}</td>
-                          <td className="num muted">{usd(f.comisionPlataforma)}</td>
-                          <td className="num money">{usd(f.gananciaPorRake)}</td>
-                          <td className="num muted">{f.rodeoAgente !== 0 ? usd(f.rodeoAgente) : "-"}</td>
-                          <td className="num"><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="table-compact">
-                    <thead>
-                      <tr>
-                        <th>Agente</th><th className="num">Resultado</th><th className="num">Rake total</th><th className="num">% Rakeback</th>
-                        <th className="num">Rakeback agente</th><th className="num">Comisión plataforma</th><th className="num">Rebate</th><th className="num">Ganancia por rake</th><th className="num">Cierre final agente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resumen.filas.map((f: any) => (
-                        <tr key={f.agentId}>
-                          <td>{f.agentName}</td>
-                          <td className="num money">{usd(f.resultado)}</td>
-                          <td className="num money">{usd(f.rakeTotal)}</td>
-                          <td className="num muted">{pct(f.rakebackPct)}</td>
-                          <td className="num money">{usd(f.rakebackAgente)}</td>
-                          <td className="num muted">{usd(f.comisionPlataforma)}</td>
-                          <td className="num muted">{f.rebate !== 0 ? usd(f.rebate) : "-"}</td>
-                          <td className="num money">{usd(f.gananciaPorRake)}</td>
-                          <td className="num"><span className={`badge ${Number(f.cierreFinalAgente) >= 0 ? "pos" : "neg"}`}>{usd(f.cierreFinalAgente)}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          <div className="panel" style={{ padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div className="deals-eyebrow">Ganancia neta · {resumen.clubName}</div>
+                <div className={`saldo-big ${cls(Number(resumen.gananciaNeta))}`} style={{ fontSize: 32 }}>{usdCents(Number(resumen.gananciaNeta))}</div>
+                {resumen.clubFamily !== "TINY" && (
+                  <div className="saldo-sub">ingresos {usd(totalIngresosRc)} − egresos {usd(totalEgresosRc)} · semana {dateShort(resumen.weekStart)} al {dateShort(resumen.weekEnd ?? resumen.weekStart)}</div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div className="panel">
-            <div className="topbar" style={{ marginBottom: 10 }}>
-              <h3 style={{ margin: 0 }}>Resumen del club — {resumen.clubName}</h3>
               {!editandoExtras && (
-                <button className="btn secondary small" onClick={() => setEditandoExtras(true)}>
-                  Cargar Ajuste manual Promociones
+                <button className="btn secondary small" onClick={() => { setEditandoExtras(true); setDetalleAbierto(true); }}>
+                  Cargar ajuste manual Promociones
                 </button>
               )}
             </div>
-            {resumen.clubFamily === "TINY" ? (
-              <div className="muted" style={{ marginBottom: 12 }}>
-                Tiny no reparte un % fijo del rake como los demás clubes: la Ganancia Neta de abajo sale del Settlement
-                (lo que nos liquida la Unión/GG) menos lo que le pagamos a los agentes — ver el desglose completo en el
-                panel "Tiny · Cierre semanal" más abajo.
-              </div>
-            ) : (
-              <div className="muted" style={{ marginBottom: 12 }}>
-                Cómo se arma la Ganancia Neta de esta semana: todo lo que sumó menos todo lo que restó. La "Comisión del
-                club/plataforma" no entra en ninguna de las dos columnas porque nunca fue plata nuestra — es la parte del
-                rake que se queda el club, no algo que ganamos ni que perdimos.
-              </div>
-            )}
-            {resumen.clubFamily !== "TINY" && (() => {
-              // gananciaPorRake ya viene neto (rake*ratio - rakeback) sumado de todos los agentes —
-              // se reconstruye la parte bruta (rake*ratio, "nuestra parte del rake") sumándole de
-              // vuelta el rakeback, así se puede mostrar cada lado por separado sin duplicar nada.
-              const nuestraParteDelRake = Number(resumen.gananciaPorRake) + Number(resumen.comisionesAgentes);
-              const ingresos: { label: string; monto: number }[] = [
-                { label: "Rake generado — nuestra parte", monto: nuestraParteDelRake },
-              ];
-              if (Number(resumen.gananciaRodeoClub) !== 0) ingresos.push({ label: "Ganancia Rodeo Club", monto: Number(resumen.gananciaRodeoClub) });
-              if (Number(resumen.ingresoPorVentas) !== 0) ingresos.push({ label: "Ajuste manual Promociones", monto: Number(resumen.ingresoPorVentas) });
-              if (Number(resumen.tasaSemanalFija) > 0) ingresos.push({ label: "Tasa semanal fija", monto: Number(resumen.tasaSemanalFija) });
+          </div>
 
-              const egresos: { label: string; monto: number }[] = [
-                { label: "Rakeback pagado a agentes", monto: Number(resumen.comisionesAgentes) },
-              ];
-              if (Number(resumen.tasaSemanalFija) < 0) egresos.push({ label: "Tasa semanal fija", monto: Math.abs(Number(resumen.tasaSemanalFija)) });
+          <div className="stat-row">
+            <div className="stat-card">
+              <div className="l">Rake generado</div>
+              <div className="v">{usd(resumen.rakeTotal)}</div>
+              <div className="s">nuestra parte {usd(nuestraParteRc)}</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Resultado de mesas</div>
+              <div className={`v ${cls(Number(resumen.resultadoTotal))}`}>{usdSigno(Number(resumen.resultadoTotal))}</div>
+              <div className="s">{resumen.jugadoresTotal ?? "-"} jugadores · {resumen.agentesConCierre} agentes</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Cierre total agentes</div>
+              <div className={`v ${cls(Number(resumen.cierreTotalAgentes))}`}>{usdSigno(Number(resumen.cierreTotalAgentes))}</div>
+              <div className="s">lo que se les liquida</div>
+            </div>
+            <div className="stat-card">
+              <div className="l">Rakeback pagado</div>
+              <div className="v">{usd(resumen.comisionesAgentes)}</div>
+              <div className="s">a los agentes</div>
+            </div>
+          </div>
 
-              const totalIngresos = ingresos.reduce((s, f) => s + f.monto, 0);
-              const totalEgresos = egresos.reduce((s, f) => s + f.monto, 0);
-
-              return (
-                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-                  <div style={{ flex: "1 1 280px" }}>
-                    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué nos hizo ganar</div>
-                    <table>
-                      <tbody>
-                        {ingresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className={`num ${f.monto >= 0 ? "pos" : "neg"}`}>{usd(f.monto)}</td></tr>
-                        ))}
-                        <tr><td><strong>Total ingresos</strong></td><td className="num pos"><strong>{usd(totalIngresos)}</strong></td></tr>
-                      </tbody>
-                    </table>
+          {resumen.clubFamily === "TINY" ? (
+            <div className="muted" style={{ margin: "0 0 14px" }}>
+              Tiny no reparte un % fijo del rake como los demás clubes: la Ganancia Neta sale del Settlement (lo que nos liquida la
+              Unión/GG) menos lo que le pagamos a los agentes — ver el desglose completo en el panel "Tiny · Cierre semanal" más abajo.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 14 }}>
+              <div className="panel" style={{ margin: 0, padding: "14px 16px" }}>
+                <div className="deals-eyebrow">Qué nos hizo ganar</div>
+                {ingresosRc.map((f) => (
+                  <div key={f.label} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span>{f.label}</span><b className={f.monto >= 0 ? "pos" : "neg"}>{usd(f.monto)}</b>
                   </div>
-                  <div style={{ flex: "1 1 280px" }}>
-                    <div className="muted" style={{ fontWeight: 700, marginBottom: 6 }}>Qué nos hizo perder</div>
-                    <table>
-                      <tbody>
-                        {egresos.map((f) => (
-                          <tr key={f.label}><td>{f.label}</td><td className={`num ${f.monto >= 0 ? "neg" : "pos"}`}>{usd(f.monto)}</td></tr>
-                        ))}
-                        <tr><td><strong>Total egresos</strong></td><td className="num neg"><strong>{usd(totalEgresos)}</strong></td></tr>
-                      </tbody>
-                    </table>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0" }}><b>Total ingresos</b><b className="pos">{usd(totalIngresosRc)}</b></div>
+              </div>
+              <div className="panel" style={{ margin: 0, padding: "14px 16px" }}>
+                <div className="deals-eyebrow">Qué nos hizo perder</div>
+                {egresosRc.map((f) => (
+                  <div key={f.label} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span>{f.label}</span><b className={f.monto >= 0 ? "neg" : "pos"}>{usd(f.monto)}</b>
                   </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0" }}><b>Total egresos</b><b className="neg">{usd(totalEgresosRc)}</b></div>
+                <div className="saldo-sub" style={{ marginTop: 10 }}>
+                  La comisión del club/plataforma ({usd(resumen.comisionPlataformaTotal)}) no entra: nunca fue plata nuestra.
                 </div>
-              );
-            })()}
-            {resumen.rebateTotal !== 0 && (
-              <div className="muted" style={{ marginBottom: 10 }}>
-                Rebate total de la semana: {usd(resumen.rebateTotal)} — informativo, no está restado de la Ganancia Neta de abajo.
+              </div>
+            </div>
+          )}
+
+          <div className="panel">
+            <div className="ag-toolbar" style={{ marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 15 }}>Cierres de la semana</h3>
+              <span className="ag-toolbar-spacer" />
+              {sinMovimientoRc > 0 && (
+                <label className="switch">
+                  <input type="checkbox" checked={verSinMov} onChange={(e) => setVerSinMov(e.target.checked)} />
+                  <i />
+                  Mostrar los {sinMovimientoRc} sin movimiento
+                </label>
+              )}
+            </div>
+            {resumen.filas.length === 0 ? (
+              <div className="muted">Sin cierres cargados para este club en esta semana.</div>
+            ) : (
+              <>
+                <div className="ag-table-wrap">
+                  <table className="saldos-table">
+                    <thead>
+                      <tr>
+                        <th>Agente</th><th className="num">Resultado</th><th className="num">Rake total</th><th className="num">Rakeback agente</th>
+                        <th className="num">Ganancia por rake</th><th className="num">Cierre final</th><th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filasRc.map((f) => {
+                        const cierre = Number(f.cierreFinalAgente);
+                        const abierto = agentesAbiertos.has(f.agentId);
+                        return (
+                          <Fragment key={f.agentId}>
+                            <tr className={`row-click ${cierre > 0.004 ? "row-pos" : cierre < -0.004 ? "row-neg" : ""}`} onClick={() => toggleAgenteRc(f.agentId)}>
+                              <td>
+                                <div className="saldo-name">{f.agentName}</div>
+                                <div className="saldo-sub">{f.jugadores ?? "-"} jugadores{f.system ? ` · ${f.system === "PREPAGO" ? "Prepago" : "Win/Lose"}` : ""}</div>
+                              </td>
+                              <td className="num money">{usdSigno(Number(f.resultado))}</td>
+                              <td className="num money">{usd(f.rakeTotal)}</td>
+                              <td className="num"><b>{usd(f.rakebackAgente)}</b><div className="saldo-sub">{pct(f.rakebackPct)}</div></td>
+                              <td className="num money">{usd(f.gananciaPorRake)}</td>
+                              <td className="num"><span className={`saldo-big ${cls(cierre)}`}>{usdSigno(cierre)}</span></td>
+                              <td style={{ width: 40, textAlign: "right", color: "var(--text-faint)" }}>{abierto ? "▴" : "▾"}</td>
+                            </tr>
+                            {abierto && (
+                              <tr>
+                                <td colSpan={7} style={{ background: "var(--panel-2)" }}>{desgloseAgenteRc(f)}</td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="ag-cards">
+                  {filasRc.map((f) => {
+                    const cierre = Number(f.cierreFinalAgente);
+                    const abierto = agentesAbiertos.has(f.agentId);
+                    return (
+                      <div key={f.agentId} className={`saldo-card ${cierre > 0.004 ? "is-pos" : cierre < -0.004 ? "is-neg" : ""}`} onClick={() => toggleAgenteRc(f.agentId)}>
+                        <div className="saldo-card-body">
+                          <div className="saldo-card-top">
+                            <div className="saldo-name">{f.agentName}</div>
+                            <div className={`saldo-big ${cls(cierre)}`}>{usdSigno(cierre)}</div>
+                          </div>
+                          <div className="saldo-card-mid">
+                            <div className="saldo-sub">{f.jugadores ?? "-"} jugadores{f.system ? ` · ${f.system === "PREPAGO" ? "Prepago" : "Win/Lose"}` : ""} · {pct(f.rakebackPct)} rakeback</div>
+                          </div>
+                          <div className="saldo-card-foot" style={{ gap: 14 }}>
+                            <span>Resultado <b style={{ color: Number(f.resultado) < 0 ? "var(--red)" : undefined }}>{usdSigno(Number(f.resultado))}</b></span>
+                            <span>Rake <b>{usd(f.rakeTotal)}</b></span>
+                            <span>Rakeback <b>{usd(f.rakebackAgente)}</b></span>
+                          </div>
+                          {abierto && <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>{desgloseAgenteRc(f)}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+                  Mostrando {filasRc.length} de {resumen.filas.length} · tocá una fila para ver el desglose
+                  {resumen.clubFamily === "SUPREMA" ? " (Ring Game, MTT, SNG, Spin, comisión plataforma y rodeo)" : " (comisión plataforma y rebate)"}.
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="panel">
+            <div
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+              onClick={() => setDetalleAbierto((v) => !v)}
+            >
+              <b>Detalle del cálculo</b>
+              <span style={{ color: "var(--text-faint)" }}>{detalleAbierto ? "▴" : "▾"}</span>
+            </div>
+            {!detalleAbierto && (
+              <div className="saldo-sub" style={{ marginTop: 4 }}>
+                Ventas/VIP, ajuste manual, cargas de tesorería ({usd(resumen.cargasTesoreriaTotal)}), tasa semanal fija, rodeo pagado ({usd(resumen.rodeoPagadoAgentes)}).
               </div>
             )}
-            {resumen.rodeoPagadoAgentes !== 0 && (
-              <div className="muted" style={{ marginBottom: 10 }}>
-                Rodeo pagado a agentes: {usd(resumen.rodeoPagadoAgentes)} — ya incluido en el cierre final de cada agente, no es un costo aparte del club.
-              </div>
-            )}
-            {editandoExtras && (
-              <table style={{ marginBottom: 10 }}>
-                <tbody>
-                  <tr>
-                    <td>Ajuste manual Promociones</td>
-                    <td><input type="number" step="0.01" value={ventasInput} onChange={(e) => setVentasInput(e.target.value)} style={{ width: 120 }} /></td>
-                  </tr>
-                  <tr>
-                    <td>Observaciones</td>
-                    <td><input type="text" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} style={{ width: 220 }} /></td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-            <table>
-              <tbody>
-                <tr className="panel" style={{ background: "var(--green-soft)" }}>
-                  <td><strong>GANANCIA NETA (ingresos − egresos)</strong></td>
-                  <td className="num"><strong className={Number(resumen.gananciaNeta) >= 0 ? "pos" : "neg"}>{usd(resumen.gananciaNeta)}</strong></td>
-                </tr>
-                <tr><td className="muted">Agentes</td><td className="num muted">{resumen.agentesConCierre}</td></tr>
-                <tr><td className="muted">Jugadores</td><td className="num muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
-                <tr><td className="muted">Resultado</td><td className={`num ${Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.resultadoTotal)}</td></tr>
-                <tr><td className="muted">Rake total generado por el club</td><td className={`num ${Number(resumen.rakeTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.rakeTotal)}</td></tr>
-                <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className={`num ${Number(resumen.comisionesAgentes) >= 0 ? "pos" : "neg"}`}>{usd(resumen.comisionesAgentes)}</td></tr>
-                <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className={`num ${Number(resumen.comisionPlataformaTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.comisionPlataformaTotal)}</td></tr>
-                <tr>
-                  <td className="muted">Ventas/VIP</td>
-                  <td className={`num ${Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}`}>
-                    {usd(resumen.ajusteManualTotal)}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="muted">Ajuste manual Promociones</td>
-                  <td className={`num ${Number(resumen.ingresoPorVentas) === 0 ? "muted" : Number(resumen.ingresoPorVentas) >= 0 ? "pos" : "neg"}`}>
-                    {usd(resumen.ingresoPorVentas)}
-                  </td>
-                </tr>
-                {Number(resumen.cargasTesoreriaTotal) !== 0 && (
-                  <tr>
-                    <td className="muted">Cargado en tesorería esta semana (informativo — se cruza en Liquidaciones)</td>
-                    <td className="num muted">{usd(resumen.cargasTesoreriaTotal)}</td>
-                  </tr>
+            {detalleAbierto && (
+              <div style={{ marginTop: 10 }}>
+                {Number(resumen.rebateTotal) !== 0 && (
+                  <div className="muted" style={{ marginBottom: 10 }}>
+                    Rebate total de la semana: {usd(resumen.rebateTotal)} — informativo, no está restado de la Ganancia Neta.
+                  </div>
                 )}
-                <tr>
-                  <td className="muted">Tasa semanal fija (Tasas)</td>
-                  <td className={`num ${Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}`}>
-                    {usd(resumen.tasaSemanalFija)}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="muted">Cierre total agentes</td>
-                  <td className={`num ${Number(resumen.cierreTotalAgentes) >= 0 ? "pos" : "neg"}`}>{usd(resumen.cierreTotalAgentes)}</td>
-                </tr>
-              </tbody>
-            </table>
-            {editandoExtras && (
-              <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                <button className="btn small" disabled={guardando} onClick={guardarExtras}>
-                  {guardando ? "Guardando..." : "Guardar"}
-                </button>
-                <button className="btn secondary small" onClick={() => setEditandoExtras(false)}>Cancelar</button>
+                {Number(resumen.rodeoPagadoAgentes) !== 0 && (
+                  <div className="muted" style={{ marginBottom: 10 }}>
+                    Rodeo pagado a agentes: {usd(resumen.rodeoPagadoAgentes)} — ya incluido en el cierre final de cada agente, no es un costo aparte del club.
+                  </div>
+                )}
+                {editandoExtras && (
+                  <table style={{ marginBottom: 10 }}>
+                    <tbody>
+                      <tr>
+                        <td>Ajuste manual Promociones</td>
+                        <td><input type="number" step="0.01" value={ventasInput} onChange={(e) => setVentasInput(e.target.value)} style={{ width: 120 }} /></td>
+                      </tr>
+                      <tr>
+                        <td>Observaciones</td>
+                        <td><input type="text" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} style={{ width: 220 }} /></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+                <table>
+                  <tbody>
+                    <tr><td className="muted">Agentes</td><td className="num muted">{resumen.agentesConCierre}</td></tr>
+                    <tr><td className="muted">Jugadores</td><td className="num muted">{resumen.jugadoresTotal ?? "-"}</td></tr>
+                    <tr><td className="muted">Resultado</td><td className={`num ${Number(resumen.resultadoTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.resultadoTotal)}</td></tr>
+                    <tr><td className="muted">Rake total generado por el club</td><td className="num">{usd(resumen.rakeTotal)}</td></tr>
+                    <tr><td className="muted">Comisiones agentes (rakeback pagado)</td><td className="num">{usd(resumen.comisionesAgentes)}</td></tr>
+                    <tr><td className="muted">Comisión del club/plataforma (no es nuestra, no suma ni resta)</td><td className="num muted">{usd(resumen.comisionPlataformaTotal)}</td></tr>
+                    <tr>
+                      <td className="muted">Ventas/VIP</td>
+                      <td className={`num ${Number(resumen.ajusteManualTotal) === 0 ? "muted" : Number(resumen.ajusteManualTotal) >= 0 ? "pos" : "neg"}`}>{usd(resumen.ajusteManualTotal)}</td>
+                    </tr>
+                    <tr>
+                      <td className="muted">Ajuste manual Promociones</td>
+                      <td className={`num ${Number(resumen.ingresoPorVentas) === 0 ? "muted" : Number(resumen.ingresoPorVentas) >= 0 ? "pos" : "neg"}`}>{usd(resumen.ingresoPorVentas)}</td>
+                    </tr>
+                    {Number(resumen.cargasTesoreriaTotal) !== 0 && (
+                      <tr>
+                        <td className="muted">Cargado en tesorería esta semana (informativo — se cruza en Liquidaciones)</td>
+                        <td className="num muted">{usd(resumen.cargasTesoreriaTotal)}</td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td className="muted">Tasa semanal fija (Tasas)</td>
+                      <td className={`num ${Number(resumen.tasaSemanalFija) === 0 ? "muted" : Number(resumen.tasaSemanalFija) >= 0 ? "pos" : "neg"}`}>{usd(resumen.tasaSemanalFija)}</td>
+                    </tr>
+                    <tr>
+                      <td className="muted">Cierre total agentes</td>
+                      <td className={`num ${Number(resumen.cierreTotalAgentes) >= 0 ? "pos" : "neg"}`}>{usd(resumen.cierreTotalAgentes)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {editandoExtras && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                    <button className="btn small" disabled={guardando} onClick={guardarExtras}>
+                      {guardando ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button className="btn secondary small" onClick={() => setEditandoExtras(false)}>Cancelar</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
