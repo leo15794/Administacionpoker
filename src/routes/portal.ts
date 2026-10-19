@@ -332,7 +332,7 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
           : await pool.query(
               `SELECT a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
                FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id
-               WHERE wc.club_id = $1 AND wc.week_start = $2::date AND wc.status <> REVERTIDO
+               WHERE wc.club_id = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
                ORDER BY ABS(wc.rake_total) DESC, a.name`,
               [l.club_id, cab.rows[0].week_start]
             );
