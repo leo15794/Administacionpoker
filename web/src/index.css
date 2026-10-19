@@ -2547,3 +2547,11 @@ button.nav-link {
 @media (max-width: 768px) {
   .pv-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Resumen financiero (19/10/2026, mockup aprobado) ---------- */
+.rf-rango { justify-content: flex-end; }
+.rf-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) {
+  .rf-grid { grid-template-columns: 1fr; }
+  .rf-rango { justify-content: flex-start; }
+}
