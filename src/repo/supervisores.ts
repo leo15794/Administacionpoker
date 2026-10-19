@@ -32,7 +32,8 @@ async function getCuentaParaUpdate(client: PoolClient, supervisorAgentId: string
 export async function listSupervisoresConsolidados() {
   const r = await pool.query(
     `SELECT a.*, COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente,
-            sc.updated_at as cuenta_updated_at
+            sc.updated_at as cuenta_updated_at,
+            (SELECT COUNT(*)::int FROM agents sub WHERE sub.supervisor = a.name) as n_sub
      FROM agents a
      LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
      WHERE a.usa_cuenta_consolidada = true
