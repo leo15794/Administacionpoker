@@ -206,28 +206,6 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
       </div>
 
       <div className="panel">
-        <h3>Stock físico por cuenta</h3>
-        {!data.stock || data.stock.length === 0 ? (
-          <div className="muted">Sin stock cargado en este club/cuenta todavía (ver "Stock y deudas" si corresponde a otro agente del grupo).</div>
-        ) : (
-          <table>
-            <thead><tr><th>Club</th><th>Unidades</th><th>Equivalente USD</th><th>Estado</th><th>Observaciones</th></tr></thead>
-            <tbody>
-              {data.stock.map((s: any) => (
-                <tr key={s.id}>
-                  <td>{s.club_name}</td>
-                  <td>{s.units}</td>
-                  <td>{s.usd_ref !== null ? usd(s.usd_ref) : <span className="muted">sin tasa</span>}</td>
-                  <td className="muted">{s.estado || "-"}</td>
-                  <td className="muted">{s.observaciones || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="panel">
         <h3>Últimos cierres semanales</h3>
         {data.cierres.length === 0 ? (
           <div className="muted">Sin cierres cargados todavía.</div>

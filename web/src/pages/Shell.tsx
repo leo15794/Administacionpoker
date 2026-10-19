@@ -99,11 +99,6 @@ const icon = {
       <path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1" /><path d="M16 14a4 4 0 0 1 4 4v2" />
     </svg>
   ),
-  stockDeudas: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.9 8.5 12 3 3.1 8.5v7L12 21l8.9-5.5z" /><path d="M3.1 8.5 12 14l8.9-5.5" /><path d="M12 14v7" />
-    </svg>
-  ),
   gananciasPeriodo: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 15l2.5 2.5L16 12" />
@@ -214,7 +209,6 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "finanzas" },
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
   { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },
-  { key: "stockDeudas", to: "/dashboard/stock-deudas", icon: "stockDeudas", label: "Stock y deudas", group: "finanzas" },
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "finanzas" },
   { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "reportes" },
   { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "reportes" },

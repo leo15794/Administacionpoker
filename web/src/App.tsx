@@ -21,7 +21,6 @@ import Supervisores from "./pages/Supervisores";
 import RakebackPendiente from "./pages/RakebackPendiente";
 import CuentasSocios from "./pages/CuentasSocios";
 import Liquidaciones from "./pages/Liquidaciones";
-import StockDeudas from "./pages/StockDeudas";
 import ResumenClub from "./pages/ResumenClub";
 import JugadoresBancados from "./pages/JugadoresBancados";
 import Rodeo from "./pages/Rodeo";
@@ -70,7 +69,6 @@ export default function App() {
           <Route path="rakeback-pendiente" element={<RakebackPendiente />} />
           <Route path="cuentas-socios" element={<CuentasSocios />} />
           <Route path="liquidaciones" element={<Liquidaciones />} />
-          <Route path="stock-deudas" element={<StockDeudas />} />
           <Route path="resumen-club" element={<ResumenClub />} />
           <Route path="jugadores-bancados" element={<JugadoresBancados />} />
           <Route path="rodeo" element={<Rodeo />} />

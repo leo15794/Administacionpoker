@@ -216,30 +216,6 @@ function FichaAgente({ agentId, onClose }: { agentId: string; onClose: () => voi
             </tbody>
           </table>
 
-          {data.stock.length > 0 && (
-            <>
-              <h4 style={{ marginTop: 16 }}>Stock por cuenta</h4>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Club</th>
-                    <th>Unidades</th>
-                    <th>≈ USD</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.stock.map((s: any) => (
-                    <tr key={s.club_id}>
-                      <td>{s.club_name}</td>
-                      <td>{s.units}</td>
-                      <td>{s.usd_ref != null ? usd(s.usd_ref) : "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-
           <h4 style={{ marginTop: 16 }}>Últimos cierres</h4>
           <table>
             <thead>
