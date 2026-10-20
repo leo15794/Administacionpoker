@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import {
   listSupervisoresConsolidados,
+  listCuentasAgentes,
+  listAgentesSinCuenta,
+  activarCuentaAgente,
   getSupervisorConCuenta,
   listSubordinados,
   registrarMovimientoSupervisor,
@@ -27,6 +30,23 @@ export const supervisoresRouter = Router();
 
 supervisoresRouter.get("/", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listSupervisoresConsolidados());
+});
+
+// Sección "Agentes" (20/10/2026): cuentas de agentes individuales. Comparten TODO lo demás (/:id/movimientos,
+// /:id/cierre-semanal/..., /:id/importar-saldos, etc.) con las cuentas de supervisores: el id es el del titular.
+// Van antes de "/:id" para que "cuentas-agentes" no se tome como un id.
+supervisoresRouter.get("/cuentas-agentes", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listCuentasAgentes());
+});
+supervisoresRouter.get("/cuentas-agentes/sin-cuenta", requireAuth, requireAdmin, async (req, res) => {
+  res.json(await listAgentesSinCuenta());
+});
+supervisoresRouter.post("/cuentas-agentes/:agentId/activar", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.status(201).json(await activarCuentaAgente(req.params.agentId));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 supervisoresRouter.get("/:id", requireAuth, requireAdmin, async (req, res) => {
@@ -61,7 +81,9 @@ supervisoresRouter.post("/:id/agentes/:agentId/ocultar", requireAuth, requireAdm
 const movimientoSchema = z.object({
   clubId: z.string().nullable().optional(),
   agentId: z.string().nullable().optional(),
-  type: z.enum(["CARGA", "DESCARGA", "AJUSTE", "PAGO", "COBRO"]),
+  type: z.enum(["CARGA", "DESCARGA", "AJUSTE", "PAGO", "COBRO", "DESCUENTO"]),
+  concepto: z.string().nullable().optional(),
+  semana: z.string().nullable().optional(),
   amount: z.number(),
   campoAjuste: z.enum(["FICHAS", "CUENTA_CORRIENTE"]).optional(),
   usdtReal: z.boolean().optional(),

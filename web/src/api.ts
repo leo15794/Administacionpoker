@@ -395,6 +395,10 @@ export const api = {
   // Cuentas consolidadas para supervisores (30/09/2026) -- sistema aislado, ver
   // src/repo/supervisores.ts. supervisorId es el id del agente que tiene usa_cuenta_consolidada.
   supervisoresConsolidados: () => request("/supervisores"),
+  // Sección "Agentes" (20/10/2026): cuentas de agentes individuales (mismo motor que las de supervisores).
+  cuentasAgentes: () => request("/supervisores/cuentas-agentes"),
+  agentesSinCuenta: () => request("/supervisores/cuentas-agentes/sin-cuenta"),
+  activarCuentaAgente: (agentId: string) => request(`/supervisores/cuentas-agentes/${agentId}/activar`, { method: "POST" }),
   supervisorConsolidado: (supervisorId: string) => request(`/supervisores/${supervisorId}`),
   subordinadosSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/subordinados`),
   movimientosSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/movimientos`),
@@ -403,8 +407,11 @@ export const api = {
     data: {
       clubId?: string | null; // obligatorio salvo en PAGO/COBRO
       agentId?: string | null;
-      type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO";
+      type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO" | "DESCUENTO";
       amount: number;
+      // Solo DESCUENTO (cuentas de agentes): concepto y semana del cierre (lunes, YYYY-MM-DD) opcional.
+      concepto?: string | null;
+      semana?: string | null;
       campoAjuste?: "FICHAS" | "CUENTA_CORRIENTE";
       usdtReal?: boolean;
       notes?: string | null;

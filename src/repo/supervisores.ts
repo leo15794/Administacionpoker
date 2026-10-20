@@ -49,6 +49,7 @@ export async function listSupervisoresConsolidados() {
      FROM agents a
      LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
      WHERE a.usa_cuenta_consolidada = true
+       AND (a.account_type = 'SUPERVISOR' OR EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name))
      ORDER BY a.name`
   );
   return r.rows;
@@ -69,10 +70,69 @@ export async function getSupervisorConCuenta(supervisorAgentId: string) {
 // usa rebate_destino=RAKEBACK_SUPERVISOR) -- nunca tienen saldo/cierre propio mientras la
 // cuenta consolidada esté activa; esto es SOLO para mostrar quiénes son (lectura/auditoría).
 export async function listSubordinados(supervisorAgentId: string) {
-  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
-  if (!sup.rows[0]) return [];
-  const r = await pool.query(`SELECT * FROM agents WHERE supervisor = $1 ORDER BY name`, [sup.rows[0].name]);
+  const cuenta = await agentesDeLaCuenta(supervisorAgentId);
+  return cuenta ? cuenta.agentes : [];
+}
+
+// Cuenta de un AGENTE INDIVIDUAL (20/10/2026, pedido de Leo: "crearia la seccion Agentes", mismo sistema que los
+// supervisores Prepago/Win/Lose): el titular no es un supervisor y no tiene agentes a cargo, así que la cuenta
+// consolida sus propios cierres -- el único "agente de la cuenta" es él mismo. Reusa las mismas tablas
+// supervisor_cuentas/movimientos/cierres/migración: el titular siempre es agents.id de quien tiene
+// usa_cuenta_consolidada, sea supervisor o agente. NO hay otra marca: es individual si no es SUPERVISOR y nadie
+// le reporta (un supervisor mal tipeado con agentes a cargo, como JD, sigue siendo supervisor).
+export async function agentesDeLaCuenta(ownerId: string) {
+  const owner = await pool.query(`SELECT * FROM agents WHERE id = $1`, [ownerId]);
+  if (!owner.rows[0]) return null;
+  const subs = await pool.query(`SELECT * FROM agents WHERE supervisor = $1 ORDER BY name`, [owner.rows[0].name]);
+  const individual = owner.rows[0].account_type !== "SUPERVISOR" && subs.rows.length === 0;
+  return {
+    owner: owner.rows[0],
+    individual,
+    agentes: individual ? [owner.rows[0]] : subs.rows,
+    ids: (individual ? [owner.rows[0]] : subs.rows).map((a: any) => a.id as string),
+  };
+}
+
+// Cuentas de agentes individuales (sección "Agentes"): con cuenta consolidada, no supervisor y sin nadie a cargo.
+export async function listCuentasAgentes() {
+  const r = await pool.query(
+    `SELECT a.*, COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente,
+            sc.updated_at as cuenta_updated_at, 0 as n_sub
+     FROM agents a
+     LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
+     WHERE a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
+       AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
+     ORDER BY a.name`
+  );
   return r.rows;
+}
+
+// Agentes individuales que todavía no tienen cuenta y se pueden activar (activos, sin supervisor, sin nadie a cargo).
+export async function listAgentesSinCuenta() {
+  const r = await pool.query(
+    `SELECT a.id, a.name, a.account_type, a.default_system
+     FROM agents a
+     WHERE a.active = true AND a.usa_cuenta_consolidada = false AND a.account_type <> 'SUPERVISOR'
+       AND COALESCE(a.supervisor, '') = ''
+       AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
+     ORDER BY a.name`
+  );
+  return r.rows;
+}
+
+// Activa la cuenta de un agente individual (sección "Agentes"). No mueve plata ni toca sus balances/cierres: solo lo
+// marca para que su cuenta exista; el saldo inicial se trae después con "Importar saldo".
+export async function activarCuentaAgente(agentId: string) {
+  const elegibles = await listAgentesSinCuenta();
+  const ag = elegibles.find((a: any) => a.id === agentId);
+  if (!ag) throw new Error("Ese agente no se puede activar (tiene que estar activo, sin supervisor y sin agentes a cargo).");
+  const modelo = ag.default_system === "WIN_LOSE" || ag.account_type === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO";
+  await pool.query(
+    `UPDATE agents SET usa_cuenta_consolidada = true, modelo_cuenta = $2, consolidar_cierres = true,
+            exigir_agente_en_movimientos = false, updated_at = now() WHERE id = $1`,
+    [agentId, modelo]
+  );
+  return getSupervisorConCuenta(agentId);
 }
 
 export interface MovimientoSupervisorInput {
@@ -82,7 +142,11 @@ export interface MovimientoSupervisorInput {
   /** Informativo únicamente (gateado por agents.exigir_agente_en_movimientos del supervisor) --
    * JAMÁS genera saldo propio para este agente. */
   agentId?: string | null;
-  type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO";
+  type: "CARGA" | "DESCARGA" | "AJUSTE" | "PAGO" | "COBRO" | "DESCUENTO";
+  /** Solo DESCUENTO (cuentas de agentes): en qué concepto se descuenta (adelanto de fichas, venta, ticket, etc.) y,
+   * opcional, la semana del cierre (YYYY-MM-DD, lunes) a la que corresponde. */
+  concepto?: string | null;
+  semana?: string | null;
   /** PAGO/COBRO (19/10/2026, pedido de Leo): USDT real contra la cuenta corriente del supervisor -- PAGO = le mandamos
    * plata (resta de cuenta_corriente, EGRESO de Wallet Manos), COBRO = nos manda plata (suma a cuenta_corriente,
    * INGRESO a Wallet Manos). No tocan fichas_reales ni piden club. CARGA/DESCARGA: siempre > 0 (el signo lo define el type, ver reclasificación de Leo).
@@ -124,22 +188,33 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   // opcional aunque el supervisor lo exija en los demás movimientos. Si no se indica, el movimiento queda en la fila
   // "Sin agente asignado" del desglose por agente (nunca se reparte a ciegas), y el total de la cuenta no cambia.
   const pagoCobroGrupal = esSupervisorWinLose(sup.rows[0]) && (input.type === "PAGO" || input.type === "COBRO");
-  if (sup.rows[0].exigir_agente_en_movimientos && !input.agentId && !pagoCobroGrupal) {
+  // Cuenta de agente individual: todo movimiento es de ese mismo agente, no hace falta elegirlo.
+  const cuentaAgente = await agentesDeLaCuenta(input.supervisorAgentId);
+  const individual = !!cuentaAgente?.individual;
+  if (individual && !input.agentId) input.agentId = input.supervisorAgentId;
+  if (sup.rows[0].exigir_agente_en_movimientos && !input.agentId && !pagoCobroGrupal && !individual) {
     throw new Error("Este supervisor exige indicar el agente de origen del movimiento.");
   }
   if (esSupervisorWinLose(sup.rows[0])) {
     if (input.type === "CARGA" || input.type === "DESCARGA") {
-      throw new Error("Un supervisor Win/Lose no maneja fichas: usá Pagar, Cobrar o un Ajuste de cuenta corriente.");
+      throw new Error("Una cuenta Win/Lose no maneja fichas: usá Pagar, Cobrar, un Descuento o un Ajuste de cuenta corriente.");
     }
     if (input.type === "AJUSTE" && input.campoAjuste !== "CUENTA_CORRIENTE") {
-      throw new Error("Un supervisor Win/Lose solo tiene cuenta corriente: el ajuste tiene que ser de cuenta corriente.");
+      throw new Error("Una cuenta Win/Lose solo tiene cuenta corriente: el ajuste tiene que ser de cuenta corriente.");
     }
+  }
+  if (input.type === "DESCUENTO" && !individual) {
+    throw new Error("Los descuentos del cierre son de las cuentas de agentes.");
+  }
+  if (input.type === "DESCUENTO" && !input.concepto?.trim()) {
+    throw new Error("Indicá el concepto del descuento (adelanto de fichas, venta, ticket, etc.).");
   }
 
   let amount = 0;
   const esPagoCobro = input.type === "PAGO" || input.type === "COBRO";
-  if (!esPagoCobro && !input.clubId) throw new Error("El club es obligatorio.");
-  if (input.type === "CARGA" || input.type === "DESCARGA" || esPagoCobro) {
+  const sinClub = esPagoCobro || input.type === "DESCUENTO";
+  if (!sinClub && !input.clubId) throw new Error("El club es obligatorio.");
+  if (input.type === "CARGA" || input.type === "DESCARGA" || esPagoCobro || input.type === "DESCUENTO") {
     if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("El importe debe ser mayor a 0.");
     amount = round2(input.amount);
   } else if (input.type === "AJUSTE") {
@@ -151,7 +226,7 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
 
   // Forzado acá (único punto donde se decide si se abre un asiento de tesorería), no confía en
   // lo que mande el frontend.
-  const usdtReal = esPagoCobro || (input.type !== "AJUSTE" && !!input.usdtReal);
+  const usdtReal = esPagoCobro || (input.type !== "AJUSTE" && input.type !== "DESCUENTO" && !!input.usdtReal);
 
   const client = await pool.connect();
   try {
@@ -169,6 +244,9 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
       ccDelta = round2(-amount);
     } else if (input.type === "COBRO") {
       ccDelta = amount;
+    } else if (input.type === "DESCUENTO") {
+      // Descuento del cierre: baja la cuenta corriente (adelanto/venta/ticket que se le dio al agente), sin mover Wallet.
+      ccDelta = round2(-amount);
     } else if (input.type === "DESCARGA") {
       fichasDelta = round2(-amount);
       ccDelta = usdtReal ? 0 : round2(amount);
@@ -205,12 +283,13 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
       `INSERT INTO supervisor_movimientos
         (id, supervisor_agent_id, club_id, agent_id, type, amount, fichas_reales_delta, cuenta_corriente_delta,
          usdt_real, treasury_adjustment_id, saldo_anterior_fichas, saldo_anterior_cc, saldo_nuevo_fichas, saldo_nuevo_cc,
-         notes, payment_link, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+         notes, payment_link, created_by, concepto, semana)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         id, input.supervisorAgentId, input.clubId ?? null, input.agentId ?? null, input.type, round2(input.amount),
         fichasDelta, ccDelta, usdtReal, treasuryAdjustmentId, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo,
         input.notes ?? null, input.paymentLink ?? null, input.createdBy ?? null,
+        input.type === "DESCUENTO" ? input.concepto!.trim() : null, input.type === "DESCUENTO" ? input.semana ?? null : null,
       ]
     );
     await client.query(
@@ -468,13 +547,10 @@ export interface SaldoPorAgenteSupervisor {
   detallePorClub: SaldoPorClubAgente[];
 }
 export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): Promise<SaldoPorAgenteSupervisor[]> {
-  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
-  if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+  const cuenta = await agentesDeLaCuenta(supervisorAgentId);
+  if (!cuenta) throw new Error("Supervisor no encontrado.");
 
-  const subRes = await pool.query(
-    `SELECT id, name, oculto_en_supervisor FROM agents WHERE supervisor = $1 ORDER BY name`,
-    [sup.rows[0].name]
-  );
+  const subRes = { rows: cuenta.agentes as { id: string; name: string; oculto_en_supervisor: boolean }[] };
   const migRes = await pool.query(
     `SELECT agent_id, COALESCE(SUM(fichas_migradas), 0) as fichas, COALESCE(SUM(pendiente_migrado), 0) as cc
      FROM supervisor_migracion_historica WHERE supervisor_agent_id = $1 GROUP BY agent_id`,
@@ -708,12 +784,10 @@ export async function previsualizarImportacionSaldos(supervisorAgentId: string):
   const sup = supRes.rows[0];
   if (!sup) throw new Error("Supervisor no encontrado.");
   if (!sup.usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
-  const ags = await pool.query(
-    `SELECT id, name FROM agents WHERE supervisor = $1 AND active = true AND COALESCE(oculto_en_supervisor, false) = false ORDER BY name`,
-    [sup.name]
-  );
+  const cuenta = await agentesDeLaCuenta(supervisorAgentId);
+  const ags = (cuenta?.agentes ?? []).filter((a: any) => a.active && !a.oculto_en_supervisor);
   const out: PropuestaImportacionAgente[] = [];
-  for (const ag of ags.rows) out.push(await calcularPropuestaImportacion(sup, ag));
+  for (const ag of ags) out.push(await calcularPropuestaImportacion(sup, ag));
   return out;
 }
 
@@ -768,15 +842,15 @@ const noImportadoSql = (supParam: string) =>
        AND smh.semana_corte IS NOT NULL AND smh.semana_corte >= wc.week_start)`;
 
 export async function getSemanasDisponiblesSupervisor(supervisorAgentId: string) {
-  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
-  if (!sup.rows[0]) return [];
+  const cuenta = await agentesDeLaCuenta(supervisorAgentId);
+  if (!cuenta) return [];
   const r = await pool.query(
     `SELECT DISTINCT wc.week_start, wc.week_end
      FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
-     WHERE a.supervisor = $1 AND wc.status <> 'REVERTIDO'
+     WHERE a.id = ANY($1::text[]) AND wc.status <> 'REVERTIDO'
      ORDER BY wc.week_start DESC LIMIT 52`,
-    [sup.rows[0].name]
+    [cuenta.ids]
   );
   return r.rows;
 }
@@ -785,6 +859,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
   const sup = await pool.query(`SELECT name, default_system FROM agents WHERE id = $1`, [supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
   const winLose = esSupervisorWinLose(sup.rows[0]);
+  const cuentaIds = (await agentesDeLaCuenta(supervisorAgentId))!.ids;
 
   // rebate / rodeo / total (20/10/2026, supervisor Win/Lose): el total de cada agente es su cierre COMPLETO
   // (weekly_closings.final_closing = resultado + rakeback + rebate + rodeo + ajuste manual), que es lo que se suma
@@ -799,18 +874,18 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
      FROM agents a
      LEFT JOIN weekly_closings wc
        ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
-     WHERE a.supervisor = $1
+     WHERE a.id = ANY($1::text[])
      GROUP BY a.id, a.name
      ORDER BY a.name`,
-    [sup.rows[0].name, weekStart, supervisorAgentId]
+    [cuentaIds, weekStart, supervisorAgentId]
   );
 
   // Agentes con cierre cargado esa semana que NO se suma porque ya está dentro de su saldo importado.
   const yaIncluidos = await pool.query(
     `SELECT DISTINCT a.name FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id
-     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND NOT ${noImportadoSql("$3")}
+     WHERE a.id = ANY($1::text[]) AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND NOT ${noImportadoSql("$3")}
      ORDER BY a.name`,
-    [sup.rows[0].name, weekStart, supervisorAgentId]
+    [cuentaIds, weekStart, supervisorAgentId]
   );
 
   // Desglose por club de cada agente (19/10/2026, pedido de Leo: que el supervisor pueda desplegar de dónde sale
@@ -821,9 +896,9 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
      FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
      JOIN clubs c ON c.id = wc.club_id
-     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
+     WHERE a.id = ANY($1::text[]) AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
      ORDER BY c.name`,
-    [sup.rows[0].name, weekStart, supervisorAgentId]
+    [cuentaIds, weekStart, supervisorAgentId]
   );
   const detallePorAgente = new Map<string, any[]>();
   for (const d of detalle.rows) {
@@ -898,8 +973,8 @@ export async function aplicarCierreConsolidadoSupervisor(
               wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate, wc.final_closing
        FROM weekly_closings wc
        JOIN agents a ON a.id = wc.agent_id
-       WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}`,
-      [sup.rows[0].name, weekStart, supervisorAgentId]
+       WHERE a.id = ANY($1::text[]) AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}`,
+      [(await agentesDeLaCuenta(supervisorAgentId))!.ids, weekStart, supervisorAgentId]
     );
     if (lineasRes.rows.length === 0) {
       throw new Error("No hay ningún cierre para sumar en esa semana (si hay cierres cargados, ya están incluidos en el saldo importado de sus agentes).");

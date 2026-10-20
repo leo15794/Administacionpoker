@@ -17,12 +17,18 @@ const TIPO_LABEL: Record<string, string> = {
   AJUSTE: "Ajuste manual",
   PAGO: "Pago USDT",
   COBRO: "Cobro USDT",
+  DESCUENTO: "Descuento",
 };
 // Salida de plata de la cuenta (Descarga y Pago) vs entrada (Carga y Cobro): define color y signo en el historial.
-const esSalidaSup = (m: any): boolean => m.type === "DESCARGA" || m.type === "PAGO";
+const esSalidaSup = (m: any): boolean => m.type === "DESCARGA" || m.type === "PAGO" || m.type === "DESCUENTO";
 
-export default function Supervisores() {
+// modo "AGENTES" (20/10/2026, pedido de Leo: "crearia la seccion Agentes"): misma pantalla y mismo motor, pero para
+// agentes individuales -- el titular de la cuenta es el propio agente (sin "Agentes a cargo", sin retiros de portal).
+export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERVISORES" | "AGENTES" }) {
+  const agentesModo = modo === "AGENTES";
   const [supervisores, setSupervisores] = useState<any[] | null>(null);
+  const [showActivar, setShowActivar] = useState(false);
+  const [showDescuento, setShowDescuento] = useState(false);
   const [clubes, setClubes] = useState<any[]>([]);
   const [error, setError] = useState("");
   // Solicitudes de retiro/pago de los supervisores (16/10/2026, pedido de Leo: "al supervisor le
@@ -69,10 +75,11 @@ export default function Supervisores() {
 
   function refresh() {
     setError("");
-    api.supervisoresConsolidados().then(setSupervisores).catch((e) => setError(e.message));
+    (agentesModo ? api.cuentasAgentes() : api.supervisoresConsolidados()).then(setSupervisores).catch((e) => setError(e.message));
   }
 
   function refreshSolicitudes() {
+    if (agentesModo) return setSolicitudes([]);
     api.solicitudesRetiroPendientes().then(setSolicitudes);
   }
 
@@ -213,7 +220,7 @@ export default function Supervisores() {
   if (error) {
     return (
       <div className="error">
-        No se pudo cargar Supervisores: {error}
+        No se pudo cargar {agentesModo ? "Agentes" : "Supervisores"}: {error}
         <div style={{ marginTop: 10 }}>
           <button className="btn secondary small" onClick={refresh}>Reintentar</button>
         </div>
@@ -245,6 +252,9 @@ export default function Supervisores() {
   const supervisoresWinLose = supervisoresOrdenados.filter((x) => esWinLose(x));
   const estadoWinLose = (n: number) => (n < -0.004 ? "El grupo nos debe" : n > 0.004 ? "Le debemos" : "Al día");
   const cantAgentesTxt = (n: number | null | undefined) => (n != null ? `${n} agente${n === 1 ? "" : "s"} a cargo` : "");
+  // En la sección Agentes no hay agentes a cargo: se muestra el sistema de la cuenta.
+  const subTxt = (x: any) => (agentesModo ? (esWinLose(x) ? "Win/Lose" : "Prepago") : cantAgentesTxt(x.n_sub));
+  const quien = agentesModo ? "Agente" : "Supervisor";
   const movsVisibles = (movimientos ?? []).filter((m) => verRevertidos || m.status !== "REVERTIDO");
   const detalleClubesAgente = (s: any) => (
     <>
@@ -288,13 +298,15 @@ export default function Supervisores() {
     <div>
       <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2>Supervisores</h2>
+          <h2>{agentesModo ? "Agentes" : "Supervisores"}</h2>
           <div className="muted">
-            Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un
-            único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio.
+            {agentesModo
+              ? "Cuenta de cada agente individual: el cierre completo de cada semana, los descuentos del cierre, y los pagos y cobros en USDT. Reemplaza a Liquidaciones para los agentes que se activan acá."
+              : "Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio."}
           </div>
         </div>
-        {solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
+        {agentesModo && <button className="btn" onClick={() => setShowActivar(true)}>+ Activar cuenta de un agente</button>}
+        {!agentesModo && solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
       </div>
 
       {solicitudes && solicitudes.length > 0 && (
@@ -330,8 +342,9 @@ export default function Supervisores() {
       {supervisores.length === 0 ? (
         <div className="panel">
           <div className="muted">
-            Todavía no hay ningún supervisor con "Usa cuenta consolidada" activado. Se activa editando un
-            agente desde Administración.
+            {agentesModo
+              ? "Todavía no hay ninguna cuenta de agente. Activá la primera con el botón de arriba."
+              : "Todavía no hay ningún supervisor con \"Usa cuenta consolidada\" activado. Se activa editando un agente desde Administración."}
           </div>
         </div>
       ) : (
@@ -339,7 +352,7 @@ export default function Supervisores() {
           {supervisoresPrepago.length > 0 && (
             <>
               <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 17 }}>Supervisores Prepago</h3>
+                <h3 style={{ margin: 0, fontSize: 17 }}>{agentesModo ? "Agentes Prepago" : "Supervisores Prepago"}</h3>
                 <span className="pill">{supervisoresPrepago.length} cuenta{supervisoresPrepago.length === 1 ? "" : "s"}</span>
               </div>
               <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Fichas reales (lo que compraron sus agentes) y cuenta corriente (rakeback).</div>
@@ -365,7 +378,7 @@ export default function Supervisores() {
                 <div className="ag-table-wrap">
                   <table className="saldos-table">
                     <thead>
-                      <tr><th>Supervisor</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr>
+                      <tr><th>{quien}</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr>
                     </thead>
                     <tbody>
                       {supervisoresPrepago.map((x) => {
@@ -379,7 +392,7 @@ export default function Supervisores() {
                           >
                             <td>
                               <div className="saldo-name">{x.name}</div>
-                              <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                              <div className="saldo-sub">{subTxt(x)}</div>
                             </td>
                             <td className="num money">{montoSignoSup(Number(x.fichas_reales))}</td>
                             <td className="num money">{montoSignoSup(Number(x.cuenta_corriente))}</td>
@@ -409,7 +422,7 @@ export default function Supervisores() {
                             <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</div>
                           </div>
                           <div className="saldo-card-mid">
-                            <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                            <div className="saldo-sub">{subTxt(x)}</div>
                           </div>
                           <div className="saldo-card-foot" style={{ gap: 16 }}>
                             <span>Fichas reales <b>{montoSignoSup(Number(x.fichas_reales))}</b></span>
@@ -427,28 +440,30 @@ export default function Supervisores() {
           {supervisoresWinLose.length > 0 && (
             <>
               <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 17 }}>Supervisores Win/Lose</h3>
+                <h3 style={{ margin: 0, fontSize: 17 }}>{agentesModo ? "Agentes Win/Lose" : "Supervisores Win/Lose"}</h3>
                 <span className="pill">{supervisoresWinLose.length} cuenta{supervisoresWinLose.length === 1 ? "" : "s"}</span>
               </div>
-              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Una sola cuenta: el cierre completo de sus agentes, que se salda con cobros y pagos en USDT.</div>
+              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>{agentesModo ? "Una sola cuenta corriente por agente: el cierre completo de cada semana, que se salda con cobros y pagos en USDT." : "Una sola cuenta: el cierre completo de sus agentes, que se salda con cobros y pagos en USDT."}</div>
               <div className="stat-row">
                 <div className="stat-card">
                   <div className="l">Cuenta corriente</div>
                   <div className="v">{montoSignoSup(supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}</div>
                   <div className="s">suma de las cuentas</div>
                 </div>
-                <div className="stat-card">
-                  <div className="l">Agentes a cargo</div>
-                  <div className="v">{supervisoresWinLose.reduce((acc, x) => acc + Number(x.n_sub ?? 0), 0)}</div>
-                  <div className="s">Win/Lose</div>
-                </div>
+                {!agentesModo && (
+                  <div className="stat-card">
+                    <div className="l">Agentes a cargo</div>
+                    <div className="v">{supervisoresWinLose.reduce((acc, x) => acc + Number(x.n_sub ?? 0), 0)}</div>
+                    <div className="s">Win/Lose</div>
+                  </div>
+                )}
               </div>
 
               <div className="panel">
                 <div className="ag-table-wrap">
                   <table className="saldos-table">
                     <thead>
-                      <tr><th>Supervisor</th><th className="num">Cuenta corriente</th><th>Estado</th><th></th></tr>
+                      <tr><th>{quien}</th><th className="num">Cuenta corriente</th><th>Estado</th><th></th></tr>
                     </thead>
                     <tbody>
                       {supervisoresWinLose.map((x) => {
@@ -462,7 +477,7 @@ export default function Supervisores() {
                           >
                             <td>
                               <div className="saldo-name">{x.name}</div>
-                              <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                              <div className="saldo-sub">{subTxt(x)}</div>
                             </td>
                             <td className="num"><span className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</span></td>
                             <td className="muted" style={{ fontSize: 12.5 }}>{estadoWinLose(cc)}</td>
@@ -491,7 +506,7 @@ export default function Supervisores() {
                             <div className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</div>
                           </div>
                           <div className="saldo-card-mid">
-                            <div className="saldo-sub">{cantAgentesTxt(x.n_sub)} · {estadoWinLose(cc)}</div>
+                            <div className="saldo-sub">{subTxt(x)} · {estadoWinLose(cc)}</div>
                           </div>
                         </div>
                       </div>
@@ -509,19 +524,20 @@ export default function Supervisores() {
           <div className="panel" style={{ padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
               <div>
-                <div className="deals-eyebrow">Cuenta consolidada</div>
+                <div className="deals-eyebrow">{agentesModo ? "Cuenta del agente" : "Cuenta consolidada"}</div>
                 <div style={{ fontSize: 22, fontWeight: 750, letterSpacing: "-0.01em" }}>{seleccionado.name}</div>
                 <div className="saldo-sub">
                   {esWinLose(seleccionado) ? "Win/Lose" : seleccionado.modelo_cuenta === "PREPAGO" ? "Prepago" : seleccionado.modelo_cuenta ?? "—"}
-                  {subordinados ? ` · ${subordinados.length} agente${subordinados.length === 1 ? "" : "s"} a cargo` : ""}
+                  {!agentesModo && subordinados ? ` · ${subordinados.length} agente${subordinados.length === 1 ? "" : "s"} a cargo` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
                 <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
+                {agentesModo && <button className="btn secondary" onClick={() => setShowDescuento(true)}>+ Descuento</button>}
                 <button className="btn secondary" onClick={() => setShowMovimiento(true)}>{esWinLose(seleccionado) ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}</button>
-                <button className="btn secondary" onClick={() => setShowImportar(true)} title="Traer a esta cuenta el saldo que ya tienen sus agentes">
-                  Importar saldos{importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}
+                <button className="btn secondary" onClick={() => setShowImportar(true)} title={agentesModo ? "Traer a esta cuenta el saldo que el agente tiene hoy" : "Traer a esta cuenta el saldo que ya tienen sus agentes"}>
+                  {agentesModo ? "Importar saldo" : "Importar saldos"}{importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}
                 </button>
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
@@ -529,7 +545,7 @@ export default function Supervisores() {
             {esWinLose(seleccionado) ? (
               <div style={{ marginTop: 14 }}>
                 <div className="saldo-sub" style={{ margin: 0 }}>
-                  {Number(seleccionado.cuenta_corriente) < -0.004 ? "Cuenta corriente · el grupo nos debe" : Number(seleccionado.cuenta_corriente) > 0.004 ? "Cuenta corriente · le debemos" : "Cuenta corriente"}
+                  {Number(seleccionado.cuenta_corriente) < -0.004 ? (agentesModo ? "Cuenta corriente · el agente nos debe" : "Cuenta corriente · el grupo nos debe") : Number(seleccionado.cuenta_corriente) > 0.004 ? "Cuenta corriente · le debemos" : "Cuenta corriente"}
                 </div>
                 <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) > 0 ? "pos" : Number(seleccionado.cuenta_corriente) < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
                   {montoSignoSup(Number(seleccionado.cuenta_corriente), true)}
@@ -560,7 +576,7 @@ export default function Supervisores() {
               <span className="seg tabs-scroll" style={{ overflowX: "auto", maxWidth: "100%" }}>
                 <button className={tabDet === "resumen" ? "on" : ""} onClick={() => setTabDet("resumen")}>Resumen</button>
                 <button className={tabDet === "cierre" ? "on" : ""} onClick={() => setTabDet("cierre")}>Cierre semanal</button>
-                <button className={tabDet === "agentes" ? "on" : ""} onClick={() => setTabDet("agentes")}>Agentes a cargo{subordinados && <span className="n">{subordinados.length}</span>}</button>
+                {!agentesModo && <button className={tabDet === "agentes" ? "on" : ""} onClick={() => setTabDet("agentes")}>Agentes a cargo{subordinados && <span className="n">{subordinados.length}</span>}</button>}
                 <button className={tabDet === "movs" ? "on" : ""} onClick={() => setTabDet("movs")}>Movimientos{movimientos && <span className="n">{movimientos.length}</span>}</button>
                 <button className={tabDet === "origen" ? "on" : ""} onClick={() => setTabDet("origen")}>Origen del saldo{migracion && <span className="n">{migracion.length}</span>}</button>
               </span>
@@ -576,10 +592,11 @@ export default function Supervisores() {
 
             {tabDet === "resumen" && (
               <>
-                <h4 style={{ margin: "0 0 4px" }}>{esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"}</h4>
+                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Saldo de la cuenta" : esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"}</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá, en su fila. El total coincide,
-                  centavo a centavo, con el saldo de arriba: es el mismo saldo de {seleccionado.name}, repartido por agente.
+                  {agentesModo
+                    ? "Saldo importado + cierres semanales aplicados + descuentos, pagos, cobros y ajustes. Coincide, centavo a centavo, con el saldo de arriba."
+                    : `Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá, en su fila. El total coincide, centavo a centavo, con el saldo de arriba: es el mismo saldo de ${seleccionado.name}, repartido por agente.`}
                 </div>
                 {!saldosPorAgente ? (
                   <Loading />
@@ -681,10 +698,10 @@ export default function Supervisores() {
 
             {tabDet === "cierre" && (
               <>
-                <h4 style={{ margin: "0 0 4px" }}>Cierre semanal de agentes a cargo</h4>
+                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Cierre semanal" : "Cierre semanal de agentes a cargo"}</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
                   {esWinLose(seleccionado)
-                    ? "Trae el cierre semanal ya cargado de cada agente a cargo: el cierre COMPLETO (resultado de mesas + rakeback + rebate) se suma a Cuenta corriente -- este supervisor es Win/Lose y no tiene fichas reales. El saldo propio del agente no se toca, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."
+                    ? "Trae el cierre semanal ya cargado de cada agente a cargo: el cierre COMPLETO (resultado de mesas + rakeback + rebate) se suma a Cuenta corriente -- esta cuenta es Win/Lose y no tiene fichas reales. El saldo propio del agente no se toca, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."
                     : "Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."}
                 </div>
                 {!semanasCierre ? (
@@ -1045,9 +1062,38 @@ export default function Supervisores() {
             tipo={pagoCobro}
             supervisor={seleccionado}
             subordinados={subordinados ?? []}
+            sinAgente={agentesModo}
             onCancel={() => setPagoCobro(null)}
             onDone={() => {
               setPagoCobro(null);
+              refrescarSeleccionado();
+            }}
+          />
+        </Modal>
+      )}
+
+      {showActivar && (
+        <Modal title="Activar cuenta de un agente" onClose={() => setShowActivar(false)}>
+          <ActivarCuentaForm
+            onCancel={() => setShowActivar(false)}
+            onDone={(cuenta: any) => {
+              setShowActivar(false);
+              refresh();
+              if (cuenta) abrirSupervisor(cuenta);
+            }}
+          />
+        </Modal>
+      )}
+
+      {showDescuento && seleccionado && (
+        <Modal title={`Descuento — ${seleccionado.name}`} onClose={() => setShowDescuento(false)}>
+          <DescuentoForm
+            supervisor={seleccionado}
+            semanas={semanasCierre ?? []}
+            semanaInicial={weekCierre}
+            onCancel={() => setShowDescuento(false)}
+            onDone={() => {
+              setShowDescuento(false);
               refrescarSeleccionado();
             }}
           />
@@ -1079,7 +1125,7 @@ export default function Supervisores() {
           <MovimientoForm
             supervisor={seleccionado}
             clubes={clubes}
-            subordinados={subordinados ?? []}
+            subordinados={agentesModo ? [] : subordinados ?? []}
             onDone={() => {
               setShowMovimiento(false);
               refrescarSeleccionado();
@@ -1098,12 +1144,14 @@ function PagoCobroForm({
   tipo,
   supervisor,
   subordinados,
+  sinAgente,
   onDone,
   onCancel,
 }: {
   tipo: "PAGO" | "COBRO";
   supervisor: any;
   subordinados: any[];
+  sinAgente?: boolean;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -1116,7 +1164,7 @@ function PagoCobroForm({
 
   // Win/Lose: Pagar/Cobrar es de todo el grupo junto, el agente es opcional (20/10/2026, pedido de Leo).
   const winLose = supervisor.default_system === "WIN_LOSE";
-  const agenteObligatorio = !!supervisor.exigir_agente_en_movimientos && !winLose;
+  const agenteObligatorio = !!supervisor.exigir_agente_en_movimientos && !winLose && !sinAgente;
   const fichas = Number(supervisor.fichas_reales);
   const cc = Number(supervisor.cuenta_corriente);
   const monto = Number(String(amount).replace(",", "."));
@@ -1180,13 +1228,15 @@ function PagoCobroForm({
           </div>
         )}
       </div>
-      <div className="field">
-        <label>Agente {agenteObligatorio ? "" : winLose ? "(opcional: si es de todo el grupo, dejalo vacío)" : "(opcional)"}</label>
-        <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">{agenteObligatorio ? "Elegir..." : winLose ? "— Todo el grupo —" : "— Ninguno —"}</option>
-          {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-      </div>
+      {!sinAgente && (
+        <div className="field">
+          <label>Agente {agenteObligatorio ? "" : winLose ? "(opcional: si es de todo el grupo, dejalo vacío)" : "(opcional)"}</label>
+          <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            <option value="">{agenteObligatorio ? "Elegir..." : winLose ? "— Todo el grupo —" : "— Ninguno —"}</option>
+            {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+      )}
       <div className="field">
         <label>Link de pago (opcional)</label>
         <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
@@ -1224,6 +1274,149 @@ function PagoCobroForm({
         <button className="btn" disabled={loading || !montoValido}>
           {loading ? "Guardando..." : tipo === "PAGO" ? "Confirmar pago" : "Confirmar cobro"}
         </button>
+      </div>
+    </form>
+  );
+}
+
+// Activar la cuenta de un agente individual (sección Agentes, 20/10/2026): lista los agentes que todavía no tienen
+// cuenta (activos, sin supervisor y sin agentes a cargo). No mueve plata: el saldo se trae después con "Importar saldo".
+function ActivarCuentaForm({ onDone, onCancel }: { onDone: (cuenta: any) => void; onCancel: () => void }) {
+  const [agentes, setAgentes] = useState<any[] | null>(null);
+  const [agentId, setAgentId] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    api.agentesSinCuenta().then(setAgentes).catch((e) => setMsg({ ok: false, text: e.message }));
+  }, []);
+  if (!agentes) return msg ? <div className="error">{msg.text}</div> : <Loading />;
+  const f = filtro.trim().toLowerCase();
+  const visibles = agentes.filter((a) => !f || a.name.toLowerCase().includes(f));
+  async function activar() {
+    setMsg(null);
+    setLoading(true);
+    try {
+      onDone(await api.activarCuentaAgente(agentId));
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo activar la cuenta." });
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <div>
+      <div className="saldo-sub" style={{ marginBottom: 12 }}>
+        Elegí el agente. Su cuenta arranca en cero y no cambia nada de lo que ya tiene; después, con "Importar saldo", se trae lo que tiene hoy.
+        Los agentes que dependen de un supervisor no aparecen: ya están en la cuenta de su supervisor.
+      </div>
+      <div className="field">
+        <label>Buscar</label>
+        <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Nombre del agente" autoFocus />
+      </div>
+      <div className="field">
+        <label>Agente ({visibles.length})</label>
+        <select size={8} value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ width: "100%" }}>
+          {visibles.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.default_system === "WIN_LOSE" || a.account_type === "WIN_LOSE" ? "Win/Lose" : "Prepago"}</option>)}
+        </select>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className="btn" disabled={loading || !agentId} onClick={activar}>{loading ? "Activando..." : "Activar cuenta"}</button>
+      </div>
+    </div>
+  );
+}
+
+// Descuento del cierre (sección Agentes, 20/10/2026): adelanto de fichas, venta, ticket, etc. Baja la cuenta corriente
+// del agente (lo que se le dio a cuenta) y queda como movimiento propio, con concepto y semana opcional.
+const CONCEPTOS_DESCUENTO = ["Adelanto de fichas", "Venta", "Ticket", "Otro"];
+function DescuentoForm({
+  supervisor,
+  semanas,
+  semanaInicial,
+  onDone,
+  onCancel,
+}: {
+  supervisor: any;
+  semanas: any[];
+  semanaInicial: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [concepto, setConcepto] = useState(CONCEPTOS_DESCUENTO[0]);
+  const [detalle, setDetalle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [semana, setSemana] = useState(semanaInicial || "");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const monto = Number(String(amount).replace(",", "."));
+  const montoValido = Number.isFinite(monto) && monto > 0;
+  const cc = Number(supervisor.cuenta_corriente);
+  const ccNuevo = montoValido ? Math.round((cc - monto) * 100) / 100 : cc;
+  const fmt = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!montoValido) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
+    setLoading(true);
+    try {
+      await api.registrarMovimientoSupervisor(supervisor.id, {
+        type: "DESCUENTO",
+        amount: monto,
+        concepto: concepto === "Otro" && detalle.trim() ? detalle.trim() : concepto,
+        semana: semana || null,
+        notes: concepto !== "Otro" && detalle.trim() ? detalle.trim() : null,
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo registrar el descuento." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="saldo-sub" style={{ marginBottom: 12 }}>
+        Lo que se le dio al agente a cuenta (adelanto de fichas, venta, ticket...): se resta de su cuenta corriente y no mueve Wallet.
+      </div>
+      <div className="field">
+        <label>Concepto</label>
+        <select value={concepto} onChange={(e) => setConcepto(e.target.value)}>
+          {CONCEPTOS_DESCUENTO.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label>Importe (USD)</label>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" inputMode="decimal" autoFocus style={{ fontSize: 24, fontWeight: 750 }} />
+      </div>
+      <div className="field">
+        <label>Semana del cierre (opcional)</label>
+        <select value={semana} onChange={(e) => setSemana(e.target.value)}>
+          <option value="">— Sin semana —</option>
+          {semanas.map((w) => {
+            const ws = String(w.week_start).slice(0, 10);
+            return <option key={ws} value={ws}>{dateShort(w.week_start)} al {dateShort(w.week_end)}</option>;
+          })}
+        </select>
+      </div>
+      <div className="field">
+        <label>{concepto === "Otro" ? "Detalle del concepto" : "Observación"}</label>
+        <input value={detalle} onChange={(e) => setDetalle(e.target.value)} placeholder="Opcional" />
+      </div>
+      <div className="panel" style={{ margin: "6px 0 12px", padding: "12px 14px", background: "var(--panel-2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span className="muted">Cuenta corriente</span>
+          <span>{fmt(cc)} → <b className={ccNuevo < -0.004 ? "neg" : ""}>{fmt(ccNuevo)}</b></span>
+        </div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className="btn" disabled={loading || !montoValido}>{loading ? "Guardando..." : "Confirmar descuento"}</button>
       </div>
     </form>
   );

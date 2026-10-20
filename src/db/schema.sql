@@ -2370,4 +2370,9 @@ ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS payment_link TEXT;
 ALTER TABLE supervisor_movimientos ALTER COLUMN club_id DROP NOT NULL;
 ALTER TABLE supervisor_movimientos DROP CONSTRAINT IF EXISTS supervisor_movimientos_type_check;
 ALTER TABLE supervisor_movimientos ADD CONSTRAINT supervisor_movimientos_type_check
-  CHECK (type IN ('CARGA','DESCARGA','AJUSTE','PAGO','COBRO'));
+  CHECK (type IN ('CARGA','DESCARGA','AJUSTE','PAGO','COBRO','DESCUENTO'));
+
+-- Cuentas de agentes individuales (20/10/2026, sección "Agentes"): el DESCUENTO del cierre (adelanto de fichas, venta,
+-- ticket, etc.) es un movimiento propio de la cuenta corriente, con su concepto y, opcional, la semana del cierre.
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS concepto TEXT;
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS semana DATE;
