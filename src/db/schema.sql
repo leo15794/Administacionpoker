@@ -1024,7 +1024,7 @@ INSERT INTO agent_user_agents (user_id, agent_id)
 -- en una base que ya existía (CREATE TABLE IF NOT EXISTS no toca constraints existentes), así
 -- que se recrea acá de forma idempotente.
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
-ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR'));
+ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR'));
 
 -- Comisión por referido de supervisor (16/09/2026, corregido el mismo día): un supervisor
 -- puede tener % configurado sobre el rake semanal de un agente que ÉL REFIRIÓ (distinto de
