@@ -126,7 +126,7 @@ export default function Supervisores() {
     if (
       !confirm(
         `¿Aplicar el cierre de la semana del ${dateShort(weekCierre)} al ${dateShort(weekEnd)}? ` +
-          `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.rakebackTotal)} a Cuenta corriente. ` +
+          (esWinLose(seleccionado) ? `Esto suma ${usd(cierreSemana.totalCierre)} a Cuenta corriente (el cierre completo de los agentes). ` : `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.rakebackTotal)} a Cuenta corriente. `) +
           `Si te equivocaste se puede desaplicar después desde el botón "Desaplicar".`
       )
     )
@@ -147,7 +147,7 @@ export default function Supervisores() {
     if (!seleccionado || !cierreSemana?.aplicado) return;
     const motivo = prompt(
       `¿Desaplicar el cierre de la semana del ${dateShort(cierreSemana.aplicado.week_start)} al ${dateShort(cierreSemana.aplicado.week_end)}? ` +
-        `Esto resta ${usd(Number(cierreSemana.aplicado.resultado_total))} a Fichas reales y ${usd(Number(cierreSemana.aplicado.rakeback_total))} a Cuenta corriente ` +
+        (esWinLose(seleccionado) ? `Esto resta ${usd(Number(cierreSemana.aplicado.rakeback_total))} a Cuenta corriente ` : `Esto resta ${usd(Number(cierreSemana.aplicado.resultado_total))} a Fichas reales y ${usd(Number(cierreSemana.aplicado.rakeback_total))} a Cuenta corriente `) +
         `(el efecto contrario de cuando se aplicó). El saldo propio de cada agente no se toca. Motivo (opcional):`
     );
     if (motivo === null) return; // canceló el prompt
@@ -219,6 +219,8 @@ export default function Supervisores() {
 
   // ---- Pantalla (19/10/2026, mockup aprobado): lista ordenada por saldo y cuenta en pestañas ----
   const saldoTotalSup = (s: any) => Number(s.fichas_reales) + Number(s.cuenta_corriente);
+  // Supervisor Win/Lose (20/10/2026): una sola cuenta (cuenta corriente), sin fichas reales ni Carga/Descarga.
+  const esWinLose = (s: any) => s?.default_system === "WIN_LOSE";
   const montoSignoSup = (n: number, centavos = false) => {
     const v = centavos ? Math.round(Math.abs(n) * 100) / 100 : Math.abs(n);
     const txt = centavos
@@ -413,17 +415,27 @@ export default function Supervisores() {
                 <div className="deals-eyebrow">Cuenta consolidada</div>
                 <div style={{ fontSize: 22, fontWeight: 750, letterSpacing: "-0.01em" }}>{seleccionado.name}</div>
                 <div className="saldo-sub">
-                  {seleccionado.modelo_cuenta === "PREPAGO" ? "Prepago" : seleccionado.modelo_cuenta ?? "—"}
+                  {esWinLose(seleccionado) ? "Win/Lose" : seleccionado.modelo_cuenta === "PREPAGO" ? "Prepago" : seleccionado.modelo_cuenta ?? "—"}
                   {subordinados ? ` · ${subordinados.length} agente${subordinados.length === 1 ? "" : "s"} a cargo` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
                 <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
-                <button className="btn secondary" onClick={() => setShowMovimiento(true)}>+ Carga / Descarga / Ajuste</button>
+                <button className="btn secondary" onClick={() => setShowMovimiento(true)}>{esWinLose(seleccionado) ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}</button>
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
             </div>
+            {esWinLose(seleccionado) ? (
+              <div style={{ marginTop: 14 }}>
+                <div className="saldo-sub" style={{ margin: 0 }}>
+                  {Number(seleccionado.cuenta_corriente) < -0.004 ? "Cuenta corriente · el grupo nos debe" : Number(seleccionado.cuenta_corriente) > 0.004 ? "Cuenta corriente · le debemos" : "Cuenta corriente"}
+                </div>
+                <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) > 0 ? "pos" : Number(seleccionado.cuenta_corriente) < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
+                  {montoSignoSup(Number(seleccionado.cuenta_corriente), true)}
+                </div>
+              </div>
+            ) : (
             <div style={{ display: "flex", gap: 28, marginTop: 14, flexWrap: "wrap" }}>
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Saldo total</div>
@@ -440,6 +452,7 @@ export default function Supervisores() {
                 <div className="saldo-big" style={{ fontSize: 20 }}>{montoSignoSup(Number(seleccionado.cuenta_corriente), true)}</div>
               </div>
             </div>
+            )}
           </div>
 
           <div className="panel">
@@ -463,7 +476,7 @@ export default function Supervisores() {
 
             {tabDet === "resumen" && (
               <>
-                <h4 style={{ margin: "0 0 4px" }}>Fichas en tiempo real por agente</h4>
+                <h4 style={{ margin: "0 0 4px" }}>{esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"}</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
                   Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá, en su fila. El total coincide,
                   centavo a centavo, con el saldo de arriba: es el mismo saldo de {seleccionado.name}, repartido por agente.
@@ -477,7 +490,7 @@ export default function Supervisores() {
                     <div className="ag-table-wrap">
                       <table className="saldos-table">
                         <thead>
-                          <tr><th>Agente</th><th className="num">Fichas en tiempo real</th><th className="num">Cuenta corriente</th><th className="num">Saldo real</th></tr>
+                          <tr><th>Agente</th>{!esWinLose(seleccionado) && <th className="num">Fichas en tiempo real</th>}<th className="num">Cuenta corriente</th>{!esWinLose(seleccionado) && <th className="num">Saldo real</th>}</tr>
                         </thead>
                         <tbody>
                           {saldosPorAgente.map((s) => {
@@ -498,13 +511,17 @@ export default function Supervisores() {
                                       {s.oculto && <span className="muted" style={{ fontSize: 11, fontWeight: 400 }}> (oculto)</span>}
                                     </div>
                                   </td>
-                                  <td className="num money">{montoSignoSup(Number(s.fichasTiempoReal), true)}</td>
-                                  <td className="num money">{montoSignoSup(Number(s.cuentaCorriente), true)}</td>
-                                  <td className="num"><span className={`saldo-big ${saldo > 0.004 ? "pos" : saldo < -0.004 ? "neg" : "neutral"}`}>{montoSignoSup(saldo, true)}</span></td>
+                                  {!esWinLose(seleccionado) && <td className="num money">{montoSignoSup(Number(s.fichasTiempoReal), true)}</td>}
+                                  {esWinLose(seleccionado) ? (
+                                    <td className="num"><span className={`saldo-big ${saldo > 0.004 ? "pos" : saldo < -0.004 ? "neg" : "neutral"}`}>{montoSignoSup(Number(s.cuentaCorriente), true)}</span></td>
+                                  ) : (
+                                    <td className="num money">{montoSignoSup(Number(s.cuentaCorriente), true)}</td>
+                                  )}
+                                  {!esWinLose(seleccionado) && <td className="num"><span className={`saldo-big ${saldo > 0.004 ? "pos" : saldo < -0.004 ? "neg" : "neutral"}`}>{montoSignoSup(saldo, true)}</span></td>}
                                 </tr>
                                 {multiClub && expandido && (
                                   <tr>
-                                    <td colSpan={4} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px", borderLeft: "3px solid var(--gold)" }}>
+                                    <td colSpan={esWinLose(seleccionado) ? 2 : 4} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px", borderLeft: "3px solid var(--gold)" }}>
                                       {detalleClubesAgente(s)}
                                     </td>
                                   </tr>
@@ -516,9 +533,9 @@ export default function Supervisores() {
                         <tfoot>
                           <tr style={{ fontWeight: 700 }}>
                             <td>Total (coincide con el saldo de arriba)</td>
-                            <td className="num">{montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0), true)}</td>
+                            {!esWinLose(seleccionado) && <td className="num">{montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0), true)}</td>}
                             <td className="num">{montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.cuentaCorriente), 0), true)}</td>
-                            <td className="num">{montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.saldoReal), 0), true)}</td>
+                            {!esWinLose(seleccionado) && <td className="num">{montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.saldoReal), 0), true)}</td>}
                           </tr>
                         </tfoot>
                       </table>
@@ -545,7 +562,7 @@ export default function Supervisores() {
                                 <div className={`saldo-big ${saldo > 0.004 ? "pos" : saldo < -0.004 ? "neg" : "neutral"}`}>{montoSignoSup(saldo)}</div>
                               </div>
                               <div className="saldo-card-foot" style={{ gap: 16 }}>
-                                <span>Fichas <b>{montoSignoSup(Number(s.fichasTiempoReal))}</b></span>
+                                {!esWinLose(seleccionado) && <span>Fichas <b>{montoSignoSup(Number(s.fichasTiempoReal))}</b></span>}
                                 <span>Cuenta corriente <b>{montoSignoSup(Number(s.cuentaCorriente))}</b></span>
                               </div>
                               {multiClub && expandido && <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>{detalleClubesAgente(s)}</div>}
@@ -554,7 +571,7 @@ export default function Supervisores() {
                         );
                       })}
                       <div className="muted" style={{ fontSize: 12 }}>
-                        Total: fichas {montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0), true)} · cuenta corriente {montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.cuentaCorriente), 0), true)}
+                        Total: {esWinLose(seleccionado) ? null : <>fichas {montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.fichasTiempoReal), 0), true)} · </>}cuenta corriente {montoSignoSup(saldosPorAgente.reduce((s, a) => s + Number(a.cuentaCorriente), 0), true)}
                       </div>
                     </div>
                   </>
@@ -566,10 +583,9 @@ export default function Supervisores() {
               <>
                 <h4 style={{ margin: "0 0 4px" }}>Cierre semanal de agentes a cargo</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se
-                  suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio
-                  del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se
-                  puede aplicar una sola vez por semana.
+                  {esWinLose(seleccionado)
+                    ? "Trae el cierre semanal ya cargado de cada agente a cargo: el cierre COMPLETO (resultado de mesas + rakeback + rebate) se suma a Cuenta corriente -- este supervisor es Win/Lose y no tiene fichas reales. El saldo propio del agente no se toca, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."
+                    : "Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."}
                 </div>
                 {!semanasCierre ? (
                   <Loading />
@@ -633,8 +649,19 @@ export default function Supervisores() {
                             <thead>
                               <tr>
                                 <th>Agente a cargo</th>
-                                <th className="num">Fichas ganadas en la semana</th>
-                                <th className="num">Rakeback generado en la semana</th>
+                                {esWinLose(seleccionado) ? (
+                                  <>
+                                    <th className="num">Resultado de mesas</th>
+                                    <th className="num">Rakeback</th>
+                                    <th className="num">Rebate y otros</th>
+                                    <th className="num">Total</th>
+                                  </>
+                                ) : (
+                                  <>
+                                    <th className="num">Fichas ganadas en la semana</th>
+                                    <th className="num">Rakeback generado en la semana</th>
+                                  </>
+                                )}
                               </tr>
                             </thead>
                             <tbody>
@@ -656,17 +683,23 @@ export default function Supervisores() {
                                       <td><div className="saldo-name"><span style={{ color: "var(--text-faint)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>{l.agent_name}</div></td>
                                       <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{montoSignoSup(Number(l.result), true)}</td>
                                       <td className="num">{usd(Number(l.rakeback))}</td>
+                                      {esWinLose(seleccionado) && (
+                                        <>
+                                          <td className="num">{montoSignoSup(Number(l.total) - Number(l.result) - Number(l.rakeback), true)}</td>
+                                          <td className={`num ${Number(l.total) >= 0 ? "pos" : "neg"}`}><b>{montoSignoSup(Number(l.total), true)}</b></td>
+                                        </>
+                                      )}
                                     </tr>
                                     {abierto && (
                                       <tr>
-                                        <td colSpan={3} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px" }}>
+                                        <td colSpan={esWinLose(seleccionado) ? 5 : 3} style={{ background: "var(--panel-2)", padding: "10px 16px 14px 36px" }}>
                                           {(l.detalle ?? []).length === 0 ? (
                                             <div className="saldo-sub">Sin cierres cargados para este agente en esta semana.</div>
                                           ) : (
                                             <div style={{ overflowX: "auto" }}>
                                               <table style={{ margin: 0 }}>
                                                 <thead>
-                                                  <tr><th>Club</th><th>Sistema</th><th className="num">Jugadores</th><th className="num">Resultado de mesas</th><th className="num">Rake generado</th><th className="num">% rakeback</th><th className="num">Rakeback</th></tr>
+                                                  <tr><th>Club</th><th>Sistema</th><th className="num">Jugadores</th><th className="num">Resultado de mesas</th><th className="num">Rake generado</th><th className="num">% rakeback</th><th className="num">Rakeback</th>{esWinLose(seleccionado) && <><th className="num">Rebate</th><th className="num">Total</th></>}</tr>
                                                 </thead>
                                                 <tbody>
                                                   {l.detalle.map((d: any) => (
@@ -678,6 +711,12 @@ export default function Supervisores() {
                                                       <td className="num">{usd(Number(d.rake_total))}</td>
                                                       <td className="num muted">{Math.round(Number(d.rakeback_pct) * 10000) / 100}%</td>
                                                       <td className="num">{usd(Number(d.rakeback))}</td>
+                                                      {esWinLose(seleccionado) && (
+                                                        <>
+                                                          <td className="num">{usd(Number(d.rebate))}</td>
+                                                          <td className={`num ${Number(d.total) >= 0 ? "pos" : "neg"}`}><b>{montoSignoSup(Number(d.total), true)}</b></td>
+                                                        </>
+                                                      )}
                                                     </tr>
                                                   ))}
                                                 </tbody>
@@ -685,7 +724,11 @@ export default function Supervisores() {
                                             </div>
                                           )}
                                           <div className="saldo-sub" style={{ marginTop: 8 }}>
-                                            Se suma a la cuenta: fichas reales <b>{montoSignoSup(Number(l.result), true)}</b> · cuenta corriente <b>{montoSignoSup(Number(l.rakeback), true)}</b>
+                                            {esWinLose(seleccionado) ? (
+                                              <>Se suma a la cuenta corriente: <b>{montoSignoSup(Number(l.total), true)}</b></>
+                                            ) : (
+                                              <>Se suma a la cuenta: fichas reales <b>{montoSignoSup(Number(l.result), true)}</b> · cuenta corriente <b>{montoSignoSup(Number(l.rakeback), true)}</b></>
+                                            )}
                                           </div>
                                         </td>
                                       </tr>
@@ -699,6 +742,12 @@ export default function Supervisores() {
                                 <td>Total de la semana</td>
                                 <td className="num">{usd(cierreSemana.resultadoTotal)}</td>
                                 <td className="num">{usd(cierreSemana.rakebackTotal)}</td>
+                                {esWinLose(seleccionado) && (
+                                  <>
+                                    <td className="num">{montoSignoSup(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal) - Number(cierreSemana.rakebackTotal), true)}</td>
+                                    <td className="num">{montoSignoSup(Number(cierreSemana.totalCierre), true)}</td>
+                                  </>
+                                )}
                               </tr>
                             </tfoot>
                           </table>
@@ -1059,7 +1108,8 @@ function MovimientoForm({
   subordinados: any[];
   onDone: () => void;
 }) {
-  const [type, setType] = useState<"CARGA" | "DESCARGA" | "AJUSTE">("CARGA");
+  const winLose = supervisor?.default_system === "WIN_LOSE"; // Win/Lose: solo Ajuste de cuenta corriente (sin fichas)
+  const [type, setType] = useState<"CARGA" | "DESCARGA" | "AJUSTE">(winLose ? "AJUSTE" : "CARGA");
   const [clubId, setClubId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [amount, setAmount] = useState("");
@@ -1107,8 +1157,8 @@ function MovimientoForm({
         <div className="field">
           <label>Tipo</label>
           <select value={type} onChange={(e) => setType(e.target.value as any)}>
-            <option value="CARGA">Carga (fichas +, cuenta corriente −)</option>
-            <option value="DESCARGA">Descarga (resta primero de cuenta corriente, después de fichas)</option>
+            {!winLose && <option value="CARGA">Carga (fichas +, cuenta corriente −)</option>}
+            {!winLose && <option value="DESCARGA">Descarga (resta primero de cuenta corriente, después de fichas)</option>}
             <option value="AJUSTE">Ajuste manual</option>
           </select>
         </div>
@@ -1134,7 +1184,7 @@ function MovimientoForm({
             <label>Aplicar a</label>
             <select value={campoAjuste} onChange={(e) => setCampoAjuste(e.target.value as any)}>
               <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
-              <option value="FICHAS">Fichas reales</option>
+              {!winLose && <option value="FICHAS">Fichas reales</option>}
             </select>
           </div>
         )}

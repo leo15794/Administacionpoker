@@ -12,6 +12,17 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// Supervisor WIN/LOSE (20/10/2026, pedido de Leo: "creemos los supervisores Win/Lose separados", piloto: Agustin).
+// Se marca con el campo que ya existe "Sistema por defecto" (agents.default_system = 'WIN_LOSE'): no hace falta
+// ninguna columna nueva. A diferencia de un supervisor Prepago (fichas reales + cuenta corriente), uno Win/Lose
+// tiene UNA sola cuenta, la cuenta corriente: sus agentes juegan con fichas del club y nunca compraron nada, así
+// que el cierre COMPLETO de cada semana (resultado + rakeback + rebate + rodeo + ajuste, o sea weekly_closings.
+// final_closing -- el mismo número que hoy viaja al "pendiente" en Liquidaciones) va a cuenta corriente, y
+// fichas_reales no se usa. Se salda con Pagar/Cobrar en USDT. Sin Carga/Descarga.
+export function esSupervisorWinLose(sup: { default_system?: string | null } | null | undefined): boolean {
+  return sup?.default_system === "WIN_LOSE";
+}
+
 // Trae (con lock FOR UPDATE) la cuenta consolidada de un supervisor, creándola en 0/0 si es la
 // primera vez que se le registra algo (el alta "de verdad", con el saldo histórico migrado, la
 // hace migrarSaldoHistoricoSupervisor -- si ese paso corre antes de cualquier movimiento manual,
@@ -110,6 +121,14 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
   if (sup.rows[0].exigir_agente_en_movimientos && !input.agentId) {
     throw new Error("Este supervisor exige indicar el agente de origen del movimiento.");
+  }
+  if (esSupervisorWinLose(sup.rows[0])) {
+    if (input.type === "CARGA" || input.type === "DESCARGA") {
+      throw new Error("Un supervisor Win/Lose no maneja fichas: usá Pagar, Cobrar o un Ajuste de cuenta corriente.");
+    }
+    if (input.type === "AJUSTE" && input.campoAjuste !== "CUENTA_CORRIENTE") {
+      throw new Error("Un supervisor Win/Lose solo tiene cuenta corriente: el ajuste tiene que ser de cuenta corriente.");
+    }
   }
 
   let amount = 0;
@@ -316,7 +335,10 @@ export async function migrarSaldoHistoricoSupervisor(
 // migrarSaldoHistoricoUriel.ts: fichas = balance crudo + resultado acumulado de mesas PREPAGO;
 // pendiente = rakeback_pendiente activo (amount-consumed). NUNCA toca el balance del agente --
 // solo lo lee, para calcular cuánto mover del lado del pool de Uriel.
-async function calcularSaldoActualDeSubordinado(agentId: string): Promise<{ fichas: number; pendiente: number; clubId: string | null }> {
+async function calcularSaldoActualDeSubordinado(
+  agentId: string,
+  soloPendiente = false
+): Promise<{ fichas: number; pendiente: number; clubId: string | null }> {
   const bal = await pool.query(`SELECT club_id, amount FROM balances WHERE agent_id = $1 AND amount <> 0`, [agentId]);
   let balanceTotal = 0;
   let clubId: string | null = null;
@@ -328,7 +350,8 @@ async function calcularSaldoActualDeSubordinado(agentId: string): Promise<{ fich
     `SELECT COALESCE(SUM(result), 0) as total_mesas FROM weekly_closings WHERE agent_id = $1 AND system = 'PREPAGO' AND status <> 'REVERTIDO'`,
     [agentId]
   );
-  const fichas = round2(balanceTotal + Number(mesas.rows[0].total_mesas));
+  // soloPendiente (supervisor Win/Lose): las fichas del agente son operativas del club, no suyas -- no entran.
+  const fichas = soloPendiente ? 0 : round2(balanceTotal + Number(mesas.rows[0].total_mesas));
 
   const pend = await pool.query(
     `SELECT club_id, amount, consumed FROM rakeback_pendiente WHERE agent_id = $1 AND active = true AND ABS(amount - consumed) > 0.004`,
@@ -361,7 +384,7 @@ export async function setOcultoSubordinado(supervisorAgentId: string, agentId: s
     throw new Error(ocultar ? `"${ag.rows[0].name}" ya está oculto.` : `"${ag.rows[0].name}" ya está visible.`);
   }
 
-  const { fichas, pendiente, clubId } = await calcularSaldoActualDeSubordinado(agentId);
+  const { fichas, pendiente, clubId } = await calcularSaldoActualDeSubordinado(agentId, esSupervisorWinLose(sup.rows[0]));
   const signo = ocultar ? -1 : 1;
   const clubParaMovimiento = clubId ?? (await pool.query(`SELECT id FROM clubs ORDER BY name LIMIT 1`)).rows[0]?.id ?? null;
   if (!clubParaMovimiento) throw new Error("No hay ningún club cargado todavía -- no se puede registrar el ajuste.");
@@ -623,13 +646,20 @@ export async function getSemanasDisponiblesSupervisor(supervisorAgentId: string)
 }
 
 export async function getCierreSemanalSupervisor(supervisorAgentId: string, weekStart: string) {
-  const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
+  const sup = await pool.query(`SELECT name, default_system FROM agents WHERE id = $1`, [supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
+  const winLose = esSupervisorWinLose(sup.rows[0]);
 
+  // rebate / rodeo / total (20/10/2026, supervisor Win/Lose): el total de cada agente es su cierre COMPLETO
+  // (weekly_closings.final_closing = resultado + rakeback + rebate + rodeo + ajuste manual), que es lo que se suma
+  // a la cuenta corriente de un supervisor Win/Lose. En Prepago estas columnas son informativas.
   const lineas = await pool.query(
     `SELECT a.id as agent_id, a.name as agent_name,
             COALESCE(SUM(wc.result), 0) as result,
-            COALESCE(SUM(wc.rakeback), 0) as rakeback
+            COALESCE(SUM(wc.rakeback), 0) as rakeback,
+            COALESCE(SUM(wc.rebate), 0) as rebate,
+            COALESCE(SUM(wc.rodeo), 0) as rodeo,
+            COALESCE(SUM(wc.final_closing), 0) as total
      FROM agents a
      LEFT JOIN weekly_closings wc
        ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
@@ -642,7 +672,8 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
   // Desglose por club de cada agente (19/10/2026, pedido de Leo: que el supervisor pueda desplegar de dónde sale
   // el cierre de cada agente) -- una fila por weekly_closing real de esa semana, solo lectura, nunca recalcula nada.
   const detalle = await pool.query(
-    `SELECT wc.agent_id, c.name as club_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback
+    `SELECT wc.agent_id, c.name as club_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback,
+            wc.rebate, wc.rodeo, wc.final_closing
      FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
      JOIN clubs c ON c.id = wc.club_id
@@ -661,6 +692,9 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
       rake_total: Number(d.rake_total),
       rakeback_pct: Number(d.rakeback_pct),
       rakeback: Number(d.rakeback),
+      rebate: Number(d.rebate),
+      rodeo: Number(d.rodeo),
+      total: Number(d.final_closing),
     });
     detallePorAgente.set(d.agent_id, arr);
   }
@@ -672,11 +706,17 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
 
   const resultadoTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.result), 0));
   const rakebackTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.rakeback), 0));
+  const totalCierre = round2(lineas.rows.reduce((s, l) => s + Number(l.total), 0));
 
   return {
+    sistema: winLose ? "WIN_LOSE" : "PREPAGO",
     lineas: lineas.rows.map((l) => ({ ...l, detalle: detallePorAgente.get(l.agent_id) ?? [] })),
     resultadoTotal,
     rakebackTotal,
+    // Lo que de verdad se suma a la cuenta corriente al aplicar: en Win/Lose el cierre completo; en Prepago solo
+    // el rakeback (el resultado va a fichas reales).
+    totalCierre,
+    efectoCuentaCorriente: winLose ? totalCierre : rakebackTotal,
     aplicado: aplicado.rows[0] ?? null,
   };
 }
@@ -710,7 +750,7 @@ export async function aplicarCierreConsolidadoSupervisor(
 
     const lineasRes = await client.query(
       `SELECT wc.id as weekly_closing_id, wc.agent_id, wc.club_id,
-              wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate
+              wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate, wc.final_closing
        FROM weekly_closings wc
        JOIN agents a ON a.id = wc.agent_id
        WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'`,
@@ -725,11 +765,21 @@ export async function aplicarCierreConsolidadoSupervisor(
     const rakeTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rake_total), 0));
     const rebateTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rebate), 0));
 
+    // Supervisor WIN/LOSE (20/10/2026): el cierre COMPLETO de cada agente (final_closing) va a cuenta corriente y
+    // fichas_reales no se mueve. Para que revertir (que resta resultado_total de fichas y rakeback_total de cuenta
+    // corriente) y la vista "Origen del saldo" (que suma result a fichas y rakeback a cuenta corriente) sigan
+    // funcionando SIN tocarse, en Win/Lose se guarda: resultado_total/result = 0 y rakeback_total/rakeback = el cierre
+    // completo. El desglose real (resultado, rakeback, rebate) se sigue viendo uniendo con weekly_closing_origen_id.
+    const winLose = esSupervisorWinLose(sup.rows[0]);
+    const totalCierre = round2(lineasRes.rows.reduce((s, l) => s + Number(l.final_closing), 0));
+    const deltaFichas = winLose ? 0 : resultadoTotal;
+    const deltaCc = winLose ? totalCierre : rakebackTotal;
+
     const cuenta = await getCuentaParaUpdate(client, supervisorAgentId);
     const fichasAntes = Number(cuenta.fichas_reales);
     const ccAntes = Number(cuenta.cuenta_corriente);
-    const fichasDespues = round2(fichasAntes + resultadoTotal);
-    const ccDespues = round2(ccAntes + rakebackTotal);
+    const fichasDespues = round2(fichasAntes + deltaFichas);
+    const ccDespues = round2(ccAntes + deltaCc);
 
     const cierreId = newId("svcierre");
     await client.query(
@@ -738,7 +788,7 @@ export async function aplicarCierreConsolidadoSupervisor(
          fichas_reales_antes, cuenta_corriente_antes, fichas_reales_despues, cuenta_corriente_despues, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
-        cierreId, supervisorAgentId, weekStart, weekEnd, resultadoTotal, rakeTotal, rakebackTotal, rebateTotal,
+        cierreId, supervisorAgentId, weekStart, weekEnd, deltaFichas, rakeTotal, deltaCc, rebateTotal,
         fichasAntes, ccAntes, fichasDespues, ccDespues, createdBy ?? null,
       ]
     );
@@ -749,8 +799,8 @@ export async function aplicarCierreConsolidadoSupervisor(
           (id, cierre_id, agent_id, club_id, result, rake_total, rakeback_pct, rakeback, rebate_pct, rebate, weekly_closing_origen_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
-          newId("svcl"), cierreId, l.agent_id, l.club_id, l.result, l.rake_total, l.rakeback_pct, l.rakeback,
-          l.rebate_pct, l.rebate, l.weekly_closing_id,
+          newId("svcl"), cierreId, l.agent_id, l.club_id, winLose ? 0 : l.result, l.rake_total, l.rakeback_pct,
+          winLose ? l.final_closing : l.rakeback, l.rebate_pct, l.rebate, l.weekly_closing_id,
         ]
       );
     }
@@ -761,7 +811,7 @@ export async function aplicarCierreConsolidadoSupervisor(
     );
 
     await client.query("COMMIT");
-    return { cierreId, resultadoTotal, rakebackTotal, fichasAntes, ccAntes, fichasDespues, ccDespues };
+    return { cierreId, resultadoTotal: deltaFichas, rakebackTotal: deltaCc, totalCierre, winLose, fichasAntes, ccAntes, fichasDespues, ccDespues };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -884,11 +934,15 @@ export async function marcarSolicitudRetiroEnviada(
   if (solicitud.estado !== "PENDIENTE") throw new Error("Esta solicitud ya fue resuelta.");
   if (!input.paymentLink?.trim()) throw new Error("Falta el link de pago.");
 
+  // Supervisor Win/Lose (20/10/2026): no tiene fichas ni Descarga -- el retiro se asienta como un PAGO en USDT contra
+  // su cuenta corriente (sin club), igual que "Pagar" en Supervisores.
+  const supSol = await pool.query(`SELECT default_system FROM agents WHERE id = $1`, [solicitud.supervisor_agent_id]);
+  const esWL = esSupervisorWinLose(supSol.rows[0]);
   const movimiento = await registrarMovimientoSupervisor({
     supervisorAgentId: solicitud.supervisor_agent_id,
-    clubId: input.clubId,
+    clubId: esWL ? null : input.clubId,
     agentId: input.agentId ?? null,
-    type: "DESCARGA",
+    type: esWL ? "PAGO" : "DESCARGA",
     amount: Number(solicitud.amount),
     usdtReal: true,
     notes: solicitud.nota ? `Solicitud de retiro del supervisor — ${solicitud.nota}` : "Solicitud de retiro del supervisor.",

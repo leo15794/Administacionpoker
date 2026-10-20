@@ -8,6 +8,8 @@ import {
   getCierreSemanalSupervisor,
   crearSolicitudRetiroSupervisor,
   listSolicitudesRetiroSupervisor,
+  listSaldosPorAgenteSupervisor,
+  esSupervisorWinLose,
 } from "../repo/supervisores.js";
 import {
   listSaldosProveedores,
@@ -100,7 +102,7 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     // supervisores") -- el supervisor ve acá el mismo saldo (fichas_reales/cuenta_corriente)
     // que el admin ve en Administración -> Supervisores, siempre filtrado a su propia cuenta.
     const agent = await pool.query(
-      `SELECT a.id, a.name, a.account_type, a.usa_cuenta_consolidada, a.consolidar_cierres,
+      `SELECT a.id, a.name, a.account_type, a.usa_cuenta_consolidada, a.consolidar_cierres, a.default_system,
               COALESCE(bal.saldo_balance,0) + COALESCE(mesas.total_mesas,0) as saldo_total,
               COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente
        FROM agents a
@@ -132,6 +134,13 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
        ORDER BY a.name`,
       [supervisor.name]
     );
+    // Supervisor Win/Lose con cuenta consolidada (20/10/2026): el saldo de cada agente que se muestra es lo que ese
+    // agente aporta a la cuenta corriente del supervisor (su parte del pozo), no su balance de fichas -- en Win/Lose
+    // las fichas son operativas del club y se ignoran. Mismo cálculo que "Origen del saldo" en el admin.
+    if (supervisor.usa_cuenta_consolidada && esSupervisorWinLose(supervisor)) {
+      const porAgente = new Map((await listSaldosPorAgenteSupervisor(supervisor.id)).map((f) => [f.agentId, f.cuentaCorriente]));
+      for (const a of agentesACargo.rows) a.saldo_total = porAgente.get(a.id) ?? 0;
+    }
     const rakebackAcreditado = await pool.query(
       `SELECT COALESCE(SUM(rebate), 0) as total FROM weekly_closings
        WHERE supervisor_agent_id = $1 AND status <> 'REVERTIDO'`,

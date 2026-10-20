@@ -84,6 +84,9 @@ export default function MiSupervision() {
 
   const sup = data.supervisor;
   const consolidada = !!sup.usa_cuenta_consolidada;
+  // Supervisor Win/Lose (20/10/2026, mockup aprobado): una sola cuenta, la cuenta corriente -- sin fichas reales. El
+  // cierre completo de cada semana se suma ahí y se salda con cobros y pagos en USDT.
+  const winLose = consolidada && sup.default_system === "WIN_LOSE";
   const fichasReales = Number(sup.fichas_reales);
   const cuentaCorriente = Number(sup.cuenta_corriente);
   const saldoPrincipal = consolidada ? fichasReales + cuentaCorriente : Number(sup.saldo_total);
@@ -105,8 +108,8 @@ export default function MiSupervision() {
   const tabActual: Tab = tabs.some((t) => t.key === tab) ? tab : "agentes";
 
   const minis = [
-    <PortalMini key="a" label="Agentes a cargo" value={String(data.agentes.length)} sub={`saldo del grupo ${montoSigno(totalGrupo)}`} />,
-    <PortalMini key="r" label="Rakeback centralizado" value={usdCents(data.rakeback_centralizado_acreditado)} sub="acreditado" />,
+    <PortalMini key="a" label="Agentes a cargo" value={String(data.agentes.length)} sub={winLose ? "Win/Lose" : `saldo del grupo ${montoSigno(totalGrupo)}`} />,
+    ...(winLose ? [] : [<PortalMini key="r" label="Rakeback centralizado" value={usdCents(data.rakeback_centralizado_acreditado)} sub="acreditado" />]),
     ...(hayReferidos ? [<PortalMini key="c" label="Comisión por referido" value={usdCents(data.saldo_referidos_total ?? 0)} sub="acumulada" />] : []),
   ];
 
@@ -137,9 +140,9 @@ export default function MiSupervision() {
   const cierrePane = consolidada && (
     <PortalPane activa={tabActual === "cierre"} titulo="Cierre semanal de agentes a cargo">
       <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-        Cada semana, las fichas ganadas en mesas de tus agentes a cargo se suman a Fichas reales, y el rakeback que generan se suma a
-        Cuenta corriente -- el saldo propio de cada agente sigue acumulando igual que siempre, esto es solo el espejo de tu cuenta.
-        Tocá un agente para ver el desglose por club.
+        {winLose
+          ? "Cada semana, el cierre completo de tus agentes (resultado de mesas + rakeback + rebate) se suma a tu cuenta corriente. Positivo: te debemos. Negativo: tu grupo nos debe. Tocá un agente para ver el desglose por club."
+          : "Cada semana, las fichas ganadas en mesas de tus agentes a cargo se suman a Fichas reales, y el rakeback que generan se suma a Cuenta corriente -- el saldo propio de cada agente sigue acumulando igual que siempre, esto es solo el espejo de tu cuenta. Tocá un agente para ver el desglose por club."}
       </div>
       {!semanasCierre ? (
         <Loading />
@@ -207,20 +210,51 @@ export default function MiSupervision() {
             <Loading />
           ) : (
             <>
+              {winLose && (
+                <div className="stat-row" style={{ marginBottom: 12 }}>
+                  <div className="stat-card">
+                    <div className="l">Cierre de la semana</div>
+                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.totalCierre)) }}>{montoSigno(Number(cierreSemana.totalCierre))}</div>
+                    <div className="s">{cierreSemana.aplicado ? "aplicado a tu cuenta" : "todavía no aplicado"}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="l">Resultado de mesas</div>
+                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.resultadoTotal)) }}>{montoSigno(Number(cierreSemana.resultadoTotal))}</div>
+                    <div className="s">de tus agentes</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="l">Rakeback y rebate</div>
+                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal)) }}>
+                      {montoSigno(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal))}
+                    </div>
+                    <div className="s">a favor del grupo</div>
+                  </div>
+                </div>
+              )}
               {lineasCierre.map((l: any) => {
                 const abierto = agentesAbiertos.has(l.agent_id);
                 const resultado = Number(l.result);
+                const monto = winLose ? Number(l.total) : resultado;
                 const detalle: any[] = l.detalle ?? [];
                 return (
-                  <div key={l.agent_id} className={`pt-card${resultado < 0 ? " ng" : ""}`} style={{ cursor: "pointer" }} onClick={() => toggleAgenteCierre(l.agent_id)}>
+                  <div key={l.agent_id} className={`pt-card${monto < 0 ? " ng" : ""}`} style={{ cursor: "pointer" }} onClick={() => toggleAgenteCierre(l.agent_id)}>
                     <div className="b">
                       <div className="t1">
                         <span className="n"><span style={{ color: "var(--text-faint)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>{l.agent_name}</span>
-                        <span className="amt" style={{ color: colorSigno(resultado) }}>{montoSigno(resultado)}</span>
+                        <span className="amt" style={{ color: colorSigno(monto) }}>{montoSigno(monto)}</span>
                       </div>
                       <div className="t2">
-                        <span>Fichas ganadas en la semana</span>
-                        <span>Rakeback {usdCents(Number(l.rakeback))}</span>
+                        {winLose ? (
+                          <>
+                            <span>Resultado {montoSigno(resultado)}</span>
+                            <span>Rakeback {usdCents(Number(l.rakeback))}{Math.abs(Number(l.rebate)) > 0.004 ? ` · rebate ${montoSigno(Number(l.rebate))}` : ""}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Fichas ganadas en la semana</span>
+                            <span>Rakeback {usdCents(Number(l.rakeback))}</span>
+                          </>
+                        )}
                       </div>
                       {abierto &&
                         (detalle.length === 0 ? (
@@ -240,9 +274,16 @@ export default function MiSupervision() {
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rake generado</div><b>{usdCents(Number(d.rake_total))}</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>% de rakeback</div><b>{Math.round(Number(d.rakeback_pct) * 10000) / 100}%</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rakeback</div><b>{usdCents(Number(d.rakeback))}</b></div>
+                                {winLose && Math.abs(Number(d.rebate)) > 0.004 && (
+                                  <div><div className="saldo-sub" style={{ margin: 0 }}>Rebate</div><b style={{ color: colorSigno(Number(d.rebate)) }}>{montoSigno(Number(d.rebate))}</b></div>
+                                )}
                               </div>
                               <div className="saldo-sub" style={{ marginTop: 8 }}>
-                                Se suma a tu cuenta: fichas reales <b>{montoSigno(Number(d.result))}</b> · cuenta corriente <b>{usdCents(Number(d.rakeback))}</b>
+                                {winLose ? (
+                                  <>Se suma a tu cuenta corriente: <b style={{ color: colorSigno(Number(d.total)) }}>{montoSigno(Number(d.total))}</b></>
+                                ) : (
+                                  <>Se suma a tu cuenta: fichas reales <b>{montoSigno(Number(d.result))}</b> · cuenta corriente <b>{usdCents(Number(d.rakeback))}</b></>
+                                )}
                               </div>
                             </div>
                           ))
@@ -253,7 +294,11 @@ export default function MiSupervision() {
               })}
               <div className="sumrow" style={{ fontWeight: 700 }}>
                 <span>Total de la semana</span>
-                <b>{montoSigno(Number(cierreSemana.resultadoTotal))} · rakeback {usdCents(Number(cierreSemana.rakebackTotal))}</b>
+                <b>
+                  {winLose
+                    ? montoSigno(Number(cierreSemana.totalCierre))
+                    : `${montoSigno(Number(cierreSemana.resultadoTotal))} · rakeback ${usdCents(Number(cierreSemana.rakebackTotal))}`}
+                </b>
               </div>
             </>
           )}
@@ -278,7 +323,7 @@ export default function MiSupervision() {
           </span>
           {vistaActual === "cuenta" && (
             <span className="saldo-sub" style={{ margin: 0 }}>
-              Saldo actual: fichas reales <b>{numCuenta(fichasReales)}</b> · cuenta corriente <b style={{ color: colorSigno(cuentaCorriente) }}>{numCuenta(cuentaCorriente)}</b>
+              Saldo actual: {winLose ? null : <>fichas reales <b>{numCuenta(fichasReales)}</b> · </>}cuenta corriente <b style={{ color: colorSigno(cuentaCorriente) }}>{numCuenta(cuentaCorriente)}</b>
             </span>
           )}
         </div>
@@ -287,8 +332,9 @@ export default function MiSupervision() {
       {vistaActual === "cuenta" ? (
         <>
           <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-            Lo que se cargó, descargó, ajustó, pagó o cobró en tu cuenta consolidada, con cómo quedaron tus fichas reales y tu cuenta corriente
-            después de cada movimiento. Los revertidos no se muestran.
+            {winLose
+              ? "Lo que se pagó, cobró o ajustó en tu cuenta corriente, con cómo quedó después de cada movimiento. Los revertidos no se muestran."
+              : "Lo que se cargó, descargó, ajustó, pagó o cobró en tu cuenta consolidada, con cómo quedaron tus fichas reales y tu cuenta corriente después de cada movimiento. Los revertidos no se muestran."}
           </div>
           {movimientosCuenta.length === 0 ? (
             <div className="muted">Todavía no hay movimientos en tu cuenta.</div>
@@ -302,7 +348,11 @@ export default function MiSupervision() {
                     type={m.type}
                     titulo={`${tipoVisual(m.type).label}${m.agent_name ? ` · ${m.agent_name}` : ""}`}
                     detalle={`${m.club_name ?? "Sin club"} · ${dateShort(m.occurred_at)}`}
-                    detalle2={`Fichas reales: ${efecto(Number(m.fichas_reales_delta), Number(m.saldo_nuevo_fichas))} · Cuenta corriente: ${efecto(Number(m.cuenta_corriente_delta), Number(m.saldo_nuevo_cc))}`}
+                    detalle2={
+                      winLose
+                        ? `Cuenta corriente: ${efecto(Number(m.cuenta_corriente_delta), Number(m.saldo_nuevo_cc))}`
+                        : `Fichas reales: ${efecto(Number(m.fichas_reales_delta), Number(m.saldo_nuevo_fichas))} · Cuenta corriente: ${efecto(Number(m.cuenta_corriente_delta), Number(m.saldo_nuevo_cc))}`
+                    }
                     monto={saliente ? -Math.abs(Number(m.amount)) : Number(m.amount)}
                     obs={m.notes}
                   />
@@ -380,11 +430,17 @@ export default function MiSupervision() {
       <PortalTop
         hero={
           <PortalHero
-            label={consolidada ? "Saldo de tu cuenta consolidada" : "Saldo propio"}
-            amount={montoSigno(saldoPrincipal)}
-            color={colorSigno(saldoPrincipal)}
+            label={
+              winLose
+                ? cuentaCorriente < -0.004 ? "Tu grupo nos debe" : cuentaCorriente > 0.004 ? "Te debemos" : "Tu cuenta está al día"
+                : consolidada ? "Saldo de tu cuenta consolidada" : "Saldo propio"
+            }
+            amount={montoSigno(winLose ? cuentaCorriente : saldoPrincipal)}
+            color={colorSigno(winLose ? cuentaCorriente : saldoPrincipal)}
             foot={
-              consolidada ? (
+              winLose ? (
+                <span>Cuenta corriente · se salda con cobros y pagos en USDT</span>
+              ) : consolidada ? (
                 <>
                   <span>Fichas reales {montoSigno(fichasReales)}</span>
                   <span>Cuenta corriente {montoSigno(cuentaCorriente)}</span>
