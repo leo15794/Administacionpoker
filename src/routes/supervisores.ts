@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import {
   listSupervisoresConsolidados,
   listCuentasAgentes,
+  datosPdfCuentasAgentes,
   listAgentesSinCuenta,
   activarCuentaAgente,
   getSupervisorConCuenta,
@@ -37,6 +38,14 @@ supervisoresRouter.get("/", requireAuth, requireAdmin, async (req, res) => {
 // Van antes de "/:id" para que "cuentas-agentes" no se tome como un id.
 supervisoresRouter.get("/cuentas-agentes", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listCuentasAgentes());
+});
+supervisoresRouter.get("/cuentas-agentes/pdf-datos", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const week = typeof req.query.week === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.week) ? req.query.week : null;
+    res.json(await datosPdfCuentasAgentes(week));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 supervisoresRouter.get("/cuentas-agentes/sin-cuenta", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listAgentesSinCuenta());

@@ -107,6 +107,70 @@ export async function listCuentasAgentes() {
   return r.rows;
 }
 
+// Datos para bajar los PDFs de las cuentas de agentes (cierre semanal, estado de cuenta o todo junto) -- el PDF se arma
+// en el navegador (jsPDF) con esto. Una entrada por cuenta de agente con: saldo, fichas por club, el cierre de la semana
+// elegida con sus descuentos, y los últimos movimientos aplicados. Solo lectura.
+export async function datosPdfCuentasAgentes(weekStart?: string | null) {
+  const cuentas = await listCuentasAgentes();
+  const semanasMap = new Map<string, { week_start: string; week_end: string }>();
+  for (const c of cuentas) {
+    for (const s of await getSemanasDisponiblesSupervisor(c.id)) {
+      const ws = String(s.week_start).slice(0, 10);
+      if (!semanasMap.has(ws)) semanasMap.set(ws, { week_start: ws, week_end: String(s.week_end).slice(0, 10) });
+    }
+  }
+  const semanas = [...semanasMap.values()].sort((a, b) => b.week_start.localeCompare(a.week_start));
+  const semana = weekStart ?? semanas[0]?.week_start ?? null;
+  const semanaFin = semanas.find((s) => s.week_start === semana)?.week_end ?? null;
+
+  const out = [];
+  for (const c of cuentas) {
+    const winLose = esSupervisorWinLose(c);
+    const saldos = await listSaldosPorAgenteSupervisor(c.id);
+    const mio = saldos.find((x) => x.agentId === c.id);
+    const movs = (await listMovimientosSupervisor(c.id)).filter((m: any) => m.status === "APLICADO").slice(0, 40);
+    let cierre: any = null;
+    let descuentos: any[] = [];
+    if (semana) {
+      const ci = await getCierreSemanalSupervisor(c.id, semana);
+      const linea = ci.lineas.find((l: any) => l.agent_id === c.id);
+      cierre = {
+        filas: linea?.detalle ?? [],
+        total: round2(Number(linea?.total ?? 0)),
+        resultado: round2(Number(linea?.result ?? 0)),
+        rakeback: round2(Number(linea?.rakeback ?? 0)),
+        aplicado: !!ci.aplicado,
+        yaIncluidoEnSaldo: (ci.agentesYaIncluidosEnSaldo ?? []).includes(c.name),
+      };
+      descuentos = movs
+        .filter((m: any) => m.type === "DESCUENTO" && m.semana && String(m.semana).slice(0, 10) === semana)
+        .map((m: any) => ({ concepto: m.concepto, amount: Number(m.amount), notes: m.notes }));
+    }
+    out.push({
+      agentId: c.id,
+      name: c.name,
+      sistema: winLose ? "WIN_LOSE" : "PREPAGO",
+      fichas: Number(c.fichas_reales),
+      cuentaCorriente: Number(c.cuenta_corriente),
+      porClub: (mio?.detallePorClub ?? []).map((d) => ({ club: d.clubName, balance: d.balance, mesas: d.mesas, fichas: d.fichas })),
+      cierre,
+      descuentos,
+      movimientos: movs.map((m: any) => ({
+        fecha: m.occurred_at,
+        type: m.type,
+        club: m.club_name,
+        amount: Number(m.amount),
+        fichasDelta: Number(m.fichas_reales_delta),
+        ccDelta: Number(m.cuenta_corriente_delta),
+        concepto: m.concepto,
+        notes: m.notes,
+        usdtReal: !!m.usdt_real,
+      })),
+    });
+  }
+  return { semana, semanaFin, semanas, cuentas: out };
+}
+
 // Agentes individuales que todavía no tienen cuenta y se pueden activar (activos, sin supervisor, sin nadie a cargo).
 export async function listAgentesSinCuenta() {
   const r = await pool.query(

@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
+import { generarPdfCuentasAgentes, type ContenidoPdf, type FormatoPdf } from "../pdfCuentasAgentes";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -29,6 +30,8 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   const [supervisores, setSupervisores] = useState<any[] | null>(null);
   const [showActivar, setShowActivar] = useState(false);
   const [showDescuento, setShowDescuento] = useState(false);
+  // Descargar PDF (sección Agentes): null = cerrado; "todos" = de todas las cuentas; un id = de esa cuenta.
+  const [pdfPara, setPdfPara] = useState<string | null>(null);
   // Tipo con el que se abre el formulario de movimiento (botones Cargar / Descargar / + Ajuste de la cuenta de un agente).
   const [movTipoInicial, setMovTipoInicial] = useState<"CARGA" | "DESCARGA" | "AJUSTE" | null>(null);
   const [clubes, setClubes] = useState<any[]>([]);
@@ -307,7 +310,12 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               : "Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio."}
           </div>
         </div>
-        {agentesModo && <button className="btn" onClick={() => setShowActivar(true)}>+ Activar cuenta de un agente</button>}
+        {agentesModo && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn secondary" onClick={() => setPdfPara("todos")}>Descargar PDF</button>
+            <button className="btn" onClick={() => setShowActivar(true)}>+ Activar cuenta de un agente</button>
+          </div>
+        )}
         {!agentesModo && solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
       </div>
 
@@ -543,6 +551,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                   </>
                 )}
                 {agentesModo && <button className="btn secondary" onClick={() => setShowDescuento(true)}>+ Descuento</button>}
+                {agentesModo && <button className="btn secondary" onClick={() => setPdfPara(seleccionado.id)}>PDF</button>}
                 <button className="btn secondary" onClick={() => { setMovTipoInicial(agentesModo ? "AJUSTE" : null); setShowMovimiento(true); }}>
                   {esWinLose(seleccionado) || agentesModo ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}
                 </button>
@@ -1129,6 +1138,12 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
         </Modal>
       )}
 
+      {pdfPara && (
+        <Modal title={pdfPara === "todos" ? "Descargar PDF — agentes" : `Descargar PDF — ${seleccionado?.name ?? ""}`} onClose={() => setPdfPara(null)}>
+          <DescargarPdfForm soloId={pdfPara === "todos" ? null : pdfPara} onClose={() => setPdfPara(null)} />
+        </Modal>
+      )}
+
       {showActivar && (
         <Modal title="Activar cuenta de un agente" onClose={() => setShowActivar(false)}>
           <ActivarCuentaForm
@@ -1336,6 +1351,114 @@ function PagoCobroForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// Descargar PDF de las cuentas de agentes (sección Agentes, 20/10/2026, pedido de Leo): se elige qué baja (cierre
+// semanal, estado de cuenta o todo junto), de qué semana, de qué agentes y si va todo en un solo PDF o uno por agente.
+function DescargarPdfForm({ soloId, onClose }: { soloId: string | null; onClose: () => void }) {
+  const [datos, setDatos] = useState<any | null>(null);
+  const [semana, setSemana] = useState("");
+  const [contenido, setContenido] = useState<ContenidoPdf>("TODO");
+  const [formato, setFormato] = useState<FormatoPdf>(soloId ? "UNO" : "UNO");
+  const [elegidos, setElegidos] = useState<Record<string, boolean> | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    setDatos(null);
+    api.pdfDatosCuentasAgentes(semana || undefined)
+      .then((d: any) => {
+        if (!vivo) return;
+        setDatos(d);
+        if (!semana && d.semana) setSemana(d.semana);
+        setElegidos((prev) => prev ?? Object.fromEntries(d.cuentas.map((c: any) => [c.agentId, soloId ? c.agentId === soloId : true])));
+      })
+      .catch((e: any) => vivo && setMsg({ ok: false, text: e.message || "No se pudieron cargar los datos." }));
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semana]);
+
+  if (!datos || !elegidos) return msg ? <div className="error">{msg.text}</div> : <Loading />;
+
+  const lista = datos.cuentas.filter((c: any) => !soloId || c.agentId === soloId);
+  const sel = lista.filter((c: any) => elegidos[c.agentId]);
+  const necesitaSemana = contenido !== "ESTADO";
+
+  async function descargar() {
+    setMsg(null);
+    setLoading(true);
+    try {
+      const n = await generarPdfCuentasAgentes(sel, datos.semana ?? semana, datos.semanaFin ?? semana, contenido, formato);
+      setMsg({ ok: true, text: n === 1 ? "PDF generado." : `${n} PDFs generados.` });
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo generar el PDF." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const opcion = (v: ContenidoPdf, t: string, d: string) => (
+    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0", cursor: "pointer" }}>
+      <input type="radio" name="contenidoPdf" checked={contenido === v} onChange={() => setContenido(v)} style={{ marginTop: 3 }} />
+      <span><b>{t}</b><div className="muted" style={{ fontSize: 12 }}>{d}</div></span>
+    </label>
+  );
+
+  return (
+    <div>
+      <div className="field">
+        <label>Qué descargar</label>
+        {opcion("CIERRE", "Cierre semanal", "Valores del cierre por club, descuentos y efecto en la cuenta.")}
+        {opcion("ESTADO", "Estado de cuenta", "Saldo actual, fichas por club y últimos movimientos.")}
+        {opcion("TODO", "Todo junto", "El cierre de la semana y el estado de cuenta en el mismo PDF.")}
+      </div>
+      {necesitaSemana && (
+        <div className="field">
+          <label>Semana del cierre</label>
+          <select value={semana} onChange={(e) => setSemana(e.target.value)}>
+            {datos.semanas.map((w: any) => (
+              <option key={w.week_start} value={w.week_start}>{dateShort(w.week_start)} al {dateShort(w.week_end)}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {!soloId && (
+        <>
+          <div className="field">
+            <label>
+              Agentes ({sel.length} de {lista.length}){" "}
+              <a style={{ cursor: "pointer", fontSize: 12, color: "var(--accent)" }} onClick={() => setElegidos(Object.fromEntries(lista.map((c: any) => [c.agentId, sel.length !== lista.length])))}>
+                {sel.length === lista.length ? "Ninguno" : "Todos"}
+              </a>
+            </label>
+            <div style={{ display: "grid", gap: 4, maxHeight: 200, overflowY: "auto" }}>
+              {lista.map((c: any) => (
+                <label key={c.agentId} style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!elegidos[c.agentId]} onChange={(e) => setElegidos({ ...elegidos, [c.agentId]: e.target.checked })} />
+                  {c.name} <span className="muted" style={{ fontSize: 12 }}>· {c.sistema === "WIN_LOSE" ? "Win/Lose" : "Prepago"}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>Formato</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className={`chip ${formato === "UNO" ? "chip-active" : ""}`} onClick={() => setFormato("UNO")}>Un solo PDF con todos</button>
+              <button type="button" className={`chip ${formato === "POR_AGENTE" ? "chip-active" : ""}`} onClick={() => setFormato("POR_AGENTE")}>Un PDF por agente</button>
+            </div>
+          </div>
+        </>
+      )}
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onClose}>Cerrar</button>
+        <button className="btn" disabled={loading || sel.length === 0} onClick={descargar}>{loading ? "Generando..." : "Descargar PDF"}</button>
+      </div>
+    </div>
   );
 }
 

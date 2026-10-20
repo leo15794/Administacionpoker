@@ -398,6 +398,7 @@ export const api = {
   // Sección "Agentes" (20/10/2026): cuentas de agentes individuales (mismo motor que las de supervisores).
   cuentasAgentes: () => request("/supervisores/cuentas-agentes"),
   agentesSinCuenta: () => request("/supervisores/cuentas-agentes/sin-cuenta"),
+  pdfDatosCuentasAgentes: (week?: string) => request(`/supervisores/cuentas-agentes/pdf-datos${week ? `?week=${week}` : ""}`),
   activarCuentaAgente: (agentId: string) => request(`/supervisores/cuentas-agentes/${agentId}/activar`, { method: "POST" }),
   supervisorConsolidado: (supervisorId: string) => request(`/supervisores/${supervisorId}`),
   subordinadosSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/subordinados`),
