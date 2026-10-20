@@ -1014,7 +1014,7 @@ CREATE TABLE IF NOT EXISTS agent_user_agents (
 -- Backfill idempotente: todo usuario que ya existía queda con su único agente de siempre
 -- también acá — cero cambio de comportamiento hasta que un admin le agregue más desde Usuarios.
 INSERT INTO agent_user_agents (user_id, agent_id)
-  SELECT id, agent_id FROM agent_users
+  SELECT id, agent_id FROM agent_users WHERE agent_id IS NOT NULL
   ON CONFLICT DO NOTHING;
 
 -- Rol SUPERVISOR (16/09/2026): un login de portal que, en vez de "Mi cuenta" de un solo agente,
