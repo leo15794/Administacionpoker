@@ -120,6 +120,27 @@ export async function listAgentesSinCuenta() {
   return r.rows;
 }
 
+// Espejo de fichas en balances (cuenta de agente individual Prepago, 20/10/2026): la cuenta es donde se opera, pero
+// balances sigue siendo lo que leen Resumen por club y los KPIs, así que cada Carga/Descarga/Ajuste de fichas suma o
+// resta también ahí (misma fila agente+club que usa el ledger de siempre). Nunca crea un movimiento en ledger_movements.
+async function espejarFichasEnBalance(client: PoolClient, agentId: string, clubId: string, delta: number) {
+  await client.query(
+    `INSERT INTO balances (id, agent_id, club_id, amount, updated_at)
+     VALUES ($1,$2,$3,$4, now())
+     ON CONFLICT (agent_id, club_id)
+     DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = now()`,
+    [newId("bal"), agentId, clubId, delta]
+  );
+}
+
+// ¿Este agente tiene cuenta propia en la sección Agentes? Se usa para bloquear "Cargar movimiento" (se carga desde su cuenta).
+export async function agenteTieneCuentaPropia(agentId: string): Promise<{ tiene: boolean; name: string | null }> {
+  const a = await pool.query(`SELECT name, usa_cuenta_consolidada FROM agents WHERE id = $1`, [agentId]);
+  if (!a.rows[0] || !a.rows[0].usa_cuenta_consolidada) return { tiene: false, name: a.rows[0]?.name ?? null };
+  const cuenta = await agentesDeLaCuenta(agentId);
+  return { tiene: !!cuenta?.individual, name: a.rows[0].name };
+}
+
 // Activa la cuenta de un agente individual (sección "Agentes"). No mueve plata ni toca sus balances/cierres: solo lo
 // marca para que su cuenta exista; el saldo inicial se trae después con "Importar saldo".
 export async function activarCuentaAgente(agentId: string) {
@@ -296,6 +317,11 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
       `UPDATE supervisor_cuentas SET fichas_reales = $1, cuenta_corriente = $2, updated_at = now() WHERE id = $3`,
       [fichasNuevo, ccNuevo, cuenta.id]
     );
+    // Cuenta de agente individual: las fichas por club se reflejan también en su balance de siempre, así Resumen por club
+    // y el resto de los reportes que leen balances siguen mostrando lo mismo.
+    if (individual && input.clubId && fichasDelta !== 0) {
+      await espejarFichasEnBalance(client, input.supervisorAgentId, input.clubId, fichasDelta);
+    }
     await client.query("COMMIT");
     return { id, fichasAnterior, ccAnterior, fichasNuevo, ccNuevo, treasuryAdjustmentId };
   } catch (err) {
@@ -342,6 +368,11 @@ export async function revertirMovimientoSupervisor(movimientoId: string) {
       [fichasNuevo, ccNuevo, cuenta.id]
     );
     await client.query(`UPDATE supervisor_movimientos SET status = 'REVERTIDO' WHERE id = $1`, [movimientoId]);
+    // Deshace el espejo en el balance del agente (ver registrarMovimientoSupervisor) si era una cuenta de agente individual.
+    const cuentaMov = await agentesDeLaCuenta(mov.supervisor_agent_id);
+    if (cuentaMov?.individual && mov.club_id && Number(mov.fichas_reales_delta) !== 0) {
+      await espejarFichasEnBalance(client, mov.supervisor_agent_id, mov.club_id, -Number(mov.fichas_reales_delta));
+    }
     await client.query("COMMIT");
     treasuryAdjustmentId = mov.treasury_adjustment_id ?? null;
     return { id: movimientoId, fichasNuevo, ccNuevo };
@@ -525,6 +556,10 @@ export interface SaldoPorClubAgente {
   clubId: string;
   clubName: string;
   fichas: number;
+  // fichas = balance (cargas y descargas) + mesas (resultado acumulado de mesas Prepago) -- se separan para la tabla
+  // "Fichas por club" de la cuenta de un agente (sección Agentes).
+  balance: number;
+  mesas: number;
   pendiente: number;
   saldo: number;
 }
@@ -625,7 +660,7 @@ export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): 
 // mesas PREPAGO, + rakeback pendiente activo con ABS(amount-consumed) > 0.004), pero agrupado por
 // (agente, club) en vez de sumado por agente -- NUNCA toca ni se mezcla con supervisor_cuentas.
 async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, SaldoPorClubAgente[]>> {
-  const resultado = new Map<string, Map<string, { clubName: string; fichas: number; pendiente: number }>>();
+  const resultado = new Map<string, Map<string, { clubName: string; fichas: number; balance: number; mesas: number; pendiente: number }>>();
   if (agentIds.length === 0) return new Map();
 
   const touch = (agentId: string, clubId: string, clubName: string) => {
@@ -634,7 +669,7 @@ async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, S
       porClub = new Map();
       resultado.set(agentId, porClub);
     }
-    if (!porClub.has(clubId)) porClub.set(clubId, { clubName, fichas: 0, pendiente: 0 });
+    if (!porClub.has(clubId)) porClub.set(clubId, { clubName, fichas: 0, balance: 0, mesas: 0, pendiente: 0 });
     return porClub.get(clubId)!;
   };
 
@@ -647,6 +682,7 @@ async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, S
   for (const r of balRes.rows) {
     const e = touch(r.agent_id, r.club_id, r.club_name);
     e.fichas = round2(e.fichas + Number(r.amount));
+    e.balance = round2(e.balance + Number(r.amount));
   }
 
   const mesasRes = await pool.query(
@@ -659,6 +695,7 @@ async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, S
   for (const r of mesasRes.rows) {
     const e = touch(r.agent_id, r.club_id, r.club_name);
     e.fichas = round2(e.fichas + Number(r.total));
+    e.mesas = round2(e.mesas + Number(r.total));
   }
 
   const pendRes = await pool.query(
@@ -679,7 +716,7 @@ async function calcularDetallePorClub(agentIds: string[]): Promise<Map<string, S
     const filas: SaldoPorClubAgente[] = [];
     for (const [clubId, v] of porClub) {
       if (Math.abs(v.fichas) <= 0.004 && Math.abs(v.pendiente) <= 0.004) continue;
-      filas.push({ clubId, clubName: v.clubName, fichas: v.fichas, pendiente: v.pendiente, saldo: round2(v.fichas + v.pendiente) });
+      filas.push({ clubId, clubName: v.clubName, fichas: v.fichas, balance: v.balance, mesas: v.mesas, pendiente: v.pendiente, saldo: round2(v.fichas + v.pendiente) });
     }
     filas.sort((a, b) => a.clubName.localeCompare(b.clubName));
     if (filas.length > 0) final.set(agentId, filas);

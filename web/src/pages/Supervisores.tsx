@@ -29,6 +29,8 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   const [supervisores, setSupervisores] = useState<any[] | null>(null);
   const [showActivar, setShowActivar] = useState(false);
   const [showDescuento, setShowDescuento] = useState(false);
+  // Tipo con el que se abre el formulario de movimiento (botones Cargar / Descargar / + Ajuste de la cuenta de un agente).
+  const [movTipoInicial, setMovTipoInicial] = useState<"CARGA" | "DESCARGA" | "AJUSTE" | null>(null);
   const [clubes, setClubes] = useState<any[]>([]);
   const [error, setError] = useState("");
   // Solicitudes de retiro/pago de los supervisores (16/10/2026, pedido de Leo: "al supervisor le
@@ -534,8 +536,16 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
                 <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
+                {agentesModo && !esWinLose(seleccionado) && (
+                  <>
+                    <button className="btn" onClick={() => { setMovTipoInicial("CARGA"); setShowMovimiento(true); }}>Cargar</button>
+                    <button className="btn" onClick={() => { setMovTipoInicial("DESCARGA"); setShowMovimiento(true); }}>Descargar</button>
+                  </>
+                )}
                 {agentesModo && <button className="btn secondary" onClick={() => setShowDescuento(true)}>+ Descuento</button>}
-                <button className="btn secondary" onClick={() => setShowMovimiento(true)}>{esWinLose(seleccionado) ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}</button>
+                <button className="btn secondary" onClick={() => { setMovTipoInicial(agentesModo ? "AJUSTE" : null); setShowMovimiento(true); }}>
+                  {esWinLose(seleccionado) || agentesModo ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}
+                </button>
                 <button className="btn secondary" onClick={() => setShowImportar(true)} title={agentesModo ? "Traer a esta cuenta el saldo que el agente tiene hoy" : "Traer a esta cuenta el saldo que ya tienen sus agentes"}>
                   {agentesModo ? "Importar saldo" : "Importar saldos"}{importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}
                 </button>
@@ -592,6 +602,53 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
             {tabDet === "resumen" && (
               <>
+                {agentesModo && !esWinLose(seleccionado) && (() => {
+                  const mio = saldosPorAgente?.find((x) => x.agentId === seleccionado.id);
+                  const clubesAg: any[] = mio?.detallePorClub ?? [];
+                  const totalClubes = Math.round(clubesAg.reduce((acc, c) => acc + Number(c.fichas), 0) * 100) / 100;
+                  const desfasado = Math.abs(totalClubes - Number(seleccionado.fichas_reales)) > 0.01;
+                  return (
+                    <>
+                      <h4 style={{ margin: "0 0 4px" }}>Fichas por club</h4>
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                        Lo que el agente tiene en cada club: cargas y descargas + resultado de mesas. Suman el total de Fichas reales de arriba.
+                      </div>
+                      {!saldosPorAgente ? <Loading /> : clubesAg.length === 0 ? (
+                        <div className="muted" style={{ marginBottom: 14 }}>Todavía no tiene fichas en ningún club.</div>
+                      ) : (
+                        <div className="ag-table-wrap" style={{ marginBottom: 14 }}>
+                          <table className="saldos-table">
+                            <thead><tr><th>Club</th><th className="num">Cargas y descargas</th><th className="num">Resultado de mesas</th><th className="num">Fichas en el club</th></tr></thead>
+                            <tbody>
+                              {clubesAg.map((c) => (
+                                <tr key={c.clubId} className={Number(c.fichas) > 0.004 ? "row-pos" : Number(c.fichas) < -0.004 ? "row-neg" : ""}>
+                                  <td><div className="saldo-name">{c.clubName}</div></td>
+                                  <td className="num money">{montoSignoSup(Number(c.balance), true)}</td>
+                                  <td className="num money">{montoSignoSup(Number(c.mesas), true)}</td>
+                                  <td className="num"><span className={`saldo-big ${Number(c.fichas) > 0.004 ? "pos" : Number(c.fichas) < -0.004 ? "neg" : "neutral"}`}>{montoSignoSup(Number(c.fichas), true)}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ fontWeight: 700 }}>
+                                <td>Total</td>
+                                <td className="num">{montoSignoSup(clubesAg.reduce((acc, c) => acc + Number(c.balance), 0), true)}</td>
+                                <td className="num">{montoSignoSup(clubesAg.reduce((acc, c) => acc + Number(c.mesas), 0), true)}</td>
+                                <td className="num">{montoSignoSup(totalClubes, true)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                      {saldosPorAgente && desfasado && (
+                        <div className="warnbox" style={{ marginBottom: 14 }}>
+                          El total por club ({montoSignoSup(totalClubes, true)}) no coincide con Fichas reales de la cuenta ({montoSignoSup(Number(seleccionado.fichas_reales), true)}).
+                          Si la cuenta es nueva, falta traer el saldo con "Importar saldo".
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Saldo de la cuenta" : esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"}</h4>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
                   {agentesModo
@@ -1126,6 +1183,9 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
             supervisor={seleccionado}
             clubes={clubes}
             subordinados={agentesModo ? [] : subordinados ?? []}
+            tipoInicial={movTipoInicial}
+            sinAgente={agentesModo}
+            fichasPorClub={agentesModo ? (saldosPorAgente?.find((x) => x.agentId === seleccionado.id)?.detallePorClub ?? []) : []}
             onDone={() => {
               setShowMovimiento(false);
               refrescarSeleccionado();
@@ -1555,30 +1615,41 @@ function MovimientoForm({
   supervisor,
   clubes,
   subordinados,
+  tipoInicial,
+  sinAgente,
+  fichasPorClub,
   onDone,
 }: {
   supervisor: any;
   clubes: any[];
   subordinados: any[];
+  tipoInicial?: "CARGA" | "DESCARGA" | "AJUSTE" | null;
+  sinAgente?: boolean;
+  fichasPorClub?: any[];
   onDone: () => void;
 }) {
   const winLose = supervisor?.default_system === "WIN_LOSE"; // Win/Lose: solo Ajuste de cuenta corriente (sin fichas)
-  const [type, setType] = useState<"CARGA" | "DESCARGA" | "AJUSTE">(winLose ? "AJUSTE" : "CARGA");
+  const [type, setType] = useState<"CARGA" | "DESCARGA" | "AJUSTE">(winLose ? "AJUSTE" : tipoInicial ?? "CARGA");
   const [clubId, setClubId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [amount, setAmount] = useState("");
   const [campoAjuste, setCampoAjuste] = useState<"FICHAS" | "CUENTA_CORRIENTE">("CUENTA_CORRIENTE");
-  const [usdtReal, setUsdtReal] = useState(false);
+  // Cuenta de agente: una Descarga casi siempre es un pago real en USDT, así que arranca tildado (se ve el efecto en Wallet abajo).
+  const [usdtReal, setUsdtReal] = useState(!!sinAgente && tipoInicial === "DESCARGA");
   const [notes, setNotes] = useState("");
   const [paymentLink, setPaymentLink] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const fichasClub = (id: string) => Number((fichasPorClub ?? []).find((c) => c.clubId === id)?.fichas ?? 0);
+  const fmtUsd = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const montoNum = Number(String(amount).replace(",", "."));
+  const montoOk = Number.isFinite(montoNum) && montoNum !== 0;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     if (!clubId) return setMsg({ ok: false, text: "El club es obligatorio." });
-    if (supervisor.exigir_agente_en_movimientos && !agentId) {
+    if (!sinAgente && supervisor.exigir_agente_en_movimientos && !agentId) {
       return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
     }
     const amountNum = Number(amount.replace(",", "."));
@@ -1611,8 +1682,8 @@ function MovimientoForm({
         <div className="field">
           <label>Tipo</label>
           <select value={type} onChange={(e) => setType(e.target.value as any)}>
-            {!winLose && <option value="CARGA">Carga (fichas +, cuenta corriente −)</option>}
-            {!winLose && <option value="DESCARGA">Descarga (resta primero de cuenta corriente, después de fichas)</option>}
+            {!winLose && <option value="CARGA">{sinAgente ? "Carga (fichas +)" : "Carga (fichas +, cuenta corriente −)"}</option>}
+            {!winLose && <option value="DESCARGA">{sinAgente ? "Descarga (fichas −)" : "Descarga (resta primero de cuenta corriente, después de fichas)"}</option>}
             <option value="AJUSTE">Ajuste manual</option>
           </select>
         </div>
@@ -1620,19 +1691,21 @@ function MovimientoForm({
           <label>Club</label>
           <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
             <option value="">Elegir...</option>
-            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}{sinAgente ? ` · ${fmtUsd(fichasClub(c.id))} en fichas` : ""}</option>)}
           </select>
         </div>
-        <div className="field">
-          <label>Agente {supervisor.exigir_agente_en_movimientos ? "" : "(opcional, informativo)"}</label>
-          <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">{supervisor.exigir_agente_en_movimientos ? "Elegir..." : "— Ninguno —"}</option>
-            {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Nunca genera saldo propio para ese agente -- solo queda como dato de a quién correspondía el movimiento.
+        {!sinAgente && (
+          <div className="field">
+            <label>Agente {supervisor.exigir_agente_en_movimientos ? "" : "(opcional, informativo)"}</label>
+            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">{supervisor.exigir_agente_en_movimientos ? "Elegir..." : "— Ninguno —"}</option>
+              {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Nunca genera saldo propio para ese agente -- solo queda como dato de a quién correspondía el movimiento.
+            </div>
           </div>
-        </div>
+        )}
         {type === "AJUSTE" && (
           <div className="field">
             <label>Aplicar a</label>
@@ -1667,6 +1740,43 @@ function MovimientoForm({
           <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
         </div>
       </div>
+      {sinAgente && clubId && montoOk && (() => {
+        // Misma regla que el servidor: Carga = fichas +, Descarga = fichas −; sin USDT real el otro lado es la cuenta corriente.
+        const signoFichas = type === "CARGA" ? 1 : type === "DESCARGA" ? -1 : campoAjuste === "FICHAS" ? Math.sign(montoNum) : 0;
+        const dFichas = type === "AJUSTE" ? (campoAjuste === "FICHAS" ? montoNum : 0) : signoFichas * Math.abs(montoNum);
+        const dCc = type === "AJUSTE" ? (campoAjuste === "CUENTA_CORRIENTE" ? montoNum : 0) : usdtReal ? 0 : -dFichas;
+        const fichasAntes = Number(supervisor.fichas_reales);
+        const ccAntes = Number(supervisor.cuenta_corriente);
+        const club = clubes.find((c) => c.id === clubId);
+        return (
+          <div className="panel" style={{ margin: "6px 0 12px", padding: "12px 14px", background: "var(--panel-2)" }}>
+            {dFichas !== 0 && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                  <span className="muted">Fichas reales</span>
+                  <span>{fmtUsd(fichasAntes)} → <b>{fmtUsd(fichasAntes + dFichas)}</b></span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                  <span className="muted">{club?.name}</span>
+                  <span>{fmtUsd(fichasClub(clubId))} → <b>{fmtUsd(fichasClub(clubId) + dFichas)}</b></span>
+                </div>
+              </>
+            )}
+            {dCc !== 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                <span className="muted">Cuenta corriente</span>
+                <span>{fmtUsd(ccAntes)} → <b>{fmtUsd(ccAntes + dCc)}</b></span>
+              </div>
+            )}
+            {type !== "AJUSTE" && usdtReal && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                <span className="muted">Wallet Manos</span>
+                <span><b>{type === "CARGA" ? "+" : "−"}{fmtUsd(Math.abs(montoNum))}</b></span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
     </form>

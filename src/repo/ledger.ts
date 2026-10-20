@@ -397,15 +397,31 @@ export function calcularSaldoFinanciero(system: SistemaAgente, fichasReales: num
  */
 export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancieroFila[]> {
   const r = await pool.query(
-    `WITH combos AS (
+    `WITH cuentas_agente AS (
+       -- Agentes con cuenta propia en la sección Agentes (activada, no supervisor, nadie a cargo): su pendiente de rakeback
+       -- viejo ya no cuenta -- lo que se les debe/deben es la cuenta corriente de su cuenta (se suma más abajo).
+       SELECT a.id as agent_id, sc.cuenta_corriente,
+              COALESCE(
+                (SELECT b2.club_id FROM balances b2 WHERE b2.agent_id = a.id ORDER BY ABS(b2.amount) DESC LIMIT 1),
+                (SELECT w.club_id FROM weekly_closings w WHERE w.agent_id = a.id AND w.status <> 'REVERTIDO' ORDER BY w.week_start DESC LIMIT 1)
+              ) as club_ref
+       FROM agents a
+       JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
+       WHERE a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
+         AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
+     ),
+     combos AS (
        SELECT agent_id, club_id FROM balances
        UNION
-       SELECT agent_id, club_id FROM rakeback_pendiente WHERE active = true AND amount > consumed
+       SELECT agent_id, club_id FROM rakeback_pendiente
+        WHERE active = true AND amount > consumed AND agent_id NOT IN (SELECT agent_id FROM cuentas_agente)
+       UNION
+       SELECT agent_id, club_ref FROM cuentas_agente WHERE club_ref IS NOT NULL AND ABS(cuenta_corriente) > 0.004
      ),
      pendiente_agg AS (
        SELECT agent_id, club_id, COALESCE(SUM(amount - consumed), 0) as disponible
        FROM rakeback_pendiente
-       WHERE active = true AND amount > consumed
+       WHERE active = true AND amount > consumed AND agent_id NOT IN (SELECT agent_id FROM cuentas_agente)
        GROUP BY agent_id, club_id
      ),
      mesas_prepago AS (
@@ -427,7 +443,9 @@ export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancier
        ) as system,
        COALESCE(b.amount, 0) as balance_amount,
        COALESCE(m.total_fichas_ganadas_mesas, 0) as total_fichas_ganadas_mesas,
-       COALESCE(p.disponible, 0) as pendiente_disponible
+       COALESCE(p.disponible, 0) + COALESCE(
+         (SELECT ca.cuenta_corriente FROM cuentas_agente ca WHERE ca.agent_id = co.agent_id AND ca.club_ref = co.club_id), 0
+       ) as pendiente_disponible
      FROM combos co
      JOIN agents a ON a.id = co.agent_id
      JOIN clubs c ON c.id = co.club_id

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { registrarMovimiento, revertirMovimiento, eliminarMovimiento } from "../repo/ledger.js";
 import { aplicarCierreSemanal, revertirCierreSemanal, eliminarCierreSemanalDefinitivo, eliminarCierresSemanaDefinitivo } from "../repo/closings.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { agenteTieneCuentaPropia } from "../repo/supervisores.js";
 
 export const movementsRouter = Router();
 
@@ -29,6 +30,13 @@ movementsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   try {
+    // Agente con cuenta propia (sección Agentes, 20/10/2026): se opera desde su cuenta, no acá -- evita cargar lo mismo dos veces.
+    const cuentaPropia = await agenteTieneCuentaPropia(parsed.data.agentId);
+    if (cuentaPropia.tiene) {
+      return res.status(400).json({
+        error: `${cuentaPropia.name} tiene su cuenta en la sección Agentes: cargá el movimiento desde ahí (Finanzas → Agentes).`,
+      });
+    }
     const result = await registrarMovimiento({
       ...parsed.data,
       occurredAt: new Date(parsed.data.occurredAt),
