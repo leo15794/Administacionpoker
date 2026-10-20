@@ -1081,6 +1081,9 @@ function PagoCobroForm({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Win/Lose: Pagar/Cobrar es de todo el grupo junto, el agente es opcional (20/10/2026, pedido de Leo).
+  const winLose = supervisor.default_system === "WIN_LOSE";
+  const agenteObligatorio = !!supervisor.exigir_agente_en_movimientos && !winLose;
   const fichas = Number(supervisor.fichas_reales);
   const cc = Number(supervisor.cuenta_corriente);
   const monto = Number(String(amount).replace(",", "."));
@@ -1095,7 +1098,7 @@ function PagoCobroForm({
     e.preventDefault();
     setMsg(null);
     if (!montoValido) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
-    if (supervisor.exigir_agente_en_movimientos && !agentId) {
+    if (agenteObligatorio && !agentId) {
       return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
     }
     setLoading(true);
@@ -1145,9 +1148,9 @@ function PagoCobroForm({
         )}
       </div>
       <div className="field">
-        <label>Agente {supervisor.exigir_agente_en_movimientos ? "" : "(opcional)"}</label>
+        <label>Agente {agenteObligatorio ? "" : winLose ? "(opcional: si es de todo el grupo, dejalo vacío)" : "(opcional)"}</label>
         <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">{supervisor.exigir_agente_en_movimientos ? "Elegir..." : "— Ninguno —"}</option>
+          <option value="">{agenteObligatorio ? "Elegir..." : winLose ? "— Todo el grupo —" : "— Ninguno —"}</option>
           {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </div>
@@ -1164,14 +1167,18 @@ function PagoCobroForm({
           <span className="muted">Cuenta corriente</span>
           <span>{fmt(cc)} → <b className={ccNuevo < -0.004 ? "neg" : ""}>{fmt(ccNuevo)}</b></span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-          <span className="muted">Fichas reales</span>
-          <span>{fmt(fichas)} <span className="muted">(sin cambios)</span></span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", borderTop: "1px solid var(--border)", marginTop: 4 }}>
-          <b>Saldo total</b>
-          <span>{fmt(totalAntes)} → <b className={totalNuevo > 0.004 ? "pos" : totalNuevo < -0.004 ? "neg" : ""}>{fmt(totalNuevo)}</b></span>
-        </div>
+        {!winLose && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+              <span className="muted">Fichas reales</span>
+              <span>{fmt(fichas)} <span className="muted">(sin cambios)</span></span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", borderTop: "1px solid var(--border)", marginTop: 4 }}>
+              <b>Saldo total</b>
+              <span>{fmt(totalAntes)} → <b className={totalNuevo > 0.004 ? "pos" : totalNuevo < -0.004 ? "neg" : ""}>{fmt(totalNuevo)}</b></span>
+            </div>
+          </>
+        )}
       </div>
       {montoValido && ccNuevo < -0.004 && (
         <div className="warnbox" style={{ marginBottom: 10 }}>
@@ -1331,9 +1338,11 @@ function SolicitudRetiroRow({
   const [enviando, setEnviando] = useState(false);
   const [rechazando, setRechazando] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Supervisor Win/Lose: el retiro se asienta como un Pago contra su cuenta corriente, sin club ni agente.
+  const esWL = solicitud.supervisor_default_system === "WIN_LOSE";
 
   useEffect(() => {
-    if (solicitud.exigir_agente_en_movimientos) {
+    if (solicitud.exigir_agente_en_movimientos && !esWL) {
       api.subordinadosSupervisor(solicitud.supervisor_agent_id).then(setSubordinados);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1341,15 +1350,15 @@ function SolicitudRetiroRow({
 
   async function onEnviar() {
     setMsg(null);
-    if (!clubId) return setMsg({ ok: false, text: "Elegí el club." });
-    if (solicitud.exigir_agente_en_movimientos && !agentId) {
+    if (!esWL && !clubId) return setMsg({ ok: false, text: "Elegí el club." });
+    if (!esWL && solicitud.exigir_agente_en_movimientos && !agentId) {
       return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
     }
     if (!paymentLink.trim()) return setMsg({ ok: false, text: "Pegá el link de pago." });
     setEnviando(true);
     try {
       await api.marcarSolicitudRetiroEnviada(solicitud.id, {
-        clubId,
+        clubId: esWL ? null : clubId,
         agentId: agentId || null,
         paymentLink: paymentLink.trim(),
       });
@@ -1385,11 +1394,13 @@ function SolicitudRetiroRow({
       <td className="muted">{dateShort(solicitud.requested_at)}</td>
       <td style={{ minWidth: 380 }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <select value={clubId} onChange={(e) => setClubId(e.target.value)} style={{ fontSize: 12.5 }}>
-            <option value="">Club...</option>
-            {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          {solicitud.exigir_agente_en_movimientos && (
+          {!esWL && (
+            <select value={clubId} onChange={(e) => setClubId(e.target.value)} style={{ fontSize: 12.5 }}>
+              <option value="">Club...</option>
+              {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          {solicitud.exigir_agente_en_movimientos && !esWL && (
             <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ fontSize: 12.5 }}>
               <option value="">Agente...</option>
               {(subordinados ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}

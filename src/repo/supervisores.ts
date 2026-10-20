@@ -119,7 +119,11 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [input.supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
   if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
-  if (sup.rows[0].exigir_agente_en_movimientos && !input.agentId) {
+  // Win/Lose (20/10/2026, pedido de Leo): un Pagar/Cobrar se hace sobre TODO el grupo junto, así que ahí el agente es
+  // opcional aunque el supervisor lo exija en los demás movimientos. Si no se indica, el movimiento queda en la fila
+  // "Sin agente asignado" del desglose por agente (nunca se reparte a ciegas), y el total de la cuenta no cambia.
+  const pagoCobroGrupal = esSupervisorWinLose(sup.rows[0]) && (input.type === "PAGO" || input.type === "COBRO");
+  if (sup.rows[0].exigir_agente_en_movimientos && !input.agentId && !pagoCobroGrupal) {
     throw new Error("Este supervisor exige indicar el agente de origen del movimiento.");
   }
   if (esSupervisorWinLose(sup.rows[0])) {
@@ -909,7 +913,7 @@ export async function listSolicitudesRetiroSupervisor(supervisorAgentId: string)
 // -> Supervisores y para la campana de notificaciones (repo/alertas.ts).
 export async function listSolicitudesRetiroPendientesTodas() {
   const r = await pool.query(
-    `SELECT sr.*, a.name as supervisor_name, a.exigir_agente_en_movimientos
+    `SELECT sr.*, a.name as supervisor_name, a.exigir_agente_en_movimientos, a.default_system as supervisor_default_system
      FROM supervisor_solicitudes_retiro sr
      JOIN agents a ON a.id = sr.supervisor_agent_id
      WHERE sr.estado = 'PENDIENTE'
@@ -926,7 +930,7 @@ export async function listSolicitudesRetiroPendientesTodas() {
 // ya quedó registrado y auditable, se puede enlazar a mano.
 export async function marcarSolicitudRetiroEnviada(
   solicitudId: string,
-  input: { clubId: string; agentId?: string | null; paymentLink: string; createdBy?: string | null }
+  input: { clubId?: string | null; agentId?: string | null; paymentLink: string; createdBy?: string | null }
 ) {
   const sol = await pool.query(`SELECT * FROM supervisor_solicitudes_retiro WHERE id = $1`, [solicitudId]);
   const solicitud = sol.rows[0];
@@ -938,6 +942,7 @@ export async function marcarSolicitudRetiroEnviada(
   // su cuenta corriente (sin club), igual que "Pagar" en Supervisores.
   const supSol = await pool.query(`SELECT default_system FROM agents WHERE id = $1`, [solicitud.supervisor_agent_id]);
   const esWL = esSupervisorWinLose(supSol.rows[0]);
+  if (!esWL && !input.clubId) throw new Error("Falta elegir el club.");
   const movimiento = await registrarMovimientoSupervisor({
     supervisorAgentId: solicitud.supervisor_agent_id,
     clubId: esWL ? null : input.clubId,

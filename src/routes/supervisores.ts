@@ -180,7 +180,7 @@ supervisoresRouter.get("/solicitudes-retiro", requireAuth, requireAdmin, async (
 });
 
 const marcarEnviadoSchema = z.object({
-  clubId: z.string(),
+  clubId: z.string().nullable().optional(),
   agentId: z.string().nullable().optional(),
   paymentLink: z.string().min(1, "Falta el link de pago."),
 });

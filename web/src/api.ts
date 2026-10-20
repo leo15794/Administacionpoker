@@ -433,7 +433,7 @@ export const api = {
     request(`/supervisores/cierre-semanal/${cierreId}/revertir`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
   // Solicitudes de retiro/pago, lado admin (16/10/2026, pedido de Leo) -- ver repo/supervisores.ts.
   solicitudesRetiroPendientes: () => request("/supervisores/solicitudes-retiro"),
-  marcarSolicitudRetiroEnviada: (solicitudId: string, data: { clubId: string; agentId?: string | null; paymentLink: string }) =>
+  marcarSolicitudRetiroEnviada: (solicitudId: string, data: { clubId?: string | null; agentId?: string | null; paymentLink: string }) =>
     request(`/supervisores/solicitudes-retiro/${solicitudId}/marcar-enviado`, { method: "POST", body: JSON.stringify(data) }),
   rechazarSolicitudRetiro: (solicitudId: string, motivo?: string | null) =>
     request(`/supervisores/solicitudes-retiro/${solicitudId}/rechazar`, { method: "POST", body: JSON.stringify({ motivo: motivo ?? null }) }),
