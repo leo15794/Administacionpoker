@@ -234,6 +234,12 @@ export default function Supervisores() {
     return `${signo}${montoSignoSup(Math.abs(a), true).replace("−", "")}`;
   };
   const supervisoresOrdenados = [...(supervisores ?? [])].sort((a, b) => Math.abs(saldoTotalSup(b)) - Math.abs(saldoTotalSup(a)));
+  // Secciones separadas (20/10/2026, pedido de Leo, mockup aprobado): los Prepago (fichas reales + cuenta corriente) y los
+  // Win/Lose (solo cuenta corriente) no se mezclan en una misma tabla ni en un mismo total.
+  const supervisoresPrepago = supervisoresOrdenados.filter((x) => !esWinLose(x));
+  const supervisoresWinLose = supervisoresOrdenados.filter((x) => esWinLose(x));
+  const estadoWinLose = (n: number) => (n < -0.004 ? "El grupo nos debe" : n > 0.004 ? "Le debemos" : "Al día");
+  const cantAgentesTxt = (n: number | null | undefined) => (n != null ? `${n} agente${n === 1 ? "" : "s"} a cargo` : "");
   const movsVisibles = (movimientos ?? []).filter((m) => verRevertidos || m.status !== "REVERTIDO");
   const detalleClubesAgente = (s: any) => (
     <>
@@ -325,85 +331,171 @@ export default function Supervisores() {
         </div>
       ) : (
         <>
-          <div className="stat-row">
-            <div className="stat-card">
-              <div className="l">Saldo total de supervisores</div>
-              <div className="v">{montoSignoSup(supervisores.reduce((s, x) => s + saldoTotalSup(x), 0))}</div>
-              <div className="s">{supervisores.length} cuenta{supervisores.length === 1 ? "" : "s"} consolidada{supervisores.length === 1 ? "" : "s"}</div>
-            </div>
-            <div className="stat-card">
-              <div className="l">Fichas reales</div>
-              <div className="v">{montoSignoSup(supervisores.reduce((s, x) => s + Number(x.fichas_reales), 0))}</div>
-              <div className="s">suma de las cuentas</div>
-            </div>
-            <div className="stat-card">
-              <div className="l">Cuenta corriente</div>
-              <div className="v">{montoSignoSup(supervisores.reduce((s, x) => s + Number(x.cuenta_corriente), 0))}</div>
-              <div className="s">suma de las cuentas</div>
-            </div>
-          </div>
+          {supervisoresPrepago.length > 0 && (
+            <>
+              <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 17 }}>Supervisores Prepago</h3>
+                <span className="pill">{supervisoresPrepago.length} cuenta{supervisoresPrepago.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Fichas reales (lo que compraron sus agentes) y cuenta corriente (rakeback).</div>
+              <div className="stat-row">
+                <div className="stat-card">
+                  <div className="l">Saldo total</div>
+                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0))}</div>
+                  <div className="s">fichas reales + cuenta corriente</div>
+                </div>
+                <div className="stat-card">
+                  <div className="l">Fichas reales</div>
+                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.fichas_reales), 0))}</div>
+                  <div className="s">suma de las cuentas</div>
+                </div>
+                <div className="stat-card">
+                  <div className="l">Cuenta corriente</div>
+                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}</div>
+                  <div className="s">suma de las cuentas</div>
+                </div>
+              </div>
 
-          <div className="panel">
-            <div className="ag-table-wrap">
-              <table className="saldos-table">
-                <thead>
-                  <tr><th>Supervisor</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {supervisoresOrdenados.map((s) => {
-                    const total = saldoTotalSup(s);
-                    const cantAgentes = s.n_sub;
+              <div className="panel">
+                <div className="ag-table-wrap">
+                  <table className="saldos-table">
+                    <thead>
+                      <tr><th>Supervisor</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {supervisoresPrepago.map((x) => {
+                        const total = saldoTotalSup(x);
+                        return (
+                          <tr
+                            key={x.id}
+                            className={`row-click ${total > 0 ? "row-pos" : total < 0 ? "row-neg" : ""}`}
+                            style={seleccionado?.id === x.id ? { outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
+                            onClick={() => abrirSupervisor(x)}
+                          >
+                            <td>
+                              <div className="saldo-name">{x.name}</div>
+                              <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                            </td>
+                            <td className="num money">{montoSignoSup(Number(x.fichas_reales))}</td>
+                            <td className="num money">{montoSignoSup(Number(x.cuenta_corriente))}</td>
+                            <td className="num"><span className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</span></td>
+                            <td style={{ width: 100, textAlign: "right" }}>
+                              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>Ver cuenta</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="ag-cards">
+                  {supervisoresPrepago.map((x) => {
+                    const total = saldoTotalSup(x);
                     return (
-                      <tr
-                        key={s.id}
-                        className={`row-click ${total > 0 ? "row-pos" : total < 0 ? "row-neg" : ""}`}
-                        style={seleccionado?.id === s.id ? { outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
-                        onClick={() => abrirSupervisor(s)}
+                      <div
+                        key={x.id}
+                        className={`saldo-card ${total > 0 ? "is-pos" : total < 0 ? "is-neg" : ""}`}
+                        style={seleccionado?.id === x.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
+                        onClick={() => abrirSupervisor(x)}
                       >
-                        <td>
-                          <div className="saldo-name">{s.name}</div>
-                          <div className="saldo-sub">{cantAgentes != null ? `${cantAgentes} agente${cantAgentes === 1 ? "" : "s"} a cargo · ` : ""}{s.modelo_cuenta === "PREPAGO" ? "Prepago" : s.modelo_cuenta ?? "—"}</div>
-                        </td>
-                        <td className="num money">{montoSignoSup(Number(s.fichas_reales))}</td>
-                        <td className="num money">{montoSignoSup(Number(s.cuenta_corriente))}</td>
-                        <td className="num"><span className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</span></td>
-                        <td style={{ width: 100, textAlign: "right" }}>
-                          <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); abrirSupervisor(s); }}>Ver cuenta</button>
-                        </td>
-                      </tr>
+                        <div className="saldo-card-body">
+                          <div className="saldo-card-top">
+                            <div className="saldo-name">{x.name}</div>
+                            <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</div>
+                          </div>
+                          <div className="saldo-card-mid">
+                            <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                          </div>
+                          <div className="saldo-card-foot" style={{ gap: 16 }}>
+                            <span>Fichas reales <b>{montoSignoSup(Number(x.fichas_reales))}</b></span>
+                            <span>Cuenta corriente <b>{montoSignoSup(Number(x.cuenta_corriente))}</b></span>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-            <div className="ag-cards">
-              {supervisoresOrdenados.map((s) => {
-                const total = saldoTotalSup(s);
-                return (
-                  <div
-                    key={s.id}
-                    className={`saldo-card ${total > 0 ? "is-pos" : total < 0 ? "is-neg" : ""}`}
-                    style={seleccionado?.id === s.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
-                    onClick={() => abrirSupervisor(s)}
-                  >
-                    <div className="saldo-card-body">
-                      <div className="saldo-card-top">
-                        <div className="saldo-name">{s.name}</div>
-                        <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {supervisoresWinLose.length > 0 && (
+            <>
+              <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 17 }}>Supervisores Win/Lose</h3>
+                <span className="pill">{supervisoresWinLose.length} cuenta{supervisoresWinLose.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Una sola cuenta: el cierre completo de sus agentes, que se salda con cobros y pagos en USDT.</div>
+              <div className="stat-row">
+                <div className="stat-card">
+                  <div className="l">Cuenta corriente</div>
+                  <div className="v">{montoSignoSup(supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}</div>
+                  <div className="s">suma de las cuentas</div>
+                </div>
+                <div className="stat-card">
+                  <div className="l">Agentes a cargo</div>
+                  <div className="v">{supervisoresWinLose.reduce((acc, x) => acc + Number(x.n_sub ?? 0), 0)}</div>
+                  <div className="s">Win/Lose</div>
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="ag-table-wrap">
+                  <table className="saldos-table">
+                    <thead>
+                      <tr><th>Supervisor</th><th className="num">Cuenta corriente</th><th>Estado</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {supervisoresWinLose.map((x) => {
+                        const cc = Number(x.cuenta_corriente);
+                        return (
+                          <tr
+                            key={x.id}
+                            className={`row-click ${cc > 0 ? "row-pos" : cc < 0 ? "row-neg" : ""}`}
+                            style={seleccionado?.id === x.id ? { outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
+                            onClick={() => abrirSupervisor(x)}
+                          >
+                            <td>
+                              <div className="saldo-name">{x.name}</div>
+                              <div className="saldo-sub">{cantAgentesTxt(x.n_sub)}</div>
+                            </td>
+                            <td className="num"><span className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</span></td>
+                            <td className="muted" style={{ fontSize: 12.5 }}>{estadoWinLose(cc)}</td>
+                            <td style={{ width: 100, textAlign: "right" }}>
+                              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>Ver cuenta</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="ag-cards">
+                  {supervisoresWinLose.map((x) => {
+                    const cc = Number(x.cuenta_corriente);
+                    return (
+                      <div
+                        key={x.id}
+                        className={`saldo-card ${cc > 0 ? "is-pos" : cc < 0 ? "is-neg" : ""}`}
+                        style={seleccionado?.id === x.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
+                        onClick={() => abrirSupervisor(x)}
+                      >
+                        <div className="saldo-card-body">
+                          <div className="saldo-card-top">
+                            <div className="saldo-name">{x.name}</div>
+                            <div className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</div>
+                          </div>
+                          <div className="saldo-card-mid">
+                            <div className="saldo-sub">{cantAgentesTxt(x.n_sub)} · {estadoWinLose(cc)}</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="saldo-card-mid">
-                        <div className="saldo-sub">{s.n_sub != null ? `${s.n_sub} agente${s.n_sub === 1 ? "" : "s"} · ` : ""}{s.modelo_cuenta === "PREPAGO" ? "Prepago" : s.modelo_cuenta ?? "—"}</div>
-                      </div>
-                      <div className="saldo-card-foot" style={{ gap: 16 }}>
-                        <span>Fichas reales <b>{montoSignoSup(Number(s.fichas_reales))}</b></span>
-                        <span>Cuenta corriente <b>{montoSignoSup(Number(s.cuenta_corriente))}</b></span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
 
