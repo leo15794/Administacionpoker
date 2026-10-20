@@ -28,6 +28,7 @@ export default function MiSupervision() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("agentes");
+  const [vistaMov, setVistaMov] = useState<"cuenta" | "agentes">("cuenta");
 
   // Cuenta consolidada -- cierre semanal de agentes a cargo, en solo lectura (14/10/2026,
   // pedido de Leo: "deberia el poder entrar y ver el desglose que esta cargado en
@@ -89,12 +90,15 @@ export default function MiSupervision() {
   const totalGrupo = data.agentes.reduce((s: number, a: any) => s + Number(a.saldo_total), 0);
   const hayReferidos = (data.referidos?.length ?? 0) > 0 || (data.movimientos_referidos?.length ?? 0) > 0;
   const movimientos: any[] = data.movimientos_agentes ?? [];
+  // Movimientos de la cuenta consolidada del propio supervisor (20/10/2026, pedido de Leo, mockup aprobado). Solo
+  // existe si tiene la cuenta consolidada activada; los demás supervisores siguen viendo solo lo de sus agentes.
+  const movimientosCuenta: any[] = data.movimientos_cuenta ?? [];
   const pendientes = (misSolicitudes ?? []).filter((s: any) => s.estado === "PENDIENTE").length;
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "agentes", label: "Agentes", count: data.agentes.length },
     ...(consolidada ? [{ key: "cierre" as Tab, label: "Cierre semanal" }] : []),
-    { key: "movimientos", label: "Movimientos", count: movimientos.length },
+    { key: "movimientos", label: "Movimientos", count: movimientos.length + movimientosCuenta.length },
     ...(hayReferidos ? [{ key: "referidos" as Tab, label: "Referidos" }] : []),
     { key: "solicitudes", label: "Solicitudes", count: misSolicitudes?.length ?? 0 },
   ];
@@ -258,20 +262,71 @@ export default function MiSupervision() {
     </PortalPane>
   );
 
+  // Efecto de un movimiento de la cuenta consolidada sobre fichas reales / cuenta corriente.
+  const numCuenta = (n: number) => (n < 0 ? "−" : "") + Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const efecto = (delta: number, despues: number) =>
+    Math.abs(delta) < 0.005 ? `sin cambio (${numCuenta(despues)})` : `${delta > 0 ? "+" : "−"}${Math.abs(delta).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${numCuenta(despues)}`;
+  const vistaActual: "cuenta" | "agentes" = consolidada ? vistaMov : "agentes";
+
   const movimientosPane = (
-    <PortalPane activa={tabActual === "movimientos"} titulo="Pagos y movimientos del grupo">
-      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-        Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y descargas de fichas, transferencias entre clubes y
-        ajustes -- para que puedan ver de un vistazo cuándo les mandamos plata o hicimos algún cambio.
-      </div>
-      {movimientos.length === 0 ? (
-        <div className="muted">Todavía no hay movimientos.</div>
-      ) : (
-        <div className="mov-list" style={{ maxHeight: 560, overflowY: "auto" }}>
-          {movimientos.map((m: any) => (
-            <MovRow key={m.id} type={m.type} titulo={`${tipoVisual(m.type).label} · ${m.agent_name}`} detalle={`${m.club_name} · ${dateShort(m.occurred_at)}`} monto={Number(m.amount)} obs={m.observation} />
-          ))}
+    <PortalPane activa={tabActual === "movimientos"} titulo={consolidada ? "Movimientos" : "Pagos y movimientos del grupo"}>
+      {consolidada && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 0 12px" }}>
+          <span className="seg">
+            <button className={vistaActual === "cuenta" ? "on" : ""} onClick={() => setVistaMov("cuenta")}>Tu cuenta<span className="n">{movimientosCuenta.length}</span></button>
+            <button className={vistaActual === "agentes" ? "on" : ""} onClick={() => setVistaMov("agentes")}>Cuentas de tus agentes<span className="n">{movimientos.length}</span></button>
+          </span>
+          {vistaActual === "cuenta" && (
+            <span className="saldo-sub" style={{ margin: 0 }}>
+              Saldo actual: fichas reales <b>{numCuenta(fichasReales)}</b> · cuenta corriente <b style={{ color: colorSigno(cuentaCorriente) }}>{numCuenta(cuentaCorriente)}</b>
+            </span>
+          )}
         </div>
+      )}
+
+      {vistaActual === "cuenta" ? (
+        <>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Lo que se cargó, descargó, ajustó, pagó o cobró en tu cuenta consolidada, con cómo quedaron tus fichas reales y tu cuenta corriente
+            después de cada movimiento. Los revertidos no se muestran.
+          </div>
+          {movimientosCuenta.length === 0 ? (
+            <div className="muted">Todavía no hay movimientos en tu cuenta.</div>
+          ) : (
+            <div className="mov-list" style={{ maxHeight: 560, overflowY: "auto" }}>
+              {movimientosCuenta.map((m: any) => {
+                const saliente = m.type === "DESCARGA" || m.type === "PAGO";
+                return (
+                  <MovRow
+                    key={m.id}
+                    type={m.type}
+                    titulo={`${tipoVisual(m.type).label}${m.agent_name ? ` · ${m.agent_name}` : ""}`}
+                    detalle={`${m.club_name ?? "Sin club"} · ${dateShort(m.occurred_at)}`}
+                    detalle2={`Fichas reales: ${efecto(Number(m.fichas_reales_delta), Number(m.saldo_nuevo_fichas))} · Cuenta corriente: ${efecto(Number(m.cuenta_corriente_delta), Number(m.saldo_nuevo_cc))}`}
+                    monto={saliente ? -Math.abs(Number(m.amount)) : Number(m.amount)}
+                    obs={m.notes}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y descargas de fichas, transferencias entre clubes y
+            ajustes -- para que puedan ver de un vistazo cuándo les mandamos plata o hicimos algún cambio.
+          </div>
+          {movimientos.length === 0 ? (
+            <div className="muted">Todavía no hay movimientos.</div>
+          ) : (
+            <div className="mov-list" style={{ maxHeight: 560, overflowY: "auto" }}>
+              {movimientos.map((m: any) => (
+                <MovRow key={m.id} type={m.type} titulo={`${tipoVisual(m.type).label} · ${m.agent_name}`} detalle={`${m.club_name} · ${dateShort(m.occurred_at)}`} monto={Number(m.amount)} obs={m.observation} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </PortalPane>
   );

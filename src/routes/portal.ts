@@ -180,6 +180,28 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
       [agentIdsGrupo]
     );
 
+    // Movimientos de la CUENTA CONSOLIDADA del propio supervisor (20/10/2026, pedido de Leo: "que a los
+    // supervisores en su login puedan ver los movimientos"): cargas, descargas, ajustes, pagos y cobros que
+    // carga el admin en Supervisores -> Movimientos, con cómo quedaron fichas reales y cuenta corriente. Solo
+    // los de SU cuenta (supervisor_agent_id = su id de login, nunca uno de la URL) y sin los revertidos. Se manda
+    // solo lo que se muestra: no se expone usdt_real (si tocó Wallet) ni quién lo cargó.
+    let movimientosCuenta: any[] = [];
+    if (supervisor.usa_cuenta_consolidada) {
+      const mc = await pool.query(
+        `SELECT sm.id, sm.type, sm.amount, sm.fichas_reales_delta, sm.cuenta_corriente_delta,
+                sm.saldo_nuevo_fichas, sm.saldo_nuevo_cc, sm.notes, sm.occurred_at,
+                c.name as club_name, a.name as agent_name
+         FROM supervisor_movimientos sm
+         LEFT JOIN clubs c ON c.id = sm.club_id
+         LEFT JOIN agents a ON a.id = sm.agent_id
+         WHERE sm.supervisor_agent_id = $1 AND sm.status <> 'REVERTIDO'
+         ORDER BY sm.occurred_at DESC, sm.id DESC
+         LIMIT 300`,
+        [supervisor.id]
+      );
+      movimientosCuenta = mc.rows;
+    }
+
     res.json({
       supervisor,
       agentes: agentesACargo.rows,
@@ -188,6 +210,7 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
       saldo_referidos_total: referidos.rows.reduce((acc: number, r: any) => acc + Number(r.saldo), 0),
       movimientos_referidos: movimientos.rows,
       movimientos_agentes: movimientosAgentes.rows,
+      movimientos_cuenta: movimientosCuenta,
     });
   } catch (err: any) {
     console.error("Error en /portal/mi-supervision:", err);

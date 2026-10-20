@@ -176,6 +176,7 @@ export function MovRow({
   type,
   titulo,
   detalle,
+  detalle2,
   monto,
   obs,
   atenuada,
@@ -184,6 +185,8 @@ export function MovRow({
   type: string;
   titulo?: string;
   detalle: string;
+  /** Segunda línea opcional, debajo del detalle (ej. cómo quedó el saldo después del movimiento). */
+  detalle2?: string;
   monto: number;
   obs?: string | null;
   atenuada?: boolean;
@@ -196,6 +199,7 @@ export function MovRow({
       <div className="mov-mid">
         <div className="mov-l1">{titulo ?? v.label} {extra}</div>
         <div className="mov-l2">{detalle}</div>
+        {detalle2 && <div className="mov-l2" style={{ marginTop: 2 }}>{detalle2}</div>}
         {obs && <div className="mov-obs">{obs}</div>}
       </div>
       <div className="mov-amt" style={monto < 0 ? { color: "var(--red)" } : undefined}>{montoSigno(monto)}</div>
