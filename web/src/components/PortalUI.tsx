@@ -25,6 +25,7 @@ export function tipoVisual(type: string): { glyph: string; cls: string; label: s
     case "PAGO":
     case "PAGO_RAKEBACK": return { glyph: "↗", cls: "g", label };
     case "AJUSTE": return { glyph: "±", cls: "gold", label };
+    case "DESCUENTO": return { glyph: "−", cls: "r", label: "Descuento" };
     case "TICKET_PROMOCIONAL": return { glyph: "★", cls: "gold", label };
     case "TRANSFERENCIA_ENTRE_CLUBES": return { glyph: "⇄", cls: "n", label };
     case "ADELANTO_FICHAS":

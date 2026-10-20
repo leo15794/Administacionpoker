@@ -171,6 +171,119 @@ export async function datosPdfCuentasAgentes(weekStart?: string | null) {
   return { semana, semanaFin, semanas, cuentas: out };
 }
 
+// "Mi cuenta" del portal para un agente CON cuenta propia (20/10/2026, pedido de Leo: que el usuario vea lo mismo que se
+// ve en Agentes, con el desglose de cada cierre como en TeamBack Afiliados): saldo de la cuenta, fichas por club, los
+// cierres semanales con su desglose por club y por jugador, y los movimientos de la cuenta. Solo lectura y solo del
+// propio agente. Del desglose NO se devuelve nada interno (subagentes, trato de la casa): únicamente lo que ya es suyo.
+export async function getMiCuentaAgente(agentId: string) {
+  const sup = await getSupervisorConCuenta(agentId);
+  if (!sup) throw new Error("Agente no encontrado.");
+  const winLose = esSupervisorWinLose(sup);
+  const saldos = await listSaldosPorAgenteSupervisor(agentId);
+  const mio = saldos.find((s) => s.agentId === agentId);
+
+  const wcs = await pool.query(
+    `SELECT wc.id, wc.week_start, wc.week_end, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct,
+            wc.rakeback, wc.rebate, wc.rodeo, wc.final_closing, c.name as club_name
+     FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+     WHERE wc.agent_id = $1 AND wc.status <> 'REVERTIDO'
+     ORDER BY wc.week_start DESC, c.name
+     LIMIT 80`,
+    [agentId]
+  );
+  const ids = wcs.rows.map((r) => r.id);
+  const jug = ids.length
+    ? (
+        await pool.query(
+          `SELECT closing_id, player_external_id, player_name, resultado, rake, rebate, rakeback_pct, rakeback, cierre_jugador
+           FROM weekly_closing_player_details WHERE closing_id = ANY($1::text[]) ORDER BY rake DESC, player_name`,
+          [ids]
+        )
+      ).rows
+    : [];
+  const aplicadas = await pool.query(
+    `SELECT week_start FROM supervisor_cierres WHERE supervisor_agent_id = $1 AND status <> 'REVERTIDO'`,
+    [agentId]
+  );
+  const aplicadasSet = new Set(aplicadas.rows.map((r) => String(r.week_start).slice(0, 10)));
+  const corteRes = await pool.query(
+    `SELECT MAX(semana_corte) as corte FROM supervisor_migracion_historica WHERE supervisor_agent_id = $1`,
+    [agentId]
+  );
+  const corte: string | null = corteRes.rows[0]?.corte ? String(corteRes.rows[0].corte).slice(0, 10) : null;
+  const primeraAplicada = [...aplicadasSet].sort()[0] ?? null;
+
+  const estadoSemana = (ws: string): "INCLUIDO" | "APLICADO" | "ANTERIOR" | "PENDIENTE" => {
+    if (corte && ws <= corte) return "INCLUIDO";
+    if (aplicadasSet.has(ws)) return "APLICADO";
+    if (!corte && primeraAplicada && ws < primeraAplicada) return "ANTERIOR";
+    return "PENDIENTE";
+  };
+
+  const semanas = new Map<string, any>();
+  for (const r of wcs.rows) {
+    const ws = String(r.week_start).slice(0, 10);
+    if (!semanas.has(ws)) {
+      semanas.set(ws, { week_start: ws, week_end: String(r.week_end).slice(0, 10), estado: estadoSemana(ws), total: 0, resultado: 0, rakeback: 0, rebate: 0, clubes: [] as any[] });
+    }
+    const s = semanas.get(ws);
+    s.total = round2(s.total + Number(r.final_closing));
+    s.resultado = round2(s.resultado + Number(r.result));
+    s.rakeback = round2(s.rakeback + Number(r.rakeback));
+    s.rebate = round2(s.rebate + Number(r.rebate));
+    s.clubes.push({
+      club: r.club_name,
+      jugadores: r.jugadores,
+      resultado: Number(r.result),
+      rake: Number(r.rake_total),
+      rakeback_pct: Number(r.rakeback_pct),
+      rakeback: Number(r.rakeback),
+      rebate: Number(r.rebate),
+      rodeo: Number(r.rodeo),
+      total: Number(r.final_closing),
+      jugadores_detalle: jug
+        .filter((j) => j.closing_id === r.id)
+        .map((j) => ({
+          id: j.player_external_id,
+          nombre: j.player_name,
+          resultado: Number(j.resultado),
+          rake: Number(j.rake),
+          rebate: Number(j.rebate),
+          rakeback_pct: Number(j.rakeback_pct),
+          rakeback: Number(j.rakeback),
+          cierre: Number(j.cierre_jugador),
+        })),
+    });
+  }
+
+  const movs = (await listMovimientosSupervisor(agentId))
+    .filter((m: any) => m.status === "APLICADO")
+    .slice(0, 100)
+    .map((m: any) => ({
+      id: m.id,
+      type: m.type,
+      club_name: m.club_name,
+      amount: Number(m.amount),
+      fichas_reales_delta: Number(m.fichas_reales_delta),
+      cuenta_corriente_delta: Number(m.cuenta_corriente_delta),
+      concepto: m.concepto,
+      semana: m.semana ? String(m.semana).slice(0, 10) : null,
+      notes: m.notes,
+      payment_link: m.payment_link,
+      usdt_real: !!m.usdt_real,
+      occurred_at: m.occurred_at,
+    }));
+
+  return {
+    sistema: winLose ? "WIN_LOSE" : "PREPAGO",
+    fichas_reales: Number(sup.fichas_reales),
+    cuenta_corriente: Number(sup.cuenta_corriente),
+    por_club: (mio?.detallePorClub ?? []).map((d) => ({ club: d.clubName, balance: d.balance, mesas: d.mesas, fichas: d.fichas })),
+    semanas: [...semanas.values()],
+    movimientos: movs,
+  };
+}
+
 // Agentes individuales que todavía no tienen cuenta y se pueden activar (activos, sin supervisor, sin nadie a cargo).
 export async function listAgentesSinCuenta() {
   const r = await pool.query(

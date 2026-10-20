@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import MiCuentaAgente from "./MiCuentaAgente";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, colorSigno, montoSigno } from "../components/PortalUI";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
@@ -34,6 +35,8 @@ export default function MiCuenta() {
   }, [agentId]);
 
   if (!data) return <Loading />;
+  // Agente con cuenta propia en la sección Agentes: "Mi cuenta" muestra esa cuenta (20/10/2026).
+  if (data.cuenta) return <MiCuentaAgente data={data} misAgentes={misAgentes} agentId={agentId} setAgentId={setAgentId} />;
 
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
   const variosClubes = data.saldos.length > 1;

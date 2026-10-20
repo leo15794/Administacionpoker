@@ -10,6 +10,8 @@ import {
   listSolicitudesRetiroSupervisor,
   listSaldosPorAgenteSupervisor,
   esSupervisorWinLose,
+  agenteTieneCuentaPropia,
+  getMiCuentaAgente,
 } from "../repo/supervisores.js";
 import {
   listSaldosProveedores,
@@ -73,6 +75,10 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     [agentId]
   );
 
+  // Agente con cuenta propia en la sección Agentes (20/10/2026): "Mi cuenta" muestra esa cuenta (saldo, cierres con su
+  // desglose por club y jugador, movimientos) en vez del saldo viejo -- ver repo/supervisores.ts getMiCuentaAgente.
+  const cuentaPropia = (await agenteTieneCuentaPropia(agentId)).tiene ? await getMiCuentaAgente(agentId) : null;
+
   res.json({
     agente: agent.rows[0],
     saldos: balances,
@@ -80,6 +86,7 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     garantia: guarantee.rows[0] ?? null,
     cierres: closings.rows,
     adelantos: adelantos.rows,
+    cuenta: cuentaPropia,
   });
 });
 
