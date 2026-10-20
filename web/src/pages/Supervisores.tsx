@@ -44,6 +44,9 @@ export default function Supervisores() {
   const [clubesExpandidos, setClubesExpandidos] = useState<Record<string, boolean>>({});
   const [showMovimiento, setShowMovimiento] = useState(false);
   const [pagoCobro, setPagoCobro] = useState<"PAGO" | "COBRO" | null>(null);
+  // Importar saldos de los agentes a cargo (20/10/2026): propuesta por agente + modal.
+  const [importables, setImportables] = useState<any[] | null>(null);
+  const [showImportar, setShowImportar] = useState(false);
   // Ocultar/mostrar un agente de "Agentes a cargo" (01/10/2026, pedido de Leo, caso Uriel):
   // puramente visual, nunca mueve plata -- ver nota en schema.sql / repo/catalog.ts. Arranca
   // colapsado (false) para no mostrar de entrada una lista larga de ocultos.
@@ -97,6 +100,8 @@ export default function Supervisores() {
     api.movimientosSupervisor(s.id).then(setMovimientos);
     api.migracionHistoricaSupervisor(s.id).then(setMigracion);
     api.saldosPorAgenteSupervisor(s.id).then(setSaldosPorAgente);
+    setImportables(null);
+    api.previsualizarImportacionSaldos(s.id).then(setImportables).catch(() => setImportables([]));
     api.semanasCierreSupervisor(s.id).then((r: any[]) => {
       setSemanasCierre(r);
       if (r[0]) {
@@ -515,6 +520,9 @@ export default function Supervisores() {
                 <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
                 <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
                 <button className="btn secondary" onClick={() => setShowMovimiento(true)}>{esWinLose(seleccionado) ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}</button>
+                <button className="btn secondary" onClick={() => setShowImportar(true)} title="Traer a esta cuenta el saldo que ya tienen sus agentes">
+                  Importar saldos{importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}
+                </button>
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
             </div>
@@ -703,6 +711,11 @@ export default function Supervisores() {
                         );
                       })}
                     </div>
+                    {cierreSemana?.agentesYaIncluidosEnSaldo?.length > 0 && (
+                      <div className="warnbox" style={{ marginBottom: 10 }}>
+                        Esta semana no suma el cierre de {cierreSemana.agentesYaIncluidosEnSaldo.join(", ")}: ya está dentro del saldo que se importó de {cierreSemana.agentesYaIncluidosEnSaldo.length === 1 ? "ese agente" : "esos agentes"}.
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
                       {cierreSemana?.aplicado ? (
                         <>
@@ -1041,6 +1054,26 @@ export default function Supervisores() {
         </Modal>
       )}
 
+      {showImportar && seleccionado && (
+        <Modal title={`Importar saldos — ${seleccionado.name}`} onClose={() => setShowImportar(false)}>
+          <ImportarSaldosForm
+            supervisor={seleccionado}
+            filas={importables}
+            onCancel={() => setShowImportar(false)}
+            onDone={() => {
+              setShowImportar(false);
+              refrescarSeleccionado();
+              api.migracionHistoricaSupervisor(seleccionado.id).then(setMigracion);
+              api.previsualizarImportacionSaldos(seleccionado.id).then(setImportables).catch(() => setImportables([]));
+              api.semanasCierreSupervisor(seleccionado.id).then((r: any[]) => {
+                setSemanasCierre(r);
+                if (weekCierre) cargarCierreSemana(seleccionado.id, weekCierre);
+              });
+            }}
+          />
+        </Modal>
+      )}
+
       {showMovimiento && seleccionado && (
         <Modal title={`Movimiento — ${seleccionado.name}`} onClose={() => setShowMovimiento(false)}>
           <MovimientoForm
@@ -1193,6 +1226,135 @@ function PagoCobroForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// Importar saldos (20/10/2026, pedido de Leo): trae a la cuenta del supervisor lo que cada agente a cargo ya tiene hoy.
+// Prepago: fichas (balance + mesas Prepago) y rakeback pendiente. Win/Lose: lo que muestra "Resumen por agente".
+// Un agente ya importado no se repite; uno que ya opera en la cuenta no se puede importar (se duplicaría).
+function ImportarSaldosForm({
+  supervisor,
+  filas,
+  onDone,
+  onCancel,
+}: {
+  supervisor: any;
+  filas: any[] | null;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const winLose = supervisor.default_system === "WIN_LOSE";
+  const [elegidos, setElegidos] = useState<Record<string, boolean> | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (filas && !elegidos) setElegidos(Object.fromEntries(filas.map((f) => [f.agentId, f.estado === "NUEVO"])));
+  }, [filas, elegidos]);
+
+  if (!filas || !elegidos) return <Loading />;
+
+  const fmt = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const sel = filas.filter((f) => elegidos[f.agentId] && f.estado === "NUEVO");
+  const totalFichas = Math.round(sel.reduce((s, f) => s + Number(f.fichas), 0) * 100) / 100;
+  const totalCc = Math.round(sel.reduce((s, f) => s + Number(f.cuentaCorriente), 0) * 100) / 100;
+  const fichasAntes = Number(supervisor.fichas_reales);
+  const ccAntes = Number(supervisor.cuenta_corriente);
+  const hayNuevos = filas.some((f) => f.estado === "NUEVO");
+
+  async function confirmar() {
+    setMsg(null);
+    setLoading(true);
+    try {
+      await api.importarSaldosSupervisor(supervisor.id, sel.map((f) => f.agentId));
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo importar." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="saldo-sub" style={{ marginBottom: 12 }}>
+        {winLose
+          ? "Cada agente entra con lo que hoy figura en su Resumen por agente (negativo = el agente nos debe). Los cierres semanales ya cargados quedan incluidos en ese saldo y no se vuelven a sumar."
+          : "Cada agente entra con sus fichas (balance + mesas Prepago) y su rakeback pendiente de hoy. Los cierres semanales ya cargados quedan incluidos y no se vuelven a sumar."}
+      </div>
+      {filas.length === 0 ? (
+        <div className="muted" style={{ padding: "12px 0" }}>Este supervisor no tiene agentes activos a cargo.</div>
+      ) : (
+        <div className="ag-table-wrap" style={{ marginBottom: 12 }}>
+          <table className="ag-table">
+            <thead>
+              <tr>
+                <th style={{ width: 28 }}></th>
+                <th>Agente</th>
+                {!winLose && <th className="num">Fichas reales</th>}
+                <th className="num">Cuenta corriente</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => {
+                const nuevo = f.estado === "NUEVO";
+                return (
+                  <tr key={f.agentId} style={nuevo ? undefined : { opacity: 0.7 }}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        disabled={!nuevo}
+                        checked={nuevo && !!elegidos[f.agentId]}
+                        onChange={(e) => setElegidos({ ...elegidos, [f.agentId]: e.target.checked })}
+                      />
+                    </td>
+                    <td><b>{f.agentName}</b></td>
+                    {!winLose && <td className="num" style={{ whiteSpace: "nowrap" }}>{fmt(Number(nuevo ? f.fichas : f.importado?.fichas ?? f.fichas))}</td>}
+                    <td style={{ whiteSpace: "nowrap" }} className={`num ${Number(nuevo ? f.cuentaCorriente : f.importado?.cuentaCorriente ?? 0) < -0.004 ? "neg" : ""}`}>
+                      {fmt(Number(nuevo ? f.cuentaCorriente : f.importado?.cuentaCorriente ?? f.cuentaCorriente))}
+                    </td>
+                    <td>
+                      {f.estado === "NUEVO" && <span className="muted">Sin importar{f.semanaCorte ? ` · incluye hasta la semana del ${dateShort(f.semanaCorte)}` : ""}</span>}
+                      {f.estado === "IMPORTADO" && <span className="muted">Ya importado{f.importado ? ` el ${dateShort(f.importado.fecha)}` : ""}</span>}
+                      {f.estado === "OPERA_EN_CUENTA" && <span className="neg" title={f.motivo ?? ""}>Ya opera en la cuenta</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {sel.length > 0 && (
+        <div className="panel" style={{ margin: "6px 0 12px", padding: "12px 14px", background: "var(--panel-2)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+            <span className="muted">Cuenta corriente</span>
+            <span>{fmt(ccAntes)} → <b className={ccAntes + totalCc < -0.004 ? "neg" : ""}>{fmt(Math.round((ccAntes + totalCc) * 100) / 100)}</b></span>
+          </div>
+          {!winLose && (
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+              <span className="muted">Fichas reales</span>
+              <span>{fmt(fichasAntes)} → <b>{fmt(Math.round((fichasAntes + totalFichas) * 100) / 100)}</b></span>
+            </div>
+          )}
+        </div>
+      )}
+      {filas.some((f) => f.estado === "OPERA_EN_CUENTA") && (
+        <div className="warnbox" style={{ marginBottom: 10 }}>
+          Los agentes marcados "Ya opera en la cuenta" ya tienen cierres o movimientos acá: importarlos duplicaría su saldo.
+        </div>
+      )}
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>{hayNuevos ? "Cancelar" : "Cerrar"}</button>
+        {hayNuevos && (
+          <button className="btn" disabled={loading || sel.length === 0} onClick={confirmar}>
+            {loading ? "Importando..." : `Importar ${sel.length} agente${sel.length === 1 ? "" : "s"}`}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

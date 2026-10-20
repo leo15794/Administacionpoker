@@ -7,6 +7,7 @@
 import { pool, newId } from "../db/pool.js";
 import type { PoolClient } from "pg";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
+import { getResumenAgentePDF } from "./agentesResumen.js";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -293,6 +294,8 @@ export interface LineaMigracionHistorica {
   fichasMigradas: number;
   pendienteMigrado: number;
   notes?: string | null;
+  // Importación desde el botón "Importar saldos": el saldo ya incluye los cierres hasta esta semana (YYYY-MM-DD).
+  semanaCorte?: string | null;
 }
 export async function migrarSaldoHistoricoSupervisor(
   supervisorAgentId: string,
@@ -312,9 +315,9 @@ export async function migrarSaldoHistoricoSupervisor(
       ccTotal = round2(ccTotal + l.pendienteMigrado);
       await client.query(
         `INSERT INTO supervisor_migracion_historica
-          (id, supervisor_agent_id, agent_id, club_id, fichas_migradas, pendiente_migrado, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [newId("svmig"), supervisorAgentId, l.agentId, l.clubId ?? null, l.fichasMigradas, l.pendienteMigrado, l.notes ?? null, createdBy ?? null]
+          (id, supervisor_agent_id, agent_id, club_id, fichas_migradas, pendiente_migrado, notes, created_by, semana_corte)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [newId("svmig"), supervisorAgentId, l.agentId, l.clubId ?? null, l.fichasMigradas, l.pendienteMigrado, l.notes ?? null, createdBy ?? null, l.semanaCorte ?? null]
       );
     }
 
@@ -622,6 +625,128 @@ export async function listMigracionHistorica(supervisorAgentId: string) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Importar saldos de los agentes a cargo (20/10/2026, pedido de Leo: "un botón dentro de supervisor para mover los
+// saldos" al crear un supervisor y asignarle agentes). Generaliza los scripts migrarSaldoHistorico*/ajustarSaldoInicial*:
+//  - Prepago: fichas = balance + resultado de mesas PREPAGO; cuenta corriente = rakeback pendiente activo (igual que
+//    calcularSaldoActualDeSubordinado).
+//  - Win/Lose: solo cuenta corriente = saldo operativo final de "Resumen por agente" de la última semana con cierre
+//    (negativo = el agente nos debe).
+// Queda registrado como una línea de supervisor_migracion_historica ("Origen del saldo") con la semana de corte: los
+// cierres de esa semana y anteriores YA están dentro del saldo y el cierre consolidado no los vuelve a sumar.
+// Nunca toca balances/pendientes/liquidaciones del agente. Un agente ya importado no se vuelve a importar.
+// ---------------------------------------------------------------------------------------------
+export type EstadoImportacionAgente = "NUEVO" | "IMPORTADO" | "OPERA_EN_CUENTA";
+export interface PropuestaImportacionAgente {
+  agentId: string;
+  agentName: string;
+  estado: EstadoImportacionAgente;
+  fichas: number;
+  cuentaCorriente: number;
+  clubId: string | null;
+  semanaCorte: string | null;
+  importado: { fichas: number; cuentaCorriente: number; fecha: string } | null;
+  motivo: string | null;
+}
+
+async function calcularPropuestaImportacion(sup: any, ag: any): Promise<PropuestaImportacionAgente> {
+  const winLose = esSupervisorWinLose(sup);
+  const ult = await pool.query(
+    `SELECT week_start, club_id FROM weekly_closings WHERE agent_id = $1 AND status <> 'REVERTIDO' ORDER BY week_start DESC, created_at DESC LIMIT 1`,
+    [ag.id]
+  );
+  const semanaCorte: string | null = ult.rows[0] ? String(ult.rows[0].week_start).slice(0, 10) : null;
+
+  let fichas = 0;
+  let cuentaCorriente = 0;
+  let clubId: string | null = ult.rows[0]?.club_id ?? null;
+  if (winLose) {
+    if (semanaCorte) {
+      const r = await getResumenAgentePDF(ag.id, semanaCorte, "WIN_LOSE");
+      cuentaCorriente = r ? round2(r.estadoCuenta.saldoOperativoFinal) : 0;
+    }
+  } else {
+    const saldo = await calcularSaldoActualDeSubordinado(ag.id);
+    fichas = saldo.fichas;
+    cuentaCorriente = saldo.pendiente;
+    clubId = clubId ?? saldo.clubId;
+  }
+
+  const imp = await pool.query(
+    `SELECT COALESCE(SUM(fichas_migradas),0) as f, COALESCE(SUM(pendiente_migrado),0) as p, MAX(created_at) as fecha, COUNT(*) as n
+     FROM supervisor_migracion_historica WHERE supervisor_agent_id = $1 AND agent_id = $2`,
+    [sup.id, ag.id]
+  );
+  if (Number(imp.rows[0].n) > 0) {
+    return {
+      agentId: ag.id, agentName: ag.name, estado: "IMPORTADO", fichas, cuentaCorriente, clubId, semanaCorte,
+      importado: { fichas: round2(Number(imp.rows[0].f)), cuentaCorriente: round2(Number(imp.rows[0].p)), fecha: new Date(imp.rows[0].fecha).toISOString() },
+      motivo: null,
+    };
+  }
+
+  const opera = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM supervisor_cierre_lineas l JOIN supervisor_cierres c ON c.id = l.cierre_id
+         WHERE c.supervisor_agent_id = $1 AND l.agent_id = $2 AND c.status <> 'REVERTIDO') as cierres,
+       (SELECT COUNT(*) FROM supervisor_movimientos m
+         WHERE m.supervisor_agent_id = $1 AND m.agent_id = $2 AND m.status <> 'REVERTIDO') as movs`,
+    [sup.id, ag.id]
+  );
+  const cierres = Number(opera.rows[0].cierres);
+  const movs = Number(opera.rows[0].movs);
+  if (cierres > 0 || movs > 0) {
+    return {
+      agentId: ag.id, agentName: ag.name, estado: "OPERA_EN_CUENTA", fichas, cuentaCorriente, clubId, semanaCorte, importado: null,
+      motivo: `Ya tiene ${cierres} cierre${cierres === 1 ? "" : "s"} y ${movs} movimiento${movs === 1 ? "" : "s"} en la cuenta: importar su saldo lo duplicaría.`,
+    };
+  }
+  return { agentId: ag.id, agentName: ag.name, estado: "NUEVO", fichas, cuentaCorriente, clubId, semanaCorte, importado: null, motivo: null };
+}
+
+export async function previsualizarImportacionSaldos(supervisorAgentId: string): Promise<PropuestaImportacionAgente[]> {
+  const supRes = await pool.query(`SELECT * FROM agents WHERE id = $1`, [supervisorAgentId]);
+  const sup = supRes.rows[0];
+  if (!sup) throw new Error("Supervisor no encontrado.");
+  if (!sup.usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
+  const ags = await pool.query(
+    `SELECT id, name FROM agents WHERE supervisor = $1 AND active = true AND COALESCE(oculto_en_supervisor, false) = false ORDER BY name`,
+    [sup.name]
+  );
+  const out: PropuestaImportacionAgente[] = [];
+  for (const ag of ags.rows) out.push(await calcularPropuestaImportacion(sup, ag));
+  return out;
+}
+
+export async function importarSaldosSupervisor(supervisorAgentId: string, agentIds: string[], createdBy?: string | null) {
+  if (agentIds.length === 0) throw new Error("Elegí al menos un agente para importar.");
+  const supRes = await pool.query(`SELECT * FROM agents WHERE id = $1`, [supervisorAgentId]);
+  const sup = supRes.rows[0];
+  if (!sup) throw new Error("Supervisor no encontrado.");
+  if (!sup.usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
+
+  const propuestas = (await previsualizarImportacionSaldos(supervisorAgentId)).filter((p) => agentIds.includes(p.agentId));
+  if (propuestas.length !== new Set(agentIds).size) throw new Error("Algún agente no está a cargo de este supervisor.");
+  for (const p of propuestas) {
+    if (p.estado === "IMPORTADO") throw new Error(`"${p.agentName}" ya tiene su saldo importado.`);
+    if (p.estado === "OPERA_EN_CUENTA") throw new Error(`"${p.agentName}": ${p.motivo}`);
+  }
+  const clubFallback: string | null = (await pool.query(`SELECT id FROM clubs ORDER BY name LIMIT 1`)).rows[0]?.id ?? null;
+  const winLose = esSupervisorWinLose(sup);
+  const lineas: LineaMigracionHistorica[] = propuestas.map((p) => ({
+    agentId: p.agentId,
+    clubId: p.clubId ?? clubFallback,
+    fichasMigradas: p.fichas,
+    pendienteMigrado: p.cuentaCorriente,
+    semanaCorte: p.semanaCorte,
+    notes: winLose
+      ? `Saldo importado de "${p.agentName}" según Resumen por agente${p.semanaCorte ? ` (semana ${p.semanaCorte})` : ""}.`
+      : `Saldo importado de "${p.agentName}": fichas (balance + mesas Prepago) y rakeback pendiente actuales.`,
+  }));
+  const r = await migrarSaldoHistoricoSupervisor(supervisorAgentId, lineas, createdBy ?? null);
+  return { importados: propuestas.length, ...r };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Cierre semanal consolidado (14/10/2026, pedido de Leo: "las liquidaciones de sus agentes, sumen
 // su saldo al momento de hacer el cierre" -- confirmado con él: el saldo PROPIO del agente sigue
 // acumulando exactamente igual que siempre (balances/rakeback_pendiente, sin tocar), esto es un
@@ -634,6 +759,13 @@ export async function listMigracionHistorica(supervisorAgentId: string) {
 // NUNCA el rebate (es un campo distinto, del mecanismo viejo rebate_destino=RAKEBACK_SUPERVISOR,
 // que convive aparte y no hay que mezclar acá).
 // ---------------------------------------------------------------------------------------------
+
+// Cierres que NO se vuelven a sumar (20/10/2026): los de un agente cuyo saldo ya fue importado con el botón "Importar
+// saldos" y cuya semana es igual o anterior a la semana de corte de esa importación -- ya están dentro del saldo.
+const noImportadoSql = (supParam: string) =>
+  `NOT EXISTS (SELECT 1 FROM supervisor_migracion_historica smh
+     WHERE smh.supervisor_agent_id = ${supParam} AND smh.agent_id = wc.agent_id
+       AND smh.semana_corte IS NOT NULL AND smh.semana_corte >= wc.week_start)`;
 
 export async function getSemanasDisponiblesSupervisor(supervisorAgentId: string) {
   const sup = await pool.query(`SELECT name FROM agents WHERE id = $1`, [supervisorAgentId]);
@@ -666,11 +798,19 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
             COALESCE(SUM(wc.final_closing), 0) as total
      FROM agents a
      LEFT JOIN weekly_closings wc
-       ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
+       ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
      WHERE a.supervisor = $1
      GROUP BY a.id, a.name
      ORDER BY a.name`,
-    [sup.rows[0].name, weekStart]
+    [sup.rows[0].name, weekStart, supervisorAgentId]
+  );
+
+  // Agentes con cierre cargado esa semana que NO se suma porque ya está dentro de su saldo importado.
+  const yaIncluidos = await pool.query(
+    `SELECT DISTINCT a.name FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id
+     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND NOT ${noImportadoSql("$3")}
+     ORDER BY a.name`,
+    [sup.rows[0].name, weekStart, supervisorAgentId]
   );
 
   // Desglose por club de cada agente (19/10/2026, pedido de Leo: que el supervisor pueda desplegar de dónde sale
@@ -681,9 +821,9 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
      FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
      JOIN clubs c ON c.id = wc.club_id
-     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'
+     WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
      ORDER BY c.name`,
-    [sup.rows[0].name, weekStart]
+    [sup.rows[0].name, weekStart, supervisorAgentId]
   );
   const detallePorAgente = new Map<string, any[]>();
   for (const d of detalle.rows) {
@@ -721,6 +861,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
     // el rakeback (el resultado va a fichas reales).
     totalCierre,
     efectoCuentaCorriente: winLose ? totalCierre : rakebackTotal,
+    agentesYaIncluidosEnSaldo: yaIncluidos.rows.map((r) => r.name as string),
     aplicado: aplicado.rows[0] ?? null,
   };
 }
@@ -757,11 +898,11 @@ export async function aplicarCierreConsolidadoSupervisor(
               wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate, wc.final_closing
        FROM weekly_closings wc
        JOIN agents a ON a.id = wc.agent_id
-       WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO'`,
-      [sup.rows[0].name, weekStart]
+       WHERE a.supervisor = $1 AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}`,
+      [sup.rows[0].name, weekStart, supervisorAgentId]
     );
     if (lineasRes.rows.length === 0) {
-      throw new Error("No hay ningún cierre cargado para los agentes a cargo en esa semana.");
+      throw new Error("No hay ningún cierre para sumar en esa semana (si hay cierres cargados, ya están incluidos en el saldo importado de sus agentes).");
     }
 
     const resultadoTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.result), 0));

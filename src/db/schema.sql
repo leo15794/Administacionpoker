@@ -1858,6 +1858,11 @@ CREATE TABLE IF NOT EXISTS supervisor_migracion_historica (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Semana de corte de una importación de saldo (20/10/2026, botón "Importar saldos" del supervisor): el saldo importado
+-- del agente YA incluye todos los cierres semanales hasta esa semana (inclusive), así que el cierre consolidado no
+-- los vuelve a sumar. NULL en las migraciones anteriores (scripts), que siguen funcionando como siempre.
+ALTER TABLE supervisor_migracion_historica ADD COLUMN IF NOT EXISTS semana_corte DATE;
+
 -- Wallet Manos real cuando una carga/descarga de supervisor tiene usdt_real=true (30/09/2026,
 -- pedido de Leo: "si descargamos fichas... tiene que mover la wallet ya que enviamos el dinero
 -- de las fichas") -- guarda a qué treasury_adjustment corresponde para poder revertirlo bien

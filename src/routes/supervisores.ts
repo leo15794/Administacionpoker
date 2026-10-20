@@ -10,6 +10,8 @@ import {
   revertirMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
+  previsualizarImportacionSaldos,
+  importarSaldosSupervisor,
   listSaldosPorAgenteSupervisor,
   setOcultoSubordinado,
   getSemanasDisponiblesSupervisor,
@@ -99,6 +101,24 @@ supervisoresRouter.get("/:id/migracion-historica", requireAuth, requireAdmin, as
 supervisoresRouter.get("/:id/saldos-por-agente", requireAuth, requireAdmin, async (req, res) => {
   try {
     res.json(await listSaldosPorAgenteSupervisor(req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Importar saldos de los agentes a cargo (20/10/2026) -- ver repo/supervisores.ts importarSaldosSupervisor.
+supervisoresRouter.get("/:id/importar-saldos", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await previsualizarImportacionSaldos(req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+supervisoresRouter.post("/:id/importar-saldos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = z.object({ agentIds: z.array(z.string()).min(1) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.status(201).json(await importarSaldosSupervisor(req.params.id, parsed.data.agentIds, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
