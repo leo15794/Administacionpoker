@@ -29,7 +29,7 @@ export default function BancadoContratos() {
 
   async function eliminar(c: any, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!(await confirmDialog(`¿Borrar el contrato de ${c.nombre}? Esto borra TODO su historial (períodos, parciales, liquidaciones, cierres RMF, ajustes, costos fijos) para siempre -- no se puede deshacer. No afecta ningún movimiento de Wallet/Tesorería (este módulo no genera ninguno).`))) return;
+    if (!(await confirmDialog(`¿Borrar el contrato de ${c.nombre}? Esto borra TODO su historial (períodos, parciales, liquidaciones, cierres RMF, ajustes, costos fijos) para siempre -- no se puede deshacer. No afecta ningún movimiento de Wallet (este módulo no genera ninguno).`))) return;
     try {
       await api.bancadoContratos.eliminar(c.id);
       if (seleccionado === c.id) setSeleccionado(null);
@@ -281,7 +281,7 @@ function NuevoContratoForm({ onCreated }: { onCreated: () => void }) {
               <input type="number" step="0.01" value={rmfRakebackBancaPct} onChange={(e) => setRmfRakebackBancaPct(e.target.value)} />
             </div>
             <div className="field">
-              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total -- solo informativo, no genera ningún movimiento de Wallet/Tesorería.">% Unión sobre rake total (informativo)</label>
+              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total -- solo informativo, no genera ningún movimiento de Wallet.">% Unión sobre rake total (informativo)</label>
               <input type="number" step="0.01" value={rmfUnionSharePct} onChange={(e) => setRmfUnionSharePct(e.target.value)} />
             </div>
             <div className="field">

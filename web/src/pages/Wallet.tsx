@@ -19,13 +19,24 @@ function todayLocal() {
 export default function Wallet() {
   const { alertDialog, promptDialog } = useConfirmDialog();
   const [data, setData] = useState<any>(null);
+  // Caja de efectivo (20/10/2026): se sacó la pantalla "Tesorería" porque nunca tuvo un solo movimiento de
+  // efectivo (todo lo real es Wallet USDT). Si algún día se carga algo en efectivo, aparece acá abajo solo.
+  const [caja, setCaja] = useState<any>(null);
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
     setError("");
-    api.tesoreria({ ledger: "WALLET_MANOS" }).then(setData).catch((e) => setError(e.message));
+    api
+      .tesoreria({ ledger: "WALLET_MANOS" })
+      .then((d) => {
+        setData(d);
+        const hayEfectivo = (d.porLedger ?? []).some((l: any) => l.ledger === "CAJA_EFECTIVO" && Number(l.movimientos) > 0);
+        if (hayEfectivo) api.tesoreria({ ledger: "CAJA_EFECTIVO" }).then(setCaja).catch(() => setCaja(null));
+        else setCaja(null);
+      })
+      .catch((e) => setError(e.message));
   }
 
   async function revertir(m: any) {
@@ -151,6 +162,55 @@ export default function Wallet() {
           </table>
         )}
       </div>
+
+      {caja && (
+        <div className="panel">
+          <h3>Caja efectivo</h3>
+          <div className="muted" style={{ marginBottom: 12 }}>
+            Hay movimientos en efectivo cargados (con su custodio). Saldo neto de la caja:{" "}
+            <strong className={Number(caja.porLedger.find((l: any) => l.ledger === "CAJA_EFECTIVO")?.neto ?? 0) >= 0 ? "pos" : "neg"}>
+              {usd(caja.porLedger.find((l: any) => l.ledger === "CAJA_EFECTIVO")?.neto ?? 0)}
+            </strong>
+          </div>
+          <table>
+            <thead><tr><th>Custodio</th><th className="num">Neto en su poder</th><th className="num">Movimientos</th></tr></thead>
+            <tbody>
+              {caja.porCustodio.map((c: any) => (
+                <tr key={c.custodio}>
+                  <td>{c.custodio}</td>
+                  <td className="num"><span className={`badge ${Number(c.neto) >= 0 ? "pos" : "neg"}`}>{usd(c.neto)}</span></td>
+                  <td className="num muted">{c.movimientos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <h4 style={{ margin: "16px 0 8px" }}>Últimos movimientos de la caja</h4>
+          <table>
+            <thead><tr><th>Fecha y hora</th><th>Dirección</th><th className="num">Monto</th><th>Custodio</th><th>Detalle</th><th></th></tr></thead>
+            <tbody>
+              {caja.ultimosMovimientos.map((m: any) => (
+                <tr key={m.id} style={estaRevertido(m) ? { opacity: 0.55 } : undefined}>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{dateTime(m.occurred_at)}</td>
+                  <td className="muted">{m.direction === "INGRESO" ? "Ingreso" : "Egreso"}</td>
+                  <td className="num"><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
+                  <td>{m.custodian || "—"}</td>
+                  <td>
+                    {estaRevertido(m) && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
+                    {m.source === "ajuste" ? m.observation : m.agent_name}
+                  </td>
+                  <td>
+                    {!estaRevertido(m) && (
+                      <button className="btn secondary small" disabled={borrando === m.id} onClick={() => revertir(m)} title="Revertir este movimiento (genera uno opuesto, no borra nada)">
+                        {borrando === m.id ? "..." : "Revertir"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showAjuste && (
         <Modal title="Registrar movimiento de Wallet" onClose={() => setShowAjuste(false)}>

@@ -827,7 +827,7 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
               <input value={rakebackBancaPct} onChange={(e) => setRakebackBancaPct(e.target.value)} type="number" step="0.01" />
             </div>
             <div className="field">
-              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total — solo informativo, no genera ningún movimiento de Wallet/Tesorería.">% Unión sobre rake total (informativo)</label>
+              <label title="% que la Unión (o quien corresponda) le reconoce a la banca sobre el rake total — solo informativo, no genera ningún movimiento de Wallet.">% Unión sobre rake total (informativo)</label>
               <input value={unionSharePct} onChange={(e) => setUnionSharePct(e.target.value)} type="number" step="0.01" />
             </div>
             <div className="field">

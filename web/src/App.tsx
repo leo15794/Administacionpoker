@@ -14,7 +14,6 @@ import ResumenFinanciero from "./pages/ResumenFinanciero";
 // api.getToken() (el token del sistema principal). La propia página maneja su login (ver
 // TeamBackAffiliates.tsx: TbLogin, tb_token/tb_session en localStorage).
 import TeamBackAffiliates from "./pages/TeamBackAffiliates";
-import Tesoreria from "./pages/Tesoreria";
 import Garantias from "./pages/Garantias";
 import Proveedores from "./pages/Proveedores";
 import Supervisores from "./pages/Supervisores";
@@ -57,7 +56,6 @@ export default function App() {
           <Route path="agentes" element={<Agentes />} />
           <Route path="movimientos" element={<Movimientos />} />
           <Route path="cierres" element={<Cierres />} />
-          <Route path="tesoreria" element={<Tesoreria />} />
           <Route path="wallet" element={<Wallet />} />
           <Route path="garantias" element={<Garantias />} />
           <Route path="proveedores" element={<Proveedores />} />

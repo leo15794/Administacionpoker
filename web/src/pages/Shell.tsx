@@ -53,11 +53,6 @@ const icon = {
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
     </svg>
   ),
-  tesoreria: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" /><path d="M12 7v10" /><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 3 6 1.5 6 4.5 0 1.4-1.3 2.5-3 2.5s-3-1.1-3-2.5" />
-    </svg>
-  ),
   garantias: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4Z" /><path d="m9 12 2 2 4-4" />
@@ -202,7 +197,6 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "operacion" },
   { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "finanzas" },
-  { key: "tesoreria", to: "/dashboard/tesoreria", icon: "tesoreria", label: "Tesorería", group: "finanzas" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "finanzas" },
   { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
   { key: "supervisores", to: "/dashboard/supervisores", icon: "supervisores", label: "Supervisores", group: "finanzas" },

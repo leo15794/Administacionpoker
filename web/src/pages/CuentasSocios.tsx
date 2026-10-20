@@ -135,7 +135,7 @@ export default function CuentasSocios() {
         <div>
           <h2>Cuentas de socios</h2>
           <div className="muted">
-            Plata de los socios (compensaciones, comisiones por referido, retiros, gastos) — separado del saldo de agentes y de Tesorería.
+            Plata de los socios (compensaciones, comisiones por referido, retiros, gastos) — separado del saldo de agentes y de Wallet.
             Acá se puede editar y eliminar todo directamente, sin pasar por revertir/corregir.
           </div>
         </div>
@@ -354,7 +354,7 @@ export default function CuentasSocios() {
                         </span>
                       )}
                       {m.treasury_adjustment_id && (
-                        <span className="badge neutral" title="Este movimiento generó un ingreso/egreso real en Tesorería → Wallet.">
+                        <span className="badge neutral" title="Este movimiento generó un ingreso/egreso real en Wallet.">
                           Wallet
                         </span>
                       )}
@@ -566,12 +566,12 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
           {moveWallet ? (
             montoPreview ? (
               <>
-                Al guardar se va a registrar en Tesorería → Wallet un{" "}
+                Al guardar se va a registrar en Wallet un{" "}
                 <strong>{montoPreview > 0 ? "EGRESO" : "INGRESO"}</strong> real de {usd(Math.abs(montoPreview))}.
                 {yaEstabaVinculado && " Si cambiás el monto, se corrige también el movimiento de Wallet (se revierte el viejo y se crea uno nuevo)."}
               </>
             ) : (
-              "Al guardar se va a registrar un movimiento real en Tesorería → Wallet por el monto de arriba."
+              "Al guardar se va a registrar un movimiento real en Wallet por el monto de arriba."
             )
           ) : yaEstabaVinculado ? (
             "Este movimiento tiene un ingreso/egreso real en Wallet vinculado — si destildás esto, se revierte."
