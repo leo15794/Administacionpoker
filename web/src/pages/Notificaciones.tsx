@@ -2,9 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { dateTime } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import AvisoImagenes from "../components/AvisoImagenes";
+import { comprimirImagen, tamanoLegible } from "../imagenes";
 
 // Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo). Siempre a mano: nada se manda solo,
 // se elige a quién (todos o algunos), se escribe el aviso y se confirma antes de enviar.
+const MAX_IMAGENES = 10;
+interface Adjunto {
+  key: string;
+  nombre: string;
+  preview: string;
+  estado: "subiendo" | "ok" | "error";
+  id?: string;
+  size?: number;
+  error?: string;
+}
 const ROL: Record<string, string> = { SUPERVISOR: "Supervisor", AGENT: "Agente", PROVEEDOR: "Proveedor" };
 const FILTROS = [
   { key: "TODOS", label: "Todos" },
@@ -27,6 +39,35 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
   const [mensaje, setMensaje] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<any | null>(null);
+  const [adjuntos, setAdjuntos] = useState<Adjunto[]>([]);
+  const [arrastrando, setArrastrando] = useState(false);
+
+  // Subir todas juntas: se pueden elegir varias a la vez (o arrastrarlas) y se achican y suben de a 3 en paralelo.
+  async function agregarArchivos(lista: FileList | File[]) {
+    setError("");
+    const archivos = [...lista].filter((f) => f.type.startsWith("image/"));
+    const lugar = MAX_IMAGENES - adjuntos.length;
+    if (archivos.length > lugar) setError(`Entran hasta ${MAX_IMAGENES} imágenes por aviso: se agregaron ${Math.max(lugar, 0)} de ${archivos.length}.`);
+    const nuevos: Adjunto[] = archivos.slice(0, Math.max(lugar, 0)).map((f) => ({ key: Math.random().toString(36).slice(2), nombre: f.name, preview: URL.createObjectURL(f), estado: "subiendo" as const }));
+    if (nuevos.length === 0) return;
+    setAdjuntos((prev) => [...prev, ...nuevos]);
+    const cola = nuevos.map((n, i) => ({ n, f: archivos[i] }));
+    const actualizar = (key: string, cambio: Partial<Adjunto>) => setAdjuntos((prev) => prev.map((a) => (a.key === key ? { ...a, ...cambio } : a)));
+    async function trabajador() {
+      for (let item = cola.shift(); item; item = cola.shift()) {
+        try {
+          const blob = await comprimirImagen(item.f);
+          const r = await api.notificaciones.subirImagen(blob, item.f.name.replace(/\.[^.]+$/, "") + ".jpg");
+          actualizar(item.n.key, { estado: "ok", id: r.id, size: r.size });
+        } catch (e: any) {
+          actualizar(item.n.key, { estado: "error", error: e?.message || "No se pudo subir." });
+        }
+      }
+    }
+    await Promise.all([trabajador(), trabajador(), trabajador()]);
+  }
+  const subiendo = adjuntos.some((a) => a.estado === "subiendo");
+  const imagenesListas = adjuntos.filter((a) => a.estado === "ok" && a.id);
 
   function cargar() {
     api.notificaciones.destinatarios().then(setDestinatarios).catch((e: any) => setError(e.message));
@@ -71,16 +112,21 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
     setResultado(null);
     if (!titulo.trim() || !mensaje.trim()) return setError("Escribí el título y el mensaje.");
     if (elegidos.size === 0) return setError("Elegí al menos un destinatario.");
+    if (subiendo) return setError("Esperá a que terminen de subir las imágenes.");
+    if (adjuntos.some((a) => a.estado === "error")) return setError("Hay imágenes que no se pudieron subir: quitalas o volvé a agregarlas.");
     const ok = await confirmDialog(
       `Vas a enviar "${titulo.trim()}" a ${elegidos.size} ${elegidos.size === 1 ? "destinatario" : "destinatarios"}.\n` +
-        `Les llega a ${conAviso}${sinAviso > 0 ? ` (a otros ${sinAviso} no, porque no activaron las notificaciones)` : ""}.\n\n¿Enviar?`,
+        `${imagenesListas.length > 0 ? `Lleva ${imagenesListas.length} ${imagenesListas.length === 1 ? "imagen" : "imágenes"}.\n` : ""}` +
+        `Notificación al celular: ${conAviso}${sinAviso > 0 ? ` (los otros ${sinAviso} lo ven al entrar a su portal, porque no activaron las notificaciones)` : ""}.\n\n¿Enviar?`,
       { title: "Confirmar envío" }
     );
     if (!ok) return;
     setEnviando(true);
     try {
-      const r = await api.notificaciones.enviar({ userIds: [...elegidos], titulo: titulo.trim(), mensaje: mensaje.trim() });
+      const r = await api.notificaciones.enviar({ userIds: [...elegidos], titulo: titulo.trim(), mensaje: mensaje.trim(), imagenIds: imagenesListas.map((a) => a.id!) });
       setResultado(r);
+      adjuntos.forEach((a) => URL.revokeObjectURL(a.preview));
+      setAdjuntos([]);
       cargar();
     } catch (e: any) {
       setError(e.message || "No se pudo enviar.");
@@ -154,12 +200,40 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
             <label>Mensaje <span className="muted">({mensaje.length}/240)</span></label>
             <textarea value={mensaje} maxLength={240} rows={4} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej. Ya cargamos tu cierre. Entrá a tu portal para ver el detalle." />
           </div>
+          <div className="field">
+            <label>Imágenes <span className="muted">({adjuntos.length}/{MAX_IMAGENES}) · opcional</span></label>
+            <label
+              className="np-drop"
+              onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
+              onDragLeave={() => setArrastrando(false)}
+              onDrop={(e) => { e.preventDefault(); setArrastrando(false); agregarArchivos(e.dataTransfer.files); }}
+              style={{ display: "block", padding: "14px 12px", textAlign: "center", border: `2px dashed ${arrastrando ? "var(--accent)" : "var(--border-strong, var(--border))"}`, borderRadius: 12, cursor: adjuntos.length >= MAX_IMAGENES ? "not-allowed" : "pointer", background: arrastrando ? "var(--accent-soft)" : "transparent" }}
+            >
+              <input type="file" accept="image/*" multiple disabled={adjuntos.length >= MAX_IMAGENES} style={{ display: "none" }} onChange={(e) => { if (e.target.files) agregarArchivos(e.target.files); e.target.value = ""; }} />
+              <b>Elegí todas juntas</b> o arrastralas acá
+              <div className="muted" style={{ fontSize: 12 }}>Hasta {MAX_IMAGENES} imágenes. Se achican solas antes de subir.</div>
+            </label>
+            {adjuntos.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                {adjuntos.map((a) => (
+                  <div key={a.key} style={{ position: "relative", width: 72 }} title={a.error || a.nombre}>
+                    <div style={{ width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: `1px solid ${a.estado === "error" ? "var(--red)" : "var(--border)"}`, background: "var(--panel-2)" }}>
+                      <img src={a.preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: a.estado === "subiendo" ? 0.45 : 1 }} />
+                    </div>
+                    <button type="button" onClick={() => { URL.revokeObjectURL(a.preview); setAdjuntos((prev) => prev.filter((x) => x.key !== a.key)); }} aria-label="Quitar" style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", fontSize: 11, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+                    <div className="muted" style={{ fontSize: 10.5, textAlign: "center", marginTop: 2 }}>{a.estado === "subiendo" ? "Subiendo..." : a.estado === "error" ? "Error" : tamanoLegible(a.size || 0)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="saldo-sub" style={{ marginBottom: 6 }}>Así les llega:</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 12, border: "1px solid var(--border)", borderRadius: 12, background: "var(--panel-2)", marginBottom: 12 }}>
             <img src="/admin-icon-192.png" alt="" width={36} height={36} style={{ borderRadius: 9, flexShrink: 0 }} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{titulo || "Título del aviso"}</div>
               <div className="muted" style={{ fontSize: 12.5 }}>{mensaje || "Acá va el mensaje."}</div>
+              {imagenesListas.length > 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>🖼 {imagenesListas.length} {imagenesListas.length === 1 ? "imagen" : "imágenes"} (la primera se ve grande en Android)</div>}
             </div>
           </div>
           <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
@@ -167,16 +241,16 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
               ? "Todavía no elegiste a nadie."
               : `${elegidos.size} elegidos: les llega a ${conAviso}${sinAviso > 0 ? ` y ${sinAviso} no lo van a recibir (sin notificaciones activadas)` : ""}.`}
           </div>
-          <button className="btn" onClick={enviar} disabled={enviando || elegidos.size === 0}>
+          <button className="btn" onClick={enviar} disabled={enviando || subiendo || elegidos.size === 0}>
             {enviando ? "Enviando..." : `Enviar a ${elegidos.size || ""} ${elegidos.size === 1 ? "persona" : "personas"}`.replace("  ", " ")}
           </button>
 
           {resultado && (
             <div className="panel" style={{ margin: "14px 0 0", padding: 12, background: "var(--panel-2)" }}>
-              <b>Enviado.</b> Les llegó a {resultado.entregados} de {resultado.elegidos}.
+              <b>Enviado.</b> Notificación al celular de {resultado.entregados} de {resultado.elegidos}. Todos lo ven en su portal.
               {resultado.sinActivar.length > 0 && (
                 <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
-                  No les llegó (sin notificaciones activadas): {resultado.sinActivar.map((x: any) => x.nombre).join(", ")}.
+                  Sin notificaciones activadas (lo ven al entrar a su portal): {resultado.sinActivar.map((x: any) => x.nombre).join(", ")}.
                 </div>
               )}
             </div>
@@ -192,7 +266,7 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
-                <tr><th>Fecha</th><th>Título</th><th>Mensaje</th><th>Llegó a</th><th>Sin activar</th><th>Lo envió</th></tr>
+                <tr><th>Fecha</th><th>Título</th><th>Mensaje</th><th>Imágenes</th><th>Notificación a</th><th>Sin activar</th><th>Lo envió</th></tr>
               </thead>
               <tbody>
                 {historial.map((h) => (
@@ -200,6 +274,7 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
                     <td>{dateTime(h.created_at)}</td>
                     <td><b>{h.titulo}</b></td>
                     <td style={{ maxWidth: 320 }}>{h.mensaje}</td>
+                    <td style={{ minWidth: 60 }}><AvisoImagenes imagenes={h.imagenes ?? []} compacto /></td>
                     <td>{h.entregados} de {h.elegidos}</td>
                     <td className="muted" style={{ fontSize: 12 }}>{(h.sin_activar ?? []).map((x: any) => x.nombre).join(", ") || "—"}</td>
                     <td className="muted" style={{ fontSize: 12 }}>{h.actor ?? "—"}</td>

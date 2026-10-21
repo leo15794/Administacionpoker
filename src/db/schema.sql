@@ -2407,3 +2407,25 @@ CREATE TABLE IF NOT EXISTS push_envios_log (
   actor       TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Imágenes y bandeja de los avisos (21/10/2026, pedido de Leo): hasta 10 imágenes por aviso, guardadas acá (el navegador las achica antes de subirlas);
+-- cada aviso queda en la bandeja de sus destinatarios para verlo y descargar las imágenes aunque no tengan las notificaciones activadas.
+ALTER TABLE push_envios_log ADD COLUMN IF NOT EXISTS imagenes JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS aviso_imagenes (
+  id         TEXT PRIMARY KEY,
+  nombre     TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  size       INTEGER NOT NULL,
+  datos      BYTEA NOT NULL,
+  creado_por TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS aviso_destinatarios (
+  aviso_id TEXT NOT NULL REFERENCES push_envios_log(id) ON DELETE CASCADE,
+  user_id  TEXT NOT NULL REFERENCES agent_users(id),
+  leido_at TIMESTAMPTZ,
+  PRIMARY KEY (aviso_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_aviso_destinatarios_user ON aviso_destinatarios(user_id);

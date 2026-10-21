@@ -6,6 +6,7 @@ import NotificationBell from "../components/NotificationBell";
 import IdleGuard from "../components/IdleGuard";
 import InstallAppBanner from "../components/InstallAppBanner";
 import PortalNotificacionesBanner from "../components/PortalNotificacionesBanner";
+import BandejaAvisos from "../components/BandejaAvisos";
 import Notificaciones from "./Notificaciones";
 
 const icon = {
@@ -678,6 +679,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       </div>
       <div className={`main ${avisosAbierto && !avisosCompleto ? "main-con-avisos" : ""}`}>
         <InstallAppBanner variante={role === "ADMIN" ? "admin" : "portal"} />
+        {role !== "ADMIN" && <BandejaAvisos />}
         {role !== "ADMIN" && <PortalNotificacionesBanner />}
         {role === "ADMIN" && (
           <div className="main-topbar">

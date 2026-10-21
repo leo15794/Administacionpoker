@@ -854,7 +854,25 @@ export const api = {
   notificaciones: {
     destinatarios: () => request("/notificaciones/destinatarios"),
     historial: () => request("/notificaciones/historial"),
-    enviar: (data: { userIds: string[]; titulo: string; mensaje: string }) => request("/notificaciones/enviar", { method: "POST", body: JSON.stringify(data) }),
+    enviar: (data: { userIds: string[]; titulo: string; mensaje: string; imagenIds?: string[] }) => request("/notificaciones/enviar", { method: "POST", body: JSON.stringify(data) }),
+    // Imágenes de los avisos: se suben de a una, en crudo (ya achicadas), y se bajan con la sesión.
+    subirImagen: async (blob: Blob, nombre: string): Promise<{ id: string; nombre: string; size: number }> => {
+      const res = await fetch(`${API_URL}/notificaciones/imagen`, {
+        method: "POST",
+        headers: { "Content-Type": blob.type || "image/jpeg", "x-nombre": encodeURIComponent(nombre), ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+        body: blob,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `No se pudo subir la imagen (${res.status}).`);
+      return data;
+    },
+    imagenBlob: async (id: string): Promise<Blob> => {
+      const res = await fetch(`${API_URL}/notificaciones/imagen/${id}`, { headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {} });
+      if (!res.ok) throw new Error("No se pudo bajar la imagen.");
+      return res.blob();
+    },
+    bandeja: () => request("/notificaciones/bandeja"),
+    marcarLeidos: (ids: string[]) => request("/notificaciones/bandeja/leidos", { method: "POST", body: JSON.stringify({ ids }) }),
     // Lo que usa cada portal para activar los avisos en su propio celular
     miEstado: () => request("/notificaciones/mi-estado"),
     suscribir: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request("/notificaciones/suscribir", { method: "POST", body: JSON.stringify(sub) }),
