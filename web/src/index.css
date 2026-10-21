@@ -619,6 +619,20 @@ body { overflow-x: hidden; }
   .tb-install-btn { width: 100%; padding: 10px 12px; }
 }
 
+/* Panel de avisos a la derecha (21/10/2026): tarjeta flotante que se puede agrandar a pantalla completa. */
+.np-open { display: flex; align-items: center; gap: 8px; margin-left: auto; padding: 0 14px; height: 40px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-weight: 650; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+.np-open:hover { background: var(--panel-2); }
+.np { position: fixed; z-index: 60; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22); flex-direction: column; overflow: hidden; }
+.np.dock { top: 14px; right: 14px; bottom: 14px; width: 400px; }
+.np.full { inset: 14px; }
+.np-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.np-h h3 { margin: 0; font-size: 16px; flex: 1; }
+.np-ic { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim); font-size: 15px; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.np-ic:hover { color: var(--text); }
+.np-body { padding: 14px 16px; overflow: auto; flex: 1; }
+.np .panel { box-shadow: none; border: 0; background: transparent; padding: 0; margin: 0 0 14px; }
+@media (min-width: 1500px) { .main.main-con-avisos { margin-right: 420px; } }
+@media (max-width: 768px) { .np.dock, .np.full { inset: 8px; width: auto; } .np-open span { display: none; } }
 .notif-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 @media (max-width: 960px) { .notif-grid { grid-template-columns: 1fr !important; } }
 .tb-install-banner.install-admin { display: none; margin: 0 0 14px; }

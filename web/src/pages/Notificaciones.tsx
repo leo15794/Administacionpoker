@@ -13,7 +13,8 @@ const FILTROS = [
   { key: "PROVEEDOR", label: "Proveedores" },
 ];
 
-export default function Notificaciones() {
+// layout: "pagina" (ruta propia), "panel" (columna angosta a la derecha) o "completa" (panel agrandado a pantalla completa).
+export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina" | "panel" | "completa" }) {
   const { confirmDialog } = useConfirmDialog();
   const [destinatarios, setDestinatarios] = useState<any[] | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
@@ -90,18 +91,18 @@ export default function Notificaciones() {
 
   return (
     <div>
-      <div className="topbar">
+      {layout === "pagina" && <div className="topbar">
         <div>
           <h2>Notificaciones</h2>
           <div className="muted">
             Mandá un aviso al celular de supervisores, agentes y proveedores. Se envía solo cuando vos lo confirmás, a quienes elijas. Les llega solo a quienes activaron las notificaciones en su portal.
           </div>
         </div>
-      </div>
+      </div>}
 
       {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)", gap: 14, alignItems: "start" }} className="notif-grid">
+      <div style={{ display: "grid", gridTemplateColumns: layout === "panel" ? "1fr" : "minmax(0, 1.2fr) minmax(0, 1fr)", gap: 14, alignItems: "start" }} className={layout === "panel" ? "" : "notif-grid"}>
         <div className="panel">
           <h3 style={{ margin: "0 0 10px" }}>1. A quién</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
@@ -127,7 +128,7 @@ export default function Notificaciones() {
                 </button>
                 <span className="muted" style={{ fontSize: 12 }}>{elegidos.size} elegidos</span>
               </div>
-              <div style={{ maxHeight: 420, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
+              <div style={{ maxHeight: layout === "panel" ? 240 : layout === "completa" ? "calc(100vh - 330px)" : 420, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 10 }}>
                 {visibles.map((d) => (
                   <label key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderBottom: "1px solid var(--border)", cursor: "pointer" }}>
                     <input type="checkbox" checked={elegidos.has(d.id)} onChange={() => alternar(d.id)} />

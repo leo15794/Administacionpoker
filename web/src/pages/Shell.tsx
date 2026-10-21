@@ -6,6 +6,7 @@ import NotificationBell from "../components/NotificationBell";
 import IdleGuard from "../components/IdleGuard";
 import InstallAppBanner from "../components/InstallAppBanner";
 import PortalNotificacionesBanner from "../components/PortalNotificacionesBanner";
+import Notificaciones from "./Notificaciones";
 
 const icon = {
   resumen: (
@@ -83,6 +84,11 @@ const icon = {
   rakebackPendiente: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+    </svg>
+  ),
+  avisos: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
     </svg>
   ),
   notificaciones: (
@@ -224,7 +230,6 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales", group: "operacion" },
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "operacion" },
-  { key: "notificaciones", to: "/dashboard/notificaciones", icon: "notificaciones", label: "Notificaciones", group: "operacion" },
   { key: "wallet", to: "/dashboard/wallet", icon: "wallet", label: "Wallet", group: "finanzas" },
   { key: "garantias", to: "/dashboard/garantias", icon: "garantias", label: "Garantías", group: "finanzas" },
   { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
@@ -283,6 +288,11 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const [pinned, setPinned] = useState(getInitialPinned);
   const [pos, setPos] = useState<MenuPos>(getInitialPos);
   const [desplegado, setDesplegado] = useState<string | null>(null);
+  // Panel de avisos a la derecha (21/10/2026, pedido de Leo): arranca cerrado, se monta la primera vez que se abre y después queda montado
+  // (oculto) para no perder lo que se estaba escribiendo; se puede agrandar a pantalla completa.
+  const [avisosAbierto, setAvisosAbierto] = useState(false);
+  const [avisosCompleto, setAvisosCompleto] = useState(false);
+  const [avisosMontado, setAvisosMontado] = useState(false);
   const [arrastrando, setArrastrando] = useState<{ zona: MenuPos | null; x: number; y: number } | null>(null);
   // Drawer del sidebar en mobile (15/10/2026) -- estado aparte de "collapsed" (que es el
   // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
@@ -666,12 +676,24 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           </button>
         </div>
       </div>
-      <div className="main">
+      <div className={`main ${avisosAbierto && !avisosCompleto ? "main-con-avisos" : ""}`}>
         <InstallAppBanner variante={role === "ADMIN" ? "admin" : "portal"} />
         {role !== "ADMIN" && <PortalNotificacionesBanner />}
         {role === "ADMIN" && (
           <div className="main-topbar">
             <GlobalSearch />
+            <button
+              type="button"
+              className="np-open"
+              title="Enviar avisos a supervisores, agentes y proveedores"
+              onClick={() => {
+                setAvisosMontado(true);
+                setAvisosAbierto((v) => !v);
+              }}
+            >
+              {icon.avisos}
+              <span>Avisos</span>
+            </button>
             <NotificationBell />
           </div>
         )}
@@ -693,6 +715,18 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             <span>Más</span>
           </button>
         </nav>
+      )}
+      {role === "ADMIN" && avisosMontado && (
+        <aside className={`np ${avisosCompleto ? "full" : "dock"}`} style={{ display: avisosAbierto ? "flex" : "none" }} aria-label="Enviar avisos">
+          <div className="np-h">
+            <h3>Notificaciones</h3>
+            <button type="button" className="np-ic" title={avisosCompleto ? "Volver al panel" : "Pantalla completa"} onClick={() => setAvisosCompleto((v) => !v)}>{avisosCompleto ? "⤡" : "⤢"}</button>
+            <button type="button" className="np-ic" title="Cerrar" onClick={() => { setAvisosAbierto(false); setAvisosCompleto(false); }}>✕</button>
+          </div>
+          <div className="np-body">
+            <Notificaciones layout={avisosCompleto ? "completa" : "panel"} />
+          </div>
+        </aside>
       )}
       <IdleGuard />
     </div>
