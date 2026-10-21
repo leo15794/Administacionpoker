@@ -397,7 +397,18 @@ export function calcularSaldoFinanciero(system: SistemaAgente, fichasReales: num
  */
 export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancieroFila[]> {
   const r = await pool.query(
-    `WITH cuentas_agente AS (
+    `WITH cuentas_sup AS (
+       -- Cuentas de supervisores (usa_cuenta_consolidada, supervisor o con agentes a cargo): lo que se debe/deben es el saldo de
+       -- la CUENTA, no el sistema viejo de sus agentes (21/10/2026, pedido de Leo: el Resumen inflaba Por cobrar/Por pagar
+       -- porque seguía sumando el pendiente viejo de los agentes de un supervisor, que se salda desde la cuenta).
+       SELECT a.id FROM agents a
+       WHERE a.usa_cuenta_consolidada = true
+         AND (a.account_type = 'SUPERVISOR' OR EXISTS (SELECT 1 FROM agents s WHERE s.supervisor = a.name))
+     ),
+     agentes_en_cuenta AS (
+       SELECT ag.id as agent_id FROM agents ag JOIN agents su ON su.name = ag.supervisor WHERE su.id IN (SELECT id FROM cuentas_sup)
+     ),
+     cuentas_agente AS (
        -- Agentes con cuenta propia en la sección Agentes (activada, no supervisor, nadie a cargo): su pendiente de rakeback
        -- viejo ya no cuenta -- lo que se les debe/deben es la cuenta corriente de su cuenta (se suma más abajo).
        SELECT a.id as agent_id, sc.cuenta_corriente,
@@ -452,9 +463,10 @@ export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancier
      LEFT JOIN balances b ON b.agent_id = co.agent_id AND b.club_id = co.club_id
      LEFT JOIN pendiente_agg p ON p.agent_id = co.agent_id AND p.club_id = co.club_id
      LEFT JOIN mesas_prepago m ON m.agent_id = co.agent_id AND m.club_id = co.club_id
+     WHERE co.agent_id NOT IN (SELECT agent_id FROM agentes_en_cuenta)
      ORDER BY a.name, c.name`
   );
-  return r.rows.map((row) => {
+  const filasViejas = r.rows.map((row) => {
     const system: SistemaAgente = row.system;
     const balanceAmount = Number(row.balance_amount);
     const totalFichasGanadasMesas = Number(row.total_fichas_ganadas_mesas);
@@ -473,6 +485,33 @@ export async function listSaldoFinancieroPorAgenteClub(): Promise<SaldoFinancier
       saldoFinanciero: calcularSaldoFinanciero(system, fichasReales, pendienteDisponible),
     };
   });
+
+  // Una fila por cuenta de supervisor: fichas reales + cuenta corriente (Prepago) o solo cuenta corriente (Win/Lose).
+  const cuentas = await pool.query(
+    `SELECT a.id, a.name, a.default_system, sc.fichas_reales, sc.cuenta_corriente
+     FROM agents a JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
+     WHERE a.usa_cuenta_consolidada = true
+       AND (a.account_type = 'SUPERVISOR' OR EXISTS (SELECT 1 FROM agents s WHERE s.supervisor = a.name))
+     ORDER BY a.name`
+  );
+  const filasCuentas: SaldoFinancieroFila[] = cuentas.rows.map((c) => {
+    const system: SistemaAgente = c.default_system === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO";
+    const fichas = Number(c.fichas_reales);
+    const cc = Number(c.cuenta_corriente);
+    return {
+      agentId: c.id,
+      clubId: "",
+      agentName: c.name,
+      clubName: "Cuenta de supervisor",
+      system,
+      balanceAmount: fichas,
+      totalFichasGanadasMesas: 0,
+      fichasReales: fichas,
+      pendienteDisponible: cc,
+      saldoFinanciero: calcularSaldoFinanciero(system, fichas, cc),
+    };
+  });
+  return [...filasViejas, ...filasCuentas];
 }
 
 /**
