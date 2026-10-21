@@ -1,3 +1,4 @@
+import LoginSwitch from "../components/LoginSwitch";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
@@ -58,6 +59,7 @@ export default function Login() {
           </div>
         </div>
         <div className="login-form-panel">
+          <LoginSwitch actual="poker" />
           <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
           <div className="sub login-reveal" style={{ animationDelay: ".28s" }}>Accedé con tu usuario y contraseña</div>
           <form onSubmit={onSubmit}>

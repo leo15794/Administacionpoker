@@ -18,6 +18,7 @@ import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
+import LoginSwitch from "../components/LoginSwitch";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
@@ -199,6 +200,7 @@ function TbLogin({ onLoggedIn }: { onLoggedIn: (s: TbSession) => void }) {
           </div>
         </div>
         <div className="login-form-panel">
+          <LoginSwitch actual="teamback" />
           <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
           <form onSubmit={onSubmit}>
             <div className="field login-reveal" style={{ animationDelay: ".36s" }}>
