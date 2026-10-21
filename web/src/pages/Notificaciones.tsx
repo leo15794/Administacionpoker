@@ -8,6 +8,20 @@ import { comprimirImagen, tamanoLegible } from "../imagenes";
 // Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo). Siempre a mano: nada se manda solo,
 // se elige a quién (todos o algunos), se escribe el aviso y se confirma antes de enviar.
 const MAX_IMAGENES = 10;
+
+// Avisos rápidos (21/10/2026, pedido de Leo): precargan título y mensaje, que se pueden editar antes de enviar.
+// Semanas de lunes a domingo, igual que los cierres: los torneos son de la semana en curso y el cierre es el de la semana que terminó.
+function rangoSemana(desfase: number): string {
+  const hoy = new Date();
+  const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - ((hoy.getDay() + 6) % 7) + desfase * 7);
+  const domingo = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6);
+  const f = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `${f(lunes)} al ${f(domingo)}`;
+}
+const AVISOS_RAPIDOS = [
+  { key: "torneos", etiqueta: "🏆 Torneos de la semana", titulo: () => "Torneos de la semana", mensaje: () => `Te dejamos los torneos de esta semana (${rangoSemana(0)}). Mirá las imágenes en tu portal.` },
+  { key: "cierre", etiqueta: "📅 Cierre semanal", titulo: () => "Tu cierre de la semana ya está", mensaje: () => `Ya cargamos tu cierre de la semana del ${rangoSemana(-1)}. Entrá a tu portal para ver el detalle.` },
+];
 interface Adjunto {
   key: string;
   nombre: string;
@@ -192,6 +206,12 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
 
         <div className="panel">
           <h3 style={{ margin: "0 0 10px" }}>2. Qué decirles</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <span className="muted" style={{ fontSize: 12 }}>Aviso rápido:</span>
+            {AVISOS_RAPIDOS.map((a) => (
+              <button key={a.key} type="button" className="btn secondary small" onClick={() => { setTitulo(a.titulo()); setMensaje(a.mensaje()); }}>{a.etiqueta}</button>
+            ))}
+          </div>
           <div className="field">
             <label>Título <span className="muted">({titulo.length}/60)</span></label>
             <input value={titulo} maxLength={60} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej. Tu cierre de la semana ya está" />
