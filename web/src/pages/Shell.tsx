@@ -667,7 +667,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </div>
       <div className="main">
-        <InstallAppBanner />
+        <InstallAppBanner variante={role === "ADMIN" ? "admin" : "portal"} />
         {role !== "ADMIN" && <PortalNotificacionesBanner />}
         {role === "ADMIN" && (
           <div className="main-topbar">

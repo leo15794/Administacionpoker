@@ -3,7 +3,7 @@
   "name": "Poker Gestión",
   "short_name": "Poker Gestión",
   "description": "Panel de administración de Poker Gestión.",
-  "start_url": "/dashboard",
+  "start_url": "/inicio",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

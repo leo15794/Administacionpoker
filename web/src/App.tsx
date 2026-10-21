@@ -34,6 +34,19 @@ import MiProveedorCierre from "./pages/MiProveedorCierre";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import { api } from "./api";
 
+// Pantalla de inicio de la app instalada (manifest start_url): lleva a cada uno a su portal según el rol de su sesión, o al login si no hay sesión.
+function Inicio() {
+  const token = api.getToken();
+  if (!token) return <Navigate to="/login" replace />;
+  let role = "";
+  try {
+    role = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+  return <Navigate to={role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : "/mi-cuenta"} replace />;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!api.getToken()) return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -45,6 +58,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/inicio" element={<Inicio />} />
 
         <Route
           path="/dashboard"

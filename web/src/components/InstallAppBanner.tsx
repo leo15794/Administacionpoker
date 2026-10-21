@@ -5,11 +5,15 @@ import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIo
 // Instalar el panel como app en el celular (21/10/2026, pedido de Leo): mismo comportamiento que el banner de TeamBack
 // Affiliates (prompt nativo en Android/Chrome; instrucciones manuales en iPhone), pero con su propio aviso de "cerrar"
 // y solo visible en pantallas chicas (ver .install-admin en index.css). No aparece si ya está instalada.
-export default function InstallAppBanner() {
+// variante "admin": solo celular y se cierra para siempre. variante "portal" (supervisor, proveedor, agente): se ve en cualquier pantalla
+// y, si lo cierran, vuelve a aparecer la próxima vez que entren (hasta que instalen la app).
+export default function InstallAppBanner({ variante = "admin" }: { variante?: "admin" | "portal" }) {
+  const store = variante === "portal" ? sessionStorage : localStorage;
+  const clave = variante === "portal" ? "dp_install_dismissed_portal" : "dp_install_dismissed";
   const [promptEvent, setPromptEvent] = useState(() => getInstallPromptEvent());
   const [dismissed, setDismissed] = useState(() => {
     try {
-      return localStorage.getItem("dp_install_dismissed") === "1";
+      return store.getItem(clave) === "1";
     } catch {
       return false;
     }
@@ -36,7 +40,7 @@ export default function InstallAppBanner() {
   function cerrar() {
     setDismissed(true);
     try {
-      localStorage.setItem("dp_install_dismissed", "1");
+      store.setItem(clave, "1");
     } catch {
       /* sin almacenamiento: solo vuelve a aparecer la próxima vez */
     }
@@ -44,7 +48,7 @@ export default function InstallAppBanner() {
 
   return (
     <>
-      <div className="tb-install-banner install-admin">
+      <div className={`tb-install-banner ${variante === "admin" ? "install-admin" : ""}`} style={variante === "portal" ? { margin: "0 0 14px" } : undefined}>
         <button className="tb-install-dismiss" onClick={cerrar} aria-label="Cerrar">✕</button>
         <img src="/admin-icon-192.png" alt="" width={40} height={40} style={{ borderRadius: 11, flexShrink: 0 }} />
         <div className="tb-install-text">
