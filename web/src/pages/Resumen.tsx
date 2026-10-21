@@ -160,14 +160,6 @@ export default function Resumen() {
   if (error) return <div className="error">No se pudo cargar el resumen: {error}</div>;
   if (!data) return <Loading />;
 
-  // Puente: hacer click en una KPI de arriba lleva directo al detalle que la compone — para
-  // "Agentes nos deben"/"Debemos a agentes" es filtrar por signo la misma tabla de saldos de
-  // abajo (nunca hace falta ir a buscarla aparte); para Wallet/Garantías/Agentes es navegar
-  // directo a esa sección, que ya tiene su propio historial de movimientos.
-  function irAKpi(signo: FiltroSigno) {
-    setFiltroSigno(signo);
-    tablaSaldosRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   const balancesFiltrados = data.balances
     .filter((b: any) => mostrarEnCero || fichasTotal(b) !== 0)
@@ -264,14 +256,6 @@ export default function Resumen() {
           <div className="muted">Estado financiero y operativo de Poker Gestión.</div>
         </div>
         <div className="dash-header-right">
-          <div>
-            <div className="muted" style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, marginBottom: 6 }}>
-              Período
-            </div>
-            <div className="period-static" title="Por ahora el resumen siempre muestra la semana actual. Vas a poder elegir otros períodos más adelante.">
-              Esta semana
-            </div>
-          </div>
           {actualizadoEn && (
             <div className="dash-updated-at">
               Última actualización
@@ -346,7 +330,10 @@ export default function Resumen() {
         >
           <div className="kpi-hero-label">Por cobrar</div>
           <div className="kpi-hero-amount pos">{usd(porCobrar)}</div>
-          <div className="kpi-hero-sub">Incluye adelantos</div>
+          <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+            <span>Win/Lose {usd(nosDebenWinLose)} · Prepago {usd(nosDebenPrepago)}</span>
+            <span>Incluye adelantos {usd(data.kpis.adelantosPendientes)}</span>
+          </div>
         </div>
 
         <div
@@ -356,7 +343,10 @@ export default function Resumen() {
         >
           <div className="kpi-hero-label">Por pagar</div>
           <div className="kpi-hero-amount neg">{usd(porPagar)}</div>
-          <div className="kpi-hero-sub">Incluye garantías</div>
+          <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+            <span>Win/Lose {usd(debemosWinLose)} · Prepago {usd(debemosPrepago)}</span>
+            <span>Incluye garantías {usd(data.kpis.garantiasPendientes)}</span>
+          </div>
         </div>
       </div>
 
@@ -370,51 +360,6 @@ export default function Resumen() {
           </div>
         </Modal>
       )}
-
-      {/* ============================== Operación ============================== */}
-      <div className="dash-section">
-        <div className="dash-section-title">Operación</div>
-      </div>
-      <div className="kpi-sub-grid">
-        <div
-          className="kpi-sub-card row-click"
-          onClick={() => document.getElementById("panel-saldo-por-club")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          title="Ver el saldo neto por club"
-        >
-          <div className="kpi-sub-label">Clubes activos</div>
-          <div className="kpi-sub-value">{data.kpis.clubesActivos}</div>
-        </div>
-        <div className="kpi-sub-card row-click" onClick={() => nav("/dashboard/agentes")} title="Ir a Agentes">
-          <div className="kpi-sub-label">Agentes activos</div>
-          <div className="kpi-sub-value">{data.kpis.agentesActivos}</div>
-        </div>
-      </div>
-
-      {/* ============================== Pendientes financieros ============================== */}
-      <div className="dash-section">
-        <div className="dash-section-title">Pendientes financieros</div>
-        <div className="dash-section-subtitle">Desglose de lo que ya está sumado en "Por cobrar" / "Por pagar" de arriba.</div>
-      </div>
-      <div className="pending-grid">
-        <div className={`pending-card row-click${filtroSigno === "nosDeben" ? " kpi-active" : ""}`} onClick={() => irAKpi("nosDeben")} title="Ver el detalle de saldos por agente y club que arma este total">
-          <div className="pending-label">Agentes nos deben</div>
-          <div className="pending-value pos">{usd(data.kpis.agentesNosDeben)}</div>
-          <div className="pending-hint">Win/Lose {usd(nosDebenWinLose)} · Prepago {usd(nosDebenPrepago)}</div>
-        </div>
-        <div className="pending-card row-click" onClick={() => nav("/dashboard/movimientos")} title="Ir a Adelantos de rakeback">
-          <div className="pending-label">Adelantos de rakeback</div>
-          <div className="pending-value pos">{usd(data.kpis.adelantosPendientes)}</div>
-        </div>
-        <div className={`pending-card row-click${filtroSigno === "debemos" ? " kpi-active" : ""}`} onClick={() => irAKpi("debemos")} title="Ver el detalle de saldos por agente y club que arma este total">
-          <div className="pending-label">Debemos a agentes</div>
-          <div className="pending-value neg">{usd(data.kpis.debemosAAgentes)}</div>
-          <div className="pending-hint">Win/Lose {usd(debemosWinLose)} · Prepago {usd(debemosPrepago)}</div>
-        </div>
-        <div className="pending-card row-click" onClick={() => nav("/dashboard/garantias")} title="Ir a Garantías">
-          <div className="pending-label">Garantías pendientes</div>
-          <div className="pending-value neg">{usd(data.kpis.garantiasPendientes)}</div>
-        </div>
-      </div>
 
       {/* ============================== Gráfico de evolución ============================== */}
       {historico.length > 1 && (
