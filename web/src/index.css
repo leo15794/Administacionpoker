@@ -130,9 +130,23 @@ a { color: inherit; }
   position: sticky;
   top: 0;
   height: 100vh;
+  /* Solo la lista del menú scrollea (ver ".sidebar nav" abajo): la marca queda arriba y el pie (modo día/noche + cerrar sesión) siempre a la vista. */
+  overflow: hidden;
+}
+.sidebar nav {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  margin: 0 -8px;
+  padding: 0 8px;
+  /* Barra fina y de los colores del tema (antes quedaba la clara por defecto del navegador): casi invisible hasta que se pasa el mouse. */
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar nav:hover,
+.sidebar nav:focus-within {
+  scrollbar-color: var(--scrollbar-thumb-hover) transparent;
 }
 .sidebar.collapsed {
   width: 68px;
@@ -272,7 +286,7 @@ a { color: inherit; }
 .nav-section-chevron.collapsed { transform: rotate(-90deg); }
 
 .sidebar-footer {
-  margin-top: auto;
+  flex-shrink: 0;
   padding-top: 14px;
   display: flex;
   gap: 8px;
@@ -283,6 +297,41 @@ a { color: inherit; }
 .sidebar-salir { flex: 1; min-width: 0; }
 .sidebar.collapsed .sidebar-footer { flex-direction: column; }
 .sidebar.collapsed .sidebar-tema, .sidebar.collapsed .sidebar-salir { width: 100%; padding: 8px 0 !important; }
+
+/* ---------- Menú flotante tipo dock (21/10/2026, pedido de Leo) ----------
+   Escritorio: tarjeta flotante. Por defecto compacta (solo íconos, 72px) y se abre sobre el contenido al pasar el mouse;
+   el botón de la marca la deja fija abierta. Los grupos arrancan cerrados (ver Shell.tsx). En celular sigue el cajón de siempre. */
+.nav-section-icon { display: none; }
+@media (min-width: 769px) {
+  .app-shell { padding: 14px; gap: 14px; background: color-mix(in srgb, var(--sidebar-bg) 55%, #000 45%); }
+  :root[data-theme="light"] .app-shell { background: #e3ebe6; }
+  .sidebar {
+    top: 14px;
+    height: calc(100vh - 28px);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  }
+  .main { padding-top: 16px; }
+  .nav-link { white-space: nowrap; }
+  .sidebar.rail { width: 72px; }
+  .sidebar.rail:hover { width: 244px; margin-right: -172px; z-index: 30; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+  .sidebar.rail:not(:hover) .brand-info,
+  .sidebar.rail:not(:hover) .sidebar-toggle,
+  .sidebar.rail:not(:hover) .nav-section-text,
+  .sidebar.rail:not(:hover) .nav-section-chevron,
+  .sidebar.rail:not(:hover) .nav-drag-handle,
+  .sidebar.rail:not(:hover) .nav-restablecer { display: none; }
+  .sidebar.rail:not(:hover) .nav-link,
+  .sidebar.rail:not(:hover) .sidebar-salir { font-size: 0; gap: 0; }
+  .sidebar.rail:not(:hover) .nav-link svg { width: 20px; height: 20px; }
+  .sidebar.rail:not(:hover) .nav-section-icon { display: flex; }
+  .sidebar.rail:not(:hover) .nav-section-label { justify-content: flex-start; padding: 10px 12px; opacity: 0.55; }
+  .sidebar.rail:not(:hover) .nav-section + .nav-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .sidebar.rail:not(:hover) .sidebar-footer { flex-direction: column; }
+  .sidebar.rail:not(:hover) .sidebar-tema,
+  .sidebar.rail:not(:hover) .sidebar-salir { width: 100%; padding: 9px 0 !important; }
+}
 
 .main {
   flex: 1;

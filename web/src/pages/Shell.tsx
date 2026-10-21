@@ -173,9 +173,13 @@ function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
-function getInitialCollapsed() {
+// Menú tipo dock (21/10/2026, pedido de Leo): por defecto compacto (solo íconos, se abre al pasar el mouse) y con los grupos cerrados.
+// Lo que se abre o se fija vive solo en esta sesión (sessionStorage) y se borra al cerrar sesión: la próxima vez vuelve todo comprimido.
+const CLAVE_FIJO = "dp_sidebar_pinned";
+const CLAVE_GRUPOS = "dp_nav_groups_open";
+function getInitialPinned() {
   try {
-    return localStorage.getItem("dp_sidebar_collapsed") === "1";
+    return sessionStorage.getItem(CLAVE_FIJO) === "1";
   } catch {
     return false;
   }
@@ -214,15 +218,18 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
 
+// Ícono de cada grupo cuando el menú está compacto y el grupo cerrado.
+const GROUP_ICON: Record<"operacion" | "finanzas" | "reportes", keyof typeof icon> = { operacion: "movimientos", finanzas: "wallet", reportes: "resumenClub" };
+
 const NAV_GROUPS: { key: "operacion" | "finanzas" | "reportes"; label: string }[] = [
   { key: "operacion", label: "Operación" },
   { key: "finanzas", label: "Finanzas" },
   { key: "reportes", label: "Reportes" },
 ];
 
-function getInitialGroupsCollapsed(): Record<string, boolean> {
+function getInitialGroupsOpen(): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem("dp_nav_groups_collapsed");
+    const raw = sessionStorage.getItem(CLAVE_GRUPOS);
     if (!raw) return {};
     return JSON.parse(raw);
   } catch {
@@ -248,14 +255,14 @@ function getInitialNavOrder(): string[] {
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" }) {
   const nav = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const [pinned, setPinned] = useState(getInitialPinned);
   // Drawer del sidebar en mobile (15/10/2026) -- estado aparte de "collapsed" (que es el
   // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
   // nunca persistido, que arranca siempre cerrado y se cierra solo al navegar.
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
-  const [groupsCollapsed, setGroupsCollapsed] = useState<Record<string, boolean>>(getInitialGroupsCollapsed);
+  const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>(getInitialGroupsOpen);
   const dragKey = useRef<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -355,15 +362,21 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   }
 
   function logout() {
+    try {
+      sessionStorage.removeItem(CLAVE_FIJO);
+      sessionStorage.removeItem(CLAVE_GRUPOS);
+    } catch {
+      /* sin almacenamiento: no hay nada que limpiar */
+    }
     api.clearToken();
     nav("/login");
   }
 
-  function toggleCollapsed() {
-    setCollapsed((v) => {
+  function togglePinned() {
+    setPinned((v) => {
       const next = !v;
       try {
-        localStorage.setItem("dp_sidebar_collapsed", next ? "1" : "0");
+        sessionStorage.setItem(CLAVE_FIJO, next ? "1" : "0");
       } catch {
         /* localStorage no disponible, no pasa nada */
       }
@@ -377,10 +390,10 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const activeGroupKey = activeItem?.group;
 
   function toggleGroup(key: string) {
-    setGroupsCollapsed((prev) => {
+    setGroupsOpen((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       try {
-        localStorage.setItem("dp_nav_groups_collapsed", JSON.stringify(next));
+        sessionStorage.setItem(CLAVE_GRUPOS, JSON.stringify(next));
       } catch {
         /* localStorage no disponible, no pasa nada */
       }
@@ -406,27 +419,23 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </div>
       <div className={`sidebar-backdrop ${mobileOpen ? "show" : ""}`} onClick={() => setMobileOpen(false)} />
-      <div className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
+      <div className={`sidebar ${pinned ? "" : "rail"} ${mobileOpen ? "mobile-open" : ""}`}>
         {/* Marca y botón de colapsar en la MISMA fila (21/10/2026, pedido de Leo: el botón solo en su propia fila dejaba un espacio muerto arriba). */}
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">P</div>
-          {!collapsed && (
-            <div className="brand-info">
-              <h1>Poker Gestión</h1>
-              <div className="sub">{rolLabel}</div>
-            </div>
-          )}
-          {!collapsed && (
-            <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
-              {icon.close}
-            </button>
-          )}
+          <div className="brand-info">
+            <h1>Poker Gestión</h1>
+            <div className="sub">{rolLabel}</div>
+          </div>
+          <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
+            {icon.close}
+          </button>
           <button
             className="sidebar-toggle"
-            onClick={toggleCollapsed}
-            title={collapsed ? "Expandir menú" : "Contraer menú"}
+            onClick={togglePinned}
+            title={pinned ? "Volver a compacto (se abre al pasar el mouse)" : "Dejar el menú abierto"}
           >
-            {collapsed ? icon.expand : icon.collapse}
+            {pinned ? icon.collapse : icon.expand}
           </button>
         </div>
 
@@ -436,28 +445,27 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               {NAV_GROUPS.map((grupo) => {
                 const keysDelGrupo = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
                 if (keysDelGrupo.length === 0) return null;
-                const contraido = !!groupsCollapsed[grupo.key] && grupo.key !== activeGroupKey;
+                const contraido = !groupsOpen[grupo.key] && grupo.key !== activeGroupKey;
                 return (
                   <div key={grupo.key} className="nav-section">
-                    {!collapsed && (
-                      <button
-                        type="button"
-                        className="nav-section-label"
-                        onClick={() => toggleGroup(grupo.key)}
-                        title={contraido ? `Mostrar ${grupo.label}` : `Ocultar ${grupo.label}`}
-                      >
-                        <span>{grupo.label}</span>
-                        <span className={`nav-section-chevron ${contraido ? "collapsed" : ""}`}>▾</span>
-                      </button>
-                    )}
-                    {(!contraido || collapsed) && keysDelGrupo.map((key) => {
+                    <button
+                      type="button"
+                      className="nav-section-label"
+                      onClick={() => toggleGroup(grupo.key)}
+                      title={contraido ? `Mostrar ${grupo.label}` : `Ocultar ${grupo.label}`}
+                    >
+                      <span className="nav-section-icon">{icon[GROUP_ICON[grupo.key]]}</span>
+                      <span className="nav-section-text">{grupo.label}</span>
+                      <span className={`nav-section-chevron ${contraido ? "collapsed" : ""}`}>▾</span>
+                    </button>
+                    {!contraido && keysDelGrupo.map((key) => {
                       const item = NAV_ITEMS.find((i) => i.key === key);
                       if (!item) return null;
                       return (
                         <div
                           key={item.key}
                           className={`nav-drag-item ${dragOverKey === item.key ? "drag-over" : ""}`}
-                          draggable={!collapsed}
+                          draggable
                           onDragStart={() => {
                             dragKey.current = item.key;
                           }}
@@ -476,8 +484,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
                           }}
                         >
                           <NavLink to={item.to} end={item.end} draggable={false} className="nav-link" title={item.label}>
-                            {!collapsed && <span className="nav-drag-handle" title="Arrastrar para reordenar">⠿</span>}
-                            {icon[item.icon]} {!collapsed && item.label}
+                            <span className="nav-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                            {icon[item.icon]} {item.label}
                           </NavLink>
                         </div>
                       );
@@ -485,23 +493,21 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
                   </div>
                 );
               })}
-              {!collapsed && (
-                <button
-                  className="nav-link"
-                  onClick={restablecerNavOrder}
-                  style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer", font: "inherit", border: "none", opacity: 0.6, fontSize: 12 }}
-                  title="Vuelve el menú al orden original"
-                >
-                  Restablecer orden del menú
-                </button>
-              )}
+              <button
+                className="nav-link nav-restablecer"
+                onClick={restablecerNavOrder}
+                style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer", font: "inherit", border: "none", opacity: 0.6, fontSize: 12 }}
+                title="Vuelve el menú al orden original"
+              >
+                Restablecer orden del menú
+              </button>
             </>
           ) : role === "SUPERVISOR" ? (
-            <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} {!collapsed && "Mi supervisión"}</NavLink>
+            <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} Mi supervisión</NavLink>
           ) : role === "PROVEEDOR" ? (
-            <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} {!collapsed && "Mi proveedor"}</NavLink>
+            <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} Mi proveedor</NavLink>
           ) : (
-            <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
+            <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} Mi cuenta</NavLink>
           )}
         </nav>
 
@@ -510,7 +516,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             {theme === "dark" ? icon.sun : icon.moon}
           </button>
           <button className="btn secondary sidebar-salir" onClick={logout} title="Cerrar sesión">
-            {icon.logout} {!collapsed && "Cerrar sesión"}
+            {icon.logout} Cerrar sesión
           </button>
         </div>
       </div>
