@@ -28,6 +28,7 @@ import ResumenAgentes from "./pages/ResumenAgentes";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
+import Notificaciones from "./pages/Notificaciones";
 import MiProveedor from "./pages/MiProveedor";
 import MiProveedorCierre from "./pages/MiProveedorCierre";
 import { ConfirmProvider } from "./components/ConfirmProvider";
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="rodeo" element={<Rodeo />} />
           <Route path="resumen-agentes" element={<ResumenAgentes />} />
           <Route path="usuarios" element={<Usuarios />} />
+          <Route path="notificaciones" element={<Notificaciones />} />
           <Route path="comisiones-referidos" element={<ComisionesReferidos />} />
           <Route path="resumen-financiero" element={<ResumenFinanciero />} />
         </Route>

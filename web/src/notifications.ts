@@ -40,7 +40,14 @@ export async function yaEstaSuscripto(): Promise<boolean> {
 /** Pide permiso de notificaciones y, si lo dan, suscribe este navegador y manda la suscripción
  * al backend. Devuelve el resultado para que el banner pueda mostrar el mensaje justo (aceptó /
  * rechazó / no soportado). */
-export async function activarNotificaciones(): Promise<"ok" | "denegado" | "no-soportado"> {
+// Destino de la suscripción: por defecto TeamBack; los portales de supervisor, proveedor y agente pasan el suyo (21/10/2026).
+export interface DestinoPush {
+  subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => Promise<unknown>;
+  unsubscribe: (endpoint: string) => Promise<unknown>;
+}
+const DESTINO_TEAMBACK: DestinoPush = { subscribe: (sub) => api.teamback.push.subscribe(sub), unsubscribe: (e) => api.teamback.push.unsubscribe(e) };
+
+export async function activarNotificaciones(destino: DestinoPush = DESTINO_TEAMBACK): Promise<"ok" | "denegado" | "no-soportado"> {
   if (!isPushSupported()) return "no-soportado";
   const permiso = await Notification.requestPermission();
   if (permiso !== "granted") return "denegado";
@@ -54,19 +61,19 @@ export async function activarNotificaciones(): Promise<"ok" | "denegado" | "no-s
     });
   }
   const json = sub.toJSON();
-  await api.teamback.push.subscribe({
+  await destino.subscribe({
     endpoint: json.endpoint!,
     keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth },
   });
   return "ok";
 }
 
-export async function desactivarNotificaciones(): Promise<void> {
+export async function desactivarNotificaciones(destino: DestinoPush = DESTINO_TEAMBACK): Promise<void> {
   if (!isPushSupported()) return;
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return;
   const endpoint = sub.endpoint;
   await sub.unsubscribe();
-  await api.teamback.push.unsubscribe(endpoint);
+  await destino.unsubscribe(endpoint);
 }

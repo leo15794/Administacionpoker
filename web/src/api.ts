@@ -850,6 +850,17 @@ export const api = {
     custodian?: string;
   }) => request("/movements", { method: "POST", body: JSON.stringify({ ...data, idempotencyKey: idempotencyKey() }) }),
 
+  // Avisos push a supervisores, proveedores y agentes (21/10/2026): siempre manuales, el admin elige a quién.
+  notificaciones: {
+    destinatarios: () => request("/notificaciones/destinatarios"),
+    historial: () => request("/notificaciones/historial"),
+    enviar: (data: { userIds: string[]; titulo: string; mensaje: string }) => request("/notificaciones/enviar", { method: "POST", body: JSON.stringify(data) }),
+    // Lo que usa cada portal para activar los avisos en su propio celular
+    miEstado: () => request("/notificaciones/mi-estado"),
+    suscribir: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) => request("/notificaciones/suscribir", { method: "POST", body: JSON.stringify(sub) }),
+    desuscribir: (endpoint: string) => request("/notificaciones/desuscribir", { method: "POST", body: JSON.stringify({ endpoint }) }),
+  },
+
   // Usuarios de acceso (login) y permisos
   usuarios: () => request("/users"),
   // agentIds: uno o varios — el primero queda como "cuenta principal" (la que usa el login por

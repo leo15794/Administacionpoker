@@ -619,6 +619,8 @@ body { overflow-x: hidden; }
   .tb-install-btn { width: 100%; padding: 10px 12px; }
 }
 
+.notif-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+@media (max-width: 960px) { .notif-grid { grid-template-columns: 1fr !important; } }
 .tb-install-banner.install-admin { display: none; margin: 0 0 14px; }
 @media (max-width: 768px) { .tb-install-banner.install-admin { display: flex; } }
 

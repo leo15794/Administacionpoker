@@ -2381,3 +2381,29 @@ ALTER TABLE supervisor_movimientos ADD CONSTRAINT supervisor_movimientos_type_ch
 -- ticket, etc.) es un movimiento propio de la cuenta corriente, con su concepto y, opcional, la semana del cierre.
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS concepto TEXT;
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS semana DATE;
+
+-- ============ Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo) ============
+-- Siempre manuales: el admin elige a quién mandar (ver repo/notificaciones.ts). Una fila por suscripción
+-- del navegador/celular de un login (puede tener varias: celular y compu).
+CREATE TABLE IF NOT EXISTS push_subs (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES agent_users(id),
+  endpoint   TEXT NOT NULL UNIQUE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subs(user_id);
+
+-- Historial de lo que se envió: a cuántos se eligió, a cuántos les llegó y quiénes no tenían las notificaciones activadas.
+CREATE TABLE IF NOT EXISTS push_envios_log (
+  id          TEXT PRIMARY KEY,
+  titulo      TEXT NOT NULL,
+  mensaje     TEXT NOT NULL,
+  elegidos    INTEGER NOT NULL DEFAULT 0,
+  entregados  INTEGER NOT NULL DEFAULT 0,
+  sin_activar JSONB NOT NULL DEFAULT '[]'::jsonb,
+  actor       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
