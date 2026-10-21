@@ -321,7 +321,8 @@ a { color: inherit; }
   .sidebar.rail:not(:hover) .nav-section-text,
   .sidebar.rail:not(:hover) .nav-section-chevron,
   .sidebar.rail:not(:hover) .nav-drag-handle,
-  .sidebar.rail:not(:hover) .nav-restablecer { display: none; }
+  .sidebar.rail:not(:hover) .nav-restablecer,
+  .sidebar.rail:not(:hover) .tb-sess-name { display: none; }
   .sidebar.rail:not(:hover) .nav-link,
   .sidebar.rail:not(:hover) .sidebar-salir { font-size: 0; gap: 0; }
   .sidebar.rail:not(:hover) .nav-link svg { width: 20px; height: 20px; }
@@ -367,6 +368,8 @@ a { color: inherit; }
   .app-shell.menu-top .main { width: 100%; max-width: 1280px; margin: 0 auto; padding-top: 6px; }
   .tn-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: grab; user-select: none; touch-action: none; flex-shrink: 0; }
   .tn-links { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+  .tn-links-flat { overflow-x: auto; scrollbar-width: none; }
+  .tn-links-flat .tn-g > button { white-space: nowrap; }
   .tn-g { position: relative; }
   .tn-g > button {
     background: none; border: none; color: var(--text-dim); font: inherit; font-weight: 650; font-size: 14px;

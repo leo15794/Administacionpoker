@@ -7,6 +7,7 @@ import IdleGuard from "../components/IdleGuard";
 import InstallAppBanner from "../components/InstallAppBanner";
 import PortalNotificacionesBanner from "../components/PortalNotificacionesBanner";
 import BandejaAvisos from "../components/BandejaAvisos";
+import { DockOverlay, useMenuPos } from "../components/MenuDock";
 import Notificaciones from "./Notificaciones";
 
 const icon = {
@@ -191,23 +192,6 @@ function applyTheme(theme: Theme) {
 // Lo que se abre o se fija vive solo en esta sesión (sessionStorage) y se borra al cerrar sesión: la próxima vez vuelve todo comprimido.
 const CLAVE_FIJO = "dp_sidebar_pinned";
 const CLAVE_GRUPOS = "dp_nav_groups_open";
-// Lugar del menú en escritorio (21/10/2026, pedido de Leo): a la izquierda (dock) o arriba (barra con desplegables).
-// Se elige arrastrando la marca a un borde y es una preferencia del navegador, no de la sesión.
-type MenuPos = "left" | "top";
-const CLAVE_POS = "dp_menu_pos";
-function getInitialPos(): MenuPos {
-  try {
-    return localStorage.getItem(CLAVE_POS) === "top" ? "top" : "left";
-  } catch {
-    return "left";
-  }
-}
-function zonaDeSoltar(x: number, y: number): MenuPos | null {
-  if (y < 110) return "top";
-  if (x < 150) return "left";
-  return null;
-}
-
 function getInitialPinned() {
   try {
     return sessionStorage.getItem(CLAVE_FIJO) === "1";
@@ -287,14 +271,13 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const nav = useNavigate();
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
-  const [pos, setPos] = useState<MenuPos>(getInitialPos);
   const [desplegado, setDesplegado] = useState<string | null>(null);
+  const { pos, arrastrando, empezarArrastre } = useMenuPos(() => setDesplegado(null));
   // Panel de avisos a la derecha (21/10/2026, pedido de Leo): arranca cerrado, se monta la primera vez que se abre y después queda montado
   // (oculto) para no perder lo que se estaba escribiendo; se puede agrandar a pantalla completa.
   const [avisosAbierto, setAvisosAbierto] = useState(false);
   const [avisosCompleto, setAvisosCompleto] = useState(false);
   const [avisosMontado, setAvisosMontado] = useState(false);
-  const [arrastrando, setArrastrando] = useState<{ zona: MenuPos | null; x: number; y: number } | null>(null);
   // Drawer del sidebar en mobile (15/10/2026) -- estado aparte de "collapsed" (que es el
   // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
   // nunca persistido, que arranca siempre cerrado y se cierra solo al navegar.
@@ -440,57 +423,6 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     });
   }
 
-  function cambiarPos(nueva: MenuPos) {
-    setPos(nueva);
-    setDesplegado(null);
-    try {
-      localStorage.setItem(CLAVE_POS, nueva);
-    } catch {
-      /* sin almacenamiento: el cambio vale solo hasta recargar */
-    }
-  }
-
-  // Arrastrar la marca del menú hasta un borde (arriba o izquierda) para acoplarlo ahí; Escape cancela.
-  function empezarArrastre(e: React.PointerEvent) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const x0 = e.clientX;
-    const y0 = e.clientY;
-    let activo = false;
-    const limpiar = () => {
-      window.removeEventListener("pointermove", mover);
-      window.removeEventListener("pointerup", soltar);
-      window.removeEventListener("keydown", tecla);
-    };
-    function mover(ev: PointerEvent) {
-      if (!activo && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
-      activo = true;
-      setArrastrando({ zona: zonaDeSoltar(ev.clientX, ev.clientY), x: ev.clientX, y: ev.clientY });
-    }
-    function soltar(ev: PointerEvent) {
-      limpiar();
-      if (!activo) return;
-      setArrastrando(null);
-      const zona = zonaDeSoltar(ev.clientX, ev.clientY);
-      if (zona && zona !== pos) cambiarPos(zona);
-    }
-    function tecla(ev: KeyboardEvent) {
-      if (ev.key !== "Escape") return;
-      activo = false;
-      limpiar();
-      setArrastrando(null);
-    }
-    window.addEventListener("pointermove", mover);
-    window.addEventListener("pointerup", soltar);
-    window.addEventListener("keydown", tecla);
-  }
-
-  // Mientras se arrastra no se selecciona texto de la página.
-  useEffect(() => {
-    document.body.classList.toggle("dp-dragging-menu", !!arrastrando);
-    return () => document.body.classList.remove("dp-dragging-menu");
-  }, [!!arrastrando]);
-
   // El desplegable de la barra de arriba se cierra al navegar y al hacer clic afuera.
   useEffect(() => {
     setDesplegado(null);
@@ -512,13 +444,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
 
   return (
     <div className={`app-shell ${pos === "top" ? "menu-top" : ""}`}>
-      {arrastrando && (
-        <div className="dock-overlay">
-          <div className={`dock-zona dock-zona-top ${arrastrando.zona === "top" ? "on" : ""}`}>Arriba</div>
-          <div className={`dock-zona dock-zona-left ${arrastrando.zona === "left" ? "on" : ""}`}>Izquierda</div>
-          <div className="dock-ghost" style={{ left: arrastrando.x + 14, top: arrastrando.y + 14 }}>Soltá en un borde · Esc cancela</div>
-        </div>
-      )}
+      <DockOverlay arrastrando={arrastrando} />
       <header className="topnav">
         <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde izquierdo para mover el menú">
           <div className="brand-mark" aria-hidden="true">P</div>

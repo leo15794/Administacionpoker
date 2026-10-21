@@ -19,6 +19,7 @@ import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
 import LoginSwitch from "../components/LoginSwitch";
+import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
@@ -319,6 +320,9 @@ const tbIcon = {
   ),
 };
 
+// Con el menú arriba: lo de uso diario va suelto y el resto en "Más".
+const TB_TOP_PRINCIPALES: Tab[] = ["resumen", "cuentas", "jugadores", "import", "pagos"];
+
 const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "resumen", label: "Liquidaciones", icon: "liquidaciones" },
   { key: "cuentas", label: "Cuentas de jugadores", icon: "pagos" },
@@ -337,17 +341,20 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
 // por tab de estado (no por ruta react-router): esta sección sigue siendo una sola ruta
 // (/teamback) con su propio login aparte, así que los ítems del menú son <button> con la clase
 // "nav-link" en vez de <NavLink>, ver ".nav-link" reseteado para <button> en index.css.
-function getInitialTbCollapsed() {
-  try {
-    return localStorage.getItem("dp_sidebar_collapsed") === "1";
-  } catch {
-    return false;
-  }
-}
-
 function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("resumen");
-  const [collapsed, setCollapsed] = useState(getInitialTbCollapsed);
+  // Mismo menú que el sistema principal (21/10/2026, pedido de Leo): compacto con íconos que se abre con el mouse (o fijo abierto) y acoplable a la izquierda o arriba.
+  const { fijo, alternarFijo } = useMenuFijo();
+  const { pos, arrastrando, empezarArrastre } = useMenuPos(() => setMasAbierto(false));
+  const [masAbierto, setMasAbierto] = useState(false);
+  useEffect(() => {
+    if (!masAbierto) return;
+    const fuera = (ev: MouseEvent) => {
+      if (!(ev.target as HTMLElement).closest(".topnav")) setMasAbierto(false);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, [masAbierto]);
   const [theme, setTheme] = useState<TbTheme>(leerTemaInicial);
   // Drawer del menú en celular (19/10/2026): hasta hoy esta sección no tenía el botón de menú que
   // sí tiene el sistema principal (Shell.tsx), así que en <=768px el sidebar quedaba fuera de
@@ -373,20 +380,43 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
     });
   }
 
-  function toggleCollapsed() {
-    setCollapsed((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem("dp_sidebar_collapsed", next ? "1" : "0");
-      } catch {
-        /* localStorage no disponible */
-      }
-      return next;
-    });
-  }
-
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${pos === "top" ? "menu-top" : ""}`}>
+      <DockOverlay arrastrando={arrastrando} />
+      <header className="topnav">
+        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde izquierdo para mover el menú">
+          <div className="brand-mark" aria-hidden="true">T</div>
+          <b>TeamBack Affiliates</b>
+        </div>
+        <nav className="tn-links">
+          {TB_NAV.filter((i) => TB_TOP_PRINCIPALES.includes(i.key)).map((item) => (
+            <div key={item.key} className={`tn-g ${tab === item.key ? "on" : ""}`}>
+              <button type="button" onClick={() => { setTab(item.key); setMasAbierto(false); }}>{item.label}</button>
+            </div>
+          ))}
+          <div className={`tn-g ${TB_NAV.some((i) => !TB_TOP_PRINCIPALES.includes(i.key) && i.key === tab) ? "on" : ""} ${masAbierto ? "open" : ""}`}>
+            <button type="button" onClick={() => setMasAbierto((v) => !v)}>Más <span className="tn-chev">▾</span></button>
+            {masAbierto && (
+              <div className="tn-dd">
+                {TB_NAV.filter((i) => !TB_TOP_PRINCIPALES.includes(i.key)).map((item) => (
+                  <button key={item.key} type="button" className={`tn-item ${tab === item.key ? "active" : ""}`} style={{ width: "100%", border: 0, background: "transparent", font: "inherit", textAlign: "left", cursor: "pointer" }} onClick={() => { setTab(item.key); setMasAbierto(false); }}>
+                    {tbIcon[item.icon]} {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </nav>
+        <div className="tn-right">
+          <span className="tn-rol">{session.name}</span>
+          <button className="btn secondary sidebar-tema" onClick={toggleTheme} title={theme === "dark" ? "Modo día" : "Modo noche"} aria-label={theme === "dark" ? "Modo día" : "Modo noche"}>
+            {theme === "dark" ? tbIcon.sun : tbIcon.moon}
+          </button>
+          <button className="btn secondary" onClick={onLogout} title="Cerrar sesión">
+            {tbIcon.logout} Cerrar sesión
+          </button>
+        </div>
+      </header>
       <div className="mobile-topbar">
         <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
           {tbIcon.menu}
@@ -397,23 +427,20 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         </div>
       </div>
       <div className={`sidebar-backdrop ${mobileOpen ? "show" : ""}`} onClick={() => setMobileOpen(false)} />
-      <div className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
-        <button
-          className="sidebar-toggle"
-          onClick={toggleCollapsed}
-          title={collapsed ? "Expandir menú" : "Contraer menú"}
-        >
-          {collapsed ? tbIcon.expand : tbIcon.collapse}
-        </button>
-
+      <div className={`sidebar ${fijo ? "" : "rail"} ${mobileOpen ? "mobile-open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark">T</div>
-          {!collapsed && (
-            <div>
-              <h1>TeamBack</h1>
-              <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
-            </div>
-          )}
+          <div className="brand-mark brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde de arriba para mover el menú">T</div>
+          <div className="brand-info">
+            <h1>TeamBack</h1>
+            <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>Affiliates</div>
+          </div>
+          <button
+            className="sidebar-toggle"
+            onClick={alternarFijo}
+            title={fijo ? "Volver a compacto (se abre al pasar el mouse)" : "Dejar el menú abierto"}
+          >
+            {fijo ? tbIcon.collapse : tbIcon.expand}
+          </button>
           <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
             {tbIcon.close}
           </button>
@@ -431,7 +458,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
                 }}
                 title={item.label}
               >
-                {tbIcon[item.icon]} {!collapsed && item.label}
+                {tbIcon[item.icon]} {item.label}
               </button>
             ))}
           </div>
@@ -441,19 +468,19 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
             title={theme === "dark" ? "Modo día" : "Modo noche"}
             style={{ borderTop: "1px solid var(--border)", borderLeft: "none", borderRight: "none", borderBottom: "none", marginTop: 8, paddingTop: 14 }}
           >
-            {theme === "dark" ? tbIcon.sun : tbIcon.moon} {!collapsed && (theme === "dark" ? "Modo día" : "Modo noche")}
+            {theme === "dark" ? tbIcon.sun : tbIcon.moon} {theme === "dark" ? "Modo día" : "Modo noche"}
           </button>
         </nav>
 
         <div className="sidebar-footer">
-          {!collapsed && <div className="muted" style={{ fontSize: 12, marginBottom: 8, paddingLeft: 4 }}>{session.name}</div>}
+          <div className="muted tb-sess-name" style={{ fontSize: 12, marginBottom: 8, paddingLeft: 4 }}>{session.name}</div>
           <button
-            className="btn secondary"
+            className="btn secondary sidebar-salir"
             onClick={onLogout}
             title="Cerrar sesión"
             style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
-            {tbIcon.logout} {!collapsed && "Cerrar sesión"}
+            {tbIcon.logout} Cerrar sesión
           </button>
         </div>
       </div>
