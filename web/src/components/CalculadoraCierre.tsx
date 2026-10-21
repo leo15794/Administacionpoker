@@ -28,6 +28,8 @@ interface Linea {
   rebatePct: string;
   rodeo: string;
   ajuste: string;
+  pagaRodeo?: boolean; // ¿le pago el rodeo a su jugador? (por defecto sí); si es no, el rodeo no entra al cierre
+  rodeoPct?: string; // si le paga: qué % del rodeo (por defecto 100)
   origen?: Origen; // si viene de un cierre real
   editable?: boolean; // una línea traída se puede "destrabar" para tocar todo a mano
 }
@@ -42,7 +44,7 @@ interface Calculada {
 
 const CLAVE = "dp_calculadora_cierre_v2";
 const nuevoId = () => Math.random().toString(36).slice(2, 10);
-const lineaVacia = (sistema: Sistema): Linea => ({ id: nuevoId(), nombre: "", sistema, resultado: "", rake: "", rakebackPct: "", rebatePct: "", rodeo: "", ajuste: "" });
+const lineaVacia = (sistema: Sistema): Linea => ({ id: nuevoId(), nombre: "", sistema, resultado: "", rake: "", rakebackPct: "", rebatePct: "", rodeo: "", ajuste: "", pagaRodeo: true, rodeoPct: "100" });
 const aTexto = (n: number) => String(Math.round(n * 10000) / 10000).replace(".", ",");
 
 // "1.234,56" y "1234.56" se leen igual; vacío = 0; texto raro = null (la línea no se calcula hasta corregirlo).
@@ -52,6 +54,15 @@ function aNumero(t: string): number | null {
   const limpio = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s;
   const n = Number(limpio);
   return Number.isFinite(n) ? n : null;
+}
+
+// Rodeo que realmente entra al cierre: 0 si el supervisor no se lo paga; si se lo paga, el % elegido (100 por defecto).
+function rodeoPagado(l: Linea): number | null {
+  const r = aNumero(l.rodeo);
+  if (r === null) return null;
+  if (l.pagaRodeo === false) return 0;
+  const pct = aNumero(l.rodeoPct ?? "100");
+  return pct === null ? null : Math.round(r * pct) / 100;
 }
 
 export default function CalculadoraCierre({
@@ -129,6 +140,8 @@ export default function CalculadoraCierre({
           rebatePct: aTexto(rebatePct),
           rodeo: aTexto(Number(d.rodeo)),
           ajuste: "",
+          pagaRodeo: true,
+          rodeoPct: "100",
           origen: {
             agente: a.agent_name,
             club: d.club_name,
@@ -173,10 +186,10 @@ export default function CalculadoraCierre({
       rake: aNumero(l.rake),
       rakebackPct: aNumero(l.rakebackPct),
       rebatePct: aNumero(l.rebatePct),
-      rodeo: aNumero(l.rodeo),
+      rodeo: rodeoPagado(l),
       ajuste: aNumero(l.ajuste),
     }));
-    if (parseadas.some((p) => [p.resultado, p.rake, p.rakebackPct, p.rebatePct, p.rodeo, p.ajuste].some((v) => v === null))) {
+    if (parseadas.some((p) => [p.resultado, p.rake, p.rakebackPct, p.rebatePct, p.rodeo, p.ajuste].some((v) => v === null)) || lineas.some((l) => l.pagaRodeo !== false && aNumero(l.rodeoPct ?? "100") === null)) {
       setError("Hay un número mal escrito: revisá los campos marcados.");
       return;
     }
@@ -304,6 +317,23 @@ export default function CalculadoraCierre({
                 {campo(l, "rodeo", "Rodeo (US$)", undefined, fijo)}
                 {campo(l, "ajuste", "Ajuste (US$)", "+ / −")}
               </div>
+              {(aNumero(l.rodeo) ?? 0) !== 0 && (
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginTop: 10, padding: "8px 10px", background: "var(--panel-2)", borderRadius: 8 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 11.5 }}>¿Le pagás el rodeo a tu jugador?</label>
+                    <select value={l.pagaRodeo === false ? "no" : "si"} onChange={(e) => cambiar(l.id, "pagaRodeo", e.target.value === "si")}>
+                      <option value="si">Sí</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                  {l.pagaRodeo !== false && (
+                    <div style={{ width: 130 }}>{campo(l, "rodeoPct", "% del rodeo", "100")}</div>
+                  )}
+                  <div className="saldo-sub" style={{ margin: 0, paddingBottom: 6 }}>
+                    {l.pagaRodeo === false ? "El rodeo no se suma al cierre." : `Rodeo que se suma al cierre: ${usdCents(rodeoPagado(l) ?? 0)}`}
+                  </div>
+                </div>
+              )}
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                 <div className="saldo-sub" style={{ margin: 0, display: "flex", gap: 14, flexWrap: "wrap" }}>
                   <span>Rakeback <b>{c ? montoSigno(c.rakeback) : "—"}</b></span>
