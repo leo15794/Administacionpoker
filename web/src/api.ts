@@ -1322,6 +1322,12 @@ export const api = {
     // (09/10/2026: "que aparezcan en USDT o en Fichas") -- el medio de pago ahora es obligatorio.
     marcarLiquidacionPagada: (id: string, medioPago: "USDT" | "FICHAS") =>
       requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "POST", body: JSON.stringify({ medioPago }) }),
+    // Cuentas de jugadores (21/10/2026): cuenta corriente con deuda que se compensa sola contra las liquidaciones.
+    cuentas: () => requestTb("/teamback/cuentas"),
+    cuenta: (playerId: string) => requestTb(`/teamback/cuentas/${playerId}`),
+    cargarMovimientoCuenta: (playerId: string, data: { tipo: "CARGO" | "COBRO" | "AJUSTE"; amount: number; concepto?: string; fecha?: string }) =>
+      requestTb(`/teamback/cuentas/${playerId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
+    anularMovimientoCuenta: (id: string) => requestTb(`/teamback/cuentas/movimientos/${id}`, { method: "DELETE" }),
     marcarLiquidacionNoPagada: (id: string) => requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "DELETE" }),
     historialJugador: (playerId: string) => requestTb(`/teamback/liquidaciones/jugador/${playerId}`),
     liquidacionIndividual: (playerId: string, weekStart: string) => requestTb(`/teamback/liquidaciones/individual/${playerId}/${weekStart}`),

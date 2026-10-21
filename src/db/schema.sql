@@ -2429,3 +2429,20 @@ CREATE TABLE IF NOT EXISTS aviso_destinatarios (
   PRIMARY KEY (aviso_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_aviso_destinatarios_user ON aviso_destinatarios(user_id);
+
+-- Cuentas de jugadores de TeamBack Affiliates (21/10/2026, pedido de Leo): cuenta corriente por jugador. Lo que se le entrega a cuenta (fichas)
+-- o se le ajusta queda como deuda y se compensa SOLO contra sus liquidaciones, de la más vieja a la más nueva (ver repo/tbCuentas.ts).
+-- tb_weekly_liquidations.compensado = cuánto de esa liquidación ya se descontó de la deuda; lo que falta es lo que se paga.
+ALTER TABLE tb_weekly_liquidations ADD COLUMN IF NOT EXISTS compensado NUMERIC(18,4) NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS tb_player_movimientos (
+  id         TEXT PRIMARY KEY,
+  player_id  TEXT NOT NULL REFERENCES tb_players(id),
+  tipo       TEXT NOT NULL CHECK (tipo IN ('CARGO','COBRO','AJUSTE')),
+  amount     NUMERIC(18,4) NOT NULL,
+  concepto   TEXT,
+  fecha      DATE NOT NULL DEFAULT CURRENT_DATE,
+  creado_por TEXT,
+  revertido  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tb_player_mov_player ON tb_player_movimientos(player_id);

@@ -17,12 +17,18 @@ import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
+import CuentasJugadoresTab from "./TeamBackCuentas";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
-type Tab = "resumen" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos";
+type Tab = "resumen" | "cuentas" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos";
 
 const TB_SESSION_KEY = "tb_session";
+
+// Cómo se pagó una liquidación: USDT, Fichas, o Compensación (descontada de la deuda del jugador, ver Cuentas de jugadores).
+function etiquetaMedio(m: string | null | undefined): string {
+  return m === "USDT" ? "USDT" : m === "COMPENSACION" ? "Compensación" : "Fichas";
+}
 
 interface TbSession {
   token: string;
@@ -313,6 +319,7 @@ const tbIcon = {
 
 const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "resumen", label: "Liquidaciones", icon: "liquidaciones" },
+  { key: "cuentas", label: "Cuentas de jugadores", icon: "pagos" },
   { key: "jugadores", label: "Jugadores / árbol", icon: "jugadores" },
   { key: "import", label: "Importar semana", icon: "import" },
   { key: "ganancia", label: "Ganancia por semana", icon: "ganancia" },
@@ -463,6 +470,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         </div>
 
         {tab === "resumen" && <LiquidacionesTab topbarSlot={topbarSlot} />}
+        {tab === "cuentas" && <CuentasJugadoresTab />}
         {tab === "jugadores" && <JugadoresTab />}
         {tab === "import" && <ImportTab />}
         {tab === "ganancia" && <GananciaSemanalTab />}
@@ -775,7 +783,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                 <div className="badge-row">
                   {l.pagado ? (
                     <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
-                      Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                      Pagado{l.medio_pago ? ` (${etiquetaMedio(l.medio_pago)})` : ""}
                     </span>
                   ) : (
                     <span className="pill a">Por cobrar</span>
@@ -857,7 +865,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
                       <td>
                         {l.pagado ? (
                           <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
-                            Pagado{l.medio_pago ? ` (${l.medio_pago === "USDT" ? "USDT" : "Fichas"})` : ""}
+                            Pagado{l.medio_pago ? ` (${etiquetaMedio(l.medio_pago)})` : ""}
                           </span>
                         ) : (
                           <span className="pill a">Por cobrar</span>
@@ -938,12 +946,15 @@ function EstadoPill({ l }: { l: any }) {
   return l.pagado ? (
     <>
       <span className="pill g" title={l.paid_at ? `Pagada el ${dateShort(l.paid_at)}` : undefined}>
-        Pagado · {l.medio_pago === "USDT" ? "USDT" : "Fichas"}
+        Pagado · {etiquetaMedio(l.medio_pago)}
       </span>
       {l.paid_at && <div className="liq-sub">{diaMes(l.paid_at)}</div>}
     </>
   ) : (
-    <span className="pill a">Pendiente de pago</span>
+    <>
+      <span className="pill a">Pendiente de pago</span>
+      {Number(l.compensado) > 0 && <div className="liq-sub">Compensó {usd(l.compensado)} de la deuda · a pagar {usd(Number(l.total_acreditado) - Number(l.compensado))}</div>}
+    </>
   );
 }
 
@@ -1457,7 +1468,8 @@ function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onP
   return (
     <div>
       <div style={{ marginBottom: 12 }}>
-        Monto a pagar: <strong>{usd(liquidacion.total_acreditado)}</strong>
+        Monto a pagar: <strong>{usd(Number(liquidacion.total_acreditado) - Number(liquidacion.compensado ?? 0))}</strong>
+        {Number(liquidacion.compensado) > 0 && <span className="muted" style={{ fontSize: 12 }}> (de {usd(liquidacion.total_acreditado)}: {usd(liquidacion.compensado)} ya se compensaron contra la deuda)</span>}
       </div>
       <div className="field">
         <label>Medio de pago</label>
@@ -1468,7 +1480,7 @@ function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onP
       </div>
       <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
         {medioPago === "USDT"
-          ? `Se va a registrar un egreso de ${usd(liquidacion.total_acreditado)} en la Wallet del sistema principal.`
+          ? `Se va a registrar un egreso de ${usd(Number(liquidacion.total_acreditado) - Number(liquidacion.compensado ?? 0))} en la Wallet del sistema principal.`
           : "Pago en fichas del club -- no mueve la Wallet."}
       </div>
       {msg && (
@@ -1873,7 +1885,7 @@ function HistorialPagosTab() {
         semana_inicio: dateShort(f.week_start),
         semana_fin: dateShort(f.week_end),
         total_liquidado: f.total_acreditado,
-        estado: f.pagado ? (f.medio_pago === "USDT" ? "USDT" : "Fichas") : "Pendiente",
+        estado: f.pagado ? (etiquetaMedio(f.medio_pago)) : "Pendiente",
         fecha_pago: f.paid_at ? dateShort(f.paid_at) : "",
       }))
     );
@@ -1962,7 +1974,7 @@ function HistorialPagosTab() {
                 <td className="num">{usd(f.total_acreditado)}</td>
                 <td>
                   {f.pagado ? (
-                    <span className="badge pos">{f.medio_pago === "USDT" ? "USDT" : "Fichas"}</span>
+                    <span className="badge pos">{etiquetaMedio(f.medio_pago)}</span>
                   ) : (
                     <span className="pill a">Por cobrar</span>
                   )}

@@ -17,6 +17,7 @@ import {
 } from "../engine/teambackAffiliates.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 import { enviarPushAUnaSuscripcion, type PushPayload } from "../lib/push.js";
+import { aplicarCompensaciones } from "./tbCuentas.js";
 
 // ---------------------------------------------------------------------------------------------
 // Config
@@ -474,6 +475,8 @@ export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekE
     );
     resultados.push({ ...r.rows[0], player_name: jugador.name, suprema_player_id: jugador.suprema_player_id });
   }
+  // Cuenta corriente (21/10/2026, pedido de Leo): si el jugador tiene deuda, las liquidaciones recién calculadas se compensan solas, de la más vieja a la más nueva.
+  for (const j of resultados) await aplicarCompensaciones(j.player_id);
   return { resultados, sinConfigurar };
 }
 
@@ -525,7 +528,8 @@ async function asegurarColumnasPago() {
        ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE,
        ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ,
        ADD COLUMN IF NOT EXISTS medio_pago TEXT,
-       ADD COLUMN IF NOT EXISTS wallet_movimiento_id TEXT`
+       ADD COLUMN IF NOT EXISTS wallet_movimiento_id TEXT,
+       ADD COLUMN IF NOT EXISTS compensado NUMERIC(18,4) NOT NULL DEFAULT 0`
   );
   columnasPagoListas = true;
 }
@@ -544,6 +548,9 @@ export async function marcarLiquidacionPagada(id: string, medioPago: "USDT" | "F
   const liq = actual.rows[0];
   if (!liq) throw new Error("No se encontró esa liquidación.");
   if (liq.pagado) throw new Error("Esta liquidación ya está marcada como pagada -- deshacé el pago antes de volver a marcarla.");
+  // Cuenta corriente del jugador (ver repo/tbCuentas.ts): lo que ya se compensó contra su deuda no se paga de nuevo, se paga solo la diferencia.
+  const neto = Math.round((Number(liq.total_acreditado) - Number(liq.compensado ?? 0)) * 10000) / 10000;
+  if (neto <= 0) throw new Error("Esta liquidación ya está compensada por completo contra la deuda del jugador: no hay nada para pagar.");
 
   // Solo USDT mueve la Wallet real del sistema principal (WALLET_MANOS) -- Fichas son del club,
   // nunca tocan la Wallet. El id del ajuste queda guardado para poder revertirlo con prolijidad
@@ -553,7 +560,7 @@ export async function marcarLiquidacionPagada(id: string, medioPago: "USDT" | "F
     const { id: movimientoId } = await registrarAjusteTesoreria({
       ledger: "WALLET_MANOS",
       direction: "EGRESO",
-      amount: Number(liq.total_acreditado),
+      amount: neto,
       reason: `Pago comisión TeamBack — ${liq.player_name} — semana del ${String(liq.week_start).slice(0, 10)}`,
       createdBy: actor ?? null,
     });
@@ -574,6 +581,9 @@ export async function marcarLiquidacionNoPagada(id: string, actor?: string | nul
   const actual = await pool.query(`SELECT * FROM tb_weekly_liquidations WHERE id = $1`, [id]);
   const liq = actual.rows[0];
   if (!liq) throw new Error("No se encontró esa liquidación.");
+  if (liq.medio_pago === "COMPENSACION") {
+    throw new Error("Esta liquidación se compensó contra la deuda del jugador. Para deshacerlo, anulá el cargo desde Cuentas de jugadores.");
+  }
 
   // Si se había pagado en USDT, el pago movió la Wallet real -- deshacerlo tiene que revertir
   // ESE movimiento (nunca borrarlo: revertirAjusteTesoreria deja el original marcado

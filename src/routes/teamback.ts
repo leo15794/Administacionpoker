@@ -18,6 +18,7 @@ import { parseSupremaWorkbook } from "../engine/importSuprema.js";
 // principal": lee (nunca escribe) el saldo de la Wallet del sistema principal, para mostrarlo acá
 // en modo SOLO LECTURA. Ver la ruta GET /wallet-espejo más abajo, admin-only.
 import { getSaldoWalletNeto } from "../repo/treasury.js";
+import { listarCuentas, getCuenta, registrarMovimiento, revertirMovimiento } from "../repo/tbCuentas.js";
 import {
   getTbConfig,
   updateTbConfig,
@@ -323,6 +324,51 @@ teambackRouter.get("/liquidaciones/individual/:playerId/:weekStart", requireTbAu
     res.json(await getLiquidacionIndividual(req.params.playerId, req.params.weekStart));
   } catch (err: any) {
     res.status(404).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Cuentas de jugadores (21/10/2026, pedido de Leo): cuenta corriente por jugador -- sus liquidaciones suman a favor, lo que se le entrega a cuenta
+// (fichas) queda como deuda y se compensa SOLO contra las liquidaciones, de la más vieja a la más nueva (ver repo/tbCuentas.ts).
+// ---------------------------------------------------------------------------------------------
+teambackRouter.get("/cuentas", requireTbAuth, requireTbAdmin, async (_req, res) => {
+  try {
+    res.json(await listarCuentas());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "No se pudieron traer las cuentas." });
+  }
+});
+
+teambackRouter.get("/cuentas/:playerId", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    res.json(await getCuenta(req.params.playerId));
+  } catch (err: any) {
+    res.status(404).json({ error: err.message || "No se pudo traer la cuenta." });
+  }
+});
+
+const movimientoCuentaSchema = z.object({
+  tipo: z.enum(["CARGO", "COBRO", "AJUSTE"]),
+  amount: z.number().finite(),
+  concepto: z.string().trim().max(200).optional().nullable(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+});
+
+teambackRouter.post("/cuentas/:playerId/movimientos", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  const parsed = movimientoCuentaSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Revisá el tipo, el importe y la fecha." });
+  try {
+    res.json(await registrarMovimiento({ playerId: req.params.playerId, ...parsed.data, actor: `TeamBack:${req.tbUser.username}` }));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo cargar el movimiento." });
+  }
+});
+
+teambackRouter.delete("/cuentas/movimientos/:id", requireTbAuth, requireTbAdmin, async (req: any, res) => {
+  try {
+    res.json(await revertirMovimiento(req.params.id, `TeamBack:${req.tbUser.username}`));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo anular el movimiento." });
   }
 });
 
