@@ -530,6 +530,7 @@ function EditarAgente({
   const [modeloCuenta, setModeloCuenta] = useState<"PREPAGO" | "WIN_LOSE">((agente.modelo_cuenta as any) ?? agente.default_system);
   const [exigirAgenteEnMovimientos, setExigirAgenteEnMovimientos] = useState<boolean>(agente.exigir_agente_en_movimientos !== false);
   const [consolidarCierres, setConsolidarCierres] = useState<boolean>(agente.consolidar_cierres !== false);
+  const [soloReferencia, setSoloReferencia] = useState<boolean>(!!agente.solo_referencia);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -555,6 +556,7 @@ function EditarAgente({
         modeloCuenta: usaCuentaConsolidada ? modeloCuenta : null,
         exigirAgenteEnMovimientos,
         consolidarCierres,
+        soloReferencia,
       });
       onSaved();
     } catch (err: any) {
@@ -633,6 +635,20 @@ function EditarAgente({
             los cierres de este agente dejan de tocarle balance propio y se rutean enteros a esa
             cuenta en "Cuentas de socios" (tiene que existir con ese mismo nombre).
           </div>
+        </div>
+      </div>
+
+      <div className="muted" style={{ marginTop: 18, marginBottom: 8, fontWeight: 600 }}>
+        Solo referencia
+      </div>
+      <div className="field">
+        <label>
+          <input type="checkbox" checked={soloReferencia} onChange={(e) => setSoloReferencia(e.target.checked)} style={{ marginRight: 6 }} />
+          Solo referencia (no suma ni resta saldo)
+        </label>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          Para agentes que se usan solo como referencia (por ejemplo, el sistema de referidos de TeamBack Afiliados). Su cierre semanal se carga igual
+          (el club, el rake y la ganancia no cambian), pero no genera pendiente, no se aplica a ninguna cuenta y no aparece para activarle una cuenta en Agentes.
         </div>
       </div>
 

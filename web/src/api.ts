@@ -382,6 +382,7 @@ export const api = {
       personKey?: string | null;
       // Cuentas consolidadas para supervisores (30/09/2026) — ver src/db/schema.sql.
       usaCuentaConsolidada?: boolean;
+      soloReferencia?: boolean;
       modeloCuenta?: "PREPAGO" | "WIN_LOSE" | null;
       exigirAgenteEnMovimientos?: boolean;
       consolidarCierres?: boolean;

@@ -1751,6 +1751,11 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS consolidar_cierres BOOLEAN NOT NULL 
 -- se mezcla con supervisor_cuentas.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS oculto_en_supervisor BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- solo_referencia (21/10/2026, pedido de Leo, caso F coco -- se usa para el sistema de referidos de TeamBack Afiliados): el cierre
+-- semanal del agente se carga igual (club, rake y ganancia no cambian) pero NO suma ni resta saldo: no genera rakeback pendiente, no
+-- se aplica a ninguna cuenta de Supervisores/Agentes y no se ofrece para activarle una cuenta.
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS solo_referencia BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- Saldo ÚNICO por supervisor (a propósito NO por club, a diferencia de proveedor_saldos --
 -- confirmado por Leo: "todo lo que pase con sus agentes va todo al mismo lugar"). club_id se
 -- graba en cada movimiento/línea (supervisor_movimientos / supervisor_cierre_lineas) solo para

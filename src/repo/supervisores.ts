@@ -89,7 +89,8 @@ export async function agentesDeLaCuenta(ownerId: string) {
     owner: owner.rows[0],
     individual,
     agentes: individual ? [owner.rows[0]] : subs.rows,
-    ids: (individual ? [owner.rows[0]] : subs.rows).map((a: any) => a.id as string),
+    // Los agentes "solo de referencia" no suman ni restan en la cuenta: se dejan fuera de los cierres que se aplican.
+    ids: (individual ? [owner.rows[0]] : subs.rows).filter((a: any) => !a.solo_referencia).map((a: any) => a.id as string),
   };
 }
 
@@ -323,7 +324,7 @@ export async function listAgentesSinCuenta() {
     `SELECT a.id, a.name, a.account_type, a.default_system
      FROM agents a
      WHERE a.active = true AND a.usa_cuenta_consolidada = false AND a.account_type <> 'SUPERVISOR'
-       AND COALESCE(a.supervisor, '') = ''
+       AND COALESCE(a.supervisor, '') = '' AND a.solo_referencia = false
        AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
      ORDER BY a.name`
   );

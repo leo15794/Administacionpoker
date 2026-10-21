@@ -400,7 +400,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       `SELECT 1 FROM agents a
        LEFT JOIN agents su ON su.name = a.supervisor AND su.usa_cuenta_consolidada = true
        WHERE a.id = $1
-         AND ((a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
+         AND (a.solo_referencia = true  -- agente solo de referencia (ej. F coco): su cierre no suma ni resta saldo
+              OR (a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
                AND NOT EXISTS (SELECT 1 FROM agents s WHERE s.supervisor = a.name))
               OR su.id IS NOT NULL
               -- agente que figura como línea de AGENTE en los cierres de un proveedor (ej. M CHOCO en Manzur): su cierre ya entra al saldo del proveedor

@@ -253,7 +253,7 @@ catalogRouter.get("/liquidacion", requireAuth, requireAdmin, async (req, res) =>
     `SELECT wc.*, c.name as club_name, a.name as agent_name FROM weekly_closings wc
      JOIN clubs c ON c.id = wc.club_id
      JOIN agents a ON a.id = wc.agent_id
-     WHERE wc.agent_id = ANY($1::text[]) AND wc.week_start = $2 AND wc.status <> 'REVERTIDO' ${system ? "AND wc.system = $3" : ""}
+     WHERE wc.agent_id = ANY($1::text[]) AND wc.week_start = $2 AND wc.status <> 'REVERTIDO' AND a.solo_referencia = false ${system ? "AND wc.system = $3" : ""}
      ORDER BY c.name`,
     system ? [agentIds, weekStart, system] : [agentIds, weekStart]
   );
@@ -1115,6 +1115,8 @@ const agentEditSchema = z.object({
   modeloCuenta: z.enum(["PREPAGO", "WIN_LOSE"]).nullable().optional(),
   exigirAgenteEnMovimientos: z.boolean().optional(),
   consolidarCierres: z.boolean().optional(),
+  // Agente solo de referencia (21/10/2026, caso F coco): su cierre no suma ni resta saldo -- ver src/db/schema.sql.
+  soloReferencia: z.boolean().optional(),
 });
 catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = agentEditSchema.safeParse(req.body);
@@ -1132,6 +1134,7 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
       modeloCuenta: parsed.data.modeloCuenta,
       exigirAgenteEnMovimientos: parsed.data.exigirAgenteEnMovimientos,
       consolidarCierres: parsed.data.consolidarCierres,
+      soloReferencia: parsed.data.soloReferencia,
     });
     if (!agent) return res.status(404).json({ error: "Agente no encontrado" });
     res.json(agent);
