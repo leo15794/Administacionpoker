@@ -392,7 +392,22 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     //   este sistema, así que tiene que viajar acá para no perderse -- confirmado por Leo con
     //   el ejemplo real de Tincho, "Total a pagar" = 227.76 = resultado + rakeback neto).
     const montoPendienteAgente = input.system === "PREPAGO" ? montoAgente - calc.result : montoAgente;
-    if (Math.abs(montoPendienteAgente) > 0.004) {
+    // Agente cubierto por una cuenta (21/10/2026, pedido de Leo: "rakeback pendiente lo eliminamos"): si el agente tiene su propia cuenta
+    // en la sección Agentes, o está a cargo de un supervisor con cuenta consolidada, su cierre se aplica a esa cuenta (desde
+    // weekly_closings) y ya no hace falta crear el rakeback pendiente -- sería el espejo viejo que se acumula sin que nadie lo salde.
+    // El cierre en sí (weekly_closings, ledger, rebate al supervisor, comisión por referido) no cambia.
+    const cubiertoPorCuenta = await client.query(
+      `SELECT 1 FROM agents a
+       LEFT JOIN agents su ON su.name = a.supervisor AND su.usa_cuenta_consolidada = true
+       WHERE a.id = $1
+         AND ((a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
+               AND NOT EXISTS (SELECT 1 FROM agents s WHERE s.supervisor = a.name))
+              OR su.id IS NOT NULL
+              -- agente que figura como línea de AGENTE en los cierres de un proveedor (ej. M CHOCO en Manzur): su cierre ya entra al saldo del proveedor
+              OR EXISTS (SELECT 1 FROM proveedor_cierre_lineas l WHERE l.agent_id = a.id AND l.tipo = 'AGENTE'))`,
+      [input.agentId]
+    );
+    if (cubiertoPorCuenta.rows.length === 0 && Math.abs(montoPendienteAgente) > 0.004) {
       const pendienteAgenteId = newId("rp");
       await client.query(
         `INSERT INTO rakeback_pendiente (id, weekly_closing_id, role, agent_id, club_id, amount, consumed, active)
