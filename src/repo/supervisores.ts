@@ -284,6 +284,39 @@ export async function getMiCuentaAgente(agentId: string) {
   };
 }
 
+// Agentes que están DENTRO de la cuenta de un supervisor (21/10/2026, pedido de Leo: las tablas del Resumen tienen que
+// reflejar los saldos de Supervisores y Agentes): lo que tienen se cuenta en la cuenta de su supervisor, no por separado.
+export async function agentesEnCuentasDeSupervisor(): Promise<string[]> {
+  const r = await pool.query(
+    `SELECT ag.id FROM agents ag JOIN agents su ON su.name = ag.supervisor
+     WHERE su.usa_cuenta_consolidada = true
+       AND (su.account_type = 'SUPERVISOR' OR EXISTS (SELECT 1 FROM agents s WHERE s.supervisor = su.name))`
+  );
+  return r.rows.map((x) => x.id as string);
+}
+
+// Una fila por cuenta (supervisores y agentes individuales) para el Resumen: saldo = fichas reales + cuenta corriente en
+// Prepago, solo cuenta corriente en Win/Lose (mismo criterio que calcularSaldoFinanciero).
+export async function listCuentasParaResumen() {
+  const filas: {
+    id: string; name: string; tipo: "SUPERVISOR" | "AGENTE"; system: "PREPAGO" | "WIN_LOSE";
+    fichas: number; cuentaCorriente: number; saldo: number; agentes: number;
+  }[] = [];
+  const mapear = (r: any, tipo: "SUPERVISOR" | "AGENTE") => {
+    const system = esSupervisorWinLose(r) ? "WIN_LOSE" : "PREPAGO";
+    const fichas = Number(r.fichas_reales);
+    const cc = Number(r.cuenta_corriente);
+    filas.push({
+      id: r.id, name: r.name, tipo, system, fichas, cuentaCorriente: cc,
+      saldo: round2(system === "PREPAGO" ? fichas + cc : cc),
+      agentes: tipo === "SUPERVISOR" ? Number(r.n_sub ?? 0) : 1,
+    });
+  };
+  for (const r of await listSupervisoresConsolidados()) mapear(r, "SUPERVISOR");
+  for (const r of await listCuentasAgentes()) mapear(r, "AGENTE");
+  return filas;
+}
+
 // Agentes individuales que todavía no tienen cuenta y se pueden activar (activos, sin supervisor, sin nadie a cargo).
 export async function listAgentesSinCuenta() {
   const r = await pool.query(

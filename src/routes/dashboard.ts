@@ -12,6 +12,11 @@ import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } 
 import { aplicarCierresAutomaticosParaClub } from "../repo/proveedores.js";
 import { getResumenTinyExtra, guardarTinyRebateUnion } from "../repo/tinyResumen.js";
 import { getResumenFinanciero, computeGananciaCierresYBancadosPorSemanas } from "../repo/resumenFinanciero.js";
+import { agentesEnCuentasDeSupervisor, listCuentasParaResumen } from "../repo/supervisores.js";
+
+// club_id de la fila que junta lo de las cuentas de supervisores en "Saldo neto por club" (un supervisor tiene un solo
+// saldo de fichas, no por club): el front la dibuja pero no abre movimientos al tocarla.
+const CLUB_CUENTAS_SUPERVISORES = "__cuentas_supervisores__";
 
 export const dashboardRouter = Router();
 
@@ -27,7 +32,13 @@ function fichasTotal(b: any): number {
 }
 
 dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => {
-  const balances = await listAllBalances();
+  // 21/10/2026 (pedido de Leo: las tablas del Resumen tienen que reflejar los saldos de Supervisores y Agentes): los agentes que
+  // están dentro de la cuenta de un supervisor ya no se cuentan por separado -- su saldo es el de la cuenta, que va en
+  // "cuentas" y en la fila "Supervisores" de Saldo neto por club. Los agentes con cuenta propia siguen acá: sus fichas
+  // por club se reflejan en balances, así que coinciden con su cuenta.
+  const enCuentaSup = await agentesEnCuentasDeSupervisor();
+  const cuentas = await listCuentasParaResumen();
+  const balances = (await listAllBalances()).filter((b: any) => !enCuentaSup.includes(b.agent_id));
 
   // KPI financiero "Agentes nos deben"/"Debemos a agentes" (30/09/2026, corrección confirmada
   // por Leo -- ver repo/ledger.ts listSaldoFinancieroPorAgenteClub): YA NO se calcula con
@@ -56,15 +67,22 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
     `SELECT c.id as club_id, c.name as club, COUNT(DISTINCT b.agent_id) as agentes,
             COALESCE(SUM(b.amount + COALESCE(mesas.total_fichas_ganadas_mesas, 0)),0) as saldo_neto
      FROM clubs c
-     LEFT JOIN balances b ON b.club_id = c.id
+     LEFT JOIN balances b ON b.club_id = c.id AND NOT (b.agent_id = ANY($1::text[]))
      LEFT JOIN LATERAL (
        SELECT COALESCE(SUM(wc.result), 0) as total_fichas_ganadas_mesas
        FROM weekly_closings wc
        WHERE wc.agent_id = b.agent_id AND wc.club_id = b.club_id AND wc.status <> 'REVERTIDO'
          AND wc.system = 'PREPAGO'
      ) mesas ON true
-     GROUP BY c.id, c.name ORDER BY c.name`
+     GROUP BY c.id, c.name ORDER BY c.name`,
+    [enCuentaSup]
   );
+  const supPrepago = cuentas.filter((c) => c.tipo === "SUPERVISOR" && c.system === "PREPAGO");
+  const fichasSupervisores = Math.round(supPrepago.reduce((s, c) => s + c.fichas, 0) * 100) / 100;
+  const filasSupervisores =
+    Math.abs(fichasSupervisores) > 0.004
+      ? [{ club_id: CLUB_CUENTAS_SUPERVISORES, club: "Supervisores (cuentas, sin club)", agentes: supPrepago.length, saldo_neto: fichasSupervisores }]
+      : [];
 
   // Mismo "Saldo neto por club", pero separado por sistema (24/09/2026, pedido de Leo). El
   // sistema de un balance no se guarda en la tabla balances (no es un dato snapshot -- un
@@ -100,8 +118,10 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
          AND wc.system = 'PREPAGO'
      ) mesas ON true
      WHERE (b.amount + COALESCE(mesas.total_fichas_ganadas_mesas, 0)) <> 0
+       AND NOT (b.agent_id = ANY($1::text[]))
      GROUP BY c.id, c.name, system
-     ORDER BY c.name, system`
+     ORDER BY c.name, system`,
+    [enCuentaSup]
   );
 
   const clubsCount = await pool.query(`SELECT COUNT(*)::int as n FROM clubs WHERE active = true`);
@@ -265,8 +285,9 @@ dashboardRouter.get("/resumen", requireAuth, requireAdmin, async (_req, res) => 
       rakeSemanaWinLose: gananciaSemana.rows[0] ? rakeSemanaWinLose : null,
       rakeSemanaPrepago: gananciaSemana.rows[0] ? rakeSemanaPrepago : null,
     },
-    porClub: porClub.rows,
-    porClubPorSistema: porClubPorSistema.rows,
+    porClub: [...porClub.rows, ...filasSupervisores],
+    porClubPorSistema: [...porClubPorSistema.rows, ...filasSupervisores.map((f) => ({ ...f, system: "PREPAGO" }))],
+    cuentas,
     resultadoPorClub,
     historicoSemanal: historicoSemanal.reverse(),
     balances,

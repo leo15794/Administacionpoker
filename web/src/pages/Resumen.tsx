@@ -538,11 +538,62 @@ export default function Resumen() {
           club: MISMOS datos, filtros, edición manual y detalle que antes, solo cambia cómo se
           dibuja. En escritorio, tabla con "Fichas" como protagonista; en celular (<=768px), una
           tarjeta por cuenta (ver .saldos-table-wrap / .saldos-cards en index.css). */}
+      {/* (21/10/2026, pedido de Leo: las tablas del Resumen tienen que reflejar los saldos de Supervisores y Agentes) Una fila por
+          cuenta -- supervisores y agentes con cuenta propia --, con el mismo saldo que se ve en sus secciones. */}
+      {data.cuentas && data.cuentas.length > 0 && (() => {
+        const cuentas: any[] = [...data.cuentas].sort((a, b) => Math.abs(Number(b.saldo)) - Math.abs(Number(a.saldo)));
+        const totalCuentas = cuentas.reduce((acc, c) => acc + Number(c.saldo), 0);
+        const ir = (c: any) => nav(c.tipo === "SUPERVISOR" ? "/dashboard/supervisores" : "/dashboard/cuentas-agentes");
+        return (
+          <div className="panel">
+            <div className="topbar" style={{ marginBottom: 12, alignItems: "center" }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Cuentas de supervisores y agentes</h3>
+                <div className="muted" style={{ marginTop: 2 }}>Positivo = le debemos · Negativo = nos debe · mismo saldo que ves en Supervisores y Agentes</div>
+              </div>
+              <button
+                className="btn secondary small"
+                onClick={() =>
+                  exportCsv(
+                    "cuentas_supervisores_y_agentes.csv",
+                    cuentas.map((c: any) => ({ cuenta: c.name, tipo: c.tipo, sistema: c.system, fichas_reales: c.fichas, cuenta_corriente: c.cuentaCorriente, saldo: c.saldo }))
+                  )
+                }
+              >
+                Exportar CSV
+              </button>
+            </div>
+            <div className="table-scroll">
+              <table className="table-compact">
+                <thead>
+                  <tr><th>Cuenta</th><th>Tipo</th><th>Sistema</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo</th></tr>
+                </thead>
+                <tbody>
+                  {cuentas.map((c: any) => (
+                    <tr key={c.id} className={`row-click ${Number(c.saldo) > 0.004 ? "row-pos" : Number(c.saldo) < -0.004 ? "row-neg" : ""}`} onClick={() => ir(c)}>
+                      <td><div className="saldo-name">{c.name}</div>{c.tipo === "SUPERVISOR" && <div className="saldo-sub">{c.agentes} agente{Number(c.agentes) === 1 ? "" : "s"} a cargo</div>}</td>
+                      <td>{c.tipo === "SUPERVISOR" ? "Supervisor" : "Agente"}</td>
+                      <td>{c.system === "WIN_LOSE" ? "Win/Lose" : "Prepago"}</td>
+                      <td className="num">{c.system === "PREPAGO" ? usd(c.fichas) : "—"}</td>
+                      <td className="num">{usd(c.cuentaCorriente)}</td>
+                      <td className="num"><span className={`badge ${Number(c.saldo) > 0.004 ? "pos" : Number(c.saldo) < -0.004 ? "neg" : "neutral"}`}>{usd(c.saldo)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 700 }}><td colSpan={5}>Total de las cuentas</td><td className="num">{usd(totalCuentas)}</td></tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="panel" ref={tablaSaldosRef}>
         <div className="topbar" style={{ marginBottom: 12, alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0 }}>Saldos por agente y club</h3>
-            <div className="muted" style={{ marginTop: 2 }}>Positivo = a favor del agente · Negativo = a favor nuestro</div>
+            <div className="muted" style={{ marginTop: 2 }}>Positivo = a favor del agente · Negativo = a favor nuestro · solo agentes que no están dentro de la cuenta de un supervisor</div>
           </div>
           <div className="saldos-tools">
             <input
@@ -794,9 +845,9 @@ function SaldoPorClubBarras({ porClub, onClickClub }: { porClub: any[]; onClickC
         // sobre 50, no sobre 100.
         const anchoPct = Math.max((Math.abs(saldo) / maxAbs) * 50, saldo === 0 ? 0 : 1.5);
         return (
-          <div key={c.club_id} className="club-balance-row" onClick={() => onClickClub(c.club_id, c.club)}>
+          <div key={c.club_id} className="club-balance-row" onClick={c.club_id === "__cuentas_supervisores__" ? undefined : () => onClickClub(c.club_id, c.club)} style={c.club_id === "__cuentas_supervisores__" ? { cursor: "default" } : undefined}>
             <div className="club-balance-name">{c.club}</div>
-            <div className="club-balance-agentes">{c.agentes} agente{Number(c.agentes) === 1 ? "" : "s"}</div>
+            <div className="club-balance-agentes">{c.agentes} {c.club_id === "__cuentas_supervisores__" ? "cuenta" : "agente"}{Number(c.agentes) === 1 ? "" : "s"}</div>
             <div className="club-balance-bar-outer">
               <div className="club-balance-bar-wrap">
                 <div className="club-balance-bar-track" />
@@ -836,7 +887,7 @@ function SaldoPorClubPorSistema({
       </thead>
       <tbody>
         {filas.map((c: any) => (
-          <tr key={c.club_id} className="row-click" onClick={() => onClickClub(c.club_id, c.club)}>
+          <tr key={c.club_id} className={c.club_id === "__cuentas_supervisores__" ? "" : "row-click"} onClick={c.club_id === "__cuentas_supervisores__" ? undefined : () => onClickClub(c.club_id, c.club)}>
             <td>{c.club}</td>
             <td>{c.agentes}</td>
             <td className="num">
