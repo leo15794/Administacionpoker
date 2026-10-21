@@ -177,6 +177,23 @@ function applyTheme(theme: Theme) {
 // Lo que se abre o se fija vive solo en esta sesión (sessionStorage) y se borra al cerrar sesión: la próxima vez vuelve todo comprimido.
 const CLAVE_FIJO = "dp_sidebar_pinned";
 const CLAVE_GRUPOS = "dp_nav_groups_open";
+// Lugar del menú en escritorio (21/10/2026, pedido de Leo): a la izquierda (dock) o arriba (barra con desplegables).
+// Se elige arrastrando la marca a un borde y es una preferencia del navegador, no de la sesión.
+type MenuPos = "left" | "top";
+const CLAVE_POS = "dp_menu_pos";
+function getInitialPos(): MenuPos {
+  try {
+    return localStorage.getItem(CLAVE_POS) === "top" ? "top" : "left";
+  } catch {
+    return "left";
+  }
+}
+function zonaDeSoltar(x: number, y: number): MenuPos | null {
+  if (y < 110) return "top";
+  if (x < 150) return "left";
+  return null;
+}
+
 function getInitialPinned() {
   try {
     return sessionStorage.getItem(CLAVE_FIJO) === "1";
@@ -256,6 +273,9 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const nav = useNavigate();
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
+  const [pos, setPos] = useState<MenuPos>(getInitialPos);
+  const [desplegado, setDesplegado] = useState<string | null>(null);
+  const [arrastrando, setArrastrando] = useState<{ zona: MenuPos | null; x: number; y: number } | null>(null);
   // Drawer del sidebar en mobile (15/10/2026) -- estado aparte de "collapsed" (que es el
   // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
   // nunca persistido, que arranca siempre cerrado y se cierra solo al navegar.
@@ -401,6 +421,70 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     });
   }
 
+  function cambiarPos(nueva: MenuPos) {
+    setPos(nueva);
+    setDesplegado(null);
+    try {
+      localStorage.setItem(CLAVE_POS, nueva);
+    } catch {
+      /* sin almacenamiento: el cambio vale solo hasta recargar */
+    }
+  }
+
+  // Arrastrar la marca del menú hasta un borde (arriba o izquierda) para acoplarlo ahí; Escape cancela.
+  function empezarArrastre(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let activo = false;
+    const limpiar = () => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("keydown", tecla);
+    };
+    function mover(ev: PointerEvent) {
+      if (!activo && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
+      activo = true;
+      setArrastrando({ zona: zonaDeSoltar(ev.clientX, ev.clientY), x: ev.clientX, y: ev.clientY });
+    }
+    function soltar(ev: PointerEvent) {
+      limpiar();
+      if (!activo) return;
+      setArrastrando(null);
+      const zona = zonaDeSoltar(ev.clientX, ev.clientY);
+      if (zona && zona !== pos) cambiarPos(zona);
+    }
+    function tecla(ev: KeyboardEvent) {
+      if (ev.key !== "Escape") return;
+      activo = false;
+      limpiar();
+      setArrastrando(null);
+    }
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+    window.addEventListener("keydown", tecla);
+  }
+
+  // Mientras se arrastra no se selecciona texto de la página.
+  useEffect(() => {
+    document.body.classList.toggle("dp-dragging-menu", !!arrastrando);
+    return () => document.body.classList.remove("dp-dragging-menu");
+  }, [!!arrastrando]);
+
+  // El desplegable de la barra de arriba se cierra al navegar y al hacer clic afuera.
+  useEffect(() => {
+    setDesplegado(null);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!desplegado) return;
+    const fuera = (ev: MouseEvent) => {
+      if (!(ev.target as HTMLElement).closest(".topnav")) setDesplegado(null);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, [desplegado]);
+
   const rolLabel =
     role === "ADMIN" ? "Panel administrativo" :
     role === "SUPERVISOR" ? "Portal de supervisor" :
@@ -408,7 +492,61 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     "Portal de agente";
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${pos === "top" ? "menu-top" : ""}`}>
+      {arrastrando && (
+        <div className="dock-overlay">
+          <div className={`dock-zona dock-zona-top ${arrastrando.zona === "top" ? "on" : ""}`}>Arriba</div>
+          <div className={`dock-zona dock-zona-left ${arrastrando.zona === "left" ? "on" : ""}`}>Izquierda</div>
+          <div className="dock-ghost" style={{ left: arrastrando.x + 14, top: arrastrando.y + 14 }}>Soltá en un borde · Esc cancela</div>
+        </div>
+      )}
+      <header className="topnav">
+        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde izquierdo para mover el menú">
+          <div className="brand-mark" aria-hidden="true">P</div>
+          <b>Poker Gestión</b>
+        </div>
+        <nav className="tn-links">
+          {role === "ADMIN" ? (
+            NAV_GROUPS.map((grupo) => {
+              const keys = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
+              if (keys.length === 0) return null;
+              return (
+                <div key={grupo.key} className={`tn-g ${activeGroupKey === grupo.key ? "on" : ""} ${desplegado === grupo.key ? "open" : ""}`}>
+                  <button type="button" onClick={() => setDesplegado((d) => (d === grupo.key ? null : grupo.key))}>
+                    {grupo.label} <span className="tn-chev">▾</span>
+                  </button>
+                  {desplegado === grupo.key && (
+                    <div className="tn-dd">
+                      {keys.map((key) => {
+                        const item = NAV_ITEMS.find((i) => i.key === key);
+                        if (!item) return null;
+                        return (
+                          <NavLink key={item.key} to={item.to} end={item.end} className="tn-item">
+                            {icon[item.icon]} {item.label}
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : "/mi-cuenta"} className="tn-item tn-solo">
+              {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : "Mi cuenta"}
+            </NavLink>
+          )}
+        </nav>
+        <div className="tn-right">
+          <span className="tn-rol">{rolLabel}</span>
+          <button className="btn secondary sidebar-tema" onClick={toggleTheme} title={theme === "dark" ? "Modo día" : "Modo noche"} aria-label={theme === "dark" ? "Modo día" : "Modo noche"}>
+            {theme === "dark" ? icon.sun : icon.moon}
+          </button>
+          <button className="btn secondary" onClick={logout} title="Cerrar sesión">
+            {icon.logout} Cerrar sesión
+          </button>
+        </div>
+      </header>
       <div className="mobile-topbar">
         <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
           {icon.menu}
@@ -422,7 +560,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       <div className={`sidebar ${pinned ? "" : "rail"} ${mobileOpen ? "mobile-open" : ""}`}>
         {/* Marca y botón de colapsar en la MISMA fila (21/10/2026, pedido de Leo: el botón solo en su propia fila dejaba un espacio muerto arriba). */}
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">P</div>
+          <div className="brand-mark brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde de arriba para mover el menú">P</div>
           <div className="brand-info">
             <h1>Poker Gestión</h1>
             <div className="sub">{rolLabel}</div>
