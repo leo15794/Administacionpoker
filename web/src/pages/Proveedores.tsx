@@ -20,7 +20,7 @@ const GARANTIA_TIPO_LABEL: Record<string, string> = {
   BAJA: "Baja",
 };
 
-type Tab = "saldos" | "cierres" | "pagos" | "garantias";
+type Tab = "resumen" | "saldos" | "cierres" | "pagos" | "garantias" | "config";
 
 export default function Proveedores() {
   const [tab, setTab] = useState<Tab>("cierres");
@@ -30,10 +30,13 @@ export default function Proveedores() {
   const [agentes, setAgentes] = useState<any[]>([]);
   const [autoCierreClubesTodos, setAutoCierreClubesTodos] = useState<any[]>([]);
   const [saldos, setSaldos] = useState<any[] | null>(null);
-  const [cierres, setCierres] = useState<any[] | null>(null);
-  const [pagos, setPagos] = useState<any[] | null>(null);
-  const [garantias, setGarantias] = useState<any[] | null>(null);
-  const [garantiasHistorial, setGarantiasHistorial] = useState<any[] | null>(null);
+  // Listas de TODOS los proveedores; las que se muestran en las pestañas (cierres, pagos, garantias...) se filtran más abajo por el proveedor elegido.
+  const [cierresTodos, setCierres] = useState<any[] | null>(null);
+  const [pagosTodos, setPagos] = useState<any[] | null>(null);
+  const [garantiasTodas, setGarantias] = useState<any[] | null>(null);
+  const [garantiasHistTodas, setGarantiasHistorial] = useState<any[] | null>(null);
+  // Proveedor elegido (21/10/2026, pedido de Leo, mockup aprobado): "" = vista general de todos.
+  const [provSel, setProvSel] = useState("");
   const [error, setError] = useState("");
   // Solicitudes de retiro/pago de los proveedores (16/10/2026, pedido de Leo: "necesito todo
   // esto mismo para la sección de proveedores") -- siempre visible arriba de todo, no depende
@@ -91,6 +94,18 @@ export default function Proveedores() {
   // dar negativo cuando la mayoría de los clubes nos deben a nosotros, y el cartel decía
   // siempre "a favor del proveedor" sin importar el signo real. Con dos números separados no
   // hay ambigüedad posible.
+  const sel = provSel ? proveedores.find((x) => x.id === provSel) ?? null : null;
+  const delProveedor = (rows: any[] | null) =>
+    rows && sel ? rows.filter((r) => r.proveedor_id === sel.id || (r.proveedor_id === undefined && r.proveedor_name === sel.name)) : rows;
+  const cierres = delProveedor(cierresTodos);
+  const pagos = delProveedor(pagosTodos);
+  const garantias = delProveedor(garantiasTodas);
+  const garantiasHistorial = delProveedor(garantiasHistTodas);
+  const saldosSel = sel ? (saldos ?? []).filter((x) => x.proveedor_id === sel.id) : [];
+  const elegirProveedor = (id: string) => {
+    setProvSel(id);
+    setTab(id ? "resumen" : "cierres");
+  };
   const totalAFavorProveedor = (saldos ?? []).reduce((s, x) => s + Math.max(Number(x.amount), 0), 0);
   const totalAFavorNuestro = (saldos ?? []).reduce((s, x) => s + Math.max(-Number(x.amount), 0), 0);
   const totalGarantizado = (garantias ?? []).reduce((s, g) => s + Number(g.amount), 0);
@@ -104,7 +119,7 @@ export default function Proveedores() {
     const deudaOperativa = -(saldos ?? [])
       .filter((s) => s.proveedor_id === proveedorId)
       .reduce((s, x) => s + Number(x.amount), 0);
-    const garantia = (garantias ?? []).find((g) => g.proveedor_id === proveedorId);
+    const garantia = (garantiasTodas ?? []).find((g) => g.proveedor_id === proveedorId);
     const garantiaVigente = garantia ? Number(garantia.amount) - Number(garantia.consumed) : 0;
     return deudaOperativa + garantiaVigente;
   }
@@ -200,14 +215,22 @@ export default function Proveedores() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
-          <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>
-          <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
+          {!sel && (
+            <>
+              <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>
+              <button className="btn" onClick={() => setShowCierre(true)} disabled={proveedores.length === 0}>+ Cierre semanal</button>
+            </>
+          )}
           <ActionsMenu
             title="Más acciones"
             items={[
               { label: "+ Nuevo proveedor", onClick: () => setShowNuevoProveedor(true) },
-              { label: "+ Ajuste manual", onClick: () => setShowAjuste(true), disabled: proveedores.length === 0 },
-              { label: "+ Liquidación PDF", onClick: () => setShowLiquidacion(true), disabled: proveedores.length === 0 },
+              ...(sel
+                ? []
+                : [
+                    { label: "+ Ajuste manual", onClick: () => setShowAjuste(true), disabled: proveedores.length === 0 },
+                    { label: "+ Liquidación PDF", onClick: () => setShowLiquidacion(true), disabled: proveedores.length === 0 },
+                  ]),
             ]}
           />
         </div>
@@ -243,6 +266,37 @@ export default function Proveedores() {
         </div>
       )}
 
+      {/* Selector de proveedor (21/10/2026, pedido de Leo, mockup aprobado): "Todos" = la vista general de siempre; un proveedor = su cuenta. */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "6px 0 14px" }}>
+        <div
+          className="panel"
+          onClick={() => elegirProveedor("")}
+          style={{ margin: 0, padding: "10px 16px", minWidth: 190, cursor: "pointer", ...(!sel ? { outline: "2px solid var(--accent)", outlineOffset: -2 } : {}) }}
+        >
+          <div style={{ fontWeight: 750, fontSize: 15 }}>Todos los proveedores</div>
+          <div className="saldo-sub">vista general de {proveedores.length}</div>
+        </div>
+        {proveedores.map((x) => {
+          const d = deudaTotalProveedor(x.id);
+          return (
+            <div
+              key={x.id}
+              className="panel"
+              onClick={() => elegirProveedor(x.id)}
+              style={{ margin: 0, padding: "10px 16px", minWidth: 190, cursor: "pointer", ...(sel?.id === x.id ? { outline: "2px solid var(--accent)", outlineOffset: -2 } : {}) }}
+            >
+              <div style={{ fontWeight: 750, fontSize: 15 }}>{x.name}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                <span className="saldo-sub" style={{ margin: 0 }}>{d > 0.004 ? "nos debe" : d < -0.004 ? "le debemos" : "al día"}</span>
+                <b style={{ fontSize: 16, color: d > 0.004 ? "var(--amber)" : d < -0.004 ? "var(--red)" : "var(--text-dim)" }}>{usd(Math.abs(d))}</b>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!sel && (
+      <>
       <div className="stat-row">
         <div className="stat-card">
           <div className="l">Nos deben</div>
@@ -313,12 +367,55 @@ export default function Proveedores() {
         cierre semanal y cada pago/cobro -- nunca se editan a mano. Tocá un club para ver los movimientos que arman ese saldo.
       </div>
 
+      </>
+      )}
+
+      {sel && (
+        <div className="panel" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div className="deals-eyebrow">Cuenta del proveedor</div>
+              <div style={{ fontSize: 22, fontWeight: 750, letterSpacing: "-0.01em" }}>{sel.name}</div>
+              <div className="saldo-sub" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {sel.notes ? `${sel.notes} · ` : ""}Auto-cierre:
+                {autoCierreClubesTodos.filter((c) => c.proveedorId === sel.id).length === 0
+                  ? " sin auto-cierre"
+                  : autoCierreClubesTodos.filter((c) => c.proveedorId === sel.id).map((c) => <span key={c.id} className="pill gold">{c.clubName} · {pct(c.rakebackPct)}</span>)}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => setShowCierre(true)}>+ Cierre semanal</button>
+              <button className="btn secondary" onClick={() => setShowPago(true)}>+ Pago / cobro</button>
+              <button className="btn secondary" onClick={() => setShowAjuste(true)}>+ Ajuste</button>
+              <button className="btn secondary" onClick={() => setShowLiquidacion(true)}>Liquidación PDF</button>
+              <ActionsMenu
+                items={[
+                  { label: "Editar", onClick: () => setEditandoProveedor(sel) },
+                  { label: "Eliminar…", onClick: () => onEliminarProveedor(sel.id, sel.name), danger: true },
+                ]}
+              />
+            </div>
+          </div>
+          {(() => {
+            const d = deudaTotalProveedor(sel.id);
+            return (
+              <div style={{ marginTop: 14 }} title="Deuda operativa (todos sus clubes) + garantía vigente">
+                <div className="saldo-sub" style={{ margin: 0 }}>Saldo total · {d > 0.004 ? "nos debe" : d < -0.004 ? "le debemos" : "al día"}</div>
+                <div className="saldo-big" style={{ fontSize: 30, color: d > 0.004 ? "var(--amber)" : d < -0.004 ? "var(--red)" : "var(--text-dim)" }}>{usd(Math.abs(d))}</div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       <div className="panel">
         <div className="ag-toolbar" style={{ marginBottom: 12 }}>
           <span className="seg">
+            {sel && <button className={tab === "resumen" ? "on" : ""} onClick={() => setTab("resumen")}>Resumen</button>}
             <button className={tab === "cierres" ? "on" : ""} onClick={() => setTab("cierres")}>Cierres<span className="n">{cierres?.length ?? 0}</span></button>
             <button className={tab === "pagos" ? "on" : ""} onClick={() => setTab("pagos")}>Pagos / cobros<span className="n">{pagos?.length ?? 0}</span></button>
             <button className={tab === "garantias" ? "on" : ""} onClick={() => setTab("garantias")}>Garantías<span className="n">{garantias?.length ?? 0}</span></button>
+            {sel && <button className={tab === "config" ? "on" : ""} onClick={() => setTab("config")}>Configuración</button>}
           </span>
           <span className="ag-toolbar-spacer" />
           {(tab === "cierres" || tab === "pagos") && (
@@ -329,6 +426,26 @@ export default function Proveedores() {
             </label>
           )}
         </div>
+
+        {tab === "resumen" && sel && (
+          <>
+            <h4 style={{ margin: "0 0 4px" }}>Saldo por club</h4>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Tocá un club para ver los movimientos que arman ese saldo.
+            </div>
+            {saldosSel.length === 0 ? (
+              <div className="muted">Todavía no tiene movimientos.</div>
+            ) : (
+              <>
+                {saldosSel.map((x) => <ClubSaldoRow key={x.id} saldo={x} />)}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 2px", borderTop: "1px solid var(--border)", fontWeight: 700 }}>
+                  <span>Total de los clubes</span>
+                  <span>{(() => { const t = saldosSel.reduce((a, x) => a + Number(x.amount), 0); return (t < 0 ? "−" : "") + usd(Math.abs(t)); })()}</span>
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         {tab === "cierres" && (
           <>
@@ -451,7 +568,7 @@ export default function Proveedores() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>Garantías activas</h3>
-              <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({})}>+ Ajustar garantía</button>
+              <button className="btn secondary small" onClick={() => setShowGarantiaAjuste({ proveedorId: sel?.id })}>+ Ajustar garantía</button>
             </div>
             {!garantias ? (
               <Loading />
@@ -506,6 +623,18 @@ export default function Proveedores() {
             )}
           </>
         )}
+        {tab === "config" && sel && (
+          <>
+            <h4 style={{ margin: "0 0 4px" }}>Auto-cierre por club</h4>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Cada vez que se guarda "Ingreso por ventas" en Resumen por club de uno de estos clubes, el cierre semanal de {sel.name} se aplica solo con ese % de rakeback.
+            </div>
+            <AutoCierreClubesEditor proveedorId={sel.id} clubes={clubes} />
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <button className="btn secondary" onClick={() => setEditandoProveedor(sel)}>Editar nombre y notas</button>
+            </div>
+          </>
+        )}
       </div>
 
       {showNuevoProveedor && (
@@ -528,6 +657,7 @@ export default function Proveedores() {
             proveedores={proveedores}
             clubes={clubes}
             agentes={agentes}
+            proveedorInicial={sel?.id}
             onDone={() => { setShowCierre(false); refresh(); }}
           />
         </Modal>
@@ -537,6 +667,7 @@ export default function Proveedores() {
           <PagoForm
             proveedores={proveedores}
             clubes={clubes}
+            proveedorInicial={sel?.id}
             onDone={() => { setShowPago(false); refresh(); }}
           />
         </Modal>
@@ -546,6 +677,7 @@ export default function Proveedores() {
           <AjusteForm
             proveedores={proveedores}
             clubes={clubes}
+            proveedorInicial={sel?.id}
             onDone={() => { setShowAjuste(false); refresh(); }}
           />
         </Modal>
@@ -554,7 +686,7 @@ export default function Proveedores() {
         <Modal title="Ajustar garantía de proveedor" onClose={() => setShowGarantiaAjuste(null)}>
           <GarantiaAjusteForm
             proveedores={proveedores}
-            garantias={garantias ?? []}
+            garantias={garantiasTodas ?? []}
             preselectProveedorId={showGarantiaAjuste.proveedorId}
             onDone={() => { setShowGarantiaAjuste(null); refresh(); }}
           />
@@ -565,7 +697,8 @@ export default function Proveedores() {
           <LiquidacionProveedorForm
             proveedores={proveedores}
             saldos={saldos ?? []}
-            garantias={garantias ?? []}
+            garantias={garantiasTodas ?? []}
+            proveedorInicial={sel?.id}
             onDone={() => setShowLiquidacion(false)}
           />
         </Modal>
@@ -1089,14 +1222,16 @@ function CierreForm({
   proveedores,
   clubes,
   agentes,
+  proveedorInicial,
   onDone,
 }: {
   proveedores: any[];
   clubes: any[];
   agentes: any[];
+  proveedorInicial?: string;
   onDone: () => void;
 }) {
-  const [proveedorId, setProveedorId] = useState("");
+  const [proveedorId, setProveedorId] = useState(proveedorInicial ?? "");
   const [weekStart, setWeekStart] = useState("");
   const [notes, setNotes] = useState("");
   const [lineas, setLineas] = useState<LineaState[]>([nuevaLinea()]);
@@ -1220,9 +1355,9 @@ function CierreForm({
 //  - "Suelto" (comportamiento de siempre): un pago directo contra el saldo total de un
 //    proveedor+club, sin atarlo a ninguna línea -- para casos sin una línea que matchee (o
 //    cierres viejos, de antes de este cambio, que no tienen nada que trackear todavía).
-function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
+function PagoForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedores: any[]; clubes: any[]; proveedorInicial?: string; onDone: () => void }) {
   const [modo, setModo] = useState<"lineas" | "suelto">("lineas");
-  const [proveedorId, setProveedorId] = useState("");
+  const [proveedorId, setProveedorId] = useState(proveedorInicial ?? "");
   const [medio, setMedio] = useState<"USDT" | "EFECTIVO" | "ZELLE" | "OTRO">("USDT");
   const [custodio, setCustodio] = useState("");
   const [notes, setNotes] = useState("");
@@ -1478,8 +1613,8 @@ function PagoForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes:
 // atar a ninguna línea de cierre (es una corrección suelta, no el cobro de un cierre puntual).
 // Como usa el mismo saldo de proveedor_saldos que ya suma el PDF de Liquidación, el ajuste
 // entra solo al total -- no hace falta tocar nada ahí aparte de mostrarlo desglosado.
-function AjusteForm({ proveedores, clubes, onDone }: { proveedores: any[]; clubes: any[]; onDone: () => void }) {
-  const [proveedorId, setProveedorId] = useState("");
+function AjusteForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedores: any[]; clubes: any[]; proveedorInicial?: string; onDone: () => void }) {
+  const [proveedorId, setProveedorId] = useState(proveedorInicial ?? "");
   const [clubId, setClubId] = useState("");
   const [amount, setAmount] = useState("");
   const [direction, setDirection] = useState<"PAGO" | "COBRO">("PAGO");
@@ -1744,14 +1879,16 @@ function LiquidacionProveedorForm({
   proveedores,
   saldos,
   garantias,
+  proveedorInicial,
   onDone,
 }: {
   proveedores: any[];
   saldos: any[];
   garantias: any[];
+  proveedorInicial?: string;
   onDone: () => void;
 }) {
-  const [proveedorId, setProveedorId] = useState("");
+  const [proveedorId, setProveedorId] = useState(proveedorInicial ?? "");
   const [cierresProveedor, setCierresProveedor] = useState<any[] | null>(null);
   const [cierreId, setCierreId] = useState("");
   const [lineas, setLineas] = useState<any[] | null>(null);
