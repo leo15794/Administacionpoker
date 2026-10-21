@@ -463,7 +463,7 @@ export default function MiSupervision() {
             {agentesPane}
             {cierrePane}
             {solicitudesPane}
-            <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={sup.default_system === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO"} perspectiva="supervisor" />
+            <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={sup.default_system === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO"} perspectiva="supervisor" permitirTraer={consolidada} />
           </>
         }
         right={
