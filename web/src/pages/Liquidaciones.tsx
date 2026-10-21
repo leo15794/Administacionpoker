@@ -1749,6 +1749,13 @@ export default function Liquidaciones() {
         agentes de clubes distintos en una sola liquidación (ej. una misma persona con una identidad por club).
       </p>
 
+      {/* Sección en desuso (21/10/2026, pedido de Leo): ahora todo se maneja desde Supervisores y Agentes (cierre semanal de la cuenta, descuentos, pagos y
+          cobros, PDF). Se sacó del menú y queda accesible solo por URL, como historial y por si hay que volver a usarla. */}
+      <div className="warnbox" style={{ marginBottom: 18 }}>
+        <b>Esta sección ya no se usa.</b> El cierre semanal, los descuentos, los pagos y cobros y los PDF se hacen desde <b>Supervisores</b> y <b>Agentes</b>.
+        Acá queda el historial de lo ya liquidado. <b>Pagar o cobrar desde esta pantalla puede duplicar</b> lo que ya hiciste en la cuenta del supervisor o del agente.
+      </div>
+
       <div className="panel">
         {!armando ? (
           <button type="button" className="btn" onClick={() => setArmando(true)}>

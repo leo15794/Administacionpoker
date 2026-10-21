@@ -204,7 +204,8 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   // "Rakeback pendiente" salió del menú (21/10/2026, pedido de Leo): todos los agentes se manejan desde Supervisores o Agentes. La ruta
   // /dashboard/rakeback-pendiente sigue existiendo (con un aviso) por si hay que volver a usarla.
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
-  { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },
+  // "Liquidaciones" salió del menú (21/10/2026, pedido de Leo): todo se maneja desde Supervisores y Agentes. La ruta /dashboard/liquidaciones sigue existiendo
+  // (con un aviso) como historial y por si hay que volver a usarla.
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "finanzas" },
   { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "reportes" },
   { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "reportes" },
