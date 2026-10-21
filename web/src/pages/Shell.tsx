@@ -201,7 +201,8 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "proveedores", to: "/dashboard/proveedores", icon: "proveedores", label: "Proveedores", group: "finanzas" },
   { key: "supervisores", to: "/dashboard/supervisores", icon: "supervisores", label: "Supervisores", group: "finanzas" },
   { key: "cuentasAgentes", to: "/dashboard/cuentas-agentes", icon: "cuenta", label: "Agentes", group: "finanzas" },
-  { key: "rakebackPendiente", to: "/dashboard/rakeback-pendiente", icon: "rakebackPendiente", label: "Rakeback pendiente", group: "finanzas" },
+  // "Rakeback pendiente" salió del menú (21/10/2026, pedido de Leo): todos los agentes se manejan desde Supervisores o Agentes. La ruta
+  // /dashboard/rakeback-pendiente sigue existiendo (con un aviso) por si hay que volver a usarla.
   { key: "cuentasSocios", to: "/dashboard/cuentas-socios", icon: "cuentasSocios", label: "Cuentas de socios", group: "finanzas" },
   { key: "liquidaciones", to: "/dashboard/liquidaciones", icon: "liquidaciones", label: "Liquidaciones", group: "finanzas" },
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "finanzas" },

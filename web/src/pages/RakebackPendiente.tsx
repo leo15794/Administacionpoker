@@ -324,6 +324,13 @@ export default function RakebackPendiente() {
         </button>
       </div>
 
+      {/* Sección en desuso (21/10/2026, pedido de Leo): todos los agentes se manejan desde Supervisores o Agentes. Se sacó del menú y queda
+          accesible solo por URL, por si hay que volver a usarla. */}
+      <div className="warnbox" style={{ marginTop: 14 }}>
+        <b>Esta sección ya no se usa.</b> Los agentes se manejan desde <b>Supervisores</b> y <b>Agentes</b> (y M CHOCO desde Proveedores). Lo que ves acá es el
+        espejo viejo de los cierres: <b>pagar o cobrar desde esta pantalla puede duplicar</b> un pago que ya hiciste en la cuenta del supervisor o del agente.
+      </div>
+
       {/* Alta manual de rakeback viejo (06/10/2026, pedido de Leo) -- crea un cierre "fantasma"
           que ancla el pendiente al sistema (ver crearRakebackPendienteManual en
           repo/rakebackPendiente.ts); afecta Saldo anterior/Liquidaciones igual que uno real. */}
