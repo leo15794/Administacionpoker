@@ -299,7 +299,7 @@ a { color: inherit; }
 .sidebar.collapsed .sidebar-tema, .sidebar.collapsed .sidebar-salir { width: 100%; padding: 8px 0 !important; }
 
 /* ---------- Menú flotante tipo dock (21/10/2026, pedido de Leo) ----------
-   Escritorio: tarjeta flotante. Por defecto compacta (solo íconos, 72px) y se abre sobre el contenido al pasar el mouse;
+   Escritorio: tarjeta flotante. Por defecto compacta (solo íconos, 72px) y se abre al pasar el mouse empujando la página;
    el botón de la marca la deja fija abierta. Los grupos arrancan cerrados (ver Shell.tsx). En celular sigue el cajón de siempre. */
 .nav-section-icon { display: none; }
 @media (min-width: 769px) {
@@ -315,7 +315,7 @@ a { color: inherit; }
   .main { padding-top: 16px; }
   .nav-link { white-space: nowrap; }
   .sidebar.rail { width: 72px; }
-  .sidebar.rail:hover { width: 244px; margin-right: -172px; z-index: 30; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+  .sidebar.rail:hover { width: 244px; z-index: 30; } /* al abrirse empuja la página (pedido de Leo), no la tapa */
   .sidebar.rail:not(:hover) .brand-info,
   .sidebar.rail:not(:hover) .sidebar-toggle,
   .sidebar.rail:not(:hover) .nav-section-text,
