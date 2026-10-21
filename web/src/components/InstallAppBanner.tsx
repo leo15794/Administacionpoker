@@ -46,7 +46,7 @@ export default function InstallAppBanner() {
     <>
       <div className="tb-install-banner install-admin">
         <button className="tb-install-dismiss" onClick={cerrar} aria-label="Cerrar">✕</button>
-        <div className="tb-install-icon">P</div>
+        <img src="/admin-icon-192.png" alt="" width={40} height={40} style={{ borderRadius: 11, flexShrink: 0 }} />
         <div className="tb-install-text">
           <div className="t1">Instalá Poker Gestión en tu celular</div>
           <div className="t2">Entrás desde un ícono en tu pantalla de inicio, sin abrir el navegador.</div>
