@@ -647,8 +647,9 @@ function EditarAgente({
           Solo referencia (no suma ni resta saldo)
         </label>
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          Para agentes que se usan solo como referencia (por ejemplo, el sistema de referidos de TeamBack Afiliados). Su cierre semanal se carga igual
-          (el club, el rake y la ganancia no cambian), pero no genera pendiente, no se aplica a ninguna cuenta y no aparece para activarle una cuenta en Agentes.
+          Para agentes que se usan solo como referencia (por ejemplo, el sistema de referidos de TeamBack Afiliados). El cierre semanal se carga igual
+          (queda la fila de la semana), pero con todos los importes en cero: no suma ni resta a ninguna ganancia, rake, saldo ni cuenta, y no genera pendiente.
+          Los valores del reporte quedan anotados en la observación del cierre. No aparece para activarle una cuenta en Agentes.
         </div>
       </div>
 

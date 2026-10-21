@@ -107,7 +107,34 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
       return { id: existing.rows[0].id, alreadyApplied: true, preview: input.preview ?? false };
     }
 
-    const agentRes = await client.query(`SELECT account_type, person_key FROM agents WHERE id = $1`, [input.agentId]);
+    const agentRes = await client.query(`SELECT account_type, person_key, solo_referencia FROM agents WHERE id = $1`, [input.agentId]);
+    // Agente SOLO DE REFERENCIA (21/10/2026, pedido de Leo, caso F coco -- su red de referidos se maneja en TeamBack Afiliados): el cierre se
+    // hace igual (queda la fila de la semana) pero NO suma ni resta a ninguna ganancia, saldo, rake, rakeback, rodeo ni comisión. Se logra pasándolo por
+    // el flujo normal con todos los importes en cero; los valores del reporte quedan anotados en la observación para poder auditarlos.
+    if (agentRes.rows[0]?.solo_referencia) {
+      const originales =
+        `resultado ${input.result}, rake ${input.rakeTotal}, rakeback ${Math.round(input.rakebackPct * 10000) / 100}%` +
+        (input.rodeoManual ? `, rodeo ${input.rodeoManual}` : "") +
+        (input.ajusteManual ? `, ajuste ${input.ajusteManual}` : "") +
+        (input.jugadores != null ? `, ${input.jugadores} jugadores` : "");
+      input = {
+        ...input,
+        result: 0,
+        rakeTotal: 0,
+        rodeoJugadores: undefined,
+        rodeoManual: 0,
+        ajusteManual: 0,
+        ajusteManualNota: null,
+        jugadores: undefined,
+        ringGame: undefined,
+        mtt: undefined,
+        sng: undefined,
+        spin: undefined,
+        bbjContribution: 0,
+        jugadoresDetalle: undefined,
+        observation: `[Solo referencia: no suma ni resta saldo ni ganancia] Valores del reporte (no se cuentan): ${originales}.` + (input.observation ? ` ${input.observation}` : ""),
+      };
+    }
     if (agentRes.rows[0]?.account_type === "BANCADO") {
       const result = await aplicarCierreBancadoTx(client, input);
       await client.query(input.preview ? "ROLLBACK" : "COMMIT");
