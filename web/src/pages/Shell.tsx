@@ -4,6 +4,7 @@ import { api } from "../api";
 import GlobalSearch from "../components/GlobalSearch";
 import NotificationBell from "../components/NotificationBell";
 import IdleGuard from "../components/IdleGuard";
+import InstallAppBanner from "../components/InstallAppBanner";
 
 const icon = {
   resumen: (
@@ -659,6 +660,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </div>
       <div className="main">
+        <InstallAppBanner />
         {role === "ADMIN" && (
           <div className="main-topbar">
             <GlobalSearch />

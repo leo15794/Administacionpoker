@@ -11,6 +11,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Poker Gestión" />
+    <script>
+      // Dos apps instalables en el mismo sitio (21/10/2026, pedido de Leo): TeamBack Affiliates (/teamback) usa el manifest de arriba;
+      // todo lo demás (panel de administración y portales) usa el de Poker Gestión, con su propio ícono. Se decide acá, antes de que el navegador evalúe la instalación.
+      if (location.pathname.indexOf("/teamback") !== 0) {
+        document.querySelector("link[rel=manifest]").href = "/manifest-admin.json";
+        document.querySelector("link[rel=apple-touch-icon]").href = "/admin-apple-touch-icon.png";
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
