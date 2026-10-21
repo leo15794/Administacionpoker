@@ -10,7 +10,7 @@ import { comprimirImagen, tamanoLegible } from "../imagenes";
 const MAX_IMAGENES = 10;
 
 // Avisos rápidos (21/10/2026, pedido de Leo): precargan título y mensaje, que se pueden editar antes de enviar.
-// Semanas de lunes a domingo, igual que los cierres: los torneos son de la semana en curso y el cierre es el de la semana que terminó.
+// Semanas de lunes a domingo, igual que los cierres: el cierre es el de la semana que terminó.
 function rangoSemana(desfase: number): string {
   const hoy = new Date();
   const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - ((hoy.getDay() + 6) % 7) + desfase * 7);
@@ -19,7 +19,7 @@ function rangoSemana(desfase: number): string {
   return `${f(lunes)} al ${f(domingo)}`;
 }
 const AVISOS_RAPIDOS = [
-  { key: "torneos", etiqueta: "🏆 Torneos de la semana", titulo: () => "Torneos de la semana", mensaje: () => `Te dejamos los torneos de esta semana (${rangoSemana(0)}). Mirá las imágenes en tu portal.` },
+  { key: "torneos", etiqueta: "🏆 Torneos diarios", titulo: () => "Torneos diarios", mensaje: () => "Te dejamos los torneos del día de HOY. Mirá las imágenes en tu portal." },
   { key: "cierre", etiqueta: "📅 Cierre semanal", titulo: () => "Tu cierre de la semana ya está", mensaje: () => `Ya cargamos tu cierre de la semana del ${rangoSemana(-1)}. Entrá a tu portal para ver el detalle.` },
 ];
 interface Adjunto {
