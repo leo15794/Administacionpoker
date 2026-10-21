@@ -163,6 +163,9 @@ export const api = {
   miSupervision: () => request("/portal/mi-supervision"),
   // Cierre semanal consolidado de agentes a cargo, en solo lectura para el propio supervisor
   // (14/10/2026) -- mismos endpoints que usa el admin en Supervisores, pero atados al login.
+  // Calculadora de cierre del portal (21/10/2026): simula con la fórmula real, sin guardar nada.
+  calcularCierrePortal: (lineas: { sistema: "PREPAGO" | "WIN_LOSE"; resultado: number; rake: number; rakebackPct: number; rebatePct: number; rodeo?: number; ajuste?: number }[]) =>
+    request("/portal/calculadora-cierre", { method: "POST", body: JSON.stringify({ lineas }) }),
   miSupervisionSemanasCierre: () => request("/portal/mi-supervision/cierre-semanal/semanas"),
   miSupervisionCierreSemanal: (weekStart: string) => request(`/portal/mi-supervision/cierre-semanal/${weekStart}`),
   // Solicitudes de retiro/pago del propio supervisor (16/10/2026, pedido de Leo) -- ver

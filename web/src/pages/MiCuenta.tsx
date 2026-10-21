@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import MiCuentaAgente from "./MiCuentaAgente";
+import CalculadoraCierre from "../components/CalculadoraCierre";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, colorSigno, montoSigno } from "../components/PortalUI";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
@@ -12,7 +13,7 @@ function saldoNeto(b: any): number {
   return Number(b.amount);
 }
 
-type Tab = "saldos" | "cierres" | "movimientos";
+type Tab = "saldos" | "cierres" | "movimientos" | "calculadora";
 
 // (19/10/2026, pedido de Leo, mockups aprobados) Portal del agente rediseñado: tarjeta principal con
 // el saldo, cierres y movimientos como tarjetas/filas (en celular la tabla de movimientos cortaba la
@@ -53,6 +54,7 @@ export default function MiCuenta() {
     ...(variosClubes ? [{ key: "saldos" as Tab, label: "Saldo por club", count: data.saldos.length }] : []),
     { key: "cierres" as Tab, label: "Cierres", count: cierres.length },
     { key: "movimientos" as Tab, label: "Movimientos", count: data.movimientos.length },
+    { key: "calculadora" as Tab, label: "Calculadora" },
   ];
 
   const minis = [
@@ -142,6 +144,7 @@ export default function MiCuenta() {
           <>
             {variosClubes && saldosPane}
             {cierresPane}
+            <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={data.agente.default_system === "PREPAGO" ? "PREPAGO" : "WIN_LOSE"} perspectiva="agente" />
           </>
         }
         right={movimientosPane}

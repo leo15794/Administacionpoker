@@ -1,3 +1,4 @@
+import CalculadoraCierre from "../components/CalculadoraCierre";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
@@ -14,7 +15,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   UNION: "Unión",
 };
 
-type Tab = "agentes" | "cierre" | "movimientos" | "referidos" | "solicitudes";
+type Tab = "agentes" | "cierre" | "movimientos" | "referidos" | "solicitudes" | "calculadora";
 
 // Vista del rol Supervisor — mismo dato que la pestaña "Supervisores" que ya ve el admin en
 // Administración, pero filtrado a un solo supervisor (el del login). Solo muestra, salvo pedir
@@ -104,6 +105,7 @@ export default function MiSupervision() {
     { key: "movimientos", label: "Movimientos", count: movimientos.length + movimientosCuenta.length },
     ...(hayReferidos ? [{ key: "referidos" as Tab, label: "Referidos" }] : []),
     { key: "solicitudes", label: "Solicitudes", count: misSolicitudes?.length ?? 0 },
+    { key: "calculadora", label: "Calculadora" },
   ];
   const tabActual: Tab = tabs.some((t) => t.key === tab) ? tab : "agentes";
 
@@ -461,6 +463,7 @@ export default function MiSupervision() {
             {agentesPane}
             {cierrePane}
             {solicitudesPane}
+            <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={sup.default_system === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO"} perspectiva="supervisor" />
           </>
         }
         right={

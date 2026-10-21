@@ -3,6 +3,7 @@ import { z } from "zod";
 import { listBalancesByAgent, listMovementsByAgent } from "../repo/ledger.js";
 import { requireAuth, type AuthedRequest } from "../lib/auth.js";
 import { pool } from "../db/pool.js";
+import { calcularCierre } from "../engine/cierre.js";
 import {
   getSemanasDisponiblesSupervisor,
   getCierreSemanalSupervisor,
@@ -451,6 +452,62 @@ const crearSolicitudRetiroSchema = z.object({
   amount: z.number().positive(),
   nota: z.string().nullable().optional(),
 });
+// Calculadora de cierre (21/10/2026, pedido de Leo): los supervisores y agentes pueden simular un cierre desde su portal, "de la misma manera que
+// nosotros liquidamos". Usa la MISMA función del cierre real (engine/cierre.ts calcularCierre, fórmula genérica) pero NO guarda ni toca nada: es
+// solo informativa y se puede recalcular cuantas veces quieran. Los porcentajes llegan en % (70 = 70%).
+const calculadoraSchema = z.object({
+  lineas: z
+    .array(
+      z.object({
+        sistema: z.enum(["PREPAGO", "WIN_LOSE"]),
+        resultado: z.number().finite(),
+        rake: z.number().finite(),
+        rakebackPct: z.number().finite().min(-100).max(100),
+        rebatePct: z.number().finite().min(-100).max(100),
+        rodeo: z.number().finite().optional(),
+        ajuste: z.number().finite().optional(),
+      })
+    )
+    .min(1)
+    .max(60),
+});
+portalRouter.post("/calculadora-cierre", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = calculadoraSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Revisá los números: hay un valor inválido." });
+  const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+  const lineas = parsed.data.lineas.map((l) => {
+    const c = calcularCierre({
+      agentId: "calculadora",
+      clubId: "calculadora",
+      system: l.sistema,
+      result: l.resultado,
+      rakeTotal: l.rake,
+      rakebackPct: l.rakebackPct / 100,
+      rebatePct: l.rebatePct / 100,
+      rodeo: l.rodeo ?? 0,
+      ajusteManual: l.ajuste ?? 0,
+      rateSnapshot: 1,
+    });
+    // Mismo reparto que el cierre real: en Prepago el resultado de mesas va a fichas y lo demás (rakeback + rebate + rodeo + ajuste) a cuenta
+    // corriente; en Win/Lose el cierre completo va a cuenta corriente.
+    const aFichas = l.sistema === "PREPAGO" ? c.result : 0;
+    const aCuentaCorriente = l.sistema === "PREPAGO" ? c.finalClosing - c.result : c.finalClosing;
+    return {
+      rakeback: r2(c.rakeback),
+      rebate: r2(c.rebate),
+      resultadoAjustado: r2(c.adjustedResult),
+      cierreFinal: r2(c.finalClosing),
+      aFichas: r2(aFichas),
+      aCuentaCorriente: r2(aCuentaCorriente),
+    };
+  });
+  const suma = (k: "rakeback" | "rebate" | "cierreFinal" | "aFichas" | "aCuentaCorriente") => r2(lineas.reduce((s, x) => s + x[k], 0));
+  res.json({
+    lineas,
+    totales: { rakeback: suma("rakeback"), rebate: suma("rebate"), cierreFinal: suma("cierreFinal"), aFichas: suma("aFichas"), aCuentaCorriente: suma("aCuentaCorriente") },
+  });
+});
+
 portalRouter.post("/mi-supervision/solicitudes-retiro", requireAuth, async (req: AuthedRequest, res) => {
   if (req.user!.role !== "SUPERVISOR") return res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
   const parsed = crearSolicitudRetiroSchema.safeParse(req.body);

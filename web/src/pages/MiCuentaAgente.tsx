@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { usdCents, dateShort } from "../fmt";
+import CalculadoraCierre from "../components/CalculadoraCierre";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, MovRow, colorSigno, montoSigno } from "../components/PortalUI";
 
 // "Mi cuenta" de un agente que tiene su cuenta en la sección Agentes (20/10/2026, pedido de Leo: que el usuario vea lo
 // mismo que se ve en Agentes, y que cada cierre se pueda abrir con su desglose como en TeamBack Afiliados). Muestra el
 // saldo de la cuenta, los cierres semanales (por club y por jugador) y los movimientos de la cuenta. Solo lectura.
-type Tab = "clubes" | "cierres" | "movimientos";
+type Tab = "clubes" | "cierres" | "movimientos" | "calculadora";
 
 const ESTADO_SEMANA: Record<string, { texto: string; clase: string }> = {
   APLICADO: { texto: "Aplicada a tu cuenta", clase: "pill g" },
@@ -68,6 +69,7 @@ export default function MiCuentaAgente({
     ...(mostrarClubes ? [{ key: "clubes" as Tab, label: "Fichas por club", count: porClub.length }] : []),
     { key: "cierres" as Tab, label: "Cierres", count: semanas.length },
     { key: "movimientos" as Tab, label: "Movimientos", count: movs.length },
+    { key: "calculadora" as Tab, label: "Calculadora" },
   ];
 
   const minis = [
@@ -275,6 +277,7 @@ export default function MiCuentaAgente({
           <>
             {clubesPane}
             {cierresPane}
+            <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={winLose ? "WIN_LOSE" : "PREPAGO"} perspectiva="agente" />
           </>
         }
         right={movimientosPane}
