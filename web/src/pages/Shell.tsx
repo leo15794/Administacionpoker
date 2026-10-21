@@ -405,26 +405,27 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       </div>
       <div className={`sidebar-backdrop ${mobileOpen ? "show" : ""}`} onClick={() => setMobileOpen(false)} />
       <div className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
-        <button
-          className="sidebar-toggle"
-          onClick={toggleCollapsed}
-          title={collapsed ? "Expandir menú" : "Contraer menú"}
-        >
-          {collapsed ? icon.expand : icon.collapse}
-        </button>
-
+        {/* Marca y botón de colapsar en la MISMA fila (21/10/2026, pedido de Leo: el botón solo en su propia fila dejaba un espacio muerto arriba). */}
         <div className="brand">
+          <div className="brand-mark" aria-hidden="true">P</div>
           {!collapsed && (
-            <div style={{ display: "flex", alignItems: "flex-start", width: "100%" }}>
-              <div>
-                <h1>Poker Gestión</h1>
-                <div className="sub" style={{ marginBottom: 0, paddingLeft: 0 }}>{rolLabel}</div>
-              </div>
-              <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
-                {icon.close}
-              </button>
+            <div className="brand-info">
+              <h1>Poker Gestión</h1>
+              <div className="sub">{rolLabel}</div>
             </div>
           )}
+          {!collapsed && (
+            <button className="mobile-close" onClick={() => setMobileOpen(false)} title="Cerrar menú" aria-label="Cerrar menú">
+              {icon.close}
+            </button>
+          )}
+          <button
+            className="sidebar-toggle"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
+          >
+            {collapsed ? icon.expand : icon.collapse}
+          </button>
         </div>
 
         <nav>
@@ -500,23 +501,13 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} {!collapsed && "Mi cuenta"}</NavLink>
           )}
-          <button
-            className="nav-link"
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Modo día" : "Modo noche"}
-            style={{ width: "100%", textAlign: "left", background: "transparent", cursor: "pointer", font: "inherit", borderTop: "1px solid var(--border)", borderLeft: "none", borderRight: "none", borderBottom: "none", marginTop: 8, paddingTop: 14 }}
-          >
-            {theme === "dark" ? icon.sun : icon.moon} {!collapsed && (theme === "dark" ? "Modo día" : "Modo noche")}
-          </button>
         </nav>
 
         <div className="sidebar-footer">
-          <button
-            className="btn secondary"
-            onClick={logout}
-            title="Cerrar sesión"
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
+          <button className="btn secondary sidebar-tema" onClick={toggleTheme} title={theme === "dark" ? "Modo día" : "Modo noche"} aria-label={theme === "dark" ? "Modo día" : "Modo noche"}>
+            {theme === "dark" ? icon.sun : icon.moon}
+          </button>
+          <button className="btn secondary sidebar-salir" onClick={logout} title="Cerrar sesión">
             {icon.logout} {!collapsed && "Cerrar sesión"}
           </button>
         </div>
