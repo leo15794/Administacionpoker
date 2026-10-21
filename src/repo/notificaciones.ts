@@ -190,3 +190,19 @@ export async function marcarLeidos(userId: string, avisoIds: string[]) {
     [userId, avisoIds]
   );
 }
+
+/** Borra un aviso enviado: desaparece de la bandeja de todos los destinatarios y de este historial. Sus imágenes se borran si ningún otro aviso las usa. */
+export async function eliminarAviso(avisoId: string): Promise<boolean> {
+  const r = await pool.query(`SELECT imagenes FROM push_envios_log WHERE id = $1`, [avisoId]);
+  if (r.rows.length === 0) return false;
+  const ids: string[] = (r.rows[0].imagenes ?? []).map((x: { id: string }) => x.id);
+  await pool.query(`DELETE FROM push_envios_log WHERE id = $1`, [avisoId]); // aviso_destinatarios se borra en cascada
+  if (ids.length > 0) {
+    await pool.query(
+      `DELETE FROM aviso_imagenes i WHERE i.id = ANY($1::text[])
+       AND NOT EXISTS (SELECT 1 FROM push_envios_log l WHERE l.imagenes @> jsonb_build_array(jsonb_build_object('id', i.id)))`,
+      [ids]
+    );
+  }
+  return true;
+}

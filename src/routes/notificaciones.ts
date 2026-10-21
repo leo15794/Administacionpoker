@@ -14,6 +14,7 @@ import {
   firmaValida,
   bandeja,
   marcarLeidos,
+  eliminarAviso,
   MAX_BYTES_IMAGEN,
   MAX_IMAGENES_POR_AVISO,
   MIMES_IMAGEN,
@@ -133,4 +134,11 @@ notificacionesRouter.post("/enviar", requireAuth, requireAdmin, async (req: Auth
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? "No se pudo enviar." });
   }
+});
+
+// Borrar un aviso enviado (por ejemplo los torneos de la semana pasada): desaparece de la bandeja de todos.
+notificacionesRouter.delete("/aviso/:id", requireAuth, requireAdmin, async (req, res) => {
+  const ok = await eliminarAviso(String(req.params.id));
+  if (!ok) return res.status(404).json({ error: "Ese aviso ya no existe." });
+  res.json({ ok: true });
 });

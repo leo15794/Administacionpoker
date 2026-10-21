@@ -121,6 +121,18 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
     });
   }
 
+  async function eliminar(h: any) {
+    const ok = await confirmDialog(`¿Eliminar el aviso "${h.titulo}"?
+Desaparece del portal de los ${h.elegidos} que lo recibieron${(h.imagenes ?? []).length > 0 ? ` y se borran sus ${h.imagenes.length} imágenes` : ""}. No se puede deshacer.`, { title: "Eliminar aviso", danger: true });
+    if (!ok) return;
+    try {
+      await api.notificaciones.eliminarAviso(h.id);
+      cargar();
+    } catch (e: any) {
+      setError(e.message || "No se pudo eliminar.");
+    }
+  }
+
   async function enviar() {
     setError("");
     setResultado(null);
@@ -286,7 +298,7 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
-                <tr><th>Fecha</th><th>Título</th><th>Mensaje</th><th>Imágenes</th><th>Notificación a</th><th>Sin activar</th><th>Lo envió</th></tr>
+                <tr><th>Fecha</th><th>Título</th><th>Mensaje</th><th>Imágenes</th><th>Notificación a</th><th>Sin activar</th><th>Lo envió</th><th></th></tr>
               </thead>
               <tbody>
                 {historial.map((h) => (
@@ -298,6 +310,7 @@ export default function Notificaciones({ layout = "pagina" }: { layout?: "pagina
                     <td>{h.entregados} de {h.elegidos}</td>
                     <td className="muted" style={{ fontSize: 12 }}>{(h.sin_activar ?? []).map((x: any) => x.nombre).join(", ") || "—"}</td>
                     <td className="muted" style={{ fontSize: 12 }}>{h.actor ?? "—"}</td>
+                    <td><button type="button" className="btn secondary small" onClick={() => eliminar(h)} title="Lo saca del portal de todos los que lo recibieron">Eliminar</button></td>
                   </tr>
                 ))}
               </tbody>

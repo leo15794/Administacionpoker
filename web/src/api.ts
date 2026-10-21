@@ -872,6 +872,7 @@ export const api = {
       return res.blob();
     },
     bandeja: () => request("/notificaciones/bandeja"),
+    eliminarAviso: (id: string) => request(`/notificaciones/aviso/${id}`, { method: "DELETE" }),
     marcarLeidos: (ids: string[]) => request("/notificaciones/bandeja/leidos", { method: "POST", body: JSON.stringify({ ids }) }),
     // Lo que usa cada portal para activar los avisos en su propio celular
     miEstado: () => request("/notificaciones/mi-estado"),
