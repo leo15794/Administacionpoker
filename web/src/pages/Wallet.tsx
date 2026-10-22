@@ -119,7 +119,7 @@ export default function Wallet() {
         {data.ultimosMovimientos.length === 0 ? (
           <div className="muted">Sin movimientos todavía.</div>
         ) : (
-          <table>
+          <table className="tbl-mov-cards">
             <thead><tr><th>Fecha y hora</th><th>Dirección</th><th className="num">Monto</th><th>Detalle</th><th></th></tr></thead>
             <tbody>
               {data.ultimosMovimientos.map((m: any) => (

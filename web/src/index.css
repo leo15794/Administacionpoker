@@ -2799,3 +2799,45 @@ button.nav-link {
 .sidebar.rail:not(:hover) .nav-section-icon::before { content: var(--suit); font-size: 20px; line-height: 1; color: var(--sc); }
 .sidebar.rail:not(:hover) .nav-section-label { opacity: 0.9; }
 .sidebar nav button.nav-link { width: 100%; box-sizing: border-box; text-align: left; }
+
+/* ---------- Vista dividida (22/10/2026, pedido de Leo): ver components/VistaDividida.tsx ---------- */
+/* Dentro de un panel (iframe) la app va sin menú, barras ni avisos: solo la sección. */
+html.embebido .sidebar, html.embebido .topnav, html.embebido .mobile-topbar, html.embebido .bottom-nav, html.embebido .main-topbar,
+html.embebido .np, html.embebido .dock-overlay, html.embebido .tb-install-banner { display: none !important; }
+html.embebido .app-shell { padding: 0 !important; display: block !important; background: transparent !important; }
+html.embebido .main { margin: 0 !important; max-width: none !important; padding: 14px 16px 40px !important; }
+html.embebido body { background: transparent !important; }
+.main.main-dividido { max-width: none; }
+@media (min-width: 1500px) { .main.main-dividido.main-con-avisos { margin-right: 420px; } }
+.np-open.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.vd-barra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.vd-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.vd-pill { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); font: inherit; font-size: 12px; font-weight: 650; color: var(--text-dim); cursor: pointer; }
+.vd-pill:hover { color: var(--text); }
+.vd-pill.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.vd-cont { position: relative; display: flex; gap: 0; height: calc(100vh - 170px); min-height: 560px; }
+.vd-panel { height: 100%; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--panel); }
+.vd-panel.foco { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.vd-cab { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+.vd-cab select { width: auto; max-width: 70%; font-weight: 700; padding: 5px 10px; margin: 0; }
+.vd-ic { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text-dim); cursor: pointer; display: grid; place-items: center; padding: 0; font-size: 13px; }
+.vd-ic:hover { color: var(--text); }
+.vd-panel iframe { flex: 1; border: 0; width: 100%; background: transparent; }
+.vd-div { width: 14px; flex-shrink: 0; display: grid; place-items: center; cursor: col-resize; touch-action: none; }
+.vd-div i { width: 4px; height: 48px; border-radius: 4px; background: var(--border-strong, var(--border)); transition: background .15s ease; }
+.vd-div:hover i { background: var(--accent); }
+.vd-capa { position: absolute; inset: 0; z-index: 5; cursor: col-resize; }
+/* Wallet: el historial pasa de tabla a lista en un panel angosto */
+@media (max-width: 900px) {
+  .tbl-mov-cards thead { display: none; }
+  .tbl-mov-cards, .tbl-mov-cards tbody { display: block; }
+  .tbl-mov-cards tr { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "f f m" "d t t" "a a a"; gap: 4px 10px; padding: 11px 4px; border-top: 1px solid var(--border); }
+  .tbl-mov-cards td { display: block; padding: 0; border: 0; }
+  .tbl-mov-cards td:nth-child(1) { grid-area: f; font-size: 12px; }
+  .tbl-mov-cards td:nth-child(2) { grid-area: d; font-size: 12px; }
+  .tbl-mov-cards td:nth-child(3) { grid-area: m; text-align: right; }
+  .tbl-mov-cards td:nth-child(4) { grid-area: t; }
+  .tbl-mov-cards td:nth-child(5) { grid-area: a; text-align: right; }
+  .tbl-mov-cards td:empty { display: none; }
+}
+.main-topbar .np-open ~ .np-open { margin-left: 0; }

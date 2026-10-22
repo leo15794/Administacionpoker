@@ -9,6 +9,7 @@ import PortalNotificacionesBanner from "../components/PortalNotificacionesBanner
 import BandejaAvisos from "../components/BandejaAvisos";
 import { DockOverlay, useMenuPos } from "../components/MenuDock";
 import { iconosPoker } from "../components/IconosPoker";
+import VistaDividida, { useVistaDividida } from "../components/VistaDividida";
 import Notificaciones from "./Notificaciones";
 
 const iconBase = {
@@ -236,6 +237,14 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "reportes" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
+// Secciones que se pueden poner en cada panel de la vista dividida.
+const SECCIONES_DIVIDIDA = NAV_ITEMS.map((i) => ({ to: i.to, label: i.label }));
+const iconoDividir = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M12 4v16" />
+  </svg>
+);
 
 // Ícono de cada grupo cuando el menú está compacto y el grupo cerrado.
 const GROUP_ICON: Record<"operacion" | "finanzas" | "reportes", keyof typeof icon> = { operacion: "movimientos", finanzas: "wallet", reportes: "resumenClub" };
@@ -276,6 +285,16 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
   const [desplegado, setDesplegado] = useState<string | null>(null);
+  // Vista dividida (22/10/2026, pedido de Leo): dos secciones lado a lado. Con ella activa, el menú abre cada sección en el panel donde estabas.
+  const vd = useVistaDividida();
+  const rutaAnterior = useRef(location.pathname);
+  useEffect(() => {
+    if (rutaAnterior.current === location.pathname) return; // solo cuando la ruta cambia de verdad (no al cargar)
+    rutaAnterior.current = location.pathname;
+    if (!vd.visible || !location.pathname.startsWith("/dashboard")) return;
+    vd.guardar(vd.foco === "izq" ? { izq: location.pathname } : { der: location.pathname });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
   const { pos, arrastrando, empezarArrastre } = useMenuPos(() => setDesplegado(null));
   // Panel de avisos a la derecha (21/10/2026, pedido de Leo): arranca cerrado, se monta la primera vez que se abre y después queda montado
   // (oculto) para no perder lo que se estaba escribiendo; se puede agrandar a pantalla completa.
@@ -607,13 +626,32 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           </button>
         </div>
       </div>
-      <div className={`main ${avisosAbierto && !avisosCompleto ? "main-con-avisos" : ""}`}>
+      <div className={`main ${avisosAbierto && !avisosCompleto ? "main-con-avisos" : ""} ${vd.visible ? "main-dividido" : ""}`}>
         <InstallAppBanner variante={role === "ADMIN" ? "admin" : "portal"} />
         {role !== "ADMIN" && <BandejaAvisos />}
         {role !== "ADMIN" && <PortalNotificacionesBanner />}
         {role === "ADMIN" && (
           <div className="main-topbar">
             <GlobalSearch />
+            {vd.posible && (
+              <button
+                type="button"
+                className={`np-open ${vd.visible ? "on" : ""}`}
+                title={vd.visible ? "Volver a una sola pantalla" : "Ver dos secciones lado a lado"}
+                onClick={() =>
+                  vd.visible
+                    ? vd.guardar({ activa: false })
+                    : vd.guardar({
+                        activa: true,
+                        izq: location.pathname.startsWith("/dashboard") ? location.pathname : "/dashboard",
+                        der: vd.estado.der === location.pathname ? "/dashboard" : vd.estado.der,
+                      })
+                }
+              >
+                {iconoDividir}
+                <span>Dividir</span>
+              </button>
+            )}
             <button
               type="button"
               className="np-open"
@@ -629,7 +667,22 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             <NotificationBell />
           </div>
         )}
-        <Outlet key={`${location.pathname}:${refreshKey}`} />
+        {vd.visible ? (
+          <VistaDividida
+            estado={vd.estado}
+            secciones={SECCIONES_DIVIDIDA}
+            foco={vd.foco}
+            onFoco={vd.setFoco}
+            onCambio={vd.guardar}
+            onSalir={() => vd.guardar({ activa: false })}
+            onAbrirCompleta={(ruta) => {
+              vd.guardar({ activa: false });
+              nav(ruta);
+            }}
+          />
+        ) : (
+          <Outlet key={`${location.pathname}:${refreshKey}`} />
+        )}
       </div>
       {/* (19/10/2026, pedido de Leo, mockup aprobado) Barra inferior SOLO en celular y SOLO para el
           admin: 4 accesos de uso diario + "Más", que abre el mismo menú lateral de siempre (que

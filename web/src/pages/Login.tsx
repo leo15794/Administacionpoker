@@ -1,5 +1,5 @@
 import LoginSwitch from "../components/LoginSwitch";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -9,6 +9,10 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+  // Si la sesión venció dentro de un panel de la vista dividida, el login se abre a pantalla completa y no adentro del panel.
+  useEffect(() => {
+    if (window.self !== window.top) window.top!.location.href = "/login";
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

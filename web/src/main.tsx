@@ -6,6 +6,9 @@ import App from './App.tsx'
 // listener de "beforeinstallprompt" lo antes posible, antes de que monte ningún componente.
 import './installPrompt'
 
+// Dentro de un panel de la vista dividida (iframe) la app se muestra sin menú ni barras: ver html.embebido en index.css.
+if (window.self !== window.top) document.documentElement.classList.add('embebido')
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
