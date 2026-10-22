@@ -39,3 +39,17 @@ Elegir según los archivos y el comportamiento modificados; consultar los script
 - No ejecutar migraciones, seeds, resets, correcciones de saldos ni scripts con efectos sobre datos como parte de una revisión visual o de documentación.
 - Para una tarea que sí requiera modificar datos, verificar el entorno objetivo y la autorización existente de Leo antes de actuar.
 - No incorporar credenciales, archivos .env ni datos operativos privados a entregas nuevas.
+
+## Reparto de roles (acordado con Leo)
+- Claude Code escribe el código (backend, lógica de cierres, saldos, compensaciones y también la implementación del frontend).
+- ChatGPT/Codex diseña lo visual (referencia, comportamiento, estados) y revisa los cambios, sobre todo lo que toca plata.
+- Los cambios chicos de interfaz (un texto, un color, un botón) los hace Claude Code directo, sin ficha ni diseño previo.
+- La ficha de `docs/tareas/` es para trabajos medianos o grandes; no hace falta para arreglos chicos.
+
+## Reglas de Leo para el trabajo diario
+- Los commits quedan locales. Solo Leo hace `git push` y `npm run migrate`; nadie más pushea ni migra.
+- Los scripts que escriben datos arrancan en modo simulación; solo Leo corre la versión con `--aplicar`.
+- No escribir en la base de producción sin que Leo lo pida. Para probar usar transacciones con rollback o una API local de solo lectura.
+- No subir a git los archivos sin versionar de Leo (`Manual_DigiPlayers.docx`, `mockups/`, `workers/`, scripts sueltos de `src/scripts/`).
+- Cambios de interfaz: mostrar primero una captura o mockup (con datos reales o ficticios, según prefiera Leo) y esperar su OK antes de implementar.
+- Antes de cada commit correr el typecheck: `npx tsc --noEmit -p .` en la raíz y `npx tsc -b` en `web/`.
