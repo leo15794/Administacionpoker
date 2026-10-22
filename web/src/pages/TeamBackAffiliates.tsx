@@ -20,6 +20,7 @@ import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
 import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
+import { iconosPoker } from "../components/IconosPoker";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
@@ -323,6 +324,18 @@ const tbIcon = {
 // Con el menú arriba: lo de uso diario va suelto y el resto en "Más".
 const TB_TOP_PRINCIPALES: Tab[] = ["resumen", "cuentas", "jugadores", "import", "pagos"];
 
+// Íconos de póker del menú (opción "Mesa"); los que no tienen equivalente (configuración, avisos) siguen con el de siempre.
+const TB_ICONO_POKER: Partial<Record<Tab, React.ReactNode>> = {
+  resumen: iconosPoker.comisionesReferidos,
+  cuentas: iconosPoker.jugadoresBancados,
+  jugadores: iconosPoker.cuenta,
+  import: iconosPoker.proveedores,
+  ganancia: iconosPoker.resumenFinanciero,
+  usuarios: iconosPoker.usuarios,
+  wallet: iconosPoker.wallet,
+  pagos: iconosPoker.resumenAgentes,
+};
+
 const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "resumen", label: "Liquidaciones", icon: "liquidaciones" },
   { key: "cuentas", label: "Cuentas de jugadores", icon: "pagos" },
@@ -400,7 +413,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
               <div className="tn-dd">
                 {TB_NAV.filter((i) => !TB_TOP_PRINCIPALES.includes(i.key)).map((item) => (
                   <button key={item.key} type="button" className={`tn-item ${tab === item.key ? "active" : ""}`} style={{ width: "100%", border: 0, background: "transparent", font: "inherit", textAlign: "left", cursor: "pointer" }} onClick={() => { setTab(item.key); setMasAbierto(false); }}>
-                    {tbIcon[item.icon]} {item.label}
+                    {TB_ICONO_POKER[item.key] ?? tbIcon[item.icon]} {item.label}
                   </button>
                 ))}
               </div>
@@ -458,7 +471,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
                 }}
                 title={item.label}
               >
-                {tbIcon[item.icon]} {item.label}
+                {TB_ICONO_POKER[item.key] ?? tbIcon[item.icon]} {item.label}
               </button>
             ))}
           </div>

@@ -8,9 +8,10 @@ import InstallAppBanner from "../components/InstallAppBanner";
 import PortalNotificacionesBanner from "../components/PortalNotificacionesBanner";
 import BandejaAvisos from "../components/BandejaAvisos";
 import { DockOverlay, useMenuPos } from "../components/MenuDock";
+import { iconosPoker } from "../components/IconosPoker";
 import Notificaciones from "./Notificaciones";
 
-const icon = {
+const iconBase = {
   resumen: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v18h18" /><path d="M18.7 8 13 13.7l-3-3L4 16.6" />
@@ -171,6 +172,9 @@ const icon = {
     </svg>
   ),
 };
+
+// Los del menú son los de póker (opción "Mesa", 22/10/2026); el resto de los íconos de la app siguen siendo los de siempre.
+const icon = { ...iconBase, ...iconosPoker };
 
 type Theme = "dark" | "light";
 
