@@ -110,6 +110,7 @@ export default function MiSupervision() {
   const tabActual: Tab = tabs.some((t) => t.key === tab) ? tab : "agentes";
 
   const minis = [
+    <PortalMini key="cc" label="Cuenta corriente" value={montoSigno(cuentaCorriente)} color={colorSigno(cuentaCorriente)} sub="se salda con cobros y pagos en USDT" />,
     <PortalMini key="a" label="Agentes a cargo" value={String(data.agentes.length)} sub={winLose ? "Win/Lose" : `saldo del grupo ${montoSigno(totalGrupo)}`} />,
     ...(winLose ? [] : [<PortalMini key="r" label="Rakeback centralizado" value={usdCents(data.rakeback_centralizado_acreditado)} sub="acreditado" />]),
     ...(hayReferidos ? [<PortalMini key="c" label="Comisión por referido" value={usdCents(data.saldo_referidos_total ?? 0)} sub="acumulada" />] : []),
