@@ -2911,9 +2911,10 @@ html.embebido body { background: transparent !important; }
 }
 .wm-fil select.wm-in { max-width: 210px; }
 
-/* Vista dividida a pantalla completa: sin menú ni barras, los dos paneles usan todo el monitor */
-body.vd-completa .sidebar, body.vd-completa .topnav, body.vd-completa .mobile-topbar, body.vd-completa .bottom-nav,
-body.vd-completa .main-topbar, body.vd-completa .np, body.vd-completa .dock-overlay { display: none !important; }
-body.vd-completa .app-shell { padding: 0 !important; display: block !important; }
-body.vd-completa .main { margin: 0 !important; max-width: none !important; padding: 8px 10px 0 !important; }
+/* Vista dividida a pantalla completa: se oculta lo de arriba (búsqueda, avisos) pero el menú queda (compacto, se abre con el mouse) para seguir navegando; los dos paneles usan casi todo el monitor */
+body.vd-completa .mobile-topbar, body.vd-completa .main-topbar, body.vd-completa .np, body.vd-completa .dock-overlay { display: none !important; }
+body.vd-completa .app-shell { padding: 8px !important; gap: 8px !important; }
+body.vd-completa .sidebar { top: 8px; height: calc(100vh - 16px); }
+body.vd-completa .topnav { top: 8px; }
+body.vd-completa .main { margin: 0 !important; max-width: none !important; padding: 0 !important; }
 body.vd-completa .vd-barra { margin-bottom: 6px; }
