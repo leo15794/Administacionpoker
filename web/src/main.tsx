@@ -7,7 +7,13 @@ import App from './App.tsx'
 import './installPrompt'
 
 // Dentro de un panel de la vista dividida (iframe) la app se muestra sin menú ni barras: ver html.embebido en index.css.
-if (window.self !== window.top) document.documentElement.classList.add('embebido')
+if (window.self !== window.top) {
+  document.documentElement.classList.add('embebido')
+  // El tema (día/noche) se cambia en la ventana principal: el panel lo toma al instante cuando cambia en el navegador.
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'dp_theme' && (e.newValue === 'light' || e.newValue === 'dark')) document.documentElement.setAttribute('data-theme', e.newValue)
+  })
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
