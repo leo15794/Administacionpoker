@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usd, dateTime } from "../fmt";
-import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import WalletMovimientos from "../components/WalletMovimientos";
 
 function estaRevertido(m: any) {
   return (m.status ?? m.movimiento_status) === "REVERTIDO";
@@ -25,6 +25,7 @@ export default function Wallet() {
   const [caja, setCaja] = useState<any>(null);
   const [error, setError] = useState("");
   const [showAjuste, setShowAjuste] = useState(false);
+  const [dirInicial, setDirInicial] = useState<"INGRESO" | "EGRESO">("INGRESO");
   const [borrando, setBorrando] = useState<string | null>(null);
 
   function refresh() {
@@ -76,90 +77,18 @@ export default function Wallet() {
 
   return (
     <div>
-      <div className="topbar">
-        <div>
-          <h2>Wallet <Ayuda>Saldo de la wallet en USDT. Se arma solo con los movimientos de agentes en USDT más el historial real importado desde la planilla — para plata que entra o sale sin ser un movimiento de agente, registrala acá.</Ayuda></h2>
-        </div>
-        <button className="btn" onClick={() => setShowAjuste(true)}>+ Registrar movimiento</button>
-      </div>
-
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Saldo Wallet (neto)</div>
-          <div className={`value ${!wallet || Number(wallet.neto) >= 0 ? "pos" : "neg"}`}>{usd(wallet?.neto ?? 0)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Movimientos registrados</div>
-          <div className="value">{wallet?.movimientos ?? 0}</div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="topbar" style={{ marginBottom: 14 }}>
-          <h3 style={{ margin: 0 }}>Historial de movimientos</h3>
-          <button
-            className="btn secondary small"
-            onClick={() =>
-              exportCsv(
-                "wallet.csv",
-                data.ultimosMovimientos.map((m: any) => ({
-                  fecha: m.occurred_at,
-                  direccion: m.direction,
-                  monto: m.amount,
-                  origen: m.source === "ajuste" ? "Ajuste / historial" : "Movimiento de agente",
-                  detalle: m.source === "ajuste" ? m.observation : (m.agent_name ?? ""),
-                  cargado_por: m.created_by ?? "",
-                }))
-              )
-            }
-          >
-            Exportar CSV
-          </button>
-        </div>
-        {data.ultimosMovimientos.length === 0 ? (
-          <div className="muted">Sin movimientos todavía.</div>
-        ) : (
-          <table className="tbl-mov-cards">
-            <thead><tr><th>Fecha y hora</th><th>Dirección</th><th className="num">Monto</th><th>Detalle</th><th></th></tr></thead>
-            <tbody>
-              {data.ultimosMovimientos.map((m: any) => (
-                <tr key={m.id} style={estaRevertido(m) ? { opacity: 0.55 } : undefined}>
-                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{dateTime(m.occurred_at)}</td>
-                  <td className="muted">{m.direction === "INGRESO" ? "Ingreso" : "Egreso"}</td>
-                  <td className="num"><span className={`badge ${m.direction === "INGRESO" ? "pos" : "neg"}`}>{usd(m.amount)}</span></td>
-                  <td>
-                    {estaRevertido(m) && <span className="badge neg" style={{ marginRight: 6 }}>Revertido</span>}
-                    {m.source === "ajuste" ? (
-                      <span title={m.created_by ? `Cargado por ${m.created_by}` : undefined}>
-                        {String(m.created_by || "").startsWith("import:") ? (
-                          <span className="badge neutral">Historial</span>
-                        ) : (
-                          <span className="badge neutral">Manual</span>
-                        )}{" "}
-                        {m.observation}
-                      </span>
-                    ) : (
-                      m.agent_name
-                    )}
-                  </td>
-                  <td>
-                    {!estaRevertido(m) && (
-                      <button
-                        className="btn secondary small"
-                        disabled={borrando === m.id}
-                        onClick={() => revertir(m)}
-                        title="Revertir este movimiento (genera uno opuesto, no borra nada)"
-                      >
-                        {borrando === m.id ? "..." : "Revertir"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <WalletMovimientos
+        titulo={<h2>Wallet <Ayuda>Saldo de la wallet en USDT. Se arma solo con los movimientos de agentes en USDT más el historial real importado desde la planilla — para plata que entra o sale sin ser un movimiento de agente, registrala con "Registrar ingreso" o "Registrar egreso".</Ayuda></h2>}
+        saldo={Number(wallet?.neto ?? 0)}
+        movimientos={data.ultimosMovimientos}
+        totalMovimientos={Number(wallet?.movimientos ?? 0)}
+        borrando={borrando}
+        onRevertir={revertir}
+        onNuevo={(dir) => {
+          setDirInicial(dir);
+          setShowAjuste(true);
+        }}
+      />
 
       {caja && (
         <div className="panel">
@@ -210,6 +139,7 @@ export default function Wallet() {
       {showAjuste && (
         <Modal title="Registrar movimiento de Wallet" onClose={() => setShowAjuste(false)}>
           <AjusteForm
+            direccionInicial={dirInicial}
             onDone={() => {
               setShowAjuste(false);
               refresh();
@@ -221,8 +151,8 @@ export default function Wallet() {
   );
 }
 
-function AjusteForm({ onDone }: { onDone: () => void }) {
-  const [direction, setDirection] = useState<"INGRESO" | "EGRESO">("INGRESO");
+function AjusteForm({ onDone, direccionInicial = "INGRESO" }: { onDone: () => void; direccionInicial?: "INGRESO" | "EGRESO" }) {
+  const [direction, setDirection] = useState<"INGRESO" | "EGRESO">(direccionInicial);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   // Fecha y hora (13/10/2026, pedido de Leo: "no se carga todo en tiempo real") -- arranca en
