@@ -199,7 +199,7 @@ function AjusteForm({ onDone, direccionInicial = "INGRESO" }: { onDone: () => vo
           </select>
         </div>
         <div className="field">
-          <label>Monto (USD)</label>
+          <label>Monto (USDT)</label>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
         </div>
         <div className="field">

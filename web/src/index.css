@@ -2918,3 +2918,10 @@ body.vd-completa .sidebar { top: 8px; height: calc(100vh - 16px); }
 body.vd-completa .topnav { top: 8px; }
 body.vd-completa .main { margin: 0 !important; max-width: none !important; padding: 0 !important; }
 body.vd-completa .vd-barra { margin-bottom: 6px; }
+
+/* Wallet en modo claro: verde y rojo más oscuros para que los importes y etiquetas se lean (el verde/rojo de noche da ~2:1 sobre blanco) */
+:root[data-theme="light"] .wm .in, :root[data-theme="light"] .wm-big.pos { color: #167a32; }
+:root[data-theme="light"] .wm .out, :root[data-theme="light"] .wm-big.neg { color: #c62828; }
+:root[data-theme="light"] .wm-b.out { border-color: #c62828; color: #c62828 !important; }
+:root[data-theme="light"] .wm-pill.in { color: #167a32; border-color: rgba(22, 122, 50, 0.45); }
+:root[data-theme="light"] .wm-pill.out { color: #c62828; border-color: rgba(198, 40, 40, 0.45); }

@@ -226,7 +226,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
             <span>Ingresos <b className="in">+{nf(ing)}</b></span>
             <span>Egresos <b className="out">−{nf(egr)}</b></span>
             <span>Neto <b className={neto >= 0 ? "in" : "out"}>{neto >= 0 ? "+" : "−"}{nf(Math.abs(neto))}</b></span>
-            <small>de lo que ves</small>
+            <small>de los movimientos filtrados · USDT</small>
           </div>
         </div>
         <div className="wm-pie2">

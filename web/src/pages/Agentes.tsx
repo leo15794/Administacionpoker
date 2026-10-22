@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type AccountType } from "../api";
 import { usd, pct, dateShort } from "../fmt";
 import { exportCsv } from "../csv";
@@ -42,6 +42,8 @@ export default function Agentes() {
   const [dealsPorAgente, setDealsPorAgente] = useState<Record<string, any[]>>({});
   const [selected, setSelected] = useState<any | null>(null);
   const [deals, setDeals] = useState<any[]>([]);
+  const [cargandoDeals, setCargandoDeals] = useState(false);
+  const [errorDeals, setErrorDeals] = useState<string | null>(null);
   // AGREGADO 05/10/2026 (pedido de Leo, item 4 del análisis de Administración): el backend ya
   // versiona los deals (upsertDeal cierra el anterior con valid_to en vez de pisarlo), pero
   // hasta ahora no había forma de verlo acá -- esta pantalla solo mostraba el vigente. Se pide
@@ -106,12 +108,29 @@ export default function Agentes() {
     }
   }
 
+  // Pedido más reciente de deals: si se abre otro agente antes de que llegue la respuesta del anterior, se descarta la vieja
+  const pedidoDeals = useRef(0);
+  async function cargarDeals(agentId: string) {
+    const n = ++pedidoDeals.current;
+    setCargandoDeals(true);
+    setErrorDeals(null);
+    setDeals([]);
+    try {
+      const r = await api.agentDeals(agentId);
+      if (n === pedidoDeals.current) setDeals(r);
+    } catch (err: any) {
+      if (n === pedidoDeals.current) setErrorDeals(err?.message ?? "No se pudieron cargar los deals");
+    } finally {
+      if (n === pedidoDeals.current) setCargandoDeals(false);
+    }
+  }
+
   async function open(agent: any) {
     setSelected(agent);
     setEditandoDeal(null);
     setHistorialDeals(null);
-    setDeals(await api.agentDeals(agent.id));
     setTab("lista");
+    await cargarDeals(agent.id);
   }
 
   async function verHistorialDeals() {
@@ -398,13 +417,19 @@ export default function Agentes() {
                       clubes={clubes}
                       fixedAgentId={selected.id}
                       initial={editandoDeal === "new" ? undefined : editandoDeal}
-                      onCreated={async () => { setEditandoDeal(null); setDeals(await api.agentDeals(selected.id)); }}
+                      onCreated={async () => { setEditandoDeal(null); await cargarDeals(selected.id); }}
                     />
                     <button className="btn secondary small" style={{ marginTop: 6 }} onClick={() => setEditandoDeal(null)}>Cancelar</button>
                   </div>
                 )}
 
-                {deals.length === 0 && !editandoDeal && (
+                {cargandoDeals && <div className="pt-empty" style={{ marginBottom: 10 }}>Cargando deals…</div>}
+                {errorDeals && !cargandoDeals && (
+                  <div className="error" style={{ marginBottom: 10 }}>
+                    ⚠ {errorDeals} <button className="btn secondary small" style={{ marginLeft: 8 }} onClick={() => cargarDeals(selected.id)}>Reintentar</button>
+                  </div>
+                )}
+                {deals.length === 0 && !editandoDeal && !cargandoDeals && !errorDeals && (
                   <div className="pt-empty" style={{ marginBottom: 10 }}>Sin deal propio en ningún club: usa el default de cada club. Agregá uno con "+ Agregar deal".</div>
                 )}
                 {deals.map((d) => (
