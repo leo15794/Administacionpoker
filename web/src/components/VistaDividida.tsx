@@ -138,6 +138,61 @@ export default function VistaDividida({ estado, secciones, foco, onFoco, onCambi
 }) {
   const cont = useRef<HTMLDivElement>(null);
   const [arrastrando, setArrastrando] = useState(false);
+  const [completa, setCompleta] = useState(false); // pantalla completa: sin menú ni barras, los dos paneles ocupan todo el monitor
+  const [alto, setAlto] = useState<number | undefined>();
+
+  // Pantalla completa (22/10/2026, pedido de Leo): oculta menú y barras (clase en body, ver index.css) y pide al navegador la pantalla completa real (como F11).
+  // Si el navegador no la permite, igual queda el modo sin menú; se sale con el botón o con Esc.
+  async function alternarCompleta() {
+    if (!completa) {
+      setCompleta(true);
+      try {
+        await document.documentElement.requestFullscreen?.();
+      } catch {
+        /* sin pantalla completa del navegador: queda solo el modo sin menú */
+      }
+    } else {
+      setCompleta(false);
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    }
+  }
+  useEffect(() => {
+    document.body.classList.toggle("vd-completa", completa);
+    const alCambiar = () => {
+      if (!document.fullscreenElement) setCompleta(false); // Esc del navegador
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.fullscreenElement) setCompleta(false);
+    };
+    document.addEventListener("fullscreenchange", alCambiar);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("fullscreenchange", alCambiar);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [completa]);
+  useEffect(
+    () => () => {
+      document.body.classList.remove("vd-completa");
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    },
+    []
+  );
+
+  // Los paneles se estiran hasta el borde de abajo de la pantalla, sea cual sea el monitor.
+  useEffect(() => {
+    const medir = () => {
+      const arriba = cont.current?.getBoundingClientRect().top ?? 0;
+      setAlto(Math.max(420, Math.round(window.innerHeight - arriba - 12)));
+    };
+    medir();
+    const t = setTimeout(medir, 80);
+    window.addEventListener("resize", medir);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", medir);
+    };
+  }, [completa]);
 
   useEffect(() => {
     const alPerderFoco = () => {
@@ -173,14 +228,15 @@ export default function VistaDividida({ estado, secciones, foco, onFoco, onCambi
         <b>Vista dividida</b>
         <span className="vd-sep" />
         <span className="muted" style={{ fontSize: 12 }}>Proporción</span>
-        {[50, 60, 70].map((p) => (
+        {[40, 50, 60, 70].map((p) => (
           <button key={p} type="button" className={`vd-pill ${estado.ratio === p ? "on" : ""}`} onClick={() => onCambio({ ratio: p })}>{p}/{100 - p}</button>
         ))}
         <button type="button" className="vd-pill" title="Intercambiar los paneles" onClick={() => onCambio({ izq: estado.der, der: estado.izq, v: (estado.v ?? 0) + 1 })}>⇄ Intercambiar</button>
         <span style={{ flex: 1 }} />
+        <button type="button" className={`vd-pill ${completa ? "on" : ""}`} onClick={alternarCompleta} title="Usar todo el monitor: oculta el menú y las barras (Esc para salir)">{completa ? "⤡ Salir de pantalla completa" : "⛶ Pantalla completa"}</button>
         <button type="button" className="vd-pill" onClick={onSalir}>✕ Salir de la vista dividida</button>
       </div>
-      <div className="vd-cont" ref={cont}>
+      <div className="vd-cont" ref={cont} style={alto ? { height: alto } : undefined}>
         <div style={{ flex: `${estado.ratio} 1 0`, minWidth: 0 }}>
           <Panel key={`izq-${estado.v ?? 0}`} lado="izq" ruta={estado.izq} secciones={secciones} esFoco={foco === "izq"} onFoco={() => onFoco("izq")} onRuta={(r) => onCambio({ izq: r })} onAbrirCompleta={onAbrirCompleta} onCerrar={() => (onAbrirCompleta(estado.der), onSalir())} />
         </div>
