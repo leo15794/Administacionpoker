@@ -14,10 +14,10 @@ import Loading from "./Loading";
 const INTERVALO_REFRESH_MS = 2 * 60 * 1000; // 2 minutos
 
 const RUTA_POR_TIPO: Record<string, string> = {
-  SALDO_PENDIENTE: "/dashboard/resumen-agentes",
+  SALDO_PENDIENTE: "/dashboard/agentes",
   MOVIMIENTO_INUSUAL: "/dashboard/movimientos",
   SIN_DEAL: "/dashboard/agentes",
-  REVERSION_TARDIA: "/dashboard/resumen-agentes",
+  REVERSION_TARDIA: "/dashboard/agentes",
   SOLICITUD_RETIRO: "/dashboard/supervisores",
   SOLICITUD_RETIRO_PROVEEDOR: "/dashboard/proveedores",
 };

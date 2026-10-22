@@ -258,6 +258,10 @@ export default function ResumenAgentes() {
 
   return (
     <div>
+      {/* Sección en desuso (22/10/2026, pedido de Leo): se sacó del menú y queda accesible solo por URL / desde las alertas. */}
+      <div className="warnbox" style={{ marginBottom: 18 }}>
+        <b>Esta sección ya no se usa.</b> Los estados de cuenta y los PDF se hacen desde <b>Supervisores</b> y <b>Agentes</b>. Se deja acá como consulta del historial.
+      </div>
       <div className="topbar">
         <div>
           <h2>Resumen por agente <Ayuda>Estado de cuenta semanal en PDF -- resumen por club, detalle por jugador (para cierres cargados desde

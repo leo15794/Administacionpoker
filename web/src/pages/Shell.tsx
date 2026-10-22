@@ -233,7 +233,8 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "comisionesReferidos", to: "/dashboard/comisiones-referidos", icon: "comisionesReferidos", label: "Comisiones por referido", group: "finanzas" },
   { key: "resumenClub", to: "/dashboard/resumen-club", icon: "resumenClub", label: "Resumen por club", group: "reportes" },
   { key: "rodeo", to: "/dashboard/rodeo", icon: "rodeo", label: "Resumen de Rodeo", group: "reportes" },
-  { key: "resumenAgentes", to: "/dashboard/resumen-agentes", icon: "resumenAgentes", label: "Resumen por agente", group: "reportes" },
+  // "Resumen por agente" salió del menú (22/10/2026, pedido de Leo): ya no se usa. La ruta /dashboard/resumen-agentes sigue existiendo (con un aviso) porque algunas alertas de la campana
+  // todavía llevan ahí, y por si hay que volver a usarla.
   { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "reportes" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
