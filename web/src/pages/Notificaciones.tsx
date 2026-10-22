@@ -4,6 +4,7 @@ import { dateTime } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import AvisoImagenes from "../components/AvisoImagenes";
 import { comprimirImagen, tamanoLegible } from "../imagenes";
+import Ayuda from "../components/Ayuda";
 
 // Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo). Siempre a mano: nada se manda solo,
 // se elige a quién (todos o algunos), se escribe el aviso y se confirma antes de enviar.
@@ -165,10 +166,7 @@ Desaparece del portal de los ${h.elegidos} que lo recibieron${(h.imagenes ?? [])
     <div>
       {layout === "pagina" && <div className="topbar">
         <div>
-          <h2>Notificaciones</h2>
-          <div className="muted">
-            Mandá un aviso al celular de supervisores, agentes y proveedores. Se envía solo cuando vos lo confirmás, a quienes elijas. Les llega solo a quienes activaron las notificaciones en su portal.
-          </div>
+          <h2>Notificaciones <Ayuda>Mandá un aviso al celular de supervisores, agentes y proveedores. Se envía solo cuando vos lo confirmás, a quienes elijas. Les llega solo a quienes activaron las notificaciones en su portal.</Ayuda></h2>
         </div>
       </div>}
 

@@ -6,6 +6,7 @@ import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import MovimientosHistorial from "../components/MovimientosHistorial";
 import Loading from "../components/Loading";
+import Ayuda, { Leyenda } from "../components/Ayuda";
 
 // ================================================================================================
 // Resumen ejecutivo -- rediseño visual/UX (25/09/2026, pedido de Leo: "mejorar visualmente y a
@@ -494,7 +495,10 @@ export default function Resumen() {
             <div className="topbar" style={{ marginBottom: 12, alignItems: "center" }}>
               <div>
                 <h3 style={{ margin: 0 }}>Cuentas de supervisores y agentes</h3>
-                <div className="muted" style={{ marginTop: 2 }}>Positivo = le debemos · Negativo = nos debe · mismo saldo que ves en Supervisores y Agentes</div>
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Leyenda pos="Le debemos" neg="Nos debe" />
+                  <Ayuda>Es el mismo saldo que ves en Supervisores y Agentes.</Ayuda>
+                </div>
               </div>
               <button
                 className="btn secondary small"
@@ -538,7 +542,10 @@ export default function Resumen() {
         <div className="topbar" style={{ marginBottom: 12, alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0 }}>Saldos por agente y club</h3>
-            <div className="muted" style={{ marginTop: 2 }}>Positivo = a favor del agente · Negativo = a favor nuestro · solo agentes que no están dentro de la cuenta de un supervisor</div>
+            <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Leyenda pos="A favor del agente" neg="A favor nuestro" />
+              <Ayuda titulo="Cómo leer esta tabla">Positivo = a favor del agente (le debemos). Negativo = a favor nuestro (nos debe). Solo aparecen los agentes que no están dentro de la cuenta de un supervisor.</Ayuda>
+            </div>
           </div>
           <div className="saldos-tools">
             <input
@@ -910,10 +917,7 @@ function EvolucionGananciaRake({ semanas }: { semanas: { week_start: string; wee
     <div>
       <div className="chart-toolbar">
         <div>
-          <h3 style={{ margin: 0, marginBottom: 4 }}>Ganancia y Rake — últimas {periodo} semanas</h3>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Datos reales de los cierres semanales cargados. La línea de Rake semana a semana todavía no está disponible — la vamos a sumar más adelante.
-          </div>
+          <h3 style={{ margin: 0, marginBottom: 4 }}>Ganancia y Rake — últimas {periodo} semanas <Ayuda>Datos reales de los cierres semanales cargados. La línea de Rake semana a semana todavía no está disponible — la vamos a sumar más adelante.</Ayuda></h3>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {([4, 8, 12] as const).map((n) => {

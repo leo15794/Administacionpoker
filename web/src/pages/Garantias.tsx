@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -50,8 +51,7 @@ export default function Garantias() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Garantías</h2>
-          <div className="muted">Separadas del saldo operativo (BIT-034). Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</div>
+          <h2>Garantías <Ayuda>Separadas del saldo operativo (BIT-034). Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</Ayuda></h2>
         </div>
         <button className="btn" onClick={() => setShowAjuste({})}>+ Nueva / ajustar garantía</button>
       </div>

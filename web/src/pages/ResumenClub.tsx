@@ -6,6 +6,7 @@ import { usd, usdCents, pct, dateShort } from "../fmt";
 import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { ClubPicker } from "../components/ClubPicker";
+import Ayuda from "../components/Ayuda";
 
 /**
  * "Resumen por club" — reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion
@@ -673,12 +674,9 @@ export default function ResumenClub() {
 
           {resumen.clubFamily === "TINY" && (
             <div className="panel">
-              <h3>Tiny · Cierre semanal</h3>
-              <div className="muted" style={{ marginBottom: 12 }}>
-                A diferencia de los demas clubes, la ganancia de Tiny no sale de un % fijo sobre el rake: sale de la
+              <h3>Tiny · Cierre semanal <Ayuda>A diferencia de los demas clubes, la ganancia de Tiny no sale de un % fijo sobre el rake: sale de la
                 diferencia entre lo que la Union/GG nos liquida a nosotros (Settlement) y lo que nosotros les pagamos a
-                los agentes (Cierre agentes).
-              </div>
+                los agentes (Cierre agentes).</Ayuda></h3>
               {!tinyExtra ? (
                 <div className="muted">Sin datos de Rebate Union/Settlement guardados para esta semana todavia.</div>
               ) : (

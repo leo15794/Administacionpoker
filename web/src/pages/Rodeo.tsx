@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 // "Resumen de Rodeo" (23/09/2026, pedido de Leo): una fila por agente+club con la memoria
 // vigente y el acumulado histórico de rodeo pagado -- para poder ver de un vistazo si la
@@ -107,13 +108,10 @@ export default function Rodeo() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Resumen de Rodeo</h2>
-          <div className="muted">
-            Memoria vigente y acumulado de Rodeo por agente y club (solo SupremaPoker: Fénix, TeamBack) — para chequear
+          <h2>Resumen de Rodeo <Ayuda>Memoria vigente y acumulado de Rodeo por agente y club (solo SupremaPoker: Fénix, TeamBack) — para chequear
             que la memoria se esté comportando como corresponde. Cuando el agente viene ganando en mesas, esa pérdida
             se acumula acá como memoria pendiente y se descuenta de lo que genere en semanas futuras antes de repartir
-            nada.
-          </div>
+            nada.</Ayuda></h2>
         </div>
       </div>
 

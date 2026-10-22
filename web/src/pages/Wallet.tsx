@@ -5,6 +5,7 @@ import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 function estaRevertido(m: any) {
   return (m.status ?? m.movimiento_status) === "REVERTIDO";
@@ -77,10 +78,7 @@ export default function Wallet() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Wallet</h2>
-          <div className="muted">
-            Saldo de la wallet en USDT. Se arma solo con los movimientos de agentes en USDT más el historial real importado desde la planilla — para plata que entra o sale sin ser un movimiento de agente, registrala acá.
-          </div>
+          <h2>Wallet <Ayuda>Saldo de la wallet en USDT. Se arma solo con los movimientos de agentes en USDT más el historial real importado desde la planilla — para plata que entra o sale sin ser un movimiento de agente, registrala acá.</Ayuda></h2>
         </div>
         <button className="btn" onClick={() => setShowAjuste(true)}>+ Registrar movimiento</button>
       </div>
@@ -165,13 +163,10 @@ export default function Wallet() {
 
       {caja && (
         <div className="panel">
-          <h3>Caja efectivo</h3>
-          <div className="muted" style={{ marginBottom: 12 }}>
-            Hay movimientos en efectivo cargados (con su custodio). Saldo neto de la caja:{" "}
+          <h3>Caja efectivo <Ayuda>Hay movimientos en efectivo cargados (con su custodio). Saldo neto de la caja:{" "}
             <strong className={Number(caja.porLedger.find((l: any) => l.ledger === "CAJA_EFECTIVO")?.neto ?? 0) >= 0 ? "pos" : "neg"}>
               {usd(caja.porLedger.find((l: any) => l.ledger === "CAJA_EFECTIVO")?.neto ?? 0)}
-            </strong>
-          </div>
+            </strong></Ayuda></h3>
           <table>
             <thead><tr><th>Custodio</th><th className="num">Neto en su poder</th><th className="num">Movimientos</th></tr></thead>
             <tbody>

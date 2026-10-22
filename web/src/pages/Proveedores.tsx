@@ -5,6 +5,7 @@ import { usd, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
+import Ayuda, { Leyenda } from "../components/Ayuda";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -207,11 +208,8 @@ export default function Proveedores() {
     <div>
       <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2>Proveedores</h2>
-          <div className="muted">
-            Cuentas separadas de Agentes: alguien nos entrega un % del rake TOTAL de un club (no de sus propios
-            jugadores), ej. Manzur en Fénix GG.
-          </div>
+          <h2>Proveedores <Ayuda>Cuentas separadas de Agentes: alguien nos entrega un % del rake TOTAL de un club (no de sus propios
+            jugadores), ej. Manzur en Fénix GG.</Ayuda></h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
@@ -238,13 +236,10 @@ export default function Proveedores() {
 
       {solicitudes && solicitudes.length > 0 && (
         <div className="panel" style={{ borderColor: "var(--gold)" }}>
-          <h3>Solicitudes de retiro pendientes</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-            Lo que piden los proveedores desde "Mi proveedor". Al marcarla como enviada se registra
+          <h3>Solicitudes de retiro pendientes <Ayuda>Lo que piden los proveedores desde "Mi proveedor". Al marcarla como enviada se registra
             el Pago de siempre en el club elegido (misma mecánica que "+ Pago / cobro" de arriba)
             con el link de pago asentado, para que puedan ver el trackeo reflejado en su propia
-            pantalla.
-          </div>
+            pantalla.</Ayuda></h3>
           <div className="ag-table-wrap" style={{ display: "block", overflowX: "auto" }}>
             <table>
               <thead><tr><th>Proveedor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
@@ -362,9 +357,9 @@ export default function Proveedores() {
           );
         })}
       </div>
-      <div className="muted" style={{ fontSize: 12, margin: "10px 0 16px" }}>
-        Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Los saldos se actualizan solos con cada
-        cierre semanal y cada pago/cobro -- nunca se editan a mano. Tocá un club para ver los movimientos que arman ese saldo.
+      <div style={{ margin: "10px 0 16px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <Leyenda pos="A favor del proveedor (le debemos)" neg="A favor nuestro (nos debe)" />
+        <Ayuda>Los saldos se actualizan solos con cada cierre semanal y cada pago/cobro -- nunca se editan a mano. Tocá un club para ver los movimientos que arman ese saldo.</Ayuda>
       </div>
 
       </>
@@ -429,10 +424,8 @@ export default function Proveedores() {
 
         {tab === "resumen" && sel && (
           <>
-            <h4 style={{ margin: "0 0 4px" }}>Saldo por club</h4>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-              Positivo = a favor del proveedor (le debemos). Negativo = a favor nuestro (nos debe). Tocá un club para ver los movimientos que arman ese saldo.
-            </div>
+            <h4 style={{ margin: "0 0 8px" }}>Saldo por club <Ayuda>Tocá un club para ver los movimientos que arman ese saldo.</Ayuda></h4>
+            <div style={{ marginBottom: 10 }}><Leyenda pos="A favor del proveedor (le debemos)" neg="A favor nuestro (nos debe)" /></div>
             {saldosSel.length === 0 ? (
               <div className="muted">Todavía no tiene movimientos.</div>
             ) : (
@@ -625,10 +618,7 @@ export default function Proveedores() {
         )}
         {tab === "config" && sel && (
           <>
-            <h4 style={{ margin: "0 0 4px" }}>Auto-cierre por club</h4>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-              Cada vez que se guarda "Ingreso por ventas" en Resumen por club de uno de estos clubes, el cierre semanal de {sel.name} se aplica solo con ese % de rakeback.
-            </div>
+            <h4 style={{ margin: "0 0 4px" }}>Auto-cierre por club <Ayuda>Cada vez que se guarda "Ingreso por ventas" en Resumen por club de uno de estos clubes, el cierre semanal de {sel.name} se aplica solo con ese % de rakeback.</Ayuda></h4>
             <AutoCierreClubesEditor proveedorId={sel.id} clubes={clubes} />
             <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
               <button className="btn secondary" onClick={() => setEditandoProveedor(sel)}>Editar nombre y notas</button>

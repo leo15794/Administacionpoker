@@ -6,6 +6,7 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
 // agente+club con lo que generó en rakeback esa semana, un total, y (abajo) lo que
@@ -1743,11 +1744,8 @@ export default function Liquidaciones() {
 
   return (
     <div>
-      <h2>Liquidaciones</h2>
-      <p className="muted" style={{ marginTop: -6, marginBottom: 18 }}>
-        Resumen de rakeback por club de una semana puntual, listo para mandarle el pago. Se pueden combinar varios
-        agentes de clubes distintos en una sola liquidación (ej. una misma persona con una identidad por club).
-      </p>
+      <h2>Liquidaciones <Ayuda>Resumen de rakeback por club de una semana puntual, listo para mandarle el pago. Se pueden combinar varios
+        agentes de clubes distintos en una sola liquidación (ej. una misma persona con una identidad por club).</Ayuda></h2>
 
       {/* Sección en desuso (21/10/2026, pedido de Leo): ahora todo se maneja desde Supervisores y Agentes (cierre semanal de la cuenta, descuentos, pagos y
           cobros, PDF). Se sacó del menú y queda accesible solo por URL, como historial y por si hay que volver a usarla. */}
@@ -2160,12 +2158,9 @@ export default function Liquidaciones() {
             )}
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-              <h4 style={{ marginTop: 0, marginBottom: 4 }}>Cargas de tesorería pendientes</h4>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                Fichas/USD que ya se le cargaron a este agente en este club (ver "Cargar Movimiento", tipo CARGA) y todavía
+              <h4 style={{ marginTop: 0, marginBottom: 4 }}>Cargas de tesorería pendientes <Ayuda>Fichas/USD que ya se le cargaron a este agente en este club (ver "Cargar Movimiento", tipo CARGA) y todavía
                 no se descontaron de ninguna liquidación. Al cruzar, si el agente tiene rakeback pendiente en esta misma
-                liquidación, se descuenta automáticamente de ahí también -- no hace falta pagarlo de nuevo con "Enviar".
-              </div>
+                liquidación, se descuenta automáticamente de ahí también -- no hace falta pagarlo de nuevo con "Enviar".</Ayuda></h4>
               {data.cargas.length === 0 ? (
                 <div className="muted">Sin cargas de tesorería pendientes para estos agentes/clubes.</div>
               ) : (
@@ -2257,10 +2252,7 @@ export default function Liquidaciones() {
 
             {data.pagos && data.pagos.length > 0 && (
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                <h3 style={{ marginTop: 0 }}>Historial de pagos de esta liquidación</h3>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                  Pagos/cobros ya registrados de verdad para estos agentes en esta semana — a dónde fueron y con qué medio.
-                </div>
+                <h3 style={{ marginTop: 0 }}>Historial de pagos de esta liquidación <Ayuda>Pagos/cobros ya registrados de verdad para estos agentes en esta semana — a dónde fueron y con qué medio.</Ayuda></h3>
                 <div style={{ overflowX: "auto" }}><table>
                   <thead>
                     <tr>
@@ -2324,10 +2316,7 @@ export default function Liquidaciones() {
 
             {crucesDetalle && (crucesDetalle.adelantosCruzados.length > 0 || crucesDetalle.pendienteSaldado.length > 0) && (
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                <h3 style={{ marginTop: 0 }}>Adelantos cruzados en esta liquidación</h3>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                  No es plata nueva — es rakeback pendiente saldado con un adelanto que ya se le había dado a ese agente.
-                </div>
+                <h3 style={{ marginTop: 0 }}>Adelantos cruzados en esta liquidación <Ayuda>No es plata nueva — es rakeback pendiente saldado con un adelanto que ya se le había dado a ese agente.</Ayuda></h3>
                 <table>
                   <thead>
                     <tr>
@@ -2392,13 +2381,10 @@ export default function Liquidaciones() {
 
             {movAbierto === "PAGO" && (
               <div className="panel" style={{ marginTop: 10, maxWidth: 620 }}>
-                <h4 style={{ marginTop: 0 }}>Registrar pago al agente</h4>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  Tildá una o varias filas y mandalas juntas en un click — cada una con su propio importe y
+                <h4 style={{ marginTop: 0 }}>Registrar pago al agente <Ayuda>Tildá una o varias filas y mandalas juntas en un click — cada una con su propio importe y
                   medio (Fichas mueve el stock físico de ese club, USDT/Efectivo/Zelle es un pago financiero
                   que no lo toca). Es independiente de "Guardar en historial": podés enviar sin guardar, o
-                  guardar sin enviar.
-                </div>
+                  guardar sin enviar.</Ayuda></h4>
                 <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
                   <button
                     type="button"
@@ -2573,12 +2559,9 @@ export default function Liquidaciones() {
 
             {movAbierto === "COBRO" && (
               <div className="panel" style={{ marginTop: 10, maxWidth: 460 }}>
-                <h4 style={{ marginTop: 0 }}>Registrar cobro al agente</h4>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  Esto registra un movimiento real de COBRO contra la wallet (mismo efecto que cargarlo en
+                <h4 style={{ marginTop: 0 }}>Registrar cobro al agente <Ayuda>Esto registra un movimiento real de COBRO contra la wallet (mismo efecto que cargarlo en
                   "Cargar movimiento"). Es independiente de "Guardar en historial": podés recibir sin
-                  guardar, o guardar sin recibir.
-                </div>
+                  guardar, o guardar sin recibir.</Ayuda></h4>
                 <div className="field">
                   <label>Agente + club</label>
                   <select value={movAgenteClub} onChange={(e) => cambiarFilaMov(e.target.value)}>

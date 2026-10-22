@@ -5,6 +5,7 @@ import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import { generarPdfCuentasAgentes, type ContenidoPdf, type FormatoPdf } from "../pdfCuentasAgentes";
+import Ayuda from "../components/Ayuda";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -303,12 +304,9 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
     <div>
       <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2>{agentesModo ? "Agentes" : "Supervisores"}</h2>
-          <div className="muted">
-            {agentesModo
+          <h2>{agentesModo ? "Agentes" : "Supervisores"} <Ayuda>{agentesModo
               ? "Cuenta de cada agente individual: el cierre completo de cada semana, los descuentos del cierre, y los pagos y cobros en USDT. Reemplaza a Liquidaciones para los agentes que se activan acá."
-              : "Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio."}
-          </div>
+              : "Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio."}</Ayuda></h2>
         </div>
         {agentesModo && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -321,13 +319,10 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
       {solicitudes && solicitudes.length > 0 && (
         <div className="panel" style={{ borderColor: "var(--gold)" }}>
-          <h3>Solicitudes de retiro pendientes</h3>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
-            Lo que piden los supervisores desde "Mi Supervisión". Al marcarla como enviada se
+          <h3>Solicitudes de retiro pendientes <Ayuda>Lo que piden los supervisores desde "Mi Supervisión". Al marcarla como enviada se
             registra la Descarga de siempre en su historial (misma mecánica que + Carga / Descarga /
             Ajuste) con el link de pago asentado, para que puedan ver el trackeo reflejado en su
-            propio historial.
-          </div>
+            propio historial.</Ayuda></h3>
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead><tr><th>Supervisor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
@@ -618,10 +613,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                   const desfasado = Math.abs(totalClubes - Number(seleccionado.fichas_reales)) > 0.01;
                   return (
                     <>
-                      <h4 style={{ margin: "0 0 4px" }}>Fichas por club</h4>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                        Lo que el agente tiene en cada club: cargas y descargas + resultado de mesas. Suman el total de Fichas reales de arriba.
-                      </div>
+                      <h4 style={{ margin: "0 0 4px" }}>Fichas por club <Ayuda>Lo que el agente tiene en cada club: cargas y descargas + resultado de mesas. Suman el total de Fichas reales de arriba.</Ayuda></h4>
                       {!saldosPorAgente ? <Loading /> : clubesAg.length === 0 ? (
                         <div className="muted" style={{ marginBottom: 14 }}>Todavía no tiene fichas en ningún club.</div>
                       ) : (
@@ -658,12 +650,9 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                     </>
                   );
                 })()}
-                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Saldo de la cuenta" : esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"}</h4>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  {agentesModo
+                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Saldo de la cuenta" : esWinLose(seleccionado) ? "Cuenta corriente por agente" : "Fichas en tiempo real por agente"} <Ayuda>{agentesModo
                     ? "Saldo importado + cierres semanales aplicados + descuentos, pagos, cobros y ajustes. Coincide, centavo a centavo, con el saldo de arriba."
-                    : `Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá, en su fila. El total coincide, centavo a centavo, con el saldo de arriba: es el mismo saldo de ${seleccionado.name}, repartido por agente.`}
-                </div>
+                    : `Cada Carga/Descarga/Ajuste que se registre con un agente elegido se suma o resta acá, en su fila. El total coincide, centavo a centavo, con el saldo de arriba: es el mismo saldo de ${seleccionado.name}, repartido por agente.`}</Ayuda></h4>
                 {!saldosPorAgente ? (
                   <Loading />
                 ) : saldosPorAgente.length === 0 ? (
@@ -764,12 +753,9 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
             {tabDet === "cierre" && (
               <>
-                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Cierre semanal" : "Cierre semanal de agentes a cargo"}</h4>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                  {esWinLose(seleccionado)
+                <h4 style={{ margin: "0 0 4px" }}>{agentesModo ? "Cierre semanal" : "Cierre semanal de agentes a cargo"} <Ayuda>{esWinLose(seleccionado)
                     ? "Trae el cierre semanal ya cargado de cada agente a cargo: el cierre COMPLETO (resultado de mesas + rakeback + rebate) se suma a Cuenta corriente -- esta cuenta es Win/Lose y no tiene fichas reales. El saldo propio del agente no se toca, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."
-                    : "Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."}
-                </div>
+                    : "Trae el cierre semanal ya cargado de cada agente a cargo: las fichas ganadas en mesas se suman a Fichas reales, y el rakeback generado se suma a Cuenta corriente -- el saldo propio del agente sigue acumulando igual que siempre, esto es un espejo automático aparte. Se puede aplicar una sola vez por semana."}</Ayuda></h4>
                 {!semanasCierre ? (
                   <Loading />
                 ) : semanasCierre.length === 0 ? (

@@ -4,6 +4,7 @@ import Modal from "../components/Modal";
 import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
 import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
+import Ayuda, { Aviso } from "../components/Ayuda";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
 // para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
@@ -425,11 +426,8 @@ export default function Usuarios() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Usuarios y permisos</h2>
-          <div className="muted">
-            ADMIN ve y administra todo. SUPERVISOR ve el resumen de su grupo de agentes a cargo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
-            PROVEEDOR ve su propia ficha en Proveedores (saldo, cierres y pagos), nunca la de otro proveedor.
-          </div>
+          <h2>Usuarios y permisos <Ayuda>ADMIN ve y administra todo. SUPERVISOR ve el resumen de su grupo de agentes a cargo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
+            PROVEEDOR ve su propia ficha en Proveedores (saldo, cierres y pagos), nunca la de otro proveedor.</Ayuda></h2>
         </div>
         <button
           className="btn"
@@ -458,11 +456,13 @@ export default function Usuarios() {
       {supervisoresInvalidos.length > 0 && (
         <div className="panel" style={{ borderColor: "var(--red)" }}>
           <h3>⚠ Supervisores mal cargados</h3>
-          <div className="muted" style={{ marginBottom: 10 }}>
-            Estos agentes tienen un supervisor cargado que no coincide con ningún agente activo de tipo
-            "Supervisor" — puede ser un nombre mal escrito, un agente que no es tipo Supervisor, o uno dado
-            de baja. Corregilo acá mismo (elegí el supervisor correcto, o quitáselo) sin tener que entrar a
-            editar cada agente por separado.
+          <div style={{ marginBottom: 10 }}>
+            <Aviso tipo="warn">
+              Estos agentes tienen un supervisor cargado que no coincide con ningún agente activo de tipo
+              "Supervisor" — puede ser un nombre mal escrito, un agente que no es tipo Supervisor, o uno dado
+              de baja. Corregilo acá mismo (elegí el supervisor correcto, o quitáselo) sin tener que entrar a
+              editar cada agente por separado.
+            </Aviso>
           </div>
           <table>
             <thead><tr><th>Agente</th><th>Supervisor cargado (no válido)</th><th>Corregir a</th></tr></thead>

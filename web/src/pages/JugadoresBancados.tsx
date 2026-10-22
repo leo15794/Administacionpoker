@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import BancadoContratosEmbed from "./BancadoContratos";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 /**
  * "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que hay que excluir
@@ -190,11 +191,8 @@ export default function JugadoresBancados() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Jugadores bancados</h2>
-          <div className="muted">
-            Un jugador marcado acá se omite del cierre agregado de su agente en la próxima importación — su plata se liquida
-            aparte, con su propio capital y makeup (desplegá su fila para configurar la banca y cerrar semanas).
-          </div>
+          <h2>Jugadores bancados <Ayuda>Un jugador marcado acá se omite del cierre agregado de su agente en la próxima importación — su plata se liquida
+            aparte, con su propio capital y makeup (desplegá su fila para configurar la banca y cerrar semanas).</Ayuda></h2>
         </div>
       </div>
 
@@ -877,11 +875,8 @@ function PanelBanca({ jugador, onCierreAplicado }: { jugador: any; onCierreAplic
           </div>
 
           <div className="panel" style={{ marginBottom: 12 }}>
-            <h4 style={{ marginTop: 0 }}>Recargar capital</h4>
-            <div className="muted" style={{ marginBottom: 10 }}>
-              Para cuando el jugador se queda en 0 (o negativo) a mitad de camino y hay que volver a cargarle fichas — no toca
-              rake/rakeback/makeup, solo el capital. Un monto negativo lo descuenta en vez de recargarlo.
-            </div>
+            <h4 style={{ marginTop: 0 }}>Recargar capital <Ayuda>Para cuando el jugador se queda en 0 (o negativo) a mitad de camino y hay que volver a cargarle fichas — no toca
+              rake/rakeback/makeup, solo el capital. Un monto negativo lo descuenta en vez de recargarlo.</Ayuda></h4>
             <div className="form-grid">
               <div className="field">
                 <label>Monto (USD)</label>
@@ -1248,12 +1243,9 @@ function ImportarBancados({ onCierreAplicado }: { onCierreAplicado: () => void }
 
   return (
     <div className="panel">
-      <h3>Cargar archivo semanal (solo bancados)</h3>
-      <div className="muted" style={{ marginBottom: 10 }}>
-        Subí el mismo archivo semanal que usás en Cierres — acá solo se procesan los jugadores que ya están marcados como
+      <h3>Cargar archivo semanal (solo bancados) <Ayuda>Subí el mismo archivo semanal que usás en Cierres — acá solo se procesan los jugadores que ya están marcados como
         bancados (el resto del archivo se ignora). Para cada uno se usa el resultado y el rake que trae el archivo, junto con
-        su configuración de banca ya cargada.
-      </div>
+        su configuración de banca ya cargada.</Ayuda></h3>
       <div className="form-grid">
         <div className="field">
           <label>Plataforma</label>

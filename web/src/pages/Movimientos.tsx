@@ -4,6 +4,7 @@ import CargarMovimiento from "../components/CargarMovimiento";
 import MovimientosHistorial from "../components/MovimientosHistorial";
 import SaldoHistorico from "../components/SaldoHistorico";
 import { AdelantosPanel } from "./Adelantos";
+import Ayuda from "../components/Ayuda";
 
 // (19/10/2026, pedido de Leo: "programá todo lo de Cargar movimiento", mockups aprobados) -- la
 // pantalla pasa de 4 paneles apilados (formulario + historial + saldo histórico + adelantos, ~2.700 px
@@ -73,8 +74,7 @@ export default function Movimientos() {
     <div>
       <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
-          <h2>Cargar movimiento</h2>
-          <div className="muted">Cada movimiento se aplica al instante y actualiza los saldos en el momento.</div>
+          <h2>Cargar movimiento <Ayuda>Cada movimiento se aplica al instante y actualiza los saldos en el momento.</Ayuda></h2>
         </div>
       </div>
 
@@ -97,10 +97,7 @@ export default function Movimientos() {
 
       {pestana === "historial" && (
         <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Historial de movimientos cargados</h3>
-          <div className="muted" style={{ marginBottom: 14 }}>
-            Últimos movimientos registrados en el sistema (los más recientes primero), para verificar rápido lo que se fue cargando.
-          </div>
+          <h3 style={{ marginTop: 0 }}>Historial de movimientos cargados <Ayuda>Últimos movimientos registrados en el sistema (los más recientes primero), para verificar rápido lo que se fue cargando.</Ayuda></h3>
           <div className="form-grid" style={{ marginBottom: 10 }}>
             <div className="field">
               <label>Agente</label>

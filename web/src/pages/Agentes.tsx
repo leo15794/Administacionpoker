@@ -7,6 +7,7 @@ import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -1534,10 +1535,7 @@ function ClubesConfig({
 }) {
   return (
     <div className="panel">
-      <h3>Configuración por club ({clubes.length})</h3>
-      <div className="muted" style={{ marginBottom: 14 }}>
-        Cada agente necesita su propio deal por club (Asignar % a agente) — ya no hay un % default de club de respaldo (18/09/2026: se sacó porque tapaba agentes sin configurar en vez de avisar).
-      </div>
+      <h3>Configuración por club ({clubes.length}) <Ayuda>Cada agente necesita su propio deal por club (Asignar % a agente) — ya no hay un % default de club de respaldo (18/09/2026: se sacó porque tapaba agentes sin configurar en vez de avisar).</Ayuda></h3>
       <table>
         <thead>
           <tr><th>Club</th><th>Unidad</th><th>Destino rebate</th><th></th></tr>
@@ -1755,10 +1753,7 @@ function NuevoDeal({
 
   return (
     <div className="panel">
-      <h3>{initial ? "Editar deal" : "Asignar % de rakeback/rebate a un agente en un club"}</h3>
-      <div className="muted" style={{ marginBottom: 14 }}>
-        Esto no borra el historial: versiona el deal anterior (queda con fecha de fin) y crea uno nuevo vigente.
-      </div>
+      <h3>{initial ? "Editar deal" : "Asignar % de rakeback/rebate a un agente en un club"} <Ayuda>Esto no borra el historial: versiona el deal anterior (queda con fecha de fin) y crea uno nuevo vigente.</Ayuda></h3>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           {!fixedAgentId && (

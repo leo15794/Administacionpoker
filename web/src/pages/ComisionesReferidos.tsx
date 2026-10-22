@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 // Pantalla dedicada para no tener que entrar a Usuarios y permisos → editar cada supervisor
 // solo para ver cuánto le corresponde de comisión por referido. Acá se ven TODOs los
@@ -115,11 +116,8 @@ export default function ComisionesReferidos() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Comisiones por referido</h2>
-          <div className="muted">
-            Todos los supervisores con % de comisión por referido configurado, con su saldo acumulado y el historial de cada uno.
-            Para asignar o cambiar un %, o dar de baja un referido, se hace desde Usuarios y permisos.
-          </div>
+          <h2>Comisiones por referido <Ayuda>Todos los supervisores con % de comisión por referido configurado, con su saldo acumulado y el historial de cada uno.
+            Para asignar o cambiar un %, o dar de baja un referido, se hace desde Usuarios y permisos.</Ayuda></h2>
         </div>
       </div>
 

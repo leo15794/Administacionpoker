@@ -4,6 +4,7 @@ import { cargarLibreriasPdf } from "../pdfLibs";
 import { usd, pct, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 // "Resumen por agente" (23/09/2026, pedido de Leo): réplica del "Estado de cuenta semanal" que
 // ya arma a mano en Excel (PDF de referencia "Cierre El Latigo Loco") -- elegís semana + uno o
@@ -259,12 +260,9 @@ export default function ResumenAgentes() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Resumen por agente</h2>
-          <div className="muted">
-            Estado de cuenta semanal en PDF -- resumen por club, detalle por jugador (para cierres cargados desde
+          <h2>Resumen por agente <Ayuda>Estado de cuenta semanal en PDF -- resumen por club, detalle por jugador (para cierres cargados desde
             ahora en adelante), subagentes y saldo. Se pueden combinar varias identidades de un mismo agente bajo un
-            nombre a elección, igual que en Liquidaciones.
-          </div>
+            nombre a elección, igual que en Liquidaciones.</Ayuda></h2>
         </div>
       </div>
 
@@ -793,10 +791,7 @@ function PreviewResumen({
           resto sigue arrastrando). "Quitar" lo saca del todo (ya resuelto, o fue un error). */}
       {ec.movimientosAjustables && ec.movimientosAjustables.length > 0 && (
         <>
-          <h4 style={{ marginTop: 16, marginBottom: 6 }}>Ajustes / cobros / pagos — marcar pendiente</h4>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-            Lo que pongas en "Pendiente" se arrastra en "Saldo anterior" semana a semana hasta que lo edites (pago parcial) o lo quites. Reversible en cualquier momento.
-          </div>
+          <h4 style={{ marginTop: 16, marginBottom: 6 }}>Ajustes / cobros / pagos — marcar pendiente <Ayuda>Lo que pongas en "Pendiente" se arrastra en "Saldo anterior" semana a semana hasta que lo edites (pago parcial) o lo quites. Reversible en cualquier momento.</Ayuda></h4>
           <table style={{ maxWidth: 820 }}>
             <thead>
               <tr>

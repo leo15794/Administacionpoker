@@ -6,6 +6,7 @@ import { exportCsv } from "../csv";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import ActionsMenu from "../components/ActionsMenu";
 import Modal from "../components/Modal";
+import Ayuda from "../components/Ayuda";
 
 // Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
 // entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
@@ -257,8 +258,7 @@ export default function Cierres() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Cierres semanales</h2>
-          <div className="muted">Clave idempotente (agente + club + semana) — un cierre nunca se aplica dos veces (BIT-001).</div>
+          <h2>Cierres semanales <Ayuda>Clave idempotente (agente + club + semana) — un cierre nunca se aplica dos veces (BIT-001).</Ayuda></h2>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn secondary" onClick={() => setShowImport((v) => !v)}>{showImport ? "Cerrar importador" : "Importar archivo"}</button>
@@ -500,11 +500,8 @@ export default function Cierres() {
 
       {bancados.length > 0 && (
         <div className="panel">
-          <h3>Memoria de bancados</h3>
-          <div className="muted" style={{ marginBottom: 14 }}>
-            Deuda eterna: cuando el rakeback de una semana no alcanza para cubrir la pérdida en mesa de un bancado, la diferencia
-            queda acá y se descuenta de sus próximas semanas positivas antes de acreditarle nada.
-          </div>
+          <h3>Memoria de bancados <Ayuda>Deuda eterna: cuando el rakeback de una semana no alcanza para cubrir la pérdida en mesa de un bancado, la diferencia
+            queda acá y se descuenta de sus próximas semanas positivas antes de acreditarle nada.</Ayuda></h3>
           <table>
             <thead><tr><th>Bancado</th><th>Club</th><th className="num">Memoria pendiente</th><th className="num">Saldo en ese club</th></tr></thead>
             <tbody>
@@ -764,13 +761,10 @@ function NuevoCierre({
 
   return (
     <div className="panel">
-      <h3>Aplicar cierre semanal</h3>
-      <div className="muted" style={{ marginBottom: 14 }}>
-        {esBancado
+      <h3>Aplicar cierre semanal <Ayuda>{esBancado
           ? "Cuenta tipo Bancado: la mesa se reparte 50/50 (ajustable) y el rakeback es 100% del bancado — si viene con memoria pendiente, se descuenta antes de acreditarle nada."
           : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como un movimiento más en el sistema."}
-        {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.
-      </div>
+        {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.</Ayuda></h3>
 
       {adelantosDelAgente.length > 0 && (
         <div className="warning" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -1536,11 +1530,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
   return (
     <div className="panel">
-      <h3>Importar cierre desde archivo</h3>
-      <div className="muted" style={{ marginBottom: 10 }}>
-        Cada plataforma tiene su propio archivo y su propia liquidación — elegí primero la plataforma del archivo que vas
-        a subir.
-      </div>
+      <h3>Importar cierre desde archivo <Ayuda>Cada plataforma tiene su propio archivo y su propia liquidación — elegí primero la plataforma del archivo que vas
+        a subir.</Ayuda></h3>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {PLATAFORMAS.map((p) => (
           <button
@@ -1837,14 +1828,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
       {tinyRebateUnionPorClub.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <h4>Rebate Union de Tiny (conciliacion)</h4>
-          <div className="muted" style={{ marginBottom: 10 }}>
-            Rebate Union: lo que Tiny/la Union nos reconoce a NOSOTROS por super agente, calculado sobre el RG Pre-rake
+          <h4>Rebate Union de Tiny (conciliacion) <Ayuda>Rebate Union: lo que Tiny/la Union nos reconoce a NOSOTROS por super agente, calculado sobre el RG Pre-rake
             P&amp;L (excl. JP) del archivo -- 10% si esa base es negativa, 0 si es positiva o cero. Es un calculo
             INDEPENDIENTE del rebate que nosotros les pagamos a cada agente (columna "Suma Rebate agentes"); nunca se
             reparte directo a los agentes. Diferencia = Rebate Union - Suma Rebate agentes: positiva es margen extra
-            para nosotros, negativa es costo extra que absorbemos.
-          </div>
+            para nosotros, negativa es costo extra que absorbemos.</Ayuda></h4>
           {tinyRebateUnionPorClub.map((grupo: any) => {
             const diferencia = grupo.items.reduce((s: number, it: any) => s + it.rebateUnionCalculado, 0) - grupo.rebateAgentesTotal;
             const baseUnionTotal = grupo.items.reduce((s: number, it: any) => s + (it.rgPreRakeExclJp ?? 0), 0);

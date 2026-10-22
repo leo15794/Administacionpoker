@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 const CATEGORY_LABEL: Record<string, string> = {
   COMPENSACION: "Compensación",
@@ -133,11 +134,8 @@ export default function CuentasSocios() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Cuentas de socios</h2>
-          <div className="muted">
-            Plata de los socios (compensaciones, comisiones por referido, retiros, gastos) — separado del saldo de agentes y de Wallet.
-            Acá se puede editar y eliminar todo directamente, sin pasar por revertir/corregir.
-          </div>
+          <h2>Cuentas de socios <Ayuda>Plata de los socios (compensaciones, comisiones por referido, retiros, gastos) — separado del saldo de agentes y de Wallet.
+            Acá se puede editar y eliminar todo directamente, sin pasar por revertir/corregir.</Ayuda></h2>
         </div>
         <button className="btn" onClick={() => setShowNuevaCuenta(true)}>+ Nueva cuenta</button>
       </div>
@@ -178,12 +176,9 @@ export default function CuentasSocios() {
       <div className="panel">
         <div className="topbar" style={{ marginBottom: ajustesHistoricos?.length ? 14 : 0 }}>
           <div>
-            <h3 style={{ margin: 0 }}>Ajuste histórico de ganancia operativa</h3>
-            <div className="muted" style={{ fontSize: 12.5 }}>
-              Para arrancar "Ganancia operativa histórica" desde un total viejo (planilla de antes de usar este
+            <h3 style={{ margin: 0 }}>Ajuste histórico de ganancia operativa <Ayuda>Para arrancar "Ganancia operativa histórica" desde un total viejo (planilla de antes de usar este
               sistema) sin tocar el cálculo en vivo de los cierres reales. Se suma arriba de ese cálculo — no
-              afecta a Resumen ejecutivo, Resumen por club ni Resumen financiero.
-            </div>
+              afecta a Resumen ejecutivo, Resumen por club ni Resumen financiero.</Ayuda></h3>
           </div>
           <button className="btn secondary" onClick={() => setShowNuevoAjusteHistorico(true)}>+ Ajuste histórico</button>
         </div>

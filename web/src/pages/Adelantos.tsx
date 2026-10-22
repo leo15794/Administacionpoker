@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -98,13 +99,10 @@ export function AdelantosPanel({ clubes }: { clubes: any[] }) {
 
   return (
     <div>
-      <h3 style={{ marginTop: 0 }}>Adelantos de rakeback</h3>
-      <div className="muted" style={{ marginBottom: 14 }}>
-        Por agente (no por club) — un agente sigue generando rake en varios clubes a la vez, el adelanto se compensa contra cualquiera.
+      <h3 style={{ marginTop: 0 }}>Adelantos de rakeback <Ayuda>Por agente (no por club) — un agente sigue generando rake en varios clubes a la vez, el adelanto se compensa contra cualquiera.
         Un mismo agente puede tener varios adelantos activos a la vez (en momentos y clubes distintos): cada uno es independiente.
         Separado del saldo operativo. Cada alta, aumento, reducción, consumo, baja o corrección queda registrado en el historial. Para
-        dar de alta uno nuevo, usá "Adelanto de rakeback" en el tipo de movimiento de arriba.
-      </div>
+        dar de alta uno nuevo, usá "Adelanto de rakeback" en el tipo de movimiento de arriba.</Ayuda></h3>
 
       <div className="kpi-grid">
         <div className="kpi-card">

@@ -6,6 +6,7 @@ import { exportCsv } from "../csv";
 import GananciasPorPeriodo from "./GananciasPorPeriodo";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
+import Ayuda from "../components/Ayuda";
 
 // Resumen financiero (18/09/2026, pedido explícito de Leo): "un resumen de todas las
 // ganancias, cada ingreso y cada egreso que se contabiliza, filtrable por día/semana/mes, para
@@ -146,11 +147,8 @@ export default function ResumenFinanciero() {
     <div>
       <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2>Resumen financiero</h2>
-          <div className="muted">
-            Todas las ganancias generadas y todos los ingresos/egresos que se contabilizan en el sistema — Wallet/Caja,
-            cierres semanales de agentes, jugadores bancados y comisiones por referido — filtrable por día, semana o mes.
-          </div>
+          <h2>Resumen financiero <Ayuda>Todas las ganancias generadas y todos los ingresos/egresos que se contabilizan en el sistema — Wallet/Caja,
+            cierres semanales de agentes, jugadores bancados y comisiones por referido — filtrable por día, semana o mes.</Ayuda></h2>
         </div>
         {tab === "resumen" && (
           <ActionsMenu
@@ -300,10 +298,7 @@ export default function ResumenFinanciero() {
           <div className="rf-grid">
             {data.porClub && data.porClub.length > 0 && (
               <div className="panel" style={{ margin: 0 }}>
-                <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ganancia por club</h3>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                  Cierres + bancados, sumada en el rango. No incluye Wallet/Caja ni comisiones por referido porque no están atadas a un club. Tocá un club para ver su resumen.
-                </div>
+                <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Ganancia por club <Ayuda>Cierres + bancados, sumada en el rango. No incluye Wallet/Caja ni comisiones por referido porque no están atadas a un club. Tocá un club para ver su resumen.</Ayuda></h3>
                 <div className="ag-table-wrap">
                   <table className="saldos-table">
                     <thead>

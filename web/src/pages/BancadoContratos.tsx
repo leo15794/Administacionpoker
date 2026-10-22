@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -662,10 +663,7 @@ function EditarContratoForm({ contrato, onSaved, onCancel }: { contrato: any; on
 
   return (
     <div className="panel" style={{ marginTop: 12, maxWidth: 560 }}>
-      <h3 style={{ marginTop: 0 }}>Editar contrato de {contrato.nombre}</h3>
-      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        No se puede cambiar la regla ni el jugador/agente vinculado -- si eso cambió de verdad, hay que crear un contrato nuevo.
-      </div>
+      <h3 style={{ marginTop: 0 }}>Editar contrato de {contrato.nombre} <Ayuda>No se puede cambiar la regla ni el jugador/agente vinculado -- si eso cambió de verdad, hay que crear un contrato nuevo.</Ayuda></h3>
       <div className="form-grid">
         <div className="field">
           <label>Club</label>

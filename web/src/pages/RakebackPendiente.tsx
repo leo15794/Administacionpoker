@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usd, dateShort } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Ayuda from "../components/Ayuda";
 
 // Rakeback pendiente (22/09/2026, pedido de Leo): el cierre semanal ahora separa el resultado
 // de mesas (Win/Lose -- lo único que mueve el stock físico/balance del agente automáticamente,
@@ -313,11 +314,8 @@ export default function RakebackPendiente() {
     <div>
       <div className="topbar">
         <div>
-          <h2>Rakeback pendiente</h2>
-          <div className="muted">
-            Lo que cada cierre semanal generó además del Win/Lose (rakeback, rebate, Rodeo, ajuste manual) — pendiente
-            hasta que se paga en fichas (mueve el stock) o en USDT/efectivo/Zelle (pago financiero, no toca el stock).
-          </div>
+          <h2>Rakeback pendiente <Ayuda>Lo que cada cierre semanal generó además del Win/Lose (rakeback, rebate, Rodeo, ajuste manual) — pendiente
+            hasta que se paga en fichas (mueve el stock) o en USDT/efectivo/Zelle (pago financiero, no toca el stock).</Ayuda></h2>
         </div>
         <button className="btn secondary" onClick={() => (manualAbierto ? setManualAbierto(false) : abrirManual())}>
           {manualAbierto ? "Cancelar" : "+ Cargar rakeback viejo"}
@@ -336,12 +334,9 @@ export default function RakebackPendiente() {
           repo/rakebackPendiente.ts); afecta Saldo anterior/Liquidaciones igual que uno real. */}
       {manualAbierto && (
         <div className="panel" style={{ marginTop: 14, maxWidth: 560 }}>
-          <h3 style={{ marginTop: 0 }}>Cargar rakeback pendiente viejo</h3>
-          <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-            Para un rakeback de una semana vieja que nunca se cargó en el sistema. Queda igual que un cierre real a
+          <h3 style={{ marginTop: 0 }}>Cargar rakeback pendiente viejo <Ayuda>Para un rakeback de una semana vieja que nunca se cargó en el sistema. Queda igual que un cierre real a
             todos los efectos (Saldo anterior, Liquidaciones) -- no mueve fichas ni genera ningún movimiento de
-            tesorería, solo la deuda de rakeback en sí.
-          </div>
+            tesorería, solo la deuda de rakeback en sí.</Ayuda></h3>
           <div className="form-grid">
             <div className="field">
               <label>Agente</label>
