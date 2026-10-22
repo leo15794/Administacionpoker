@@ -52,7 +52,9 @@ export function useVistaDividida() {
     });
   }, []);
 
-  const posible = ancho >= ANCHO_MINIMO_DIVIDIDA;
+  // Un panel (la app dentro de un iframe) nunca se divide a sí mismo: la elección se guarda en el navegador y sin esto cada panel mostraría otra vista dividida adentro.
+  const embebido = window.self !== window.top;
+  const posible = !embebido && ancho >= ANCHO_MINIMO_DIVIDIDA;
   return { estado, guardar, foco, setFoco, posible, visible: estado.activa && posible };
 }
 
