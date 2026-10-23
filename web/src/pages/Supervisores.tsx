@@ -1116,6 +1116,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
             subordinados={subordinados ?? []}
             sinAgente={agentesModo}
             onCancel={() => setPagoCobro(null)}
+            onParcial={refrescarSeleccionado}
             onDone={() => {
               setPagoCobro(null);
               refrescarSeleccionado();
@@ -1207,6 +1208,7 @@ function PagoCobroForm({
   subordinados,
   sinAgente,
   onDone,
+  onParcial,
   onCancel,
 }: {
   tipo: "PAGO" | "COBRO";
@@ -1214,10 +1216,13 @@ function PagoCobroForm({
   subordinados: any[];
   sinAgente?: boolean;
   onDone: () => void;
+  onParcial?: () => void;
   onCancel: () => void;
 }) {
   const [amount, setAmount] = useState("");
-  const [agentId, setAgentId] = useState("");
+  // Varios agentes en un mismo pago/cobro (23/10/2026, pedido de Leo): agente tildado -> importe de ese agente. Cada uno se
+  // registra como un movimiento propio con su etiqueta; todos mueven la misma cuenta corriente del titular.
+  const [sel, setSel] = useState<Record<string, string>>({});
   const [paymentLink, setPaymentLink] = useState("");
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -1228,8 +1233,12 @@ function PagoCobroForm({
   const agenteObligatorio = !!supervisor.exigir_agente_en_movimientos && !winLose && !sinAgente;
   const fichas = Number(supervisor.fichas_reales);
   const cc = Number(supervisor.cuenta_corriente);
-  const monto = Number(String(amount).replace(",", "."));
-  const montoValido = Number.isFinite(monto) && monto > 0;
+  const num = (v: string) => Number(String(v).replace(",", "."));
+  const tildados = Object.keys(sel);
+  const hayAgentes = tildados.length > 0;
+  const montosAgentes = tildados.map((id) => num(sel[id]));
+  const monto = hayAgentes ? Math.round(montosAgentes.reduce((t, n) => t + (Number.isFinite(n) && n > 0 ? n : 0), 0) * 100) / 100 : num(amount);
+  const montoValido = hayAgentes ? montosAgentes.every((n) => Number.isFinite(n) && n > 0) : Number.isFinite(monto) && monto > 0;
   const signo = tipo === "PAGO" ? -1 : 1;
   const ccNuevo = montoValido ? Math.round((cc + signo * monto) * 100) / 100 : cc;
   const totalAntes = fichas + cc;
@@ -1239,22 +1248,36 @@ function PagoCobroForm({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!montoValido) return setMsg({ ok: false, text: "El importe tiene que ser mayor a 0." });
-    if (agenteObligatorio && !agentId) {
+    if (!montoValido) return setMsg({ ok: false, text: hayAgentes ? "Cada agente elegido necesita un importe mayor a 0." : "El importe tiene que ser mayor a 0." });
+    if (agenteObligatorio && !hayAgentes) {
       return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
     }
     setLoading(true);
+    // Un movimiento por agente, uno atrás del otro. Si alguno falla, los anteriores ya quedaron registrados: se sacan de la
+    // selección y se avisa cuáles, para no repetirlos al reintentar.
+    const destinos: (string | null)[] = hayAgentes ? tildados : [null];
+    const hechos: string[] = [];
     try {
-      await api.registrarMovimientoSupervisor(supervisor.id, {
-        type: tipo,
-        amount: monto,
-        agentId: agentId || null,
-        notes: notes.trim() || null,
-        paymentLink: paymentLink.trim() || null,
-      });
+      for (const id of destinos) {
+        await api.registrarMovimientoSupervisor(supervisor.id, {
+          type: tipo,
+          amount: id ? num(sel[id]) : monto,
+          agentId: id,
+          notes: notes.trim() || null,
+          paymentLink: paymentLink.trim() || null,
+        });
+        if (id) hechos.push(id);
+      }
       onDone();
     } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
+      const nombre = (id: string) => subordinados.find((a) => a.id === id)?.name ?? id;
+      if (hechos.length > 0) {
+        setSel((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !hechos.includes(id))));
+        onParcial?.();
+        setMsg({ ok: false, text: `Se registraron: ${hechos.map(nombre).join(", ")}. Falló el siguiente: ${err.message || "error desconocido"}. Los ya registrados se sacaron de la lista.` });
+      } else {
+        setMsg({ ok: false, text: err.message || "No se pudo registrar el movimiento." });
+      }
     } finally {
       setLoading(false);
     }
@@ -1267,6 +1290,7 @@ function PagoCobroForm({
           ? "Le mandamos USDT: se resta de su cuenta corriente y sale de Wallet Manos."
           : "Nos manda USDT: se suma a su cuenta corriente y entra a Wallet Manos."}
       </div>
+      {!hayAgentes && (
       <div className="field">
         <label>Importe (USDT)</label>
         <input
@@ -1289,13 +1313,45 @@ function PagoCobroForm({
           </div>
         )}
       </div>
+      )}
       {!sinAgente && (
         <div className="field">
-          <label>Agente {agenteObligatorio ? "" : winLose ? "(opcional: si es de todo el grupo, dejalo vacío)" : "(opcional)"}</label>
-          <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">{agenteObligatorio ? "Elegir..." : winLose ? "— Todo el grupo —" : "— Ninguno —"}</option>
-            {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+          <label>Agentes {agenteObligatorio ? "(elegí al menos uno)" : winLose ? "(opcional: si es de todo el grupo, no tildes ninguno)" : "(opcional: tildá uno o varios y poné el importe de cada uno)"}</label>
+          <div className="pc-ags">
+            {subordinados.map((a) => {
+              const on = a.id in sel;
+              const mv = Number(a.cc_movido ?? 0);
+              return (
+                <div key={a.id} className={`pc-ag ${on ? "on" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={(e) => setSel((prev) => {
+                      const n = { ...prev };
+                      if (e.target.checked) n[a.id] = ""; else delete n[a.id];
+                      return n;
+                    })}
+                    aria-label={`Elegir ${a.name}`}
+                  />
+                  <div>
+                    <b>{a.name}</b>
+                    <small>Movido a su nombre en la cuenta corriente: <b className={mv < -0.004 ? "neg" : mv > 0.004 ? "pos" : ""}>{fmt(mv)}</b></small>
+                  </div>
+                  <input
+                    className="pc-imp"
+                    value={on ? sel[a.id] : ""}
+                    disabled={!on}
+                    placeholder="0,00"
+                    inputMode="decimal"
+                    onChange={(e) => setSel((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {hayAgentes && (
+            <div className="pc-tot"><span className="muted">{tildados.length} agente{tildados.length === 1 ? "" : "s"} elegido{tildados.length === 1 ? "" : "s"}</span><b>Total {tipo === "PAGO" ? "a pagar" : "a cobrar"}: {fmt(monto)}</b></div>
+          )}
         </div>
       )}
       <div className="field">
@@ -1333,7 +1389,7 @@ function PagoCobroForm({
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
         <button className="btn" disabled={loading || !montoValido}>
-          {loading ? "Guardando..." : tipo === "PAGO" ? "Confirmar pago" : "Confirmar cobro"}
+          {loading ? "Guardando..." : `Confirmar ${tipo === "PAGO" ? "pago" : "cobro"}${tildados.length > 1 ? "s (" + tildados.length + ")" : ""}`}
         </button>
       </div>
     </form>
