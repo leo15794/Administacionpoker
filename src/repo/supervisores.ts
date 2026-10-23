@@ -72,16 +72,12 @@ export async function getSupervisorConCuenta(supervisorAgentId: string) {
 export async function listSubordinados(supervisorAgentId: string) {
   const cuenta = await agentesDeLaCuenta(supervisorAgentId);
   if (!cuenta) return [];
-  // cc_movido: lo que se movió de la cuenta corriente con la etiqueta de cada agente (pagos, cobros, ajustes, etc.; sin los
-  // revertidos). No es un saldo del agente -- la cuenta corriente es una sola, la del titular -- sino su aporte acumulado.
-  const mov = await pool.query(
-    `SELECT agent_id, SUM(cuenta_corriente_delta) AS cc FROM supervisor_movimientos
-     WHERE supervisor_agent_id = $1 AND agent_id IS NOT NULL AND COALESCE(status, '') <> 'REVERTIDO'
-     GROUP BY agent_id`,
-    [supervisorAgentId]
-  );
-  const porAgente = new Map<string, number>(mov.rows.map((r: any) => [r.agent_id as string, Number(r.cc)]));
-  return cuenta.agentes.map((a: any) => ({ ...a, cc_movido: round2(porAgente.get(a.id) ?? 0) }));
+  // cc_agente: la cuenta corriente de cada agente dentro de la cuenta del titular, la misma que muestra la tabla "Fichas en
+  // tiempo real por agente" (listSaldosPorAgenteSupervisor: migración + movimientos aplicados + rakeback de cierres). Los
+  // agentes que ya no son subordinados quedan afuera; lo que no tiene agente asignado no se reparte.
+  const saldos = await listSaldosPorAgenteSupervisor(supervisorAgentId);
+  const porAgente = new Map<string, number>(saldos.filter((f) => f.agentId).map((f) => [f.agentId as string, f.cuentaCorriente]));
+  return cuenta.agentes.map((a: any) => ({ ...a, cc_agente: round2(porAgente.get(a.id) ?? 0) }));
 }
 
 // Cuenta de un AGENTE INDIVIDUAL (20/10/2026, pedido de Leo: "crearia la seccion Agentes", mismo sistema que los

@@ -1320,7 +1320,7 @@ function PagoCobroForm({
           <div className="pc-ags">
             {subordinados.map((a) => {
               const on = a.id in sel;
-              const mv = Number(a.cc_movido ?? 0);
+              const mv = Number(a.cc_agente ?? 0);
               return (
                 <div key={a.id} className={`pc-ag ${on ? "on" : ""}`}>
                   <input
@@ -1335,7 +1335,7 @@ function PagoCobroForm({
                   />
                   <div>
                     <b>{a.name}</b>
-                    <small>Movido a su nombre en la cuenta corriente: <b className={mv < -0.004 ? "neg" : mv > 0.004 ? "pos" : ""}>{fmt(mv)}</b></small>
+                    <small>Su cuenta corriente: <b className={mv < -0.004 ? "neg" : mv > 0.004 ? "pos" : ""}>{fmt(mv)}</b></small>
                   </div>
                   <input
                     className="pc-imp"
