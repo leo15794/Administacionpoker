@@ -20,6 +20,7 @@ import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
 import TeamBackPruebaTab from "./TeamBackPrueba";
 import { clearBadge } from "../badge";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
 import { iconosPoker } from "../components/IconosPoker";
@@ -1034,6 +1035,7 @@ function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
   const [notificando, setNotificando] = useState<string | null>(null);
   // Vista (19/10/2026, mockup aprobado): filtro por estado de pago y panel de "Semana nueva…".
   const [filtroEstado, setFiltroEstado] = useState<"todos" | "pendientes" | "pagados">("todos");
+  const [buscaLiq, setBuscaLiq] = useState("");
   const [nuevaAbierta, setNuevaAbierta] = useState(false);
   const [nuevaInicio, setNuevaInicio] = useState("");
   const [nuevaFin, setNuevaFin] = useState("");
@@ -1196,8 +1198,12 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
   const filasOrdenadas = [...filas].sort(
     (a, b) => Number(!!a.pagado) - Number(!!b.pagado) || Number(b.total_acreditado) - Number(a.total_acreditado)
   );
-  const filasVista = filasOrdenadas.filter((f) => (filtroEstado === "todos" ? true : filtroEstado === "pendientes" ? !f.pagado : !!f.pagado));
-  const pendienteUnico = nPendientes === 1 ? filas.find((f) => !f.pagado) : null;
+  const qLiq = buscaLiq.trim().toLowerCase();
+  const filasVista = filasOrdenadas.filter(
+    (f) => (filtroEstado === "todos" ? true : filtroEstado === "pendientes" ? !f.pagado : !!f.pagado) && (qLiq === "" || `${f.player_name} ${f.suprema_player_id}`.toLowerCase().includes(qLiq))
+  );
+  // Estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): paginación de las filas.
+  const pgLiq = usePaginado(filasVista, "dp_tb_liq_tamano", [weekStart, filtroEstado, buscaLiq]);
 
   function itemsFila(f: any) {
     const verLiquidacion = {
@@ -1241,34 +1247,22 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
         )}
 
       {filas.length > 0 && (
-        <div className="kpi-grid tb-kpis">
-          <div className="kpi-card">
-            <div className="label">Total de la semana</div>
-            <div className="value">{usd(totalGeneral)}</div>
-            <div className="muted kpi-sub">{filas.length} jugador{filas.length === 1 ? "" : "es"} con liquidación</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Pagado</div>
-            <div className="value pos">{usd(totalPagado)}</div>
-            <div className="muted kpi-sub">{nPagadas} de {filas.length} jugador{filas.length === 1 ? "" : "es"}</div>
-          </div>
-          <div className={`kpi-card${nPendientes > 0 ? " kpi-warn" : ""}`}>
-            <div className="label">Pendiente de pago</div>
-            <div className={`value${nPendientes > 0 ? " warn" : ""}`}>{usd(totalPendiente)}</div>
-            <div className="muted kpi-sub">
-              {nPendientes} jugador{nPendientes === 1 ? "" : "es"}
-              {pendienteUnico ? ` · ${pendienteUnico.player_name}` : ""}
-            </div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Referidos activos</div>
-            <div className="value">{referidosActivosTotal}</div>
-            <div className="muted kpi-sub">sumando todos los jugadores</div>
-          </div>
-        </div>
+        <WmSaldoCard
+          etiqueta={`TOTAL DE LA SEMANA${weekStart ? ` · ${diaMes(weekStart)} AL ${diaMes(semanas.find((x) => String(x.week_start).slice(0, 10) === weekStart)?.week_end ?? weekStart)}` : ""}`}
+          monto={usd(totalGeneral)}
+          sub={`${filas.length} jugador${filas.length === 1 ? "" : "es"} con liquidación`}
+        >
+          <WmConteos
+            items={[
+              { etiqueta: "PAGADO", valor: <span style={{ color: "var(--green)" }}>{usd(totalPagado)}</span> },
+              { etiqueta: "PENDIENTE DE PAGO", valor: <span style={nPendientes > 0 ? { color: "var(--amber)" } : undefined}>{usd(totalPendiente)}</span> },
+              { etiqueta: "REFERIDOS ACTIVOS", valor: referidosActivosTotal },
+            ]}
+          />
+        </WmSaldoCard>
       )}
 
-      <div className="panel panel-visible">
+      <div className="wm-card wm-tabla">
         <div className="liq-toolbar">
           <button className="btn" disabled={calculando} onClick={recalcularSeleccionada}>
             {calculando ? "Calculando..." : "Calcular / recalcular"}
@@ -1309,19 +1303,23 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
           )}
           <span className="liq-toolbar-spacer" />
           {filas.length > 0 && (
-            <div className="seg">
-              <button className={filtroEstado === "todos" ? "on" : ""} onClick={() => setFiltroEstado("todos")}>
-                Todos<span className="n">{filas.length}</span>
-              </button>
-              <button className={filtroEstado === "pendientes" ? "on" : ""} onClick={() => setFiltroEstado("pendientes")}>
-                Pendientes<span className="n">{nPendientes}</span>
-              </button>
-              <button className={filtroEstado === "pagados" ? "on" : ""} onClick={() => setFiltroEstado("pagados")}>
-                Pagados<span className="n">{nPagadas}</span>
-              </button>
-            </div>
+            <input className="wm-in" placeholder="Buscar jugador..." value={buscaLiq} onChange={(e) => setBuscaLiq(e.target.value)} style={{ minWidth: 200 }} />
           )}
         </div>
+
+        {filas.length > 0 && (
+          <WmTabs
+            actual={filtroEstado}
+            onChange={setFiltroEstado}
+            tabs={
+              [
+                { k: "todos", t: "Todos", n: filas.length },
+                { k: "pendientes", t: "Pendientes", n: nPendientes },
+                { k: "pagados", t: "Pagados", n: nPagadas },
+              ] as WmTab<typeof filtroEstado>[]
+            }
+          />
+        )}
 
         {nuevaAbierta && (
           <div className="liq-nueva">
@@ -1369,11 +1367,16 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
               </tr>
             </thead>
             <tbody>
-              {filasVista.map((f) => (
+              {pgLiq.recorte.map((f) => (
                 <tr key={f.id} className={f.pagado ? "" : "fila-pendiente"}>
                   <td>
-                    <div className="liq-name">{f.player_name}</div>
-                    <div className="liq-sub">ID {f.suprema_player_id}</div>
+                    <div className="wm-who">
+                      <span className="wm-av">{String(f.player_name ?? "?").trim().slice(0, 2).toUpperCase()}</span>
+                      <div>
+                        <div className="liq-name">{f.player_name}</div>
+                        <div className="liq-sub">ID {f.suprema_player_id}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="num">{usd(f.rake_propio)}</td>
                   <td><EscalonPill l={f} /></td>
@@ -1433,7 +1436,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
         </div>
 
         <div className="liq-cards">
-          {filasVista.map((f) => (
+          {pgLiq.recorte.map((f) => (
             <div key={f.id} className={`liq-card${f.pagado ? " pagada" : " pendiente"}`}>
               <div className="liq-card-body">
                 <div className="liq-card-top">
@@ -1475,6 +1478,7 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
             <div className="muted">{filas.length === 0 ? "Sin datos para esta semana todavía." : "Ningún jugador coincide con este filtro."}</div>
           )}
         </div>
+        {filasVista.length > 0 && <WmPaginacion p={pgLiq} unidad="liquidaciones" />}
       </div>
 
       {individual && (
@@ -1906,19 +1910,16 @@ function HistorialPagosTab() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [jugador, setJugador] = useState("");
-  const [medioPago, setMedioPago] = useState<"" | "USDT" | "FICHAS" | "PENDIENTE">("");
+  // Estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas por medio de pago, buscador, fechas en "Más filtros" y paginación.
+  const [busca, setBusca] = useState("");
+  const [masFiltros, setMasFiltros] = useState(false);
+  const [medioTab, setMedioTab] = useState<"todos" | "FICHAS" | "COMPENSACION" | "USDT" | "PENDIENTE">("todos");
 
   async function cargar() {
     setCargando(true);
     setMsg(null);
     try {
-      const r = await api.teamback.historialPagos({
-        desde: desde || undefined,
-        hasta: hasta || undefined,
-        jugador: jugador || undefined,
-        medioPago: medioPago || undefined,
-      });
+      const r = await api.teamback.historialPagos({ desde: desde || undefined, hasta: hasta || undefined });
       setFilas(r.filas);
       setTotales(r.totales);
     } catch (err: any) {
@@ -1933,10 +1934,25 @@ function HistorialPagosTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const medioDe = (f: any) => (f.pagado ? (f.medio_pago ?? "FICHAS") : "PENDIENTE");
+  const q = busca.trim().toLowerCase();
+  const base = filas.filter((f) => q === "" || String(f.player_name).toLowerCase().includes(q));
+  const cuentas = {
+    todos: base.length,
+    FICHAS: base.filter((f) => medioDe(f) === "FICHAS").length,
+    COMPENSACION: base.filter((f) => medioDe(f) === "COMPENSACION").length,
+    USDT: base.filter((f) => medioDe(f) === "USDT").length,
+    PENDIENTE: base.filter((f) => medioDe(f) === "PENDIENTE").length,
+  };
+  const visibles = base.filter((f) => medioTab === "todos" || medioDe(f) === medioTab);
+  const pg = usePaginado(visibles, "dp_tb_pagos_tamano", [busca, medioTab, filas]);
+  const totalVisible = visibles.reduce((a, f) => a + Number(f.total_acreditado), 0);
+  const iniciales = (n: string) => String(n ?? "?").trim().slice(0, 2).toUpperCase();
+
   function exportar() {
     exportCsv(
       "historial_pagos_teamback.csv",
-      filas.map((f) => ({
+      visibles.map((f) => ({
         jugador: f.player_name,
         semana_inicio: dateShort(f.week_start),
         semana_fin: dateShort(f.week_end),
@@ -1948,104 +1964,92 @@ function HistorialPagosTab() {
   }
 
   return (
-    <div className="panel">
-      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
-        Todos los pagos de TeamBack Affiliates en un solo lugar, cruzando todos los jugadores y
-        todas las semanas -- filtrá por fecha, jugador o medio de pago.
-      </div>
-      {msg && <div className="error">{msg.text}</div>}
-
-      <div className="form-grid" style={{ marginBottom: 16 }}>
-        <div className="field">
-          <label>Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Medio de pago</label>
-          <select value={medioPago} onChange={(e) => setMedioPago(e.target.value as any)}>
-            <option value="">Todos</option>
-            <option value="USDT">USDT</option>
-            <option value="FICHAS">Fichas</option>
-            <option value="PENDIENTE">Pendiente</option>
-          </select>
-        </div>
-        <div className="field" style={{ minWidth: 220 }}>
-          <label>Jugador</label>
-          <input type="text" placeholder="Buscar jugador..." value={jugador} onChange={(e) => setJugador(e.target.value)} />
-        </div>
-        <div className="field" style={{ alignSelf: "flex-end" }}>
-          <button className="btn" onClick={cargar} disabled={cargando}>
-            {cargando ? "Buscando..." : "Buscar"}
-          </button>
-        </div>
-        <div className="field" style={{ alignSelf: "flex-end" }}>
-          <button className="btn secondary" onClick={exportar} disabled={filas.length === 0}>
-            Exportar CSV
-          </button>
-        </div>
-      </div>
+    <div className="wm">
+      {msg && <div className="error" style={{ marginBottom: 12 }}>{msg.text}</div>}
 
       {totales && (
-        <div className="kpi-sub-grid" style={{ marginBottom: 20 }}>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Total pagado en USDT</div>
-            <div className="kpi-sub-value" style={{ color: "var(--green)" }}>{usd(totales.total_usdt)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_usdt} pago{totales.count_usdt === "1" ? "" : "s"}</div>
-          </div>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Total pagado en Fichas</div>
-            <div className="kpi-sub-value" style={{ color: "var(--green)" }}>{usd(totales.total_fichas)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_fichas} pago{totales.count_fichas === "1" ? "" : "s"}</div>
-          </div>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Total pendiente</div>
-            <div className="kpi-sub-value" style={{ color: "var(--amber)" }}>{usd(totales.total_pendiente)}</div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{totales.count_pendiente} liquidaci{totales.count_pendiente === "1" ? "ón" : "ones"} sin pagar</div>
-          </div>
-        </div>
+        <WmSaldoCard
+          etiqueta="TOTAL PAGADO · TEAMBACK"
+          monto={usd(Number(totales.total_usdt) + Number(totales.total_fichas))}
+          signo="pos"
+          sub={`${totales.count_fichas} pago${totales.count_fichas === "1" ? "" : "s"} en fichas · ${totales.count_usdt} en USDT`}
+        >
+          <WmConteos
+            items={[
+              { etiqueta: "PAGADO EN USDT", valor: usd(totales.total_usdt) },
+              { etiqueta: "PAGADO EN FICHAS", valor: usd(totales.total_fichas) },
+              { etiqueta: "PENDIENTE", valor: <span style={{ color: "var(--amber)" }}>{usd(totales.total_pendiente)}</span> },
+            ]}
+          />
+        </WmSaldoCard>
       )}
 
-      {cargando ? (
-        <Loading />
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Jugador</th>
-              <th>Semana</th>
-              <th className="num">Total liquidado</th>
-              <th>Medio de pago</th>
-              <th>Fecha de pago</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((f) => (
-              <tr key={f.id}>
-                <td>{f.player_name}</td>
-                <td>{dateShort(f.week_start)} al {dateShort(f.week_end)}</td>
-                <td className="num">{usd(f.total_acreditado)}</td>
-                <td>
+      <div className="wm-card">
+        <div className="wm-cab">
+          <div className="wm-h">Pagos <span className="wm-n">{visibles.length}</span></div>
+          <div className="wm-fil">
+            <input className="wm-in" placeholder="Buscar jugador..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <button type="button" className={`wm-in wm-btn ${masFiltros || desde || hasta ? "on" : ""}`} onClick={() => setMasFiltros((v) => !v)}>⚲ Fechas ▾</button>
+            <button type="button" className="wm-in wm-btn" onClick={exportar} disabled={visibles.length === 0}>Exportar CSV</button>
+          </div>
+        </div>
+        {(masFiltros || desde || hasta) && (
+          <div className="wm-mas">
+            <label>Desde<input className="wm-in" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
+            <label>Hasta<input className="wm-in" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></label>
+            <button type="button" className="btn small" onClick={cargar} disabled={cargando}>{cargando ? "Buscando..." : "Aplicar fechas"}</button>
+          </div>
+        )}
+        <WmTabs
+          actual={medioTab}
+          onChange={setMedioTab}
+          tabs={
+            [
+              { k: "todos", t: "Todos", n: cuentas.todos },
+              { k: "FICHAS", t: "Fichas", n: cuentas.FICHAS },
+              { k: "COMPENSACION", t: "Compensación", n: cuentas.COMPENSACION },
+              { k: "USDT", t: "USDT", n: cuentas.USDT },
+              { k: "PENDIENTE", t: "Pendientes", n: cuentas.PENDIENTE },
+            ] as WmTab<typeof medioTab>[]
+          }
+        />
+
+        {cargando ? (
+          <Loading />
+        ) : (
+          <>
+            <div className="hp-th">
+              <span>JUGADOR</span><span>SEMANA</span><span>TOTAL LIQUIDADO</span><span>MEDIO DE PAGO</span><span>FECHA DE PAGO</span>
+            </div>
+            {pg.recorte.map((f) => (
+              <div className="hp-fila" key={f.id}>
+                <div className="wm-who">
+                  <span className="wm-av">{iniciales(f.player_name)}</span>
+                  <div><div className="saldo-name">{f.player_name}</div></div>
+                </div>
+                <span className="ds">{dateShort(f.week_start)} al {dateShort(f.week_end)}</span>
+                <span className="t">{usd(f.total_acreditado)}</span>
+                <span>
                   {f.pagado ? (
-                    <span className="badge pos">{etiquetaMedio(f.medio_pago)}</span>
+                    <span className={`wm-pill ${f.medio_pago === "COMPENSACION" ? "neutro" : "in"}`}>{etiquetaMedio(f.medio_pago)}</span>
                   ) : (
-                    <span className="pill a">Por cobrar</span>
+                    <span className="wm-pill gris">Por cobrar</span>
                   )}
-                </td>
-                <td className="muted">{f.paid_at ? dateShort(f.paid_at) : "—"}</td>
-              </tr>
+                </span>
+                <span className="ds">{f.paid_at ? dateShort(f.paid_at) : "—"}</span>
+              </div>
             ))}
-            {filas.length === 0 && (
-              <tr>
-                <td colSpan={5} className="muted">No hay pagos que coincidan con estos filtros.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
+            {visibles.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>No hay pagos que coincidan con estos filtros.</div>}
+            <div className="wm-pie">
+              <div className="wm-tot">
+                <span>Total liquidado de lo filtrado <b className="in">{usd(totalVisible)}</b></span>
+                <small>{visibles.length} pago{visibles.length === 1 ? "" : "s"}</small>
+              </div>
+            </div>
+            <WmPaginacion p={pg} unidad="pagos" />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2212,6 +2216,9 @@ function JugadoresTab() {
   const [jugadores, setJugadores] = useState<any[]>([]);
   const [nuevo, setNuevo] = useState<any | null>(null);
   const [configurando, setConfigurando] = useState<any | null>(null);
+  // Estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador y paginación en una sola lista.
+  const [tabJug, setTabJug] = useState<"todos" | "directos" | "referidos" | "sinconfig" | "inactivos">("todos");
+  const [buscaJug, setBuscaJug] = useState("");
 
   async function cargar() {
     setJugadores(await api.teamback.listPlayers(true));
@@ -2227,6 +2234,12 @@ function JugadoresTab() {
   // filas -- no cambia nada de cómo se cargan, editan o liquidan.
   const directos = jugadores.filter((j) => !j.referido_por_id);
   const referidos = jugadores.filter((j) => j.referido_por_id);
+  const qJ = buscaJug.trim().toLowerCase();
+  const baseJug = jugadores.filter((j) => qJ === "" || `${j.name} ${j.suprema_player_id} ${j.referido_por_name ?? ""}`.toLowerCase().includes(qJ));
+  const visiblesJug = baseJug.filter((j) =>
+    tabJug === "todos" ? true : tabJug === "directos" ? !j.referido_por_id : tabJug === "referidos" ? !!j.referido_por_id : tabJug === "sinconfig" ? !j.tiene_config : !j.active
+  );
+  const pgJug = usePaginado(visiblesJug, "dp_tb_jugadores_tamano", [tabJug, buscaJug]);
 
   function filaJugador(j: any) {
     return (
@@ -2259,65 +2272,70 @@ function JugadoresTab() {
   }
 
   return (
-    <>
-      <div className="panel">
-        <div className="topbar" style={{ marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>Jugadores</h3>
-          <button className="btn small" onClick={() => setNuevo({})}>+ Nuevo jugador</button>
-        </div>
-        <div className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
-          Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general
-          para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el
-          suyo (botón "% Configurar").
-        </div>
-      </div>
+    <div className="wm">
+      <WmSaldoCard
+        etiqueta="COMISIÓN ACUMULADA · JUGADORES"
+        monto={usd(jugadores.reduce((a, j) => a + Number(j.comision_total ?? 0), 0))}
+        sub={`${jugadores.length} jugador${jugadores.length === 1 ? "" : "es"} · ${directos.length} directos y ${referidos.length} referidos`}
+      >
+        <WmConteos
+          items={[
+            { etiqueta: "COMISIONES PAGADAS", valor: usd(jugadores.reduce((a, j) => a + Number(j.comision_pagada ?? 0), 0)) },
+            { etiqueta: "SIN % CONFIGURAR", valor: jugadores.filter((j) => !j.tiene_config).length },
+            { etiqueta: "INACTIVOS", valor: jugadores.filter((j) => !j.active).length },
+          ]}
+        />
+      </WmSaldoCard>
 
-      <div className="panel" style={{ marginTop: 16 }}>
-        <h3 style={{ margin: "0 0 10px" }}>Jugadores directos ({directos.length})</h3>
-        <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-          Llegaron solos, sin que nadie los haya referido.
+      <div className="wm-card wm-tabla">
+        <div className="wm-cab">
+          <div className="wm-h">Jugadores <span className="wm-n">{visiblesJug.length}</span></div>
+          <div className="wm-fil">
+            <input className="wm-in" placeholder="Buscar jugador, ID o referente..." value={buscaJug} onChange={(e) => setBuscaJug(e.target.value)} />
+            <button type="button" className="btn small" onClick={() => setNuevo({})}>+ Nuevo jugador</button>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>ID Suprema</th>
-              <th>Fecha de alta</th>
-              <th>Referido por</th>
-              <th className="num"># Referidos</th>
-              <th className="num">Comisión acumulada</th>
-              <th className="num">Comisiones pagadas</th>
-              <th className="num">%</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>{directos.map(filaJugador)}</tbody>
-        </table>
-      </div>
-
-      <div className="panel" style={{ marginTop: 16 }}>
-        <h3 style={{ margin: "0 0 10px" }}>Jugadores referidos ({referidos.length})</h3>
-        <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-          Entraron referidos por otro jugador (columna "Referido por").
+        <div className="muted" style={{ marginBottom: 8, fontSize: 12.5 }}>
+          Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el suyo (botón "% Configurar").
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>ID Suprema</th>
-              <th>Fecha de alta</th>
-              <th>Referido por</th>
-              <th className="num"># Referidos</th>
-              <th className="num">Comisión acumulada</th>
-              <th className="num">Comisiones pagadas</th>
-              <th className="num">%</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>{referidos.map(filaJugador)}</tbody>
-        </table>
+        <WmTabs
+          actual={tabJug}
+          onChange={setTabJug}
+          tabs={
+            [
+              { k: "todos", t: "Todos", n: baseJug.length },
+              { k: "directos", t: "Directos", n: baseJug.filter((j) => !j.referido_por_id).length },
+              { k: "referidos", t: "Referidos", n: baseJug.filter((j) => !!j.referido_por_id).length },
+              { k: "sinconfig", t: "Sin % configurar", n: baseJug.filter((j) => !j.tiene_config).length },
+              { k: "inactivos", t: "Inactivos", n: baseJug.filter((j) => !j.active).length },
+            ] as WmTab<typeof tabJug>[]
+          }
+        />
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>ID Suprema</th>
+                <th>Fecha de alta</th>
+                <th>Referido por</th>
+                <th className="num"># Referidos</th>
+                <th className="num">Comisión acumulada</th>
+                <th className="num">Comisiones pagadas</th>
+                <th className="num">%</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pgJug.recorte.map(filaJugador)}
+              {visiblesJug.length === 0 && (
+                <tr><td colSpan={10} className="muted">Ningún jugador coincide con estos filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <WmPaginacion p={pgJug} unidad="jugadores" />
       </div>
 
       {nuevo && (
@@ -2330,7 +2348,7 @@ function JugadoresTab() {
           <FormConfigJugador jugador={configurando} onSaved={() => { setConfigurando(null); cargar(); }} />
         </Modal>
       )}
-    </>
+    </div>
   );
 }
 

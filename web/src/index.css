@@ -3029,3 +3029,33 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 /* Tablas con el estilo de la Wallet en pantallas que mantienen sus tablas (23/10/2026): encabezado chico en mayúsculas y fila resaltada al pasar el mouse */
 .wm-tabla table th { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
 .wm-tabla table tbody tr:hover > td { background: var(--panel-2); }
+
+/* TeamBack > Historial de pagos con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.hp-th, .hp-fila { display: grid; grid-template-columns: minmax(0, 1.5fr) 1.4fr 1fr 150px 1fr; gap: 12px; align-items: center; }
+.hp-th { padding: 10px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.hp-th > span:nth-child(3) { text-align: right; }
+.hp-fila { padding: 11px 8px; border-top: 1px solid var(--border); }
+.hp-fila:hover { background: var(--panel-2); }
+.hp-fila .t { text-align: right; font-size: 15.5px; font-weight: 750; white-space: nowrap; }
+.hp-fila .ds { font-size: 12.5px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .hp-th { display: none; }
+  .hp-fila { grid-template-columns: minmax(0, 1fr) auto; }
+  .hp-fila > :nth-child(2) { grid-column: 1; } .hp-fila > :nth-child(3) { grid-column: 2; grid-row: 1; }
+  .hp-fila > :nth-child(4), .hp-fila > :nth-child(5) { grid-column: auto; }
+}
+
+/* TeamBack > Cuentas de jugadores con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.cj-th, .cj-fila { display: grid; grid-template-columns: minmax(0, 1.6fr) 1fr 1fr 1fr 1fr 120px; gap: 12px; align-items: center; }
+.cj-th { padding: 10px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.cj-th > span:nth-child(n+2):nth-child(-n+4) { text-align: right; }
+.cj-fila { padding: 11px 8px; border-top: 1px solid var(--border); }
+.cj-fila:hover { background: var(--panel-2); }
+.cj-fila .n { text-align: right; font-size: 14.5px; white-space: nowrap; }
+@media (max-width: 768px) {
+  .cj-th { display: none; }
+  .cj-fila { grid-template-columns: minmax(0, 1fr) auto; }
+  .cj-fila > :nth-child(2), .cj-fila > :nth-child(3) { display: none; }
+  .cj-fila > :nth-child(4) { grid-column: 2; grid-row: 1; }
+  .cj-fila > :nth-child(5) { grid-column: 1; } .cj-fila > :nth-child(6) { grid-column: 2; }
+}

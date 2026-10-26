@@ -3,6 +3,7 @@ import { api } from "../api";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { usdCents as usd } from "../fmt";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 // Cuentas de jugadores de TeamBack Affiliates (21/10/2026, pedido de Leo): una cuenta corriente por jugador, como las de supervisores y agentes del
 // sistema principal. Sus liquidaciones suman a favor; lo que se le entrega a cuenta (fichas) queda como deuda y se compensa SOLO contra las liquidaciones
@@ -21,6 +22,14 @@ export default function CuentasJugadoresTab() {
   const [datos, setDatos] = useState<any | null>(null);
   const [error, setError] = useState("");
   const [sel, setSel] = useState<string | null>(null);
+  // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas por estado, buscador y paginación.
+  const [estadoTab, setEstadoTab] = useState<"todas" | "deben" | "apagar" | "aldia">("todas");
+  const [buscaC, setBuscaC] = useState("");
+  const qC = buscaC.trim().toLowerCase();
+  const todasOrdenadas = [...(datos?.cuentas ?? [])].sort((a: any, b: any) => b.deuda - a.deuda || b.pendiente - a.pendiente || a.name.localeCompare(b.name));
+  const estadoDe = (c: any): "deben" | "apagar" | "aldia" => (c.deuda > 0.004 ? "deben" : c.pendiente > 0.004 ? "apagar" : "aldia");
+  const visibles = todasOrdenadas.filter((c: any) => (estadoTab === "todas" || estadoDe(c) === estadoTab) && (qC === "" || String(c.name).toLowerCase().includes(qC)));
+  const pgC = usePaginado(visibles, "dp_tb_cuentas_tamano", [estadoTab, buscaC]);
 
   function cargar() {
     api.teamback.cuentas().then(setDatos).catch((e: any) => setError(e.message));
@@ -31,40 +40,72 @@ export default function CuentasJugadoresTab() {
   if (error) return <div className="error">{error}</div>;
   if (!datos) return <div className="muted">Cargando...</div>;
   const t = datos.totales;
-  const ordenadas = [...datos.cuentas].sort((a: any, b: any) => b.deuda - a.deuda || b.pendiente - a.pendiente || a.name.localeCompare(b.name));
+  const cuentasTotal = { todas: datos.cuentas.length, deben: datos.cuentas.filter((c: any) => estadoDe(c) === "deben").length, apagar: datos.cuentas.filter((c: any) => estadoDe(c) === "apagar").length, aldia: datos.cuentas.filter((c: any) => estadoDe(c) === "aldia").length };
   return (
-    <div>
+    <div className="wm">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
         Cada jugador tiene su cuenta corriente: las liquidaciones suman a su favor y lo que se le entrega a cuenta (fichas) queda como deuda. La deuda se descuenta sola de sus liquidaciones, de la más vieja a la más nueva, apenas se calculan.
       </div>
-      <div className="stat-row" style={{ marginBottom: 14 }}>
-        <div className="stat-card"><div className="l">Pendiente de pagar</div><div className="v">{usd(t.pendiente)}</div></div>
-        <div className="stat-card"><div className="l">Deuda de jugadores</div><div className="v" style={{ color: t.deuda > 0 ? "var(--red)" : undefined }}>{usd(t.deuda)}</div></div>
-        <div className="stat-card"><div className="l">Compensado hasta hoy</div><div className="v">{usd(t.compensado)}</div></div>
-        <div className="stat-card"><div className="l">Jugadores con deuda</div><div className="v">{t.conDeuda}</div></div>
-      </div>
-      <div className="panel" style={{ overflowX: "auto" }}>
-        <table>
-          <thead>
-            <tr><th>Jugador</th><th style={{ textAlign: "right" }}>A pagar</th><th style={{ textAlign: "right" }}>Deuda</th><th style={{ textAlign: "right" }}>Saldo neto</th><th>Estado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {ordenadas.map((c: any) => (
-              <tr key={c.id}>
-                <td>
-                  <b>{c.name}</b>
-                  {c.semanas_pendientes > 0 && <div className="muted" style={{ fontSize: 12 }}>{c.semanas_pendientes} {c.semanas_pendientes === 1 ? "semana" : "semanas"} sin pagar</div>}
-                </td>
-                <td style={{ textAlign: "right" }}>{c.pendiente > 0 ? usd(c.pendiente) : <span className="muted">—</span>}</td>
-                <td style={{ textAlign: "right", color: c.deuda > 0 ? "var(--red)" : undefined }}>{c.deuda > 0 ? usd(c.deuda) : <span className="muted">—</span>}</td>
-                <td style={{ textAlign: "right" }}><b style={{ color: c.neto < 0 ? "var(--red)" : undefined }}>{signo(c.neto)}</b></td>
-                <td><Estado c={c} /></td>
-                <td style={{ textAlign: "right" }}><button className="btn secondary small" onClick={() => setSel(c.id)}>Ver cuenta</button></td>
-              </tr>
-            ))}
-            {ordenadas.length === 0 && <tr><td colSpan={6} className="muted">Todavía no hay liquidaciones calculadas.</td></tr>}
-          </tbody>
-        </table>
+      <WmSaldoCard
+        etiqueta="DEUDA DE JUGADORES"
+        monto={usd(t.deuda)}
+        signo={t.deuda > 0 ? "neg" : ""}
+        sub={`${t.conDeuda} jugador${t.conDeuda === 1 ? "" : "es"} con deuda`}
+      >
+        <WmConteos
+          items={[
+            { etiqueta: "PENDIENTE DE PAGAR", valor: usd(t.pendiente) },
+            { etiqueta: "COMPENSADO HASTA HOY", valor: usd(t.compensado) },
+          ]}
+        />
+      </WmSaldoCard>
+
+      <div className="wm-card">
+        <div className="wm-cab">
+          <div className="wm-h">Cuentas <span className="wm-n">{visibles.length}</span></div>
+          <div className="wm-fil">
+            <input className="wm-in" placeholder="Buscar jugador..." value={buscaC} onChange={(e) => setBuscaC(e.target.value)} />
+          </div>
+        </div>
+        <WmTabs
+          actual={estadoTab}
+          onChange={setEstadoTab}
+          tabs={
+            [
+              { k: "todas", t: "Todas", n: cuentasTotal.todas },
+              { k: "deben", t: "Nos deben", n: cuentasTotal.deben },
+              { k: "apagar", t: "Le debemos", n: cuentasTotal.apagar },
+              { k: "aldia", t: "Al día", n: cuentasTotal.aldia },
+            ] as WmTab<typeof estadoTab>[]
+          }
+        />
+        <div className="cj-th">
+          <span>JUGADOR</span><span>A PAGAR</span><span>DEUDA</span><span>SALDO NETO</span><span>ESTADO</span><span />
+        </div>
+        {pgC.recorte.map((c: any) => (
+          <div className="cj-fila" key={c.id}>
+            <div className="wm-who">
+              <span className={`wm-av ${c.deuda > 0.004 ? "n" : ""}`}>{String(c.name).trim().slice(0, 2).toUpperCase()}</span>
+              <div>
+                <div className="saldo-name">{c.name}</div>
+                {c.semanas_pendientes > 0 && <div className="saldo-sub">{c.semanas_pendientes} {c.semanas_pendientes === 1 ? "semana" : "semanas"} sin pagar</div>}
+              </div>
+            </div>
+            <span className="n">{c.pendiente > 0 ? usd(c.pendiente) : <span className="muted">—</span>}</span>
+            <span className="n" style={{ color: c.deuda > 0 ? "var(--red)" : undefined }}>{c.deuda > 0 ? usd(c.deuda) : <span className="muted">—</span>}</span>
+            <span className="n"><b style={{ color: c.neto < 0 ? "var(--red)" : undefined }}>{signo(c.neto)}</b></span>
+            <span><Estado c={c} /></span>
+            <span style={{ textAlign: "right" }}><button className="btn secondary small" onClick={() => setSel(c.id)}>Ver cuenta</button></span>
+          </div>
+        ))}
+        {visibles.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>{datos.cuentas.length === 0 ? "Todavía no hay liquidaciones calculadas." : "Ninguna cuenta coincide con estos filtros."}</div>}
+        <div className="wm-pie">
+          <div className="wm-tot">
+            <span>Saldo neto de lo filtrado <b className={visibles.reduce((a: number, c: any) => a + c.neto, 0) >= 0 ? "in" : "out"}>{signo(visibles.reduce((a: number, c: any) => a + c.neto, 0))}</b></span>
+            <small>{visibles.length} cuenta{visibles.length === 1 ? "" : "s"}</small>
+          </div>
+        </div>
+        <WmPaginacion p={pgC} unidad="cuentas" />
       </div>
     </div>
   );
