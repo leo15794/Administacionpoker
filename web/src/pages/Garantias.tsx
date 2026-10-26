@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { usePaginado, WmPaginacion, WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 const TIPO_LABEL: Record<string, string> = {
   ALTA: "Alta",
@@ -31,6 +32,8 @@ export default function Garantias() {
     api.agentes().then(setAgentes);
   }, []);
 
+  const pgHist = usePaginado(historial ?? [], "dp_garantias_hist_tamano", []);
+
   if (error) {
     return (
       <div className="error">
@@ -48,7 +51,7 @@ export default function Garantias() {
   const totalPendiente = totalGarantizado - totalConsumido;
 
   return (
-    <div>
+    <div className="wm">
       <div className="topbar">
         <div>
           <h2>Garantías <Ayuda>Separadas del saldo operativo (BIT-034). Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</Ayuda></h2>
@@ -56,26 +59,16 @@ export default function Garantias() {
         <button className="btn" onClick={() => setShowAjuste({})}>+ Nueva / ajustar garantía</button>
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="label">Total garantizado</div>
-          <div className="value">{usd(totalGarantizado)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Consumido</div>
-          <div className="value">{usd(totalConsumido)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Pendiente</div>
-          <div className="value">{usd(totalPendiente)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Agentes con garantía activa</div>
-          <div className="value">{garantias.length}</div>
-        </div>
-      </div>
+      <WmSaldoCard etiqueta="TOTAL GARANTIZADO" monto={usd(totalGarantizado)} sub={`${garantias.length} agente${garantias.length === 1 ? "" : "s"} con garantía activa`}>
+        <WmConteos
+          items={[
+            { etiqueta: "CONSUMIDO", valor: usd(totalConsumido) },
+            { etiqueta: "PENDIENTE", valor: usd(totalPendiente) },
+          ]}
+        />
+      </WmSaldoCard>
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <h3>Garantías activas</h3>
         {garantias.length === 0 ? (
           <div className="muted">Todavía no hay garantías activas cargadas.</div>
@@ -105,7 +98,7 @@ export default function Garantias() {
         )}
       </div>
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <h3>Historial de movimientos</h3>
         {!historial ? (
           <Loading />
@@ -117,7 +110,7 @@ export default function Garantias() {
               <tr><th>Fecha</th><th>Agente</th><th>Tipo</th><th className="num">Monto</th><th className="num">Garantía resultante</th><th className="num">Consumido resultante</th><th>Notas</th></tr>
             </thead>
             <tbody>
-              {historial.map((m) => (
+              {pgHist.recorte.map((m) => (
                 <tr key={m.id}>
                   <td>{dateShort(m.occurred_at)}</td>
                   <td>{m.agent_name}</td>
@@ -131,6 +124,7 @@ export default function Garantias() {
             </tbody>
           </table>
         )}
+        {historial && historial.length > 0 && <WmPaginacion p={pgHist} unidad="movimientos" />}
       </div>
 
       {showAjuste && (

@@ -79,7 +79,7 @@ export default function TeamBackPruebaTab() {
     }, "Cierre cargado y liquidación calculada.");
   }
 
-  if (!data) return <div className="panel"><Loading /></div>;
+  if (!data) return <div className="wm-card wm-tabla"><Loading /></div>;
 
   const titulares = data.jugadores.filter((j) => !j.referido_por_id);
   const nombreDe = (id: string) => data.jugadores.find((j) => j.id === id)?.name ?? id;
@@ -94,7 +94,7 @@ export default function TeamBackPruebaTab() {
 
       {msg && <div className={msg.ok ? "success" : "error"} style={{ marginBottom: 12 }}>{msg.text}</div>}
 
-      <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="wm-card wm-tabla" style={{ marginBottom: 14 }}>
         <h3 style={{ marginTop: 0 }}>Jugadores de prueba</h3>
         {data.jugadores.length === 0 ? (
           <div className="muted" style={{ marginBottom: 12 }}>Todavía no hay ninguno. Creá uno con usuario y contraseña para poder entrar al portal como jugador.</div>
@@ -155,7 +155,7 @@ export default function TeamBackPruebaTab() {
         </form>
       </div>
 
-      <div className="panel" style={{ marginBottom: 14 }}>
+      <div className="wm-card wm-tabla" style={{ marginBottom: 14 }}>
         <h3 style={{ marginTop: 0 }}>Cargar un cierre a mano</h3>
         {data.jugadores.length === 0 ? (
           <div className="muted">Primero creá un jugador de prueba.</div>
@@ -184,7 +184,7 @@ export default function TeamBackPruebaTab() {
         </div>
       </div>
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <h3 style={{ marginTop: 0 }}>Cierres cargados</h3>
         {data.semanas.length === 0 ? (
           <div className="muted">Todavía no hay cierres de prueba.</div>

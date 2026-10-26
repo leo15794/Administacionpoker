@@ -4,6 +4,7 @@ import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 // Pantalla dedicada para no tener que entrar a Usuarios y permisos → editar cada supervisor
 // solo para ver cuánto le corresponde de comisión por referido. Acá se ven TODOs los
@@ -113,7 +114,7 @@ export default function ComisionesReferidos() {
   if (!data) return <Loading />;
 
   return (
-    <div>
+    <div className="wm">
       <div className="topbar">
         <div>
           <h2>Comisiones por referido <Ayuda>Todos los supervisores con % de comisión por referido configurado, con su saldo acumulado y el historial de cada uno.
@@ -121,11 +122,22 @@ export default function ComisionesReferidos() {
         </div>
       </div>
 
+      {data.length > 0 && (
+        <WmSaldoCard
+          etiqueta="SALDO TOTAL DE COMISIONES"
+          monto={usd(data.reduce((a: number, x: any) => a + Number(x.saldoTotal), 0))}
+          signo={data.reduce((a: number, x: any) => a + Number(x.saldoTotal), 0) >= 0 ? "pos" : "neg"}
+          sub={`${data.length} supervisor${data.length === 1 ? "" : "es"} con comisión por referido`}
+        >
+          <WmConteos items={[{ etiqueta: "AGENTES REFERIDOS", valor: data.reduce((a: number, x: any) => a + (x.referidos?.length ?? 0), 0) }]} />
+        </WmSaldoCard>
+      )}
+
       {data.length === 0 ? (
         <div className="panel muted">Todavía no hay ningún supervisor con comisión por referido configurada.</div>
       ) : (
         data.map((s) => (
-          <div key={s.userId} className="panel" style={{ marginBottom: 16 }}>
+          <div key={s.userId} className="wm-card wm-tabla">
             <div className="topbar" style={{ marginBottom: 8 }}>
               <h3 style={{ margin: 0 }}>{s.email}</h3>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

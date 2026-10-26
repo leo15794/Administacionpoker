@@ -1595,32 +1595,29 @@ function GananciaSemanalTab() {
   const acumulado = datos?.acumulado;
 
   return (
-    <div className="panel">
+    <div className="wm">
+      {acumulado && (
+        <WmSaldoCard
+          etiqueta="GANANCIA ACUMULADA · TEAMBACK"
+          monto={usd(acumulado.ganancia)}
+          signo={acumulado.ganancia >= 0 ? "pos" : "neg"}
+          sub={`${filas.length} semana${filas.length === 1 ? "" : "s"} liquidada${filas.length === 1 ? "" : "s"}`}
+        >
+          <WmConteos
+            items={[
+              { etiqueta: "RAKE PROPIO ACUMULADO", valor: usd(acumulado.rake_propio_total) },
+              { etiqueta: "TOTAL LIQUIDADO ACUMULADO", valor: usd(acumulado.total_liquidado) },
+            ]}
+          />
+        </WmSaldoCard>
+      )}
+      <div className="wm-card wm-tabla">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
         Ganancia = (rake propio total de la semana × 80%) − total liquidado a los jugadores esa
         semana (rakeback + comisiones). Solo aparecen semanas que ya tienen liquidación calculada
         (pestaña Liquidaciones o el botón de Importar semana). El pago se marca desde Liquidaciones.
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-
-      {acumulado && (
-        <div className="kpi-sub-grid" style={{ marginBottom: 16 }}>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Rake propio acumulado</div>
-            <div className="kpi-sub-value">{usd(acumulado.rake_propio_total)}</div>
-          </div>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Total liquidado acumulado</div>
-            <div className="kpi-sub-value">{usd(acumulado.total_liquidado)}</div>
-          </div>
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Ganancia acumulada</div>
-            <div className="kpi-sub-value" style={{ color: acumulado.ganancia >= 0 ? "var(--green)" : "var(--red)" }}>
-              {usd(acumulado.ganancia)}
-            </div>
-          </div>
-        </div>
-      )}
 
       <table>
         <thead>
@@ -1662,6 +1659,7 @@ function GananciaSemanalTab() {
           </tfoot>
         )}
       </table>
+      </div>
     </div>
   );
 }
@@ -1694,23 +1692,15 @@ function WalletEspejoTab() {
   if (cargando) return <div className="panel"><Loading /></div>;
 
   return (
-    <div className="panel">
-      <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
-        Espejo de solo lectura del saldo de la Wallet de Poker Gestión (sistema principal). Se
-        actualiza al abrir esta pestaña. Acá no se puede cargar, ajustar ni mover la Wallet -- para
-        eso hay que entrar al sistema principal.
-      </div>
+    <div className="wm">
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-
       {saldo !== null && (
-        <div className="kpi-sub-grid">
-          <div className="kpi-sub-card">
-            <div className="kpi-sub-label">Saldo Wallet (espejo)</div>
-            <div className="kpi-sub-value" style={{ color: saldo >= 0 ? "var(--green)" : "var(--red)" }}>
-              {usd(saldo)}
-            </div>
-          </div>
-        </div>
+        <WmSaldoCard
+          etiqueta="SALDO WALLET (ESPEJO)"
+          monto={usd(saldo)}
+          signo={saldo >= 0 ? "pos" : "neg"}
+          sub="Espejo de solo lectura de la Wallet de Poker Gestión (sistema principal). Se actualiza al abrir esta pestaña. Acá no se puede cargar, ajustar ni mover la Wallet -- para eso hay que entrar al sistema principal."
+        />
       )}
     </div>
   );
@@ -1808,7 +1798,7 @@ function AvisosTab() {
   }
 
   return (
-    <div className="panel">
+    <div className="wm-card wm-tabla">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
         Mandá una notificación push libre -- novedades, torneos, lo que necesites avisar. Solo le
         llega a quien ya activó las notificaciones en su celular/navegador.
@@ -2980,6 +2970,13 @@ function UsuariosTab() {
   const [jugadores, setJugadores] = useState<any[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
+  // Estilo de la Wallet (23/10/2026, pedido de Leo): pestañas por rol, buscador y paginación.
+  const [rolTab, setRolTab] = useState<"todos" | "admin" | "jugador" | "inactivos">("todos");
+  const [buscaU, setBuscaU] = useState("");
+  const qU = buscaU.trim().toLowerCase();
+  const baseU = usuarios.filter((u) => qU === "" || `${u.name} ${u.username} ${u.player_name ?? ""}`.toLowerCase().includes(qU));
+  const visiblesU = baseU.filter((u) => (rolTab === "todos" ? true : rolTab === "admin" ? u.role === "ADMIN" : rolTab === "jugador" ? u.role !== "ADMIN" : !u.active));
+  const pgU = usePaginado(visiblesU, "dp_tb_usuarios_tamano", [rolTab, buscaU]);
 
   async function cargar() {
     setUsuarios(await api.teamback.listUsuarios());
@@ -2990,14 +2987,29 @@ function UsuariosTab() {
   }, []);
 
   return (
-    <div className="panel">
-      <div className="topbar" style={{ marginBottom: 10 }}>
-        <h3 style={{ margin: 0 }}>Usuarios de TeamBack Affiliates</h3>
-        <button className="btn small" onClick={() => setNuevo(true)}>+ Nuevo usuario</button>
+    <div className="wm-card wm-tabla">
+      <div className="wm-cab">
+        <div className="wm-h">Usuarios de TeamBack Affiliates <span className="wm-n">{visiblesU.length}</span></div>
+        <div className="wm-fil">
+          <input className="wm-in" placeholder="Buscar usuario o jugador..." value={buscaU} onChange={(e) => setBuscaU(e.target.value)} />
+          <button type="button" className="btn small" onClick={() => setNuevo(true)}>+ Nuevo usuario</button>
+        </div>
       </div>
       <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
         Login propio de esta sección -- no tiene nada que ver con "Usuarios y permisos" del resto del sistema. Un ADMIN controla todo; un PLAYER solo ve su propia liquidación (un jugador puede tener a lo sumo un login).
       </div>
+      <WmTabs
+        actual={rolTab}
+        onChange={setRolTab}
+        tabs={
+          [
+            { k: "todos", t: "Todos", n: baseU.length },
+            { k: "admin", t: "Admins", n: baseU.filter((u) => u.role === "ADMIN").length },
+            { k: "jugador", t: "Jugadores", n: baseU.filter((u) => u.role !== "ADMIN").length },
+            { k: "inactivos", t: "Inactivos", n: baseU.filter((u) => !u.active).length },
+          ] as WmTab<typeof rolTab>[]
+        }
+      />
       <table>
         <thead>
           <tr>
@@ -3010,7 +3022,7 @@ function UsuariosTab() {
           </tr>
         </thead>
         <tbody>
-          {usuarios.map((u) => (
+          {pgU.recorte.map((u) => (
             <tr key={u.id} style={u.active ? undefined : { opacity: 0.55 }}>
               <td>{u.name}</td>
               <td className="muted">{u.username}</td>
@@ -3022,13 +3034,14 @@ function UsuariosTab() {
               </td>
             </tr>
           ))}
-          {usuarios.length === 0 && (
+          {visiblesU.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted">Sin usuarios todavía.</td>
+              <td colSpan={6} className="muted">{usuarios.length === 0 ? "Sin usuarios todavía." : "Ningún usuario coincide con estos filtros."}</td>
             </tr>
           )}
         </tbody>
       </table>
+      <WmPaginacion p={pgU} unidad="usuarios" />
 
       {nuevo && (
         <Modal title="Nuevo usuario" onClose={() => setNuevo(false)}>

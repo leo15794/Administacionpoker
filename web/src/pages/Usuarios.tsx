@@ -5,6 +5,7 @@ import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
 import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Ayuda, { Aviso } from "../components/Ayuda";
+import { usePaginado, WmPaginacion, WmTabs, type WmTab } from "../components/ListaWm";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
 // para combinar varios agentes en un solo pago. Acá sirve para decidir qué cuentas puede VER un
@@ -363,6 +364,15 @@ export default function Usuarios() {
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
   const [preseleccionarAgente, setPreseleccionarAgente] = useState<{ id: string; name: string } | null>(null);
+  // Estilo de la Wallet (23/10/2026, pedido de Leo): pestañas por rol, buscador y paginación en la lista de usuarios.
+  const [rolTab, setRolTab] = useState<"todos" | "ADMIN" | "SUPERVISOR" | "AGENT" | "PROVEEDOR" | "inactivos">("todos");
+  const [buscaU, setBuscaU] = useState("");
+  const qU = buscaU.trim().toLowerCase();
+  const baseU = usuarios.filter(
+    (u) => qU === "" || `${u.email} ${u.proveedor_name ?? ""} ${(u.agentes ?? []).map((a: any) => a.name).join(" ")}`.toLowerCase().includes(qU)
+  );
+  const visiblesU = baseU.filter((u) => (rolTab === "todos" ? true : rolTab === "inactivos" ? !u.active : u.role === rolTab));
+  const pgU = usePaginado(visiblesU, "dp_usuarios_tamano", [rolTab, buscaU]);
 
   function refresh() {
     api.usuarios().then(setUsuarios);
@@ -561,13 +571,33 @@ export default function Usuarios() {
         </div>
       )}
 
-      <div className="panel">
+      <div className="wm-card wm-tabla wm">
+        <div className="wm-cab">
+          <div className="wm-h">Usuarios <span className="wm-n">{visiblesU.length}</span></div>
+          <div className="wm-fil">
+            <input className="wm-in" placeholder="Buscar usuario, agente o proveedor..." value={buscaU} onChange={(e) => setBuscaU(e.target.value)} />
+          </div>
+        </div>
+        <WmTabs
+          actual={rolTab}
+          onChange={setRolTab}
+          tabs={
+            [
+              { k: "todos", t: "Todos", n: baseU.length },
+              { k: "ADMIN", t: "Admins", n: baseU.filter((u) => u.role === "ADMIN").length },
+              { k: "SUPERVISOR", t: "Supervisores", n: baseU.filter((u) => u.role === "SUPERVISOR").length },
+              { k: "AGENT", t: "Agentes", n: baseU.filter((u) => u.role === "AGENT").length },
+              { k: "PROVEEDOR", t: "Proveedores", n: baseU.filter((u) => u.role === "PROVEEDOR").length },
+              { k: "inactivos", t: "Desactivados", n: baseU.filter((u) => !u.active).length },
+            ] as WmTab<typeof rolTab>[]
+          }
+        />
         <table>
           <thead>
             <tr><th>Usuario</th><th>Agentes/clubes/proveedor</th><th>Rol</th><th>Estado</th><th></th></tr>
           </thead>
           <tbody>
-            {usuarios.map((u) => (
+            {pgU.recorte.map((u) => (
               <tr key={u.id}>
                 <td>{u.email}</td>
                 <td className="muted">
@@ -597,8 +627,12 @@ export default function Usuarios() {
                 </td>
               </tr>
             ))}
+            {visiblesU.length === 0 && (
+              <tr><td colSpan={5} className="muted">{usuarios.length === 0 ? "Todavía no hay usuarios." : "Ningún usuario coincide con estos filtros."}</td></tr>
+            )}
           </tbody>
         </table>
+        <WmPaginacion p={pgU} unidad="usuarios" />
       </div>
 
       {editando && (
