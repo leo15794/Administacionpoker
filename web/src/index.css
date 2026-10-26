@@ -3001,3 +3001,27 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 :root[data-theme="light"] .cz-fila .r { color: #c62828; }
 .cz-fila .ex { font-size: 12.5px; color: var(--text-dim); min-width: 0; }
 .cz-desglose { padding: 6px 12px 12px 54px; border-top: 1px dashed var(--border); }
+
+/* Cuentas de socios > lista con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.cs-th, .cs-fila { display: grid; grid-template-columns: minmax(0, 1.6fr) 1.3fr 130px 190px 190px; gap: 12px; align-items: center; }
+.cs-th.aj, .cs-fila.aj { grid-template-columns: minmax(0, 1.6fr) 1fr 1fr 60px; }
+.cs-th { padding: 10px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.cs-th > span:nth-child(4) { text-align: right; }
+.cs-th.aj > span:nth-child(3) { text-align: right; } .cs-th.aj > span:nth-child(4) { text-align: left; }
+.cs-fila { padding: 12px 8px; border-top: 1px solid var(--border); }
+.cs-fila:hover { background: var(--panel-2); }
+.cs-fila .ds { font-size: 12.5px; color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cs-fila .t { text-align: right; font-size: 17px; font-weight: 750; }
+.cs-fila .t small { display: block; font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+.cs-fila .t.p { color: #34c759; } .cs-fila .t.r { color: #ff6b6b; }
+:root[data-theme="light"] .cs-fila .t.p { color: #167a32; }
+:root[data-theme="light"] .cs-fila .t.r { color: #c62828; }
+.cs-fila .acc { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+@media (max-width: 768px) {
+  .cs-th { display: none; }
+  .cs-fila, .cs-fila.aj { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "w s" "d d" "m m" "a a"; }
+  .cs-fila > :nth-child(1) { grid-area: w; } .cs-fila > :nth-child(2) { grid-area: d; }
+  .cs-fila > :nth-child(3):not(.t) { grid-area: m; }
+  .cs-fila > .t { grid-area: s; } .cs-fila > .acc { grid-area: a; justify-content: flex-start; }
+  .cs-fila.aj > :nth-child(2) { grid-area: d; }
+}

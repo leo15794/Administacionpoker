@@ -5,6 +5,8 @@ import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import ActionsMenu from "../components/ActionsMenu";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 const CATEGORY_LABEL: Record<string, string> = {
   COMPENSACION: "Compensación",
@@ -55,6 +57,15 @@ export default function CuentasSocios() {
   const [showNuevoAjusteHistorico, setShowNuevoAjusteHistorico] = useState(false);
   const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
+  // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador, orden y paginación.
+  const [tipoCuenta, setTipoCuenta] = useState<"todas" | "personal" | "operativa">("todas");
+  const [buscaCuenta, setBuscaCuenta] = useState("");
+  const [ordenCuenta, setOrdenCuenta] = useState<"saldo" | "nombre">("saldo");
+  const qc = buscaCuenta.trim().toLowerCase();
+  const cuentasVisibles = (cuentas ?? [])
+    .filter((c) => (tipoCuenta === "todas" || (tipoCuenta === "operativa") === (c.kind === "OPERATIVA")) && (qc === "" || `${c.name} ${c.description ?? ""}`.toLowerCase().includes(qc)))
+    .sort((a, b) => (ordenCuenta === "nombre" ? String(a.name).localeCompare(String(b.name)) : Math.abs(Number(b.saldo)) - Math.abs(Number(a.saldo)) || String(a.name).localeCompare(String(b.name))));
+  const pgCuentas = usePaginado(cuentasVisibles, "dp_socios_tamano", [tipoCuenta, buscaCuenta, ordenCuenta]);
 
   function refresh() {
     setError("");
@@ -129,6 +140,7 @@ export default function CuentasSocios() {
   if (!cuentas) return <Loading />;
 
   const cuentaMovimientos = showMovimientosDe ? cuentas.find((c) => c.id === showMovimientosDe) ?? null : null;
+  const personales = cuentas.filter((c) => c.kind !== "OPERATIVA");
 
   return (
     <div>
@@ -140,138 +152,141 @@ export default function CuentasSocios() {
         <button className="btn" onClick={() => setShowNuevaCuenta(true)}>+ Nueva cuenta</button>
       </div>
 
-      {agregados && (
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="label">Ganancia operativa histórica</div>
-            <div className="value">{usd(agregados.gananciaOperativaHistorica)}</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Ganancia real de todos los cierres (misma cuenta que Resumen ejecutivo/por club/financiero)
-              {ajustesHistoricos && ajustesHistoricos.length > 0 ? " + ajuste histórico de abajo" : ""}
+      <div className="wm">
+        <WmSaldoCard
+          etiqueta="LE DEBEN A LA EMPRESA · SOCIOS"
+          monto={usd(personales.reduce((a, c) => a + Math.max(Number(c.saldo), 0), 0))}
+          signo={personales.some((c) => Number(c.saldo) > 0) ? "neg" : ""}
+          sub={`suma de ${personales.filter((c) => Number(c.saldo) > 0).length} cuenta${personales.filter((c) => Number(c.saldo) > 0).length === 1 ? "" : "s"} personal${personales.filter((c) => Number(c.saldo) > 0).length === 1 ? "" : "es"} con deuda`}
+        >
+          {agregados && (
+            <WmConteos
+              items={[
+                { etiqueta: "GANANCIA OPERATIVA HISTÓRICA", valor: usd(agregados.gananciaOperativaHistorica) },
+                { etiqueta: "RETIROS DE SOCIOS", valor: usd(agregados.retirosSocios) },
+                { etiqueta: "GASTOS OPERATIVOS", valor: usd(agregados.gastosOperativos) },
+                { etiqueta: "INGRESOS / AJUSTES", valor: usd(agregados.ingresosAjustes) },
+                { etiqueta: "GANANCIA NETA HISTÓRICA", valor: usd(agregados.gananciaNetaHistorica) },
+                { etiqueta: "SALDO DESPUÉS DE RETIROS", valor: usd(agregados.saldoDespuesRetiros) },
+              ]}
+            />
+          )}
+        </WmSaldoCard>
+
+        <div className="wm-card">
+          <div className="wm-cab">
+            <div className="wm-h">
+              Cuentas <span className="wm-n">{cuentasVisibles.length}</span>
+            </div>
+            <div className="wm-fil">
+              <input className="wm-in" placeholder="Buscar cuenta..." value={buscaCuenta} onChange={(e) => setBuscaCuenta(e.target.value)} />
+              <select className="wm-in" value={ordenCuenta} onChange={(e) => setOrdenCuenta(e.target.value as "saldo" | "nombre")} aria-label="Orden">
+                <option value="saldo">Orden: mayor saldo</option>
+                <option value="nombre">Orden: nombre</option>
+              </select>
             </div>
           </div>
-          <div className="kpi-card">
-            <div className="label">Retiros de socios</div>
-            <div className="value">{usd(agregados.retirosSocios)}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Gastos operativos</div>
-            <div className="value">{usd(agregados.gastosOperativos)}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Ingresos/ajustes</div>
-            <div className="value">{usd(agregados.ingresosAjustes)}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Ganancia neta histórica</div>
-            <div className="value">{usd(agregados.gananciaNetaHistorica)}</div>
-          </div>
-          <div className="kpi-card">
-            <div className="label">Saldo después de retiros</div>
-            <div className="value">{usd(agregados.saldoDespuesRetiros)}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="panel">
-        <div className="topbar" style={{ marginBottom: ajustesHistoricos?.length ? 14 : 0 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Ajuste histórico de ganancia operativa <Ayuda>Para arrancar "Ganancia operativa histórica" desde un total viejo (planilla de antes de usar este
-              sistema) sin tocar el cálculo en vivo de los cierres reales. Se suma arriba de ese cálculo — no
-              afecta a Resumen ejecutivo, Resumen por club ni Resumen financiero.</Ayuda></h3>
-          </div>
-          <button className="btn secondary" onClick={() => setShowNuevoAjusteHistorico(true)}>+ Ajuste histórico</button>
-        </div>
-        {ajustesHistoricos && ajustesHistoricos.length > 0 && (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr><th>Concepto</th><th>Fecha</th><th className="num">Monto</th><th></th></tr>
-              </thead>
-              <tbody>
-                {ajustesHistoricos.map((a) => (
-                  <tr key={a.id} title={a.notes || undefined}>
-                    <td>{a.concept}</td>
-                    <td className="muted">{dateShort(a.created_at)}</td>
-                    <td className={`num ${Number(a.amount) >= 0 ? "pos" : "neg"}`}>{usd(a.amount)}</td>
-                    <td className="row-actions">
-                      <button className="btn secondary small" onClick={() => setShowEditarAjusteHistorico(a)}>Editar</button>
-                      <button
-                        className="btn secondary small"
-                        disabled={borrando === a.id}
-                        onClick={() => eliminarAjusteHistorico(a)}
-                        style={{ color: "var(--red)" }}
-                      >
-                        {borrando === a.id ? "..." : "Eliminar"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <h3>Cuentas</h3>
-        {cuentas.length === 0 ? (
-          <div className="muted">Todavía no hay ninguna cuenta cargada — creá una con "+ Nueva cuenta" (ej. "Uriel", "Juan").</div>
-        ) : (
-          <div className="cuentas-grid">
-            {cuentas.map((c) => (
-              <div className="cuenta-card" key={c.id}>
-                <div className="cuenta-card-header">
-                  <div className="cuenta-card-name">
-                    {c.name}
-                    {c.kind === "OPERATIVA" && (
-                      <span className="badge neutral" style={{ marginLeft: 6, fontSize: 10 }} title="Cuenta operativa: solo un total acumulado, no es una deuda de ni hacia nadie.">
-                        Operativa
-                      </span>
-                    )}
+          <WmTabs
+            actual={tipoCuenta}
+            onChange={setTipoCuenta}
+            tabs={
+              [
+                { k: "todas", t: "Todas", n: cuentas.length },
+                { k: "personal", t: "Personales", n: personales.length },
+                { k: "operativa", t: "Operativas", n: cuentas.length - personales.length },
+              ] as WmTab<"todas" | "personal" | "operativa">[]
+            }
+          />
+          {cuentas.length === 0 ? (
+            <div className="muted" style={{ padding: "12px 0" }}>Todavía no hay ninguna cuenta cargada — creá una con "+ Nueva cuenta" (ej. "Uriel", "Juan").</div>
+          ) : (
+            <>
+              <div className="cs-th">
+                <span>CUENTA</span><span>DETALLE</span><span>MOVIMIENTOS</span><span>SALDO</span><span />
+              </div>
+              {pgCuentas.recorte.map((c) => {
+                const operativa = c.kind === "OPERATIVA";
+                const saldo = Number(c.saldo);
+                return (
+                  <div className="cs-fila" key={c.id}>
+                    <div className="wm-who">
+                      <span className={`wm-av ${!operativa && saldo > 0 ? "n" : ""}`}>{String(c.name).trim().slice(0, 2).toUpperCase()}</span>
+                      <div>
+                        <div className="saldo-name">{c.name}</div>
+                        <div className="saldo-sub" title={operativa ? "Cuenta operativa: solo un total acumulado, no es una deuda de ni hacia nadie." : undefined}>{operativa ? "Operativa" : "Personal"}</div>
+                      </div>
+                    </div>
+                    <span className="ds" title={c.description || undefined}>{c.description || "—"}</span>
+                    <span className="ds">{c.movimientos} movimiento{c.movimientos === 1 ? "" : "s"}</span>
+                    <span className={`t ${operativa ? "" : claseDebeFavor(c.saldo) === "neg" ? "r" : "p"}`}>
+                      {usd(c.saldo)}
+                      <small>{operativa ? "total acumulado" : labelDebeFavor(c.saldo)}</small>
+                    </span>
+                    <div className="acc">
+                      <button className="btn secondary small" onClick={() => abrirMovimientos(c.id)}>Ver movimientos</button>
+                      <ActionsMenu
+                        items={[
+                          { label: "+ Movimiento", onClick: () => setShowNuevoMov(c.id) },
+                          { label: "Editar", onClick: () => setShowEditarCuenta(c) },
+                          { label: borrando === c.id ? "Eliminando..." : "Eliminar (borra la cuenta y sus movimientos)", onClick: () => eliminarCuenta(c), danger: true, disabled: borrando === c.id },
+                        ]}
+                      />
+                    </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    {c.kind === "OPERATIVA" ? (
-                      <>
-                        <div className="cuenta-card-saldo">{usd(c.saldo)}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>total acumulado</div>
-                      </>
-                    ) : (
-                      <>
-                        <div className={`cuenta-card-saldo ${claseDebeFavor(c.saldo)}`}>{usd(c.saldo)}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>{labelDebeFavor(c.saldo)}</div>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {c.description && (
-                  <div className="cuenta-card-desc" title={c.description}>{c.description}</div>
-                )}
-                <div className="cuenta-card-meta">{c.movimientos} movimiento{c.movimientos === 1 ? "" : "s"}</div>
-                <div className="row-actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-                  <button className="btn secondary small" onClick={() => abrirMovimientos(c.id)}>
-                    Ver movimientos
-                  </button>
-                  <button className="btn secondary small" onClick={() => setShowNuevoMov(c.id)}>
-                    + Movimiento
-                  </button>
-                  <button className="btn secondary small" onClick={() => setShowEditarCuenta(c)}>
-                    Editar
-                  </button>
-                  <button
-                    className="btn secondary small"
-                    disabled={borrando === c.id}
-                    onClick={() => eliminarCuenta(c)}
-                    title="Borrado real — la cuenta y todos sus movimientos."
-                    style={{ color: "var(--red)" }}
-                  >
-                    {borrando === c.id ? "..." : "Eliminar"}
-                  </button>
+                );
+              })}
+              {cuentasVisibles.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>Ninguna cuenta coincide con la búsqueda.</div>}
+              <div className="wm-pie">
+                <div className="wm-tot">
+                  <span>Le deben a la empresa <b className="out">{usd(cuentasVisibles.filter((c) => c.kind !== "OPERATIVA").reduce((a, c) => a + Math.max(Number(c.saldo), 0), 0))}</b></span>
+                  <small>{cuentasVisibles.length} cuenta{cuentasVisibles.length === 1 ? "" : "s"}</small>
                 </div>
               </div>
-            ))}
+              <WmPaginacion p={pgCuentas} unidad="cuentas" />
+            </>
+          )}
+        </div>
+
+        <div className="wm-card">
+          <div className="wm-cab">
+            <div className="wm-h">
+              Ajuste histórico de ganancia operativa{" "}
+              <Ayuda>Para arrancar "Ganancia operativa histórica" desde un total viejo (planilla de antes de usar este
+                sistema) sin tocar el cálculo en vivo de los cierres reales. Se suma arriba de ese cálculo — no
+                afecta a Resumen ejecutivo, Resumen por club ni Resumen financiero.</Ayuda>
+            </div>
+            <div className="wm-fil">
+              <button type="button" className="wm-in wm-btn" onClick={() => setShowNuevoAjusteHistorico(true)}>+ Ajuste histórico</button>
+            </div>
           </div>
-        )}
+          {ajustesHistoricos && ajustesHistoricos.length > 0 ? (
+            <>
+              <div className="cs-th aj">
+                <span>CONCEPTO</span><span>FECHA</span><span>MONTO</span><span />
+              </div>
+              {ajustesHistoricos.map((a) => (
+                <div className="cs-fila aj" key={a.id} title={a.notes || undefined}>
+                  <div className="wm-who">
+                    <span className="wm-av">{String(a.concept).trim().slice(0, 2).toUpperCase()}</span>
+                    <div><div className="saldo-name">{a.concept}</div></div>
+                  </div>
+                  <span className="ds">{dateShort(a.created_at)}</span>
+                  <span className={`t ${Number(a.amount) >= 0 ? "p" : "r"}`}>{usd(a.amount)}</span>
+                  <div className="acc">
+                    <ActionsMenu
+                      items={[
+                        { label: "Editar", onClick: () => setShowEditarAjusteHistorico(a) },
+                        { label: borrando === a.id ? "Eliminando..." : "Eliminar", onClick: () => eliminarAjusteHistorico(a), danger: true, disabled: borrando === a.id },
+                      ]}
+                    />
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="muted">Todavía no hay ajustes históricos.</div>
+          )}
+        </div>
       </div>
 
       {showNuevaCuenta && (
