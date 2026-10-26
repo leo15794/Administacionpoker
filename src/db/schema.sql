@@ -2446,3 +2446,7 @@ CREATE TABLE IF NOT EXISTS tb_player_movimientos (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_tb_player_mov_player ON tb_player_movimientos(player_id);
+
+-- Cuenta de prueba de TeamBack Afiliados (23/10/2026, pedido de Leo): jugadores marcados como "prueba" para mostrar cómo funciona el
+-- portal con cierres cargados a mano. Quedan fuera de totales, ganancias, historial de pagos, árbol, cuentas y avisos reales (ver repo/tbPrueba.ts).
+ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS es_prueba BOOLEAN NOT NULL DEFAULT FALSE;

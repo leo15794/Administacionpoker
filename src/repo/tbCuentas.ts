@@ -7,6 +7,7 @@
 //
 // Sección aparte del resto de DigiPlayers, igual que todo TeamBack: solo toca tb_*.
 import { pool, newId } from "../db/pool.js";
+import { asegurarColumnasPago } from "./teamback.js";
 
 let tablasListas = false;
 /** Crea lo necesario si todavía no se corrió el migrate (mismo criterio que asegurarColumnasPago en repo/teamback.ts). */
@@ -139,6 +140,7 @@ export async function revertirMovimiento(movimientoId: string, actor?: string | 
 /** Lista de cuentas: todos los jugadores con liquidaciones o movimientos. */
 export async function listarCuentas() {
   await asegurarTablasCuentas();
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT p.id, p.name, p.suprema_player_id,
             COALESCE(l.semanas_pendientes, 0)::int AS semanas_pendientes,
@@ -159,7 +161,7 @@ export async function listarCuentas() {
        SELECT player_id, SUM(CASE tipo WHEN 'CARGO' THEN amount WHEN 'COBRO' THEN -amount ELSE amount END) AS neto
        FROM tb_player_movimientos WHERE revertido = FALSE GROUP BY player_id
      ) m ON m.player_id = p.id
-     WHERE l.player_id IS NOT NULL OR m.player_id IS NOT NULL
+     WHERE (l.player_id IS NOT NULL OR m.player_id IS NOT NULL) AND NOT p.es_prueba
      ORDER BY p.name`
   );
   const cuentas = r.rows.map((x: any) => {

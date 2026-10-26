@@ -165,7 +165,7 @@ export async function listTbPlayers(includeInactive = true) {
             (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id AND l.pagado = true) as comision_pagada
      FROM tb_players p
      LEFT JOIN tb_players ref ON ref.id = p.referido_por_id
-     WHERE $1 OR p.active = true
+     WHERE ($1 OR p.active = true) AND NOT p.es_prueba
      ORDER BY p.name`,
     [includeInactive]
   );
@@ -251,16 +251,17 @@ export async function actualizarTbPlayer(id: string, input: Partial<TbPlayerInpu
 /** Árbol completo (todos los niveles) -- V1 solo paga el nivel directo, pero se expone completo
  * para que la UI lo pueda mostrar y para tenerlo listo el día que se pague un segundo nivel. */
 export async function getArbolReferidos() {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `WITH RECURSIVE arbol AS (
        SELECT id, suprema_player_id, name, referido_por_id, active, 0 as nivel,
               ARRAY[id] as camino
-       FROM tb_players WHERE referido_por_id IS NULL
+       FROM tb_players WHERE referido_por_id IS NULL AND NOT es_prueba
        UNION ALL
        SELECT p.id, p.suprema_player_id, p.name, p.referido_por_id, p.active, a.nivel + 1,
               a.camino || p.id
        FROM tb_players p JOIN arbol a ON p.referido_por_id = a.id
-       WHERE NOT p.id = ANY(a.camino) -- corta cualquier ciclo por las dudas, nunca debería pasar
+       WHERE NOT p.id = ANY(a.camino) AND NOT p.es_prueba -- corta cualquier ciclo por las dudas, nunca debería pasar
      )
      SELECT * FROM arbol ORDER BY camino`
   );
@@ -424,9 +425,10 @@ export async function previsualizarConfigJugador(playerId: string, cfgCandidata:
  * (25/09/2026) Cada jugador usa SU PROPIA config (tb_player_config), no un default global -- si
  * un jugador con algo para liquidar todavía no tiene la suya cargada, se lo salta (no se le
  * inventa un % por defecto) y queda listado en `sinConfigurar` para que se sepa y se cargue. */
-export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekEnd: string) {
+export async function calcularYGuardarLiquidacionSemana(weekStart: string, weekEnd: string, soloPrueba = false) {
+  await asegurarColumnasPago();
   const configsPorJugador = await getTodasLasConfigsDeJugadores();
-  const jugadores = await pool.query(`SELECT * FROM tb_players WHERE active = true`);
+  const jugadores = await pool.query(`SELECT * FROM tb_players WHERE active = true AND es_prueba = $1`, [soloPrueba]);
 
   const resultados: any[] = [];
   const sinConfigurar: { playerId: string; playerName: string; supremaPlayerId: string }[] = [];
@@ -485,14 +487,18 @@ export async function getLiquidacionesSemana(weekStart: string) {
   const r = await pool.query(
     `SELECT l.*, p.name as player_name, p.suprema_player_id
      FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
-     WHERE l.week_start = $1::date ORDER BY p.name`,
+     WHERE l.week_start = $1::date AND NOT p.es_prueba ORDER BY p.name`,
     [weekStart]
   );
   return r.rows;
 }
 
 export async function getSemanasDisponibles() {
-  const r = await pool.query(`SELECT DISTINCT week_start, week_end FROM tb_weekly_liquidations ORDER BY week_start DESC`);
+  await asegurarColumnasPago();
+  const r = await pool.query(
+    `SELECT DISTINCT l.week_start, l.week_end FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
+     WHERE NOT p.es_prueba ORDER BY l.week_start DESC`
+  );
   return r.rows;
 }
 
@@ -521,8 +527,10 @@ export async function eliminarSemana(weekStart: string) {
 // ---------------------------------------------------------------------------------------------
 
 let columnasPagoListas = false;
-async function asegurarColumnasPago() {
+export async function asegurarColumnasPago() {
   if (columnasPagoListas) return;
+  // es_prueba (23/10/2026): marca de la cuenta de prueba -- se asegura acá para que ningún reporte falle si todavía no se corrió el migrate.
+  await pool.query(`ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS es_prueba BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(
     `ALTER TABLE tb_weekly_liquidations
        ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE,
@@ -540,7 +548,7 @@ export async function marcarLiquidacionPagada(id: string, medioPago: "USDT" | "F
     throw new Error('El medio de pago tiene que ser "USDT" o "FICHAS".');
   }
   const actual = await pool.query(
-    `SELECT l.*, p.name as player_name
+    `SELECT l.*, p.name as player_name, p.es_prueba
      FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
      WHERE l.id = $1`,
     [id]
@@ -556,7 +564,7 @@ export async function marcarLiquidacionPagada(id: string, medioPago: "USDT" | "F
   // nunca tocan la Wallet. El id del ajuste queda guardado para poder revertirlo con prolijidad
   // si se deshace el pago (ver marcarLiquidacionNoPagada).
   let walletMovimientoId: string | null = null;
-  if (medioPago === "USDT") {
+  if (medioPago === "USDT" && !liq.es_prueba) {
     const { id: movimientoId } = await registrarAjusteTesoreria({
       ledger: "WALLET_MANOS",
       direction: "EGRESO",
@@ -628,6 +636,7 @@ export async function getHistorialPagos(filtros: FiltrosHistorialPagos) {
     ($1::date IS NULL OR l.week_start >= $1::date)
     AND ($2::date IS NULL OR l.week_end <= $2::date)
     AND ($3::text IS NULL OR p.name ILIKE '%' || $3 || '%')
+    AND NOT p.es_prueba
   `;
 
   let whereFilas = whereComun;
@@ -696,12 +705,14 @@ export interface GananciaPorSemanaResultado {
 }
 
 export async function getGananciaPorSemana(): Promise<GananciaPorSemanaResultado> {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT l.week_start,
             MAX(l.week_end) as week_end,
             SUM(l.rake_propio) as rake_propio_total,
             SUM(l.total_acreditado) as total_liquidado
-     FROM tb_weekly_liquidations l
+     FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
+     WHERE NOT p.es_prueba
      GROUP BY l.week_start
      ORDER BY l.week_start DESC`
   );
@@ -733,11 +744,12 @@ export async function getGananciaPorSemana(): Promise<GananciaPorSemanaResultado
 /** Ganancia de TeamBack Afiliados por semana liquidada con week_start en [desde, hastaExclusivo) -- misma cuenta que
  * getGananciaPorSemana (rake * 80% - total acreditado), la usa Resumen financiero (19/10/2026, pedido de Leo). */
 export async function getGananciaTeamBackEnRango(desde: string, hastaExclusivo: string) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT l.week_start, MAX(l.week_end) as week_end, COUNT(*) as jugadores,
             SUM(l.rake_propio) as rake_propio_total, SUM(l.total_acreditado) as total_liquidado
-     FROM tb_weekly_liquidations l
-     WHERE l.week_start >= $1 AND l.week_start < $2
+     FROM tb_weekly_liquidations l JOIN tb_players p ON p.id = l.player_id
+     WHERE l.week_start >= $1 AND l.week_start < $2 AND NOT p.es_prueba
      GROUP BY l.week_start
      ORDER BY l.week_start`,
     [desde, hastaExclusivo]
@@ -900,7 +912,10 @@ async function getPushSubscripcionesDeJugador(playerId: string) {
 }
 
 async function getTodasLasPushSubscripciones() {
-  const r = await pool.query(`SELECT endpoint, p256dh, auth FROM tb_push_subscriptions`);
+  await asegurarColumnasPago();
+  const r = await pool.query(
+    `SELECT s.endpoint, s.p256dh, s.auth FROM tb_push_subscriptions s JOIN tb_players p ON p.id = s.player_id WHERE NOT p.es_prueba`
+  );
   return r.rows;
 }
 
@@ -977,9 +992,10 @@ export async function getLogNotificaciones(tipo?: string, weekStart?: string) {
 /** Manda "tu liquidación de esta semana ya está calculada" a todos los jugadores que tengan una
  * fila en tb_weekly_liquidations esa semana. Botón manual en el admin, al lado de "Calcular". */
 export async function notificarLiquidacionCerrada(weekStart: string, actor?: string | null) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT DISTINCT l.player_id, p.name FROM tb_weekly_liquidations l
-     JOIN tb_players p ON p.id = l.player_id WHERE l.week_start = $1::date`,
+     JOIN tb_players p ON p.id = l.player_id WHERE l.week_start = $1::date AND NOT p.es_prueba`,
     [weekStart]
   );
   const titulo = "Tu liquidación ya está lista";
@@ -1023,13 +1039,14 @@ export async function notificarLiquidacionPagada(liquidacionId: string, actor?: 
  * config_snapshot ya persistido de la liquidación del referente esa semana), le manda un aviso.
  * Si un referente tiene más de un referido activo, se le manda UN solo push con el total. */
 export async function notificarReferidosActivos(weekStart: string, actor?: string | null) {
+  await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT l.player_id as referrer_id, p.name as referrer_name, COUNT(*) as activos
      FROM tb_weekly_liquidations l
      JOIN tb_players p ON p.id = l.player_id
      JOIN tb_players ref ON ref.referido_por_id = l.player_id
      LEFT JOIN tb_weekly_stats s ON s.player_id = ref.id AND s.week_start = $1::date
-     WHERE l.week_start = $1::date
+     WHERE l.week_start = $1::date AND NOT p.es_prueba
        AND COALESCE(s.rake_bruto, 0) >= (l.config_snapshot->>'umbralReferidoActivoUsd')::numeric
      GROUP BY l.player_id, p.name`,
     [weekStart]

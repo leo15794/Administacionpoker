@@ -19,6 +19,7 @@ import { parseSupremaWorkbook } from "../engine/importSuprema.js";
 // en modo SOLO LECTURA. Ver la ruta GET /wallet-espejo más abajo, admin-only.
 import { getSaldoWalletNeto } from "../repo/treasury.js";
 import { listarCuentas, getCuenta, registrarMovimiento, revertirMovimiento } from "../repo/tbCuentas.js";
+import { listarCuentasPrueba, crearJugadorPrueba, cargarRakePrueba, borrarSemanaPrueba, borrarCuentaPrueba } from "../repo/tbPrueba.js";
 import {
   getTbConfig,
   updateTbConfig,
@@ -568,5 +569,59 @@ teambackRouter.delete("/push/log/:id", requireTbAuth, requireTbAdmin, async (req
     res.json({ ok: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "No se pudo borrar el aviso." });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Cuenta de prueba (23/10/2026, pedido de Leo) -- jugadores marcados es_prueba para mostrar cómo funciona el portal con cierres
+// cargados a mano. Todo admin-only; nunca toca jugadores reales ni la Wallet. Ver repo/tbPrueba.ts.
+// ---------------------------------------------------------------------------------------------
+
+teambackRouter.get("/prueba", requireTbAuth, requireTbAdmin, async (_req, res) => {
+  res.json(await listarCuentasPrueba());
+});
+
+const pruebaJugadorSchema = z.object({
+  name: z.string().min(1, "Poné un nombre."),
+  username: z.string().nullable().optional(),
+  password: z.string().nullable().optional(),
+  referidoPorId: z.string().nullable().optional(),
+});
+teambackRouter.post("/prueba/jugadores", requireTbAuth, requireTbAdmin, async (req, res) => {
+  const parsed = pruebaJugadorSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.json(await crearJugadorPrueba(parsed.data, hashPassword));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo crear el jugador de prueba." });
+  }
+});
+
+const pruebaRakeSchema = z.object({ playerId: z.string().min(1), weekStart: z.string().min(1), rake: z.number() });
+teambackRouter.post("/prueba/rake", requireTbAuth, requireTbAdmin, async (req, res) => {
+  const parsed = pruebaRakeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Datos inválidos." });
+  try {
+    res.json(await cargarRakePrueba(parsed.data.playerId, parsed.data.weekStart, parsed.data.rake));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo cargar el cierre." });
+  }
+});
+
+teambackRouter.delete("/prueba/rake", requireTbAuth, requireTbAdmin, async (req, res) => {
+  const playerId = String(req.query.playerId ?? "");
+  const weekStart = String(req.query.weekStart ?? "");
+  try {
+    res.json(await borrarSemanaPrueba(playerId, weekStart));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo borrar el cierre." });
+  }
+});
+
+teambackRouter.delete("/prueba/jugadores/:id", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    res.json(await borrarCuentaPrueba(req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "No se pudo borrar la cuenta de prueba." });
   }
 });

@@ -18,13 +18,14 @@ import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
+import TeamBackPruebaTab from "./TeamBackPrueba";
 import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
 import { iconosPoker } from "../components/IconosPoker";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
 import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
 
-type Tab = "resumen" | "cuentas" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos";
+type Tab = "resumen" | "cuentas" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos" | "prueba";
 
 const TB_SESSION_KEY = "tb_session";
 
@@ -334,6 +335,7 @@ const TB_ICONO_POKER: Partial<Record<Tab, React.ReactNode>> = {
   usuarios: iconosPoker.usuarios,
   wallet: iconosPoker.wallet,
   pagos: iconosPoker.resumenAgentes,
+  prueba: iconosPoker.usuarios,
 };
 
 const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
@@ -347,6 +349,7 @@ const TB_NAV: { key: Tab; label: string; icon: keyof typeof tbIcon }[] = [
   { key: "wallet", label: "Wallet (espejo)", icon: "wallet" },
   { key: "avisos", label: "Avisos", icon: "avisos" },
   { key: "pagos", label: "Historial de pagos", icon: "pagos" },
+  { key: "prueba", label: "Cuenta de prueba", icon: "usuarios" },
 ];
 
 // (25/09/2026, pedido de Leo: "hagamos el menu como la administracion de poker") -- mismo
@@ -521,6 +524,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         {tab === "wallet" && <WalletEspejoTab />}
         {tab === "avisos" && <AvisosTab />}
         {tab === "pagos" && <HistorialPagosTab />}
+        {tab === "prueba" && <TeamBackPruebaTab />}
       </div>
     </div>
   );

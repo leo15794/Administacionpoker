@@ -1322,6 +1322,17 @@ export const api = {
     // (09/10/2026: "que aparezcan en USDT o en Fichas") -- el medio de pago ahora es obligatorio.
     marcarLiquidacionPagada: (id: string, medioPago: "USDT" | "FICHAS") =>
       requestTb(`/teamback/liquidaciones/${id}/pagar`, { method: "POST", body: JSON.stringify({ medioPago }) }),
+    // Cuenta de prueba (23/10/2026): jugadores marcados como prueba, con cierres cargados a mano. Ver repo/tbPrueba.ts.
+    prueba: {
+      listar: () => requestTb("/teamback/prueba"),
+      crearJugador: (data: { name: string; username?: string | null; password?: string | null; referidoPorId?: string | null }) =>
+        requestTb("/teamback/prueba/jugadores", { method: "POST", body: JSON.stringify(data) }),
+      cargarRake: (data: { playerId: string; weekStart: string; rake: number }) =>
+        requestTb("/teamback/prueba/rake", { method: "POST", body: JSON.stringify(data) }),
+      borrarSemana: (playerId: string, weekStart: string) =>
+        requestTb(`/teamback/prueba/rake?playerId=${encodeURIComponent(playerId)}&weekStart=${encodeURIComponent(weekStart)}`, { method: "DELETE" }),
+      borrarJugador: (id: string) => requestTb(`/teamback/prueba/jugadores/${id}`, { method: "DELETE" }),
+    },
     // Cuentas de jugadores (21/10/2026): cuenta corriente con deuda que se compensa sola contra las liquidaciones.
     cuentas: () => requestTb("/teamback/cuentas"),
     cuenta: (playerId: string) => requestTb(`/teamback/cuentas/${playerId}`),
