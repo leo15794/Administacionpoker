@@ -26,7 +26,7 @@ self.addEventListener("push", (event) => {
     // Si no vino como JSON válido, se muestra el genérico de arriba en vez de romper.
   }
   event.waitUntil(
-    self.registration.showNotification(data.title, {
+    Promise.all([actualizarNumeroDelIcono(data.badge), self.registration.showNotification(data.title, {
       body: data.body,
       icon: "/icon-192.png",
       // Imagen grande opcional (13/10/2026, pedido de Leo) -- si el payload no trae "image",
@@ -38,9 +38,27 @@ self.addEventListener("push", (event) => {
       // un archivo aparte (badge-96.png), generado a partir del mismo logo pero como silueta.
       badge: "/badge-96.png",
       data: { url: data.url || "/teamback" },
-    })
+    })])
   );
 });
+
+// Número en el ícono de la app instalada (23/10/2026, pedido de Leo). Si el aviso trae el número (portales: avisos sin leer, lo calcula el
+// servidor) se usa tal cual; si no (TeamBack), se suma uno a una cuenta guardada en un caché, que la app borra al abrirse (ver badge.ts).
+const CACHE_CONTADOR = "dp-badge-v1";
+async function actualizarNumeroDelIcono(desdeServidor) {
+  try {
+    let n = Number(desdeServidor);
+    if (!Number.isFinite(n) || n <= 0) {
+      const cache = await caches.open(CACHE_CONTADOR);
+      const previo = await cache.match("/__contador");
+      n = (previo ? Number(await previo.text()) || 0 : 0) + 1;
+      await cache.put("/__contador", new Response(String(n)));
+    }
+    if (self.navigator && self.navigator.setAppBadge) await self.navigator.setAppBadge(n);
+  } catch {
+    // sin soporte o sin permiso: el aviso se muestra igual
+  }
+}
 
 // Al tocar la notificación: si ya hay una pestaña/ventana de la app abierta, la enfoca; si no,
 // abre una nueva en la URL que vino en el payload.

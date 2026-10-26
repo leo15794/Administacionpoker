@@ -129,12 +129,15 @@ export async function enviarAvisos(input: {
   const recibieron: { id: string; nombre: string }[] = [];
   for (const u of usuarios.rows) {
     const subs = await pool.query(`SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = $1`, [u.id]);
+    // Número del ícono: lo que tenía sin leer + este aviso (que se guarda en la bandeja más abajo).
+    const sinLeer = await pool.query(`SELECT COUNT(*)::int AS n FROM aviso_destinatarios WHERE user_id = $1 AND leido_at IS NULL`, [u.id]);
+    const badge = Number(sinLeer.rows[0]?.n ?? 0) + 1;
     let ok = 0;
     for (const s of subs.rows) {
       try {
         await enviarPushAUnaSuscripcion(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          { title: input.titulo, body: input.mensaje, url: RUTA_POR_ROL[u.role] ?? "/", image: urlImagen }
+          { title: input.titulo, body: input.mensaje, url: RUTA_POR_ROL[u.role] ?? "/", image: urlImagen, badge }
         );
         ok++;
       } catch (err: any) {

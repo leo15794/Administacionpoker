@@ -19,6 +19,7 @@ import ActionsMenu from "../components/ActionsMenu";
 import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
 import TeamBackPruebaTab from "./TeamBackPrueba";
+import { clearBadge } from "../badge";
 import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
 import { iconosPoker } from "../components/IconosPoker";
@@ -125,6 +126,15 @@ export default function TeamBackAffiliates() {
   useEffect(() => {
     aplicarTema(leerTemaInicial());
   }, []);
+
+  // Número del ícono (23/10/2026): TeamBack cuenta los avisos recibidos desde la última vez que se abrió; al abrir la app (o volver a ella) se borra.
+  useEffect(() => {
+    if (!session) return;
+    clearBadge();
+    const alVolver = () => { if (document.visibilityState === "visible") clearBadge(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => document.removeEventListener("visibilitychange", alVolver);
+  }, [session]);
 
   if (!session) return <TbLogin onLoggedIn={setSession} />;
   const cerrarSesion = () => { cerrarTbSession(); setSession(null); };

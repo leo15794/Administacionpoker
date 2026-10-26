@@ -39,6 +39,9 @@ export interface PushPayload {
   // showNotification). No hay upload propio: tiene que ser un link a una imagen que ya exista
   // en algún lado.
   image?: string;
+  // Número para el ícono de la app instalada (23/10/2026, pedido de Leo): avisos sin ver de ese usuario. Si no viene, el service worker
+  // lleva su propia cuenta (ver sw.js).
+  badge?: number;
 }
 
 /** Manda un push a UNA suscripción puntual. Si el navegador/SO la dio de baja del otro lado

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { dateTime } from "../fmt";
 import { GrillaDescarga, ImagenAuth, type ImagenAviso } from "./AvisoImagenes";
+import { setBadge } from "../badge";
 
 // Bandeja de avisos recibidos en el portal de supervisor, proveedor o agente (21/10/2026, pedido de Leo). Arriba del portal queda UNA sola fila
 // compacta con el último aviso (miniaturas + título + "Ver"); al tocarla se abre a pantalla completa con el aviso, las imágenes (para descargar)
@@ -28,11 +29,21 @@ export default function BandejaAvisos() {
   const [abierta, setAbierta] = useState(false);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
 
+  // Al abrir la app y cada vez que se vuelve a ella se refresca la bandeja, y el número del ícono queda igual a los avisos sin leer.
   useEffect(() => {
-    api.notificaciones
-      .bandeja()
-      .then((r: Aviso[]) => setAvisos(r))
-      .catch(() => setAvisos([]));
+    function cargar() {
+      api.notificaciones
+        .bandeja()
+        .then((r: Aviso[]) => {
+          setAvisos(r);
+          setBadge(r.filter((a) => !a.leido_at).length);
+        })
+        .catch(() => setAvisos([]));
+    }
+    cargar();
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => document.removeEventListener("visibilitychange", alVolver);
   }, []);
 
   // bloquear el scroll de la página de atrás mientras la hoja está abierta
@@ -56,6 +67,7 @@ export default function BandejaAvisos() {
     setAbierta(true);
     if (sinLeer.length > 0) {
       api.notificaciones.marcarLeidos(sinLeer.map((a) => a.id)).catch(() => {});
+      setBadge(0);
       // se sigue viendo el punto/“nuevo” de esta visita; al volver a entrar ya figuran como leídos
     }
   }
