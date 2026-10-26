@@ -599,7 +599,7 @@ export default function ResumenClub() {
             </div>
             {!detalleAbierto && (
               <div className="saldo-sub" style={{ marginTop: 4 }}>
-                Ventas/VIP, ajuste manual, cargas de tesorería ({usd(resumen.cargasTesoreriaTotal)}), tasa semanal fija, rodeo pagado ({usd(resumen.rodeoPagadoAgentes)}).
+                Ventas/VIP, ajuste manual, cargas de fichas de la semana ({usd(resumen.cargasTesoreriaTotal)}), tasa semanal fija, rodeo pagado ({usd(resumen.rodeoPagadoAgentes)}).
               </div>
             )}
             {detalleAbierto && (
@@ -646,7 +646,7 @@ export default function ResumenClub() {
                     </tr>
                     {Number(resumen.cargasTesoreriaTotal) !== 0 && (
                       <tr>
-                        <td className="muted">Cargado en tesorería esta semana (informativo — se cruza en Liquidaciones)</td>
+                        <td className="muted" title="Suma de las cargas de fichas a los agentes de este club con fecha de esta semana: las que se cargan a mano y las que genera el pago de liquidaciones o de rakeback pendiente en fichas. Es solo informativo: no entra en ningún total de esta pantalla.">Cargas de fichas de la semana (informativo)</td>
                         <td className="num muted">{usd(resumen.cargasTesoreriaTotal)}</td>
                       </tr>
                     )}
