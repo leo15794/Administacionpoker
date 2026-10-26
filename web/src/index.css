@@ -3025,3 +3025,7 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
   .cs-fila > .t { grid-area: s; } .cs-fila > .acc { grid-area: a; justify-content: flex-start; }
   .cs-fila.aj > :nth-child(2) { grid-area: d; }
 }
+
+/* Tablas con el estilo de la Wallet en pantallas que mantienen sus tablas (23/10/2026): encabezado chico en mayúsculas y fila resaltada al pasar el mouse */
+.wm-tabla table th { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.wm-tabla table tbody tr:hover > td { background: var(--panel-2); }

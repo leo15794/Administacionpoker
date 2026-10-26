@@ -5,6 +5,7 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 import BancadoContratosEmbed from "./BancadoContratos";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 /**
  * "Jugadores bancados" (pedido 14/09/2026): un jugador puntual de un agente que hay que excluir
@@ -43,6 +44,9 @@ export default function JugadoresBancados() {
   // Pestaña nueva (pedido Leo 02/10/2026): "Contratos" vive ACÁ adentro, no en un menú propio --
   // reutiliza esta misma pantalla de "Jugadores bancados" en vez de abrir una nueva.
   const [tab, setTab] = useState<"clasico" | "contratos">("clasico");
+  // Estilo de la Wallet, versión liviana (23/10/2026, pedido de Leo): pestañas con subrayado, tarjeta de resumen y paginación en las tablas largas.
+  const pgResumen = usePaginado(resumenBancados, "dp_bancados_resumen_tamano", [filtroWeekStart, filtroWeekEnd, filtroPlayerIds.size]);
+  const pgHistorial = usePaginado(historialGlobal, "dp_bancados_historial_tamano", [filtroWeekStart, filtroWeekEnd, filtroPlayerIds.size]);
 
   function filtroActivo() {
     return { weekStart: filtroWeekStart || undefined, weekEnd: filtroWeekEnd || undefined, playerIds: filtroPlayerIds.size > 0 ? Array.from(filtroPlayerIds) : undefined };
@@ -196,15 +200,35 @@ export default function JugadoresBancados() {
         </div>
       </div>
 
-      <div className="tabs" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        <button className={`btn small ${tab === "clasico" ? "" : "secondary"}`} onClick={() => setTab("clasico")}>Jugadores bancados (capital/makeup)</button>
-        <button className={`btn small ${tab === "contratos" ? "" : "secondary"}`} onClick={() => setTab("contratos")}>Contratos (regla nueva)</button>
-      </div>
+      <WmTabs
+        actual={tab}
+        onChange={setTab}
+        tabs={[
+          { k: "clasico", t: "Jugadores bancados (capital/makeup)" },
+          { k: "contratos", t: "Contratos (regla nueva)" },
+        ]}
+      />
+      <div style={{ height: 14 }} />
 
       {tab === "contratos" && <BancadoContratosEmbed />}
 
       {tab === "clasico" && (
-      <>
+      <div className="wm">
+      <WmSaldoCard
+        etiqueta="GANANCIA DE LA EMPRESA · BANCADOS"
+        monto={usd(resumenBancados.reduce((a, x) => a + Number(x.gananciaEmpresaTotal ?? 0), 0))}
+        signo={resumenBancados.reduce((a, x) => a + Number(x.gananciaEmpresaTotal ?? 0), 0) >= 0 ? "pos" : "neg"}
+        sub={`acumulado de los cierres semanales · ${resumenBancados.length} jugador${resumenBancados.length === 1 ? "" : "es"} con cierres`}
+      >
+        <WmConteos
+          items={[
+            { etiqueta: "JUGADORES BANCADOS", valor: bancados.length },
+            { etiqueta: "SEMANAS CERRADAS", valor: resumenBancados.reduce((a, x) => a + Number(x.semanasCerradas ?? 0), 0) },
+            { etiqueta: "CAPITAL ACTUAL", valor: usd(resumenBancados.reduce((a, x) => a + Number(x.capitalActual ?? 0), 0)) },
+            { etiqueta: "MAKEUP ACTUAL", valor: usd(resumenBancados.reduce((a, x) => a + Number(x.makeupActual ?? 0), 0)) },
+          ]}
+        />
+      </WmSaldoCard>
       <div className="panel">
         <h3>Buscar y marcar un jugador</h3>
         <input
@@ -263,7 +287,7 @@ export default function JugadoresBancados() {
 
       <ImportarBancados onCierreAplicado={refreshHistorial} />
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <h3>Jugadores marcados como bancados ({bancados.length})</h3>
         {cargando ? (
           <Loading />
@@ -352,7 +376,7 @@ export default function JugadoresBancados() {
         </div>
       </div>
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Resumen histórico de bancados</h3>
         </div>
@@ -383,7 +407,7 @@ export default function JugadoresBancados() {
                 </tr>
               </thead>
               <tbody>
-                {resumenBancados.map((r) => (
+                {pgResumen.recorte.map((r) => (
                   <tr key={r.playerId}>
                     <td>{r.playerName} <span className="muted">#{r.playerExternalId}</span></td>
                     <td>{r.clubName}</td>
@@ -400,11 +424,12 @@ export default function JugadoresBancados() {
                 ))}
               </tbody>
             </table>
+            <WmPaginacion p={pgResumen} unidad="jugadores" />
           </div>
         )}
       </div>
 
-      <div className="panel">
+      <div className="wm-card wm-tabla">
         <div className="topbar" style={{ marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>Historial de la banca</h3>
         </div>
@@ -437,7 +462,7 @@ export default function JugadoresBancados() {
                 </tr>
               </thead>
               <tbody>
-                {historialGlobal.map((h) => (
+                {pgHistorial.recorte.map((h) => (
                   <tr key={h.id} style={h.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
                     <td>{dateShort(h.week_start)}{h.tipo !== "RECARGA_CAPITAL" ? ` - ${dateShort(h.week_end)}` : ""}</td>
                     <td>
@@ -499,10 +524,11 @@ export default function JugadoresBancados() {
                 ))}
               </tbody>
             </table>
+            <WmPaginacion p={pgHistorial} unidad="movimientos de banca" />
           </div>
         )}
       </div>
-      </>
+      </div>
       )}
     </div>
   );
