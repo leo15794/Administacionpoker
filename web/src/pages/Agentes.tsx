@@ -8,6 +8,7 @@ import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 const ACCOUNT_TYPES: AccountType[] = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"];
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -25,7 +26,6 @@ function TipoDot({ a }: { a: any }) {
   return <span className={"acc-dot " + dotClass}>{ACCOUNT_TYPE_LABELS[tipo as AccountType] ?? a.account_type}</span>;
 }
 
-const TAMANOS_AGENTES = [10, 25, 50, 100, 0]; // 0 = todos
 const CLAVE_TAM_AGENTES = "dp_agentes_tamano";
 
 function iniciales(nombre: string): string {
@@ -81,10 +81,7 @@ export default function Agentes() {
   const [minimo, setMinimo] = useState("");
   const [maximo, setMaximo] = useState("");
   const [masFiltros, setMasFiltros] = useState(false);
-  const [pagina, setPagina] = useState(1);
-  const [tamano, setTamano] = useState<number>(() => {
-    try { const raw = localStorage.getItem(CLAVE_TAM_AGENTES); const v = Number(raw); return raw !== null && TAMANOS_AGENTES.includes(v) ? v : 25; } catch { return 25; }
-  });
+
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
@@ -227,13 +224,8 @@ export default function Agentes() {
     sinId: activos.filter((a) => !a.external_id).length,
   };
   const hayGarantia = agentesFiltrados.some((a) => a.garantia_monto != null);
-  const porPagina = tamano === 0 ? Math.max(agentesFiltrados.length, 1) : tamano;
-  const paginas = Math.max(1, Math.ceil(agentesFiltrados.length / porPagina));
-  const pag = Math.min(pagina, paginas);
-  const recorte = agentesFiltrados.slice((pag - 1) * porPagina, pag * porPagina);
-  const numeros: (number | "…")[] = [];
-  for (let i = 1; i <= paginas; i++) if (i === 1 || i === paginas || Math.abs(i - pag) <= 1) numeros.push(i); else if (numeros[numeros.length - 1] !== "…") numeros.push("…");
-  useEffect(() => { setPagina(1); }, [vista, filtro, supFiltro, tipoFiltro, minimo, maximo, tamano, orden, ordenAsc]);
+  const pg = usePaginado(agentesFiltrados, CLAVE_TAM_AGENTES, [vista, filtro, supFiltro, tipoFiltro, minimo, maximo, orden, ordenAsc]);
+  const recorte = pg.recorte;
   function ordenarPor(k: "saldo" | "nombre" | "supervisor") {
     if (orden === k) setOrdenAsc((v) => !v);
     else { setOrden(k); setOrdenAsc(k !== "saldo"); }
@@ -325,19 +317,14 @@ export default function Agentes() {
               cajón lateral (hoja inferior en celular) y tarjetas por agente en celular. Mismas acciones,
               mismos datos. */}
           <div className="wm">
-            <div className="wm-card wm-saldo">
-              <div>
-                <div className="wm-lbl">SALDO NETO TOTAL</div>
-                <div className={`wm-big ${saldoNetoTotal > 0.004 ? "pos" : saldoNetoTotal < -0.004 ? "neg" : ""}`}>{usd(saldoNetoTotal)}</div>
-                <div className="muted" style={{ fontSize: 13 }}>{activos.length} agentes activos</div>
-              </div>
-              <div className="ag-resumen">
-                <div><span className="wm-lbl">CON SALDO</span><b>{resumen.conSaldo}</b></div>
-                <div><span className="wm-lbl">EN US$ 0</span><b>{resumen.enCero}</b></div>
-                <div><span className="wm-lbl">SIN DEAL</span><b>{resumen.sinDeal}</b></div>
-                <div><span className="wm-lbl">SIN ID DE PLATAFORMA</span><b>{resumen.sinId}</b></div>
-              </div>
-            </div>
+            <WmSaldoCard etiqueta="SALDO NETO TOTAL" monto={usd(saldoNetoTotal)} signo={saldoNetoTotal > 0.004 ? "pos" : saldoNetoTotal < -0.004 ? "neg" : ""} sub={`${activos.length} agentes activos`}>
+              <WmConteos items={[
+                { etiqueta: "CON SALDO", valor: resumen.conSaldo },
+                { etiqueta: "EN US$ 0", valor: resumen.enCero },
+                { etiqueta: "SIN DEAL", valor: resumen.sinDeal },
+                { etiqueta: "SIN ID DE PLATAFORMA", valor: resumen.sinId },
+              ]} />
+            </WmSaldoCard>
 
             <div className="wm-card">
               <div className="wm-cab">
@@ -382,13 +369,17 @@ export default function Agentes() {
                   <label>Saldo hasta<input className="wm-in" inputMode="decimal" value={maximo} onChange={(e) => setMaximo(e.target.value)} placeholder="Sin tope" /></label>
                 </div>
               )}
-              <div className="wm-tabs">
-                <button className={vista === "conSaldo" ? "on" : ""} onClick={() => setVista("conSaldo")}>Con saldo <i>{cuentas.conSaldo}</i></button>
-                <button className={vista === "todos" ? "on" : ""} onClick={() => setVista("todos")}>Todos <i>{cuentas.todos}</i></button>
-                <button className={vista === "sinDeal" ? "on" : ""} onClick={() => setVista("sinDeal")} title="Sin deal propio: usan el default de cada club">Sin deal <i>{cuentas.sinDeal}</i></button>
-                <button className={vista === "sinId" ? "on" : ""} onClick={() => setVista("sinId")} title="Sin ID de plataforma: si el nombre del archivo no matchea exacto, la importación puede no reconocerlos">Sin ID de plataforma <i>{cuentas.sinId}</i></button>
-                <button className={vista === "baja" ? "on" : ""} onClick={() => setVista("baja")} title="Los dados de baja no reciben cierres nuevos, pero conservan su historial">Dados de baja</button>
-              </div>
+              <WmTabs
+                actual={vista}
+                onChange={setVista}
+                tabs={[
+                  { k: "conSaldo", t: "Con saldo", n: cuentas.conSaldo },
+                  { k: "todos", t: "Todos", n: cuentas.todos },
+                  { k: "sinDeal", t: "Sin deal", n: cuentas.sinDeal, title: "Sin deal propio: usan el default de cada club" },
+                  { k: "sinId", t: "Sin ID de plataforma", n: cuentas.sinId, title: "Sin ID de plataforma: si el nombre del archivo no matchea exacto, la importación puede no reconocerlos" },
+                  { k: "baja", t: "Dados de baja", title: "Los dados de baja no reciben cierres nuevos, pero conservan su historial" },
+                ]}
+              />
 
               <div className="ag-table-wrap">
                 <div className={`ag-th ${hayGarantia ? "g" : ""}`}>
@@ -469,23 +460,7 @@ export default function Agentes() {
                   <small>{agentesFiltrados.length} agente{agentesFiltrados.length === 1 ? "" : "s"}</small>
                 </div>
               </div>
-              <div className="wm-pie2">
-                <span className="muted">
-                  Mostrando {recorte.length} de {agentesFiltrados.length} agentes
-                  <label className="wm-tam">Ver
-                    <select className="wm-in" value={tamano} onChange={(e) => { const t = Number(e.target.value); setTamano(t); try { localStorage.setItem(CLAVE_TAM_AGENTES, String(t)); } catch { /* sin almacenamiento: no pasa nada */ } }}>
-                      {TAMANOS_AGENTES.map((t) => <option key={t} value={t}>{t === 0 ? "Todos" : t}</option>)}
-                    </select>
-                  </label>
-                </span>
-                {tamano !== 0 && paginas > 1 && (
-                  <div className="wm-pag">
-                    <button type="button" className="wm-p" disabled={pag === 1} onClick={() => setPagina(pag - 1)}>‹ Anterior</button>
-                    {numeros.map((n, i) => n === "…" ? <span key={`p${i}`} className="wm-p dis">…</span> : <button key={n} type="button" className={`wm-p ${n === pag ? "on" : ""}`} onClick={() => setPagina(n)}>{n}</button>)}
-                    <button type="button" className="wm-p" disabled={pag === paginas} onClick={() => setPagina(pag + 1)}>Siguiente ›</button>
-                  </div>
-                )}
-              </div>
+              <WmPaginacion p={pg} unidad="agentes" />
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportCsv } from "../csv";
 import ActionsMenu from "./ActionsMenu";
+import { usePaginado, WmPaginacion, WmTabs } from "./ListaWm";
 
 // Saldo y movimientos de la Wallet (22/10/2026, pedido de Leo, inspirado en una referencia que trajo): saldo con los botones de ingreso y egreso,
 // y abajo la lista de movimientos con pestañas, buscador, período, persona y más filtros, totales de lo filtrado y paginación (10 / 25 / 50 / 100 / todos).
@@ -10,7 +11,6 @@ const LABEL: Record<string, string> = {
   PAGO_RAKEBACK: "Pago de rakeback", ADELANTO_RAKEBACK: "Adelanto de rakeback", AJUSTE: "Ajuste", AJUSTE_TESORERIA: "Movimiento manual",
 };
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const TAMANOS = [10, 25, 50, 100, 0]; // 0 = todos
 const CLAVE_TAM = "dp_wallet_tamano";
 const CLAVE_PERIODO = "dp_wallet_periodo";
 
@@ -77,10 +77,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
   const [maximo, setMaximo] = useState("");
   const [masFiltros, setMasFiltros] = useState(false);
   const [orden, setOrden] = useState<"desc" | "asc">("desc");
-  const [tamano, setTamano] = useState<number>(() => leer(CLAVE_TAM, 25));
-  const [pagina, setPagina] = useState(1);
 
-  useEffect(() => { try { localStorage.setItem(CLAVE_TAM, JSON.stringify(tamano)); } catch { /* sin almacenamiento */ } }, [tamano]);
   useEffect(() => { try { localStorage.setItem(CLAVE_PERIODO, JSON.stringify(periodo)); } catch { /* sin almacenamiento */ } }, [periodo]);
 
   const filas = useMemo(() => movimientos.map((m) => ({ m, p: partes(m) })), [movimientos]);
@@ -120,14 +117,8 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
   const egr = vigentes.filter(({ m }) => m.direction === "EGRESO").reduce((a, { m }) => a + Number(m.amount), 0);
   const neto = ing - egr;
 
-  const porPagina = tamano === 0 ? Math.max(visibles.length, 1) : tamano;
-  const paginas = Math.max(1, Math.ceil(visibles.length / porPagina));
-  const pag = Math.min(pagina, paginas);
-  const recorte = visibles.slice((pag - 1) * porPagina, pag * porPagina);
-  useEffect(() => { setPagina(1); }, [tab, busca, periodo, persona, tipo, minimo, maximo, tamano]);
-
-  const numeros: (number | "…")[] = [];
-  for (let i = 1; i <= paginas; i++) if (i === 1 || i === paginas || Math.abs(i - pag) <= 1) numeros.push(i); else if (numeros[numeros.length - 1] !== "…") numeros.push("…");
+  const pg = usePaginado(visibles, CLAVE_TAM, [tab, busca, periodo, persona, tipo, minimo, maximo]);
+  const recorte = pg.recorte;
 
   function exportar() {
     exportCsv("wallet.csv", visibles.map(({ m, p }) => ({
@@ -180,13 +171,11 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
             <button type="button" className="btn secondary small" onClick={() => { setTipo(""); setMinimo(""); setMaximo(""); setPersona(""); setBusca(""); setPeriodo("todo"); }}>Limpiar filtros</button>
           </div>
         )}
-        <div className="wm-tabs" role="tablist">
-          {(["todos", "ingresos", "egresos", "reversiones"] as const).map((k) => (
-            <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
-              {cap(k)} <i>{cuentas[k]}</i>
-            </button>
-          ))}
-        </div>
+        <WmTabs
+          actual={tab}
+          onChange={setTab}
+          tabs={(["todos", "ingresos", "egresos", "reversiones"] as const).map((k) => ({ k, t: cap(k), n: cuentas[k] }))}
+        />
 
         <div className="wm-th">
           <span>PERSONA / CONCEPTO</span>
@@ -229,23 +218,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
             <small>de los movimientos filtrados · USDT</small>
           </div>
         </div>
-        <div className="wm-pie2">
-          <span className="muted">
-            Mostrando {recorte.length} de {visibles.length} movimientos
-            <label className="wm-tam">Ver
-              <select className="wm-in" value={tamano} onChange={(e) => setTamano(Number(e.target.value))}>
-                {TAMANOS.map((t) => <option key={t} value={t}>{t === 0 ? "Todos" : t}</option>)}
-              </select>
-            </label>
-          </span>
-          {tamano !== 0 && paginas > 1 && (
-            <div className="wm-pag">
-              <button type="button" className="wm-p" disabled={pag === 1} onClick={() => setPagina(pag - 1)}>‹ Anterior</button>
-              {numeros.map((n, i) => n === "…" ? <span key={`p${i}`} className="wm-p dis">…</span> : <button key={n} type="button" className={`wm-p ${n === pag ? "on" : ""}`} onClick={() => setPagina(n)}>{n}</button>)}
-              <button type="button" className="wm-p" disabled={pag === paginas} onClick={() => setPagina(pag + 1)}>Siguiente ›</button>
-            </div>
-          )}
-        </div>
+        <WmPaginacion p={pg} unidad="movimientos" />
       </div>
     </div>
   );
