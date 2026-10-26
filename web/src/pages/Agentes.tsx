@@ -25,6 +25,15 @@ function TipoDot({ a }: { a: any }) {
   return <span className={"acc-dot " + dotClass}>{ACCOUNT_TYPE_LABELS[tipo as AccountType] ?? a.account_type}</span>;
 }
 
+const TAMANOS_AGENTES = [10, 25, 50, 100, 0]; // 0 = todos
+const CLAVE_TAM_AGENTES = "dp_agentes_tamano";
+
+function iniciales(nombre: string): string {
+  const p = nombre.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
+  return ((p[0][0] ?? "") + (p.length > 1 ? p[1][0] ?? "" : p[0][1] ?? "")).toUpperCase();
+}
+
 function DealsChip({ n }: { n: number }) {
   return n > 0 ? (
     <span className="pill" title="Ver/editar los deals de este agente">{n} {n === 1 ? "club" : "clubes"}</span>
@@ -63,8 +72,19 @@ export default function Agentes() {
   // Vista de la lista (19/10/2026, mockup aprobado): "Con saldo" por defecto -- antes la lista era
   // alfabética y más de la mitad de las filas estaban en US$ 0, así que los que tienen plata quedaban
   // enterrados. Reemplaza al filtro "solo sin deal" de las tarjetas resumen de antes.
-  const [vista, setVista] = useState<"todos" | "conSaldo" | "sinDeal" | "sinId">("conSaldo");
-  const [orden, setOrden] = useState<"saldo" | "nombre">("saldo");
+  const [vista, setVista] = useState<"todos" | "conSaldo" | "sinDeal" | "sinId" | "baja">("conSaldo");
+  const [orden, setOrden] = useState<"saldo" | "nombre" | "supervisor">("saldo");
+  const [ordenAsc, setOrdenAsc] = useState(false);
+  // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): filtros extra, pestañas y paginación.
+  const [supFiltro, setSupFiltro] = useState("");
+  const [tipoFiltro, setTipoFiltro] = useState("");
+  const [minimo, setMinimo] = useState("");
+  const [maximo, setMaximo] = useState("");
+  const [masFiltros, setMasFiltros] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState<number>(() => {
+    try { const raw = localStorage.getItem(CLAVE_TAM_AGENTES); const v = Number(raw); return raw !== null && TAMANOS_AGENTES.includes(v) ? v : 25; } catch { return 25; }
+  });
   const [historialAgent, setHistorialAgent] = useState<{ id: string; name: string } | null>(null);
   const [editando, setEditando] = useState<any | null>(null);
   const [configurandoClub, setConfigurandoClub] = useState<any | null>(null);
@@ -85,6 +105,10 @@ export default function Agentes() {
   useEffect(() => {
     refresh();
   }, [verDadosDeBaja]);
+
+  useEffect(() => {
+    setVerDadosDeBaja(vista === "baja");
+  }, [vista]);
 
   async function reactivarAgente(a: any) {
     try {
@@ -163,26 +187,61 @@ export default function Agentes() {
   const q = filtro.trim().toLowerCase();
   const tieneSaldo = (a: any) => Math.abs(Number(a.saldo_total ?? 0)) >= 0.005;
   const sinDealDe = (a: any) => (dealsPorAgente[a.id]?.length ?? 0) === 0;
-  const base = agentes.filter((a) => a.name.toLowerCase().includes(q));
-  // Contadores de los filtros (sobre la búsqueda actual, así siempre cuadran con lo que se ve).
+  const activos = agentes.filter((a) => a.active !== false);
+  const supervisores = [...new Set(activos.map((a) => a.supervisor).filter(Boolean) as string[])].sort((x, y) => x.localeCompare(y));
+  const tipoDe = (a: any) => (a.account_type as string) ?? a.default_system;
+  const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
+  const min = num(minimo);
+  const max = num(maximo);
+  const base = agentes.filter(
+    (a) =>
+      (vista === "baja" ? a.active === false : a.active !== false) &&
+      (q === "" || a.name.toLowerCase().includes(q) || String(a.external_id ?? "").toLowerCase().includes(q) || String(a.supervisor ?? "").toLowerCase().includes(q)) &&
+      (supFiltro === "" || (supFiltro === "__ninguno__" ? !a.supervisor : a.supervisor === supFiltro)) &&
+      (tipoFiltro === "" || tipoDe(a) === tipoFiltro) &&
+      (min === null || Number(a.saldo_total ?? 0) >= min) &&
+      (max === null || Number(a.saldo_total ?? 0) <= max)
+  );
+  // Contadores de las pestañas (sobre la búsqueda y los filtros actuales, así siempre cuadran con lo que se ve).
   const cuentas = {
     todos: base.length,
     conSaldo: base.filter(tieneSaldo).length,
     sinDeal: base.filter(sinDealDe).length,
     sinId: base.filter((a) => !a.external_id).length,
-    conSaldoTotal: agentes.filter(tieneSaldo).length,
   };
+  const dir = ordenAsc ? 1 : -1;
   const agentesFiltrados = base
     .filter((a) => (vista === "conSaldo" ? tieneSaldo(a) : vista === "sinDeal" ? sinDealDe(a) : vista === "sinId" ? !a.external_id : true))
-    .sort((a, b) =>
-      orden === "saldo"
-        ? Math.abs(Number(b.saldo_total ?? 0)) - Math.abs(Number(a.saldo_total ?? 0)) || a.name.localeCompare(b.name)
-        : a.name.localeCompare(b.name)
-    );
-  const saldoNetoTotal = agentes.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
+    .sort((a, b) => {
+      const porNombre = a.name.localeCompare(b.name);
+      if (orden === "nombre") return dir * porNombre;
+      if (orden === "supervisor") return dir * String(a.supervisor ?? "").localeCompare(String(b.supervisor ?? "")) || porNombre;
+      return dir * (Math.abs(Number(a.saldo_total ?? 0)) - Math.abs(Number(b.saldo_total ?? 0))) || porNombre;
+    });
+  const saldoNetoTotal = activos.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
+  const saldoFiltrado = agentesFiltrados.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
+  const resumen = {
+    conSaldo: activos.filter(tieneSaldo).length,
+    enCero: activos.filter((a) => !tieneSaldo(a)).length,
+    sinDeal: activos.filter(sinDealDe).length,
+    sinId: activos.filter((a) => !a.external_id).length,
+  };
+  const hayGarantia = agentesFiltrados.some((a) => a.garantia_monto != null);
+  const porPagina = tamano === 0 ? Math.max(agentesFiltrados.length, 1) : tamano;
+  const paginas = Math.max(1, Math.ceil(agentesFiltrados.length / porPagina));
+  const pag = Math.min(pagina, paginas);
+  const recorte = agentesFiltrados.slice((pag - 1) * porPagina, pag * porPagina);
+  const numeros: (number | "…")[] = [];
+  for (let i = 1; i <= paginas; i++) if (i === 1 || i === paginas || Math.abs(i - pag) <= 1) numeros.push(i); else if (numeros[numeros.length - 1] !== "…") numeros.push("…");
+  useEffect(() => { setPagina(1); }, [vista, filtro, supFiltro, tipoFiltro, minimo, maximo, tamano, orden, ordenAsc]);
+  function ordenarPor(k: "saldo" | "nombre" | "supervisor") {
+    if (orden === k) setOrdenAsc((v) => !v);
+    else { setOrden(k); setOrdenAsc(k !== "saldo"); }
+  }
+  const flecha = (k: string) => (orden === k ? (ordenAsc ? " ↑" : " ↓") : "");
 
   // "sin ID de plataforma" es clickeable: abre la edición para cargarlo (igual que antes).
-  const subLineaAgente = (a: any) => (
+  const subLineaAgente = (a: any, conSup = true) => (
     <>
       {a.external_id ? (
         <>ID {a.external_id}</>
@@ -198,7 +257,7 @@ export default function Agentes() {
           sin ID de plataforma
         </span>
       )}
-      {a.supervisor ? " · Sup. " + a.supervisor : ""}
+      {conSup && a.supervisor ? " · Sup. " + a.supervisor : ""}
     </>
   );
 
@@ -225,6 +284,15 @@ export default function Agentes() {
         {/* "+ Nuevo club" / "+ Nuevo agente" separadas de las pestañas (05/10/2026). En celular el club va
             dentro de un menú ⋯ para que el encabezado no ocupe media pantalla. */}
         <div className="ag-head-actions">
+          <ActionsMenu
+            label="Configuración ▾"
+            items={[
+              { label: "Configurar clubes", onClick: () => setTab("clubes") },
+              { label: "Asignar % a agente", onClick: () => setTab("deal") },
+              { label: "Reglas especiales", onClick: () => setTab("reglas") },
+              { label: "Árbol de clubes", onClick: () => setTab("arbol") },
+            ]}
+          />
           <button className="btn secondary small solo-desktop" onClick={() => setTab(tab === "nuevo-club" ? "lista" : "nuevo-club")}>+ Nuevo club</button>
           <button className="btn small" onClick={() => setTab(tab === "nuevo-agente" ? "lista" : "nuevo-agente")}>+ Nuevo agente</button>
           <span className="solo-mobile">
@@ -233,13 +301,14 @@ export default function Agentes() {
         </div>
       </div>
 
-      <div className="tabs tabs-scroll">
-        <button className={tab === "lista" ? "active" : ""} onClick={() => setTab("lista")}>Lista</button>
-        <button className={tab === "clubes" ? "active" : ""} onClick={() => setTab("clubes")}>Configurar clubes</button>
-        <button className={tab === "deal" ? "active" : ""} onClick={() => setTab("deal")}>Asignar % a agente</button>
-        <button className={tab === "reglas" ? "active" : ""} onClick={() => setTab("reglas")}>Reglas especiales</button>
-        <button className={tab === "arbol" ? "active" : ""} onClick={() => setTab("arbol")}>Árbol de clubes</button>
-      </div>
+      {tab !== "lista" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <button className="btn secondary small" onClick={() => setTab("lista")}>← Volver a la lista</button>
+          <b>
+            {tab === "clubes" ? "Configurar clubes" : tab === "deal" ? "Asignar % a agente" : tab === "reglas" ? "Reglas especiales" : tab === "arbol" ? "Árbol de clubes" : tab === "nuevo-club" ? "Nuevo club" : "Nuevo agente"}
+          </b>
+        </div>
+      )}
 
       {tab === "nuevo-agente" && <NuevoAgente onCreated={refresh} agentes={agentes} />}
       {tab === "nuevo-club" && <NuevoClub onCreated={refresh} />}
@@ -255,108 +324,118 @@ export default function Agentes() {
               con contadores en lugar de las tarjetas resumen, supervisor visible en la fila, deals en un
               cajón lateral (hoja inferior en celular) y tarjetas por agente en celular. Mismas acciones,
               mismos datos. */}
-          <div className="panel panel-visible">
-            <div className="ag-toolbar">
-              <div className="seg">
-                <button className={vista === "todos" ? "on" : ""} onClick={() => setVista("todos")}>Todos<span className="n">{cuentas.todos}</span></button>
-                <button className={vista === "conSaldo" ? "on" : ""} onClick={() => setVista("conSaldo")}>Con saldo<span className="n">{cuentas.conSaldo}</span></button>
-                <button className={vista === "sinDeal" ? "on" : ""} onClick={() => setVista("sinDeal")} title="Sin deal propio: usan el default de cada club">Sin deal<span className="n">{cuentas.sinDeal}</span></button>
-                <button className={vista === "sinId" ? "on" : ""} onClick={() => setVista("sinId")} title="Sin ID de plataforma: si el nombre del archivo no matchea exacto, la importación puede no reconocerlos">Sin ID de plataforma<span className="n">{cuentas.sinId}</span></button>
+          <div className="wm">
+            <div className="wm-card wm-saldo">
+              <div>
+                <div className="wm-lbl">SALDO NETO TOTAL</div>
+                <div className={`wm-big ${saldoNetoTotal > 0.004 ? "pos" : saldoNetoTotal < -0.004 ? "neg" : ""}`}>{usd(saldoNetoTotal)}</div>
+                <div className="muted" style={{ fontSize: 13 }}>{activos.length} agentes activos</div>
               </div>
-              <span className="ag-toolbar-spacer" />
-              <label className="switch" title="Los dados de baja no reciben cierres nuevos, pero conservan su historial">
-                <input type="checkbox" checked={verDadosDeBaja} onChange={(e) => setVerDadosDeBaja(e.target.checked)} />
-                <i />
-                Ver dados de baja
-              </label>
-              <input className="search-input ag-search" placeholder="Buscar agente..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-              <button
-                className="btn secondary small"
-                onClick={() =>
-                  exportCsv(
-                    "agentes.csv",
-                    agentesFiltrados.map((a) => ({
-                      nombre: a.name,
-                      sistema: a.default_system,
-                      saldo_total: a.saldo_total,
-                      garantia_monto: a.garantia_monto ?? "",
-                      garantia_consumida: a.garantia_consumida ?? "",
-                    }))
-                  )
-                }
-              >
-                Exportar CSV
-              </button>
+              <div className="ag-resumen">
+                <div><span className="wm-lbl">CON SALDO</span><b>{resumen.conSaldo}</b></div>
+                <div><span className="wm-lbl">EN US$ 0</span><b>{resumen.enCero}</b></div>
+                <div><span className="wm-lbl">SIN DEAL</span><b>{resumen.sinDeal}</b></div>
+                <div><span className="wm-lbl">SIN ID DE PLATAFORMA</span><b>{resumen.sinId}</b></div>
+              </div>
             </div>
 
-            <div className="stat-row">
-              <div className="stat-card">
-                <div className="l">Saldo neto total</div>
-                <div className="v" style={{ color: saldoNetoTotal > 0 ? "var(--green)" : saldoNetoTotal < 0 ? "var(--red)" : undefined }}>{usd(saldoNetoTotal)}</div>
-                <div className="s">{agentes.length} agentes{verDadosDeBaja ? " (con dados de baja)" : " activos"}</div>
-              </div>
-              <div className="stat-card">
-                <div className="l">Con saldo</div>
-                <div className="v">{cuentas.conSaldoTotal}</div>
-                <div className="s">{agentes.length - cuentas.conSaldoTotal} están en US$ 0</div>
-              </div>
-              <span className="ag-toolbar-spacer" />
-              <div className="ag-orden">
-                <span className="muted" style={{ fontSize: 12 }}>Orden:</span>
-                <div className="seg">
-                  <button className={orden === "saldo" ? "on" : ""} onClick={() => setOrden("saldo")}>Mayor saldo</button>
-                  <button className={orden === "nombre" ? "on" : ""} onClick={() => setOrden("nombre")}>Nombre</button>
+            <div className="wm-card">
+              <div className="wm-cab">
+                <div className="wm-h">Agentes <span className="wm-n">{agentesFiltrados.length}</span></div>
+                <div className="wm-fil">
+                  <input className="wm-in" placeholder="Buscar agente, ID o supervisor..." value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+                  <select className="wm-in" value={supFiltro} onChange={(e) => setSupFiltro(e.target.value)} aria-label="Supervisor">
+                    <option value="">Supervisor: todos</option>
+                    <option value="__ninguno__">Sin supervisor</option>
+                    {supervisores.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                  <button type="button" className={`wm-in wm-btn ${masFiltros || tipoFiltro || minimo || maximo ? "on" : ""}`} onClick={() => setMasFiltros((v) => !v)}>⚲ Más filtros ▾</button>
+                  <button
+                    type="button"
+                    className="wm-in wm-btn"
+                    onClick={() =>
+                      exportCsv(
+                        "agentes.csv",
+                        agentesFiltrados.map((a) => ({
+                          nombre: a.name,
+                          sistema: a.default_system,
+                          saldo_total: a.saldo_total,
+                          garantia_monto: a.garantia_monto ?? "",
+                          garantia_consumida: a.garantia_consumida ?? "",
+                        }))
+                      )
+                    }
+                  >
+                    Exportar CSV
+                  </button>
                 </div>
               </div>
-            </div>
+              {(masFiltros || tipoFiltro || minimo || maximo) && (
+                <div className="wm-mas">
+                  <label>Tipo de cuenta
+                    <select className="wm-in" value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
+                      <option value="">Todos</option>
+                      {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>)}
+                    </select>
+                  </label>
+                  <label>Saldo desde<input className="wm-in" inputMode="decimal" value={minimo} onChange={(e) => setMinimo(e.target.value)} placeholder="Sin piso" /></label>
+                  <label>Saldo hasta<input className="wm-in" inputMode="decimal" value={maximo} onChange={(e) => setMaximo(e.target.value)} placeholder="Sin tope" /></label>
+                </div>
+              )}
+              <div className="wm-tabs">
+                <button className={vista === "conSaldo" ? "on" : ""} onClick={() => setVista("conSaldo")}>Con saldo <i>{cuentas.conSaldo}</i></button>
+                <button className={vista === "todos" ? "on" : ""} onClick={() => setVista("todos")}>Todos <i>{cuentas.todos}</i></button>
+                <button className={vista === "sinDeal" ? "on" : ""} onClick={() => setVista("sinDeal")} title="Sin deal propio: usan el default de cada club">Sin deal <i>{cuentas.sinDeal}</i></button>
+                <button className={vista === "sinId" ? "on" : ""} onClick={() => setVista("sinId")} title="Sin ID de plataforma: si el nombre del archivo no matchea exacto, la importación puede no reconocerlos">Sin ID de plataforma <i>{cuentas.sinId}</i></button>
+                <button className={vista === "baja" ? "on" : ""} onClick={() => setVista("baja")} title="Los dados de baja no reciben cierres nuevos, pero conservan su historial">Dados de baja</button>
+              </div>
 
-            {/* 15/10/2026, pedido de Leo ("mejorar visualmente Administración" -> aprobó la variante
-                "Denso / Minimalista"): "Sistema" + "Tipo de cuenta" fusionados en una sola columna con
-                punto de color (account_type es el dato más específico de los dos). El detalle de los % por
-                club se sigue viendo igual que antes al abrir los deals. */}
-            <div className="ag-table-wrap">
-              <table className="table-saldo-accent">
-                <thead>
-                  <tr><th>Agente</th><th>Tipo de cuenta</th><th>Deals</th><th className="num">Saldo total</th><th className="num">Garantía</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {agentesFiltrados.map((a) => {
-                    const saldo = Number(a.saldo_total);
-                    const rowClass = a.active === false ? "" : saldo > 0 ? "row-pos" : saldo < 0 ? "row-neg" : "";
-                    return (
-                      <tr key={a.id} className={`row-click ${rowClass}`} style={a.active === false ? { opacity: 0.55 } : undefined} onClick={() => open(a)}>
-                        <td>
-                          <div className="saldo-name">
+              <div className="ag-table-wrap">
+                <div className={`ag-th ${hayGarantia ? "g" : ""}`}>
+                  <button type="button" className="wm-ord" onClick={() => ordenarPor("nombre")}>AGENTE{flecha("nombre")}</button>
+                  <button type="button" className="wm-ord" onClick={() => ordenarPor("supervisor")}>SUPERVISOR{flecha("supervisor")}</button>
+                  <span>DEALS</span>
+                  {hayGarantia && <span style={{ textAlign: "right" }}>GARANTÍA</span>}
+                  <button type="button" className="wm-ord" style={{ textAlign: "right" }} onClick={() => ordenarPor("saldo")}>SALDO TOTAL{flecha("saldo")}</button>
+                  <span />
+                </div>
+                {recorte.map((a) => {
+                  const saldo = Number(a.saldo_total);
+                  const tipo = tipoDe(a);
+                  return (
+                    <div key={a.id} className={`ag-fila ${hayGarantia ? "g" : ""} ${a.active !== false && saldo < 0 ? "rojo" : ""}`} style={a.active === false ? { opacity: 0.55 } : undefined} onClick={() => open(a)}>
+                      <div className="who">
+                        <span className={`av ${saldo < 0 ? "n" : ""}`}>{iniciales(a.name)}</span>
+                        <div>
+                          <b>
                             {a.name}
                             {a.active === false && <span className="pill" style={{ marginLeft: 8 }}>Dado de baja</span>}
-                          </div>
-                          <div className="saldo-sub">{subLineaAgente(a)}</div>
-                        </td>
-                        <td><TipoDot a={a} /></td>
-                        <td><DealsChip n={dealsPorAgente[a.id]?.length ?? 0} /></td>
-                        <td className="num"><span className={`saldo-big ${saldo > 0 ? "pos" : saldo < 0 ? "neg" : "neutral"}`}>{usd(a.saldo_total)}</span></td>
-                        <td className="num">
-                          {a.garantia_monto != null ? (
-                            <span className="muted" style={{ fontSize: 12.5 }}>{usd(a.garantia_consumida)} / {usd(a.garantia_monto)}</span>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                        </td>
-                        <td style={{ width: 56, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                          <ActionsMenu items={itemsAgente(a)} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {agentesFiltrados.length === 0 && (
-                    <tr><td colSpan={6} className="muted">Ningún agente coincide con estos filtros.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </b>
+                          <span>
+                            {subLineaAgente(a, false)}
+                            {tipo && tipo !== "PREPAGO" && <> · <TipoDot a={a} /></>}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`sup ${a.supervisor ? "" : "no"}`}>{a.supervisor || "—"}</span>
+                      <span><DealsChip n={dealsPorAgente[a.id]?.length ?? 0} /></span>
+                      {hayGarantia && (
+                        <span className="muted" style={{ fontSize: 12.5, textAlign: "right" }}>
+                          {a.garantia_monto != null ? `${usd(a.garantia_consumida)} / ${usd(a.garantia_monto)}` : "—"}
+                        </span>
+                      )}
+                      <span className={`sl ${saldo > 0 ? "p" : saldo < 0 ? "n" : ""}`}>{usd(a.saldo_total)}</span>
+                      <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                        <ActionsMenu items={itemsAgente(a)} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {agentesFiltrados.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>Ningún agente coincide con estos filtros.</div>}
+              </div>
 
             <div className="ag-cards">
-              {agentesFiltrados.map((a) => {
+              {recorte.map((a) => {
                 const saldo = Number(a.saldo_total);
                 return (
                   <div key={a.id} className={`saldo-card ${a.active === false ? "" : saldo > 0 ? "is-pos" : saldo < 0 ? "is-neg" : ""}`} style={a.active === false ? { opacity: 0.55 } : undefined} onClick={() => open(a)}>
@@ -384,9 +463,29 @@ export default function Agentes() {
               })}
               {agentesFiltrados.length === 0 && <div className="muted">Ningún agente coincide con estos filtros.</div>}
             </div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-              Mostrando {agentesFiltrados.length} de {agentes.length}
-              {vista === "conSaldo" && cuentas.todos > cuentas.conSaldo ? ` · el resto (${cuentas.todos - cuentas.conSaldo}) está en US$ 0, se ve con "Todos"` : ""}.
+              <div className="wm-pie">
+                <div className="wm-tot">
+                  <span>Saldo de los agentes filtrados <b className={saldoFiltrado >= 0 ? "in" : "out"}>{usd(saldoFiltrado)}</b></span>
+                  <small>{agentesFiltrados.length} agente{agentesFiltrados.length === 1 ? "" : "s"}</small>
+                </div>
+              </div>
+              <div className="wm-pie2">
+                <span className="muted">
+                  Mostrando {recorte.length} de {agentesFiltrados.length} agentes
+                  <label className="wm-tam">Ver
+                    <select className="wm-in" value={tamano} onChange={(e) => { const t = Number(e.target.value); setTamano(t); try { localStorage.setItem(CLAVE_TAM_AGENTES, String(t)); } catch { /* sin almacenamiento: no pasa nada */ } }}>
+                      {TAMANOS_AGENTES.map((t) => <option key={t} value={t}>{t === 0 ? "Todos" : t}</option>)}
+                    </select>
+                  </label>
+                </span>
+                {tamano !== 0 && paginas > 1 && (
+                  <div className="wm-pag">
+                    <button type="button" className="wm-p" disabled={pag === 1} onClick={() => setPagina(pag - 1)}>‹ Anterior</button>
+                    {numeros.map((n, i) => n === "…" ? <span key={`p${i}`} className="wm-p dis">…</span> : <button key={n} type="button" className={`wm-p ${n === pag ? "on" : ""}`} onClick={() => setPagina(n)}>{n}</button>)}
+                    <button type="button" className="wm-p" disabled={pag === paginas} onClick={() => setPagina(pag + 1)}>Siguiente ›</button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
