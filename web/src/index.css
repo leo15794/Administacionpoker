@@ -2980,3 +2980,10 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .sp-kp { display: flex; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; flex-wrap: wrap; row-gap: 12px; }
 .sp-kp > div { padding: 0 28px; border-left: 1px solid var(--border); }
 .sp-kp > div:first-child { padding-left: 0; border-left: 0; }
+
+/* Proveedores > cierres y pagos con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.wm-card .saldos-table th { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.wm-card .saldos-table tbody tr:hover > td { background: var(--panel-2); }
+.wm-who { display: flex; gap: 12px; align-items: center; }
+.wm-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex-shrink: 0; background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); color: var(--accent); }
+.wm-av.n { background: rgba(198, 40, 40, 0.12); color: #c62828; }

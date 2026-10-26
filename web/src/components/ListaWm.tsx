@@ -89,12 +89,12 @@ export function WmTabs<K extends string>({ tabs, actual, onChange }: { tabs: WmT
 }
 
 /** Tarjeta grande de arriba: etiqueta, monto grande, línea chica y, a la derecha, lo que se pase (botones o conteos). */
-export function WmSaldoCard({ etiqueta, monto, sub, signo, children }: { etiqueta: string; monto: ReactNode; sub?: ReactNode; signo?: "pos" | "neg" | ""; children?: ReactNode }) {
+export function WmSaldoCard({ etiqueta, monto, sub, signo, color, children }: { etiqueta: string; monto: ReactNode; sub?: ReactNode; signo?: "pos" | "neg" | ""; color?: string; children?: ReactNode }) {
   return (
     <div className="wm-card wm-saldo">
       <div>
         <div className="wm-lbl">{etiqueta}</div>
-        <div className={`wm-big ${signo ?? ""}`}>{monto}</div>
+        <div className={`wm-big ${signo ?? ""}`} style={color ? { color } : undefined}>{monto}</div>
         {sub && <div className="muted" style={{ fontSize: 13 }}>{sub}</div>}
       </div>
       {children}

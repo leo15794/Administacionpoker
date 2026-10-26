@@ -6,6 +6,8 @@ import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
 import Ayuda, { Leyenda } from "../components/Ayuda";
+import { exportCsv } from "../csv";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -38,6 +40,8 @@ export default function Proveedores() {
   const [garantiasHistTodas, setGarantiasHistorial] = useState<any[] | null>(null);
   // Proveedor elegido (21/10/2026, pedido de Leo, mockup aprobado): "" = vista general de todos.
   const [provSel, setProvSel] = useState("");
+  // Cierres y pagos con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): buscador, revertidos, totales y paginación.
+  const [busca, setBusca] = useState("");
   const [error, setError] = useState("");
   // Solicitudes de retiro/pago de los proveedores (16/10/2026, pedido de Leo: "necesito todo
   // esto mismo para la sección de proveedores") -- siempre visible arriba de todo, no depende
@@ -77,6 +81,18 @@ export default function Proveedores() {
     api.agentesProveedores().then(setAgentes);
     refreshSolicitudes();
   }, []);
+
+  const provSelNombre = provSel ? (proveedores ?? []).find((x) => x.id === provSel)?.name : undefined;
+  const delSel = (rows: any[] | null) => (rows && provSel ? rows.filter((x) => x.proveedor_id === provSel || (x.proveedor_id === undefined && x.proveedor_name === provSelNombre)) : rows ?? []);
+  const qb = busca.trim().toLowerCase();
+  const cierresVis = delSel(cierresTodos).filter(
+    (c) => (verRevertidos || c.status !== "REVERTIDO") && (qb === "" || `${dateShort(c.week_start)} ${dateShort(c.week_end)} ${c.proveedor_name} ${c.notes ?? ""}`.toLowerCase().includes(qb))
+  );
+  const pagosVis = delSel(pagosTodos).filter(
+    (p) => (verRevertidos || p.status !== "REVERTIDO") && (qb === "" || `${p.club_name} ${p.proveedor_name} ${p.medio} ${dateShort(p.occurred_at)}`.toLowerCase().includes(qb))
+  );
+  const pgCierres = usePaginado(cierresVis, "dp_prov_cierres_tamano", [verRevertidos, busca, provSel]);
+  const pgPagos = usePaginado(pagosVis, "dp_prov_pagos_tamano", [verRevertidos, busca, provSel]);
 
   if (error) {
     return (
@@ -196,8 +212,6 @@ export default function Proveedores() {
   }
 
   // ---- Pantalla (19/10/2026, mockup aprobado): cierres y pagos con revertidos ocultos, menú ⋯ por fila ----
-  const cierresVisibles = (cierres ?? []).filter((c) => verRevertidos || c.status !== "REVERTIDO");
-  const pagosVisibles = (pagos ?? []).filter((p) => verRevertidos || p.status !== "REVERTIDO");
   const medioPagoTxt = (m: string) => ({ SIN_TESORERIA: "Sin tesorería", OTRO: "Otro", USDT: "USDT", EFECTIVO: "Efectivo", ZELLE: "Zelle" } as Record<string, string>)[m] ?? m;
   const itemsPago = (p: any) => [
     ...(p.status !== "REVERTIDO" ? [{ label: "Revertir", onClick: () => onRevertirPago(p.id) }] : []),
@@ -205,7 +219,7 @@ export default function Proveedores() {
   ];
 
   return (
-    <div>
+    <div className="wm">
       <div className="topbar" style={{ flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2>Proveedores <Ayuda>Cuentas separadas de Agentes: alguien nos entrega un % del rake TOTAL de un club (no de sus propios
@@ -292,23 +306,15 @@ export default function Proveedores() {
 
       {!sel && (
       <>
-      <div className="stat-row">
-        <div className="stat-card">
-          <div className="l">Nos deben</div>
-          <div className="v">{usd(totalAFavorNuestro)}</div>
-          <div className="s">saldos a favor nuestro</div>
-        </div>
-        <div className="stat-card">
-          <div className="l">Les debemos</div>
-          <div className="v">{usd(totalAFavorProveedor)}</div>
-          <div className="s">saldos a favor de proveedores</div>
-        </div>
-        <div className="stat-card">
-          <div className="l">Proveedores activos</div>
-          <div className="v">{proveedores.length}</div>
-          <div className="s">con auto-cierre en {autoCierreClubesTodos.length} club{autoCierreClubesTodos.length === 1 ? "" : "es"}</div>
-        </div>
-      </div>
+      <WmSaldoCard etiqueta="NOS DEBEN · PROVEEDORES" monto={usd(totalAFavorNuestro)} color="var(--amber)" sub={`saldos a favor nuestro · ${proveedores.length} proveedor${proveedores.length === 1 ? "" : "es"} activo${proveedores.length === 1 ? "" : "s"}`}>
+        <WmConteos
+          items={[
+            { etiqueta: "LES DEBEMOS", valor: usd(totalAFavorProveedor) },
+            { etiqueta: "PROVEEDORES ACTIVOS", valor: proveedores.length },
+            { etiqueta: "AUTO-CIERRE", valor: `${autoCierreClubesTodos.length} club${autoCierreClubesTodos.length === 1 ? "" : "es"}` },
+          ]}
+        />
+      </WmSaldoCard>
 
       <div className="pv-grid">
         {proveedores.map((p) => {
@@ -403,24 +409,40 @@ export default function Proveedores() {
         </div>
       )}
 
-      <div className="panel">
-        <div className="ag-toolbar" style={{ marginBottom: 12 }}>
-          <span className="seg">
-            {sel && <button className={tab === "resumen" ? "on" : ""} onClick={() => setTab("resumen")}>Resumen</button>}
-            <button className={tab === "cierres" ? "on" : ""} onClick={() => setTab("cierres")}>Cierres<span className="n">{cierres?.length ?? 0}</span></button>
-            <button className={tab === "pagos" ? "on" : ""} onClick={() => setTab("pagos")}>Pagos / cobros<span className="n">{pagos?.length ?? 0}</span></button>
-            <button className={tab === "garantias" ? "on" : ""} onClick={() => setTab("garantias")}>Garantías<span className="n">{garantias?.length ?? 0}</span></button>
-            {sel && <button className={tab === "config" ? "on" : ""} onClick={() => setTab("config")}>Configuración</button>}
-          </span>
-          <span className="ag-toolbar-spacer" />
+      <div className="wm-card">
+        <div className="wm-cab">
+          <div className="wm-h">Movimientos{sel ? ` · ${sel.name}` : ""}</div>
           {(tab === "cierres" || tab === "pagos") && (
-            <label className="switch">
-              <input type="checkbox" checked={verRevertidos} onChange={(e) => setVerRevertidos(e.target.checked)} />
-              <i />
-              Mostrar revertidos
-            </label>
+            <div className="wm-fil">
+              <input className="wm-in" placeholder={tab === "cierres" ? "Buscar semana, proveedor o nota..." : "Buscar club, proveedor o medio..."} value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <button type="button" className={`wm-in wm-btn ${verRevertidos ? "on" : ""}`} onClick={() => setVerRevertidos((v) => !v)}>Mostrar revertidos</button>
+              <button
+                type="button"
+                className="wm-in wm-btn"
+                onClick={() =>
+                  tab === "cierres"
+                    ? exportCsv("proveedores-cierres.csv", cierresVis.map((c) => ({ semana_desde: c.week_start, semana_hasta: c.week_end, proveedor: c.proveedor_name, estado: c.status, cierre: c.cierre, saldo_resultante: c.saldo_nuevo, notas: c.notes ?? "" })))
+                    : exportCsv("proveedores-pagos.csv", pagosVis.map((p) => ({ fecha: p.occurred_at, proveedor: p.proveedor_name, club: p.club_name, tipo: p.direction, medio: p.medio, monto: p.amount, saldo_resultante: p.saldo_nuevo, estado: p.status })))
+                }
+              >
+                Exportar CSV
+              </button>
+            </div>
           )}
         </div>
+        <WmTabs
+          actual={tab}
+          onChange={setTab}
+          tabs={
+            [
+              ...(sel ? [{ k: "resumen", t: "Resumen" }] : []),
+              { k: "cierres", t: "Cierres", n: cierres?.length ?? 0 },
+              { k: "pagos", t: "Pagos / cobros", n: pagos?.length ?? 0 },
+              { k: "garantias", t: "Garantías", n: garantias?.length ?? 0 },
+              ...(sel ? [{ k: "config", t: "Configuración" }] : []),
+            ] as WmTab<Tab>[]
+          }
+        />
 
         {tab === "resumen" && sel && (
           <>
@@ -457,21 +479,27 @@ export default function Proveedores() {
                       <tr><th>Semana</th><th>Estado</th><th className="num">Cierre</th><th className="num">Saldo resultante</th><th></th></tr>
                     </thead>
                     <tbody>
-                      {cierresVisibles.map((c) => (
+                      {pgCierres.recorte.map((c) => (
                         <CierreRow key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <div className="ag-cards">
-                  {cierresVisibles.map((c) => (
+                  {pgCierres.recorte.map((c) => (
                     <CierreCard key={c.id} cierre={c} onRevertir={onRevertirCierre} onRecalcular={onRecalcularCierre} onEliminar={onEliminarCierre} />
                   ))}
                 </div>
-                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-                  Mostrando {cierresVisibles.length} de {cierres.length}
-                  {!verRevertidos && cierres.length > cierresVisibles.length ? ` · ${cierres.length - cierresVisibles.length} revertido${cierres.length - cierresVisibles.length === 1 ? "" : "s"} oculto${cierres.length - cierresVisibles.length === 1 ? "" : "s"}` : ""}.
+                <div className="wm-pie">
+                  <div className="wm-tot">
+                    <span>Cierres filtrados <b className={cierresVis.reduce((a, c) => a + Number(c.cierre), 0) >= 0 ? "in" : "out"}>{(() => { const t = cierresVis.reduce((a, c) => a + Number(c.cierre), 0); return (t < 0 ? "−" : "") + usd(Math.abs(t)); })()}</b></span>
+                    <small>
+                      {cierresVis.length} cierre{cierresVis.length === 1 ? "" : "s"}
+                      {!verRevertidos && cierres.length > cierresVis.length && !busca ? ` · ${cierres.length - cierresVis.length} revertido${cierres.length - cierresVis.length === 1 ? "" : "s"} oculto${cierres.length - cierresVis.length === 1 ? "" : "s"}` : ""}
+                    </small>
+                  </div>
                 </div>
+                <WmPaginacion p={pgCierres} unidad="cierres" />
               </>
             )}
           </>
@@ -491,7 +519,7 @@ export default function Proveedores() {
                       <tr><th>Fecha</th><th>Proveedor · club</th><th>Tipo</th><th>Medio</th><th className="num">Monto</th><th className="num">Saldo resultante</th><th>Link</th><th></th></tr>
                     </thead>
                     <tbody>
-                      {pagosVisibles.map((p) => (
+                      {pgPagos.recorte.map((p) => (
                         <tr key={p.id} style={p.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                           <td className="muted">{dateShort(p.occurred_at)}</td>
                           <td>
@@ -515,7 +543,7 @@ export default function Proveedores() {
                   </table>
                 </div>
                 <div className="ag-cards">
-                  {pagosVisibles.map((p) => (
+                  {pgPagos.recorte.map((p) => (
                     <div key={p.id} className={`saldo-card ${p.direction === "COBRO" ? "is-pos" : "is-neg"}`} style={p.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                       <div className="saldo-card-body">
                         <div className="saldo-card-top">
@@ -538,10 +566,13 @@ export default function Proveedores() {
                     </div>
                   ))}
                 </div>
-                <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-                  Mostrando {pagosVisibles.length} de {pagos.length}
-                  {!verRevertidos && pagos.length > pagosVisibles.length ? ` · ${pagos.length - pagosVisibles.length} revertido${pagos.length - pagosVisibles.length === 1 ? "" : "s"} oculto${pagos.length - pagosVisibles.length === 1 ? "" : "s"}` : ""}.
+                <div className="wm-pie">
+                  <div className="wm-tot">
+                    <span>Neto de los pagos / cobros filtrados <b className={pagosVis.filter((p) => p.status !== "REVERTIDO").reduce((a, p) => a + (p.direction === "COBRO" ? 1 : -1) * Number(p.amount), 0) >= 0 ? "in" : "out"}>{(() => { const t = pagosVis.filter((p) => p.status !== "REVERTIDO").reduce((a, p) => a + (p.direction === "COBRO" ? 1 : -1) * Number(p.amount), 0); return (t < 0 ? "−" : "+") + usd(Math.abs(t)); })()}</b></span>
+                    <small>{pagosVis.length} movimiento{pagosVis.length === 1 ? "" : "s"}</small>
+                  </div>
                 </div>
+                <WmPaginacion p={pgPagos} unidad="pagos / cobros" />
               </>
             )}
           </>
@@ -848,8 +879,13 @@ function CierreRow(props: CierreProps) {
     <>
       <tr style={{ cursor: "pointer", ...(cierre.status === "REVERTIDO" ? { opacity: 0.55 } : {}) }} onClick={toggle}>
         <td>
-          <div className="saldo-name">{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</div>
-          <div className="saldo-sub">{cierre.proveedor_name}{cierre.notes ? ` · ${cierre.notes}` : ""}</div>
+          <div className="wm-who">
+            <span className={`wm-av ${monto < -0.004 ? "n" : ""}`}>{String(dateShort(cierre.week_start)).slice(0, 2)}</span>
+            <div>
+              <div className="saldo-name">{dateShort(cierre.week_start)} - {dateShort(cierre.week_end)}</div>
+              <div className="saldo-sub">{cierre.proveedor_name}{cierre.notes ? ` · ${cierre.notes}` : ""}</div>
+            </div>
+          </div>
         </td>
         <td><EstadoCierre status={cierre.status} /></td>
         <td className="num"><span className={`saldo-big ${monto > 0 ? "pos" : monto < 0 ? "neg" : "neutral"}`}>{monto < 0 ? "−" : ""}{usd(Math.abs(monto))}</span></td>
