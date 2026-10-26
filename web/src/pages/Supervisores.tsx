@@ -6,6 +6,8 @@ import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import { generarPdfCuentasAgentes, type ContenidoPdf, type FormatoPdf } from "../pdfCuentasAgentes";
 import Ayuda from "../components/Ayuda";
+import { exportCsv } from "../csv";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -78,6 +80,10 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   const [cargandoCierre, setCargandoCierre] = useState(false);
   const [aplicandoCierre, setAplicandoCierre] = useState(false);
   const [revirtiendoCierre, setRevirtiendoCierre] = useState(false);
+  // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas Prepago / Win/Lose, buscador, orden y paginación.
+  const [tipoLista, setTipoLista] = useState<"prepago" | "winlose" | null>(null);
+  const [buscaLista, setBuscaLista] = useState("");
+  const [ordenLista, setOrdenLista] = useState<"saldo" | "nombre">("saldo");
 
   function refresh() {
     setError("");
@@ -223,6 +229,17 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
     }
   }
 
+  const tipoListaActual: "prepago" | "winlose" = tipoLista ?? ((supervisores ?? []).some((x) => x.default_system !== "WIN_LOSE") ? "prepago" : "winlose");
+  const qLista = buscaLista.trim().toLowerCase();
+  const listaVisible = (supervisores ?? [])
+    .filter((x) => (x.default_system === "WIN_LOSE") === (tipoListaActual === "winlose") && (qLista === "" || String(x.name).toLowerCase().includes(qLista)))
+    .sort((a, b) => {
+      const sa = tipoListaActual === "winlose" ? Number(a.cuenta_corriente) : Number(a.fichas_reales) + Number(a.cuenta_corriente);
+      const sb = tipoListaActual === "winlose" ? Number(b.cuenta_corriente) : Number(b.fichas_reales) + Number(b.cuenta_corriente);
+      return ordenLista === "nombre" ? String(a.name).localeCompare(String(b.name)) : Math.abs(sb) - Math.abs(sa) || String(a.name).localeCompare(String(b.name));
+    });
+  const pgSup = usePaginado(listaVisible, "dp_supervisores_tamano", [tipoListaActual, buscaLista, ordenLista, modo]);
+
   if (error) {
     return (
       <div className="error">
@@ -353,175 +370,153 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
           </div>
         </div>
       ) : (
-        <>
-          {supervisoresPrepago.length > 0 && (
-            <>
-              <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 17 }}>{agentesModo ? "Agentes Prepago" : "Supervisores Prepago"}</h3>
-                <span className="pill">{supervisoresPrepago.length} cuenta{supervisoresPrepago.length === 1 ? "" : "s"}</span>
-              </div>
-              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>Fichas reales (lo que compraron sus agentes) y cuenta corriente (rakeback).</div>
-              <div className="stat-row">
-                <div className="stat-card">
-                  <div className="l">Saldo total</div>
-                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0))}</div>
-                  <div className="s">fichas reales + cuenta corriente</div>
-                </div>
-                <div className="stat-card">
-                  <div className="l">Fichas reales</div>
-                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.fichas_reales), 0))}</div>
-                  <div className="s">suma de las cuentas</div>
-                </div>
-                <div className="stat-card">
-                  <div className="l">Cuenta corriente</div>
-                  <div className="v">{montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}</div>
-                  <div className="s">suma de las cuentas</div>
-                </div>
-              </div>
+        <div className="wm">
+          <WmSaldoCard
+            etiqueta={tipoListaActual === "prepago" ? `SALDO TOTAL · ${agentesModo ? "AGENTES" : "SUPERVISORES"} PREPAGO` : `CUENTA CORRIENTE · ${agentesModo ? "AGENTES" : "SUPERVISORES"} WIN/LOSE`}
+            monto={montoSignoSup(tipoListaActual === "prepago" ? supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0) : supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}
+            signo={(tipoListaActual === "prepago" ? supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0) : supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0)) >= 0 ? "pos" : "neg"}
+            sub={tipoListaActual === "prepago" ? `fichas reales + cuenta corriente · ${supervisoresPrepago.length} cuenta${supervisoresPrepago.length === 1 ? "" : "s"}` : `una sola cuenta por ${quien.toLowerCase()}, se salda con cobros y pagos en USDT · ${supervisoresWinLose.length} cuenta${supervisoresWinLose.length === 1 ? "" : "s"}`}
+          >
+            <WmConteos
+              items={
+                tipoListaActual === "prepago"
+                  ? [
+                      { etiqueta: "FICHAS REALES", valor: montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.fichas_reales), 0)) },
+                      { etiqueta: "CUENTA CORRIENTE", valor: montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0)) },
+                      ...(supervisoresWinLose.length > 0 ? [{ etiqueta: "WIN/LOSE · CUENTA CORR.", valor: montoSignoSup(supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0)) }] : []),
+                    ]
+                  : [
+                      ...(!agentesModo ? [{ etiqueta: "AGENTES A CARGO", valor: supervisoresWinLose.reduce((acc, x) => acc + Number(x.n_sub ?? 0), 0) }] : []),
+                      ...(supervisoresPrepago.length > 0 ? [{ etiqueta: "PREPAGO · SALDO TOTAL", valor: montoSignoSup(supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0)) }] : []),
+                    ]
+              }
+            />
+          </WmSaldoCard>
 
-              <div className="panel">
-                <div className="ag-table-wrap">
-                  <table className="saldos-table">
-                    <thead>
-                      <tr><th>{quien}</th><th className="num">Fichas reales</th><th className="num">Cuenta corriente</th><th className="num">Saldo total</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                      {supervisoresPrepago.map((x) => {
-                        const total = saldoTotalSup(x);
-                        return (
-                          <tr
-                            key={x.id}
-                            className={`row-click ${total > 0 ? "row-pos" : total < 0 ? "row-neg" : ""}`}
-                            style={seleccionado?.id === x.id ? { outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
-                            onClick={() => abrirSupervisor(x)}
-                          >
-                            <td>
-                              <div className="saldo-name">{x.name}</div>
-                              <div className="saldo-sub">{subTxt(x)}</div>
-                            </td>
-                            <td className="num money">{montoSignoSup(Number(x.fichas_reales))}</td>
-                            <td className="num money">{montoSignoSup(Number(x.cuenta_corriente))}</td>
-                            <td className="num"><span className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</span></td>
-                            <td style={{ width: 100, textAlign: "right" }}>
-                              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>Ver cuenta</button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="ag-cards">
-                  {supervisoresPrepago.map((x) => {
-                    const total = saldoTotalSup(x);
-                    return (
-                      <div
-                        key={x.id}
-                        className={`saldo-card ${total > 0 ? "is-pos" : total < 0 ? "is-neg" : ""}`}
-                        style={seleccionado?.id === x.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
-                        onClick={() => abrirSupervisor(x)}
-                      >
-                        <div className="saldo-card-body">
-                          <div className="saldo-card-top">
-                            <div className="saldo-name">{x.name}</div>
-                            <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</div>
-                          </div>
-                          <div className="saldo-card-mid">
-                            <div className="saldo-sub">{subTxt(x)}</div>
-                          </div>
-                          <div className="saldo-card-foot" style={{ gap: 16 }}>
-                            <span>Fichas reales <b>{montoSignoSup(Number(x.fichas_reales))}</b></span>
-                            <span>Cuenta corriente <b>{montoSignoSup(Number(x.cuenta_corriente))}</b></span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+          <div className="wm-card">
+            <div className="wm-cab">
+              <div className="wm-h">Cuentas <span className="wm-n">{listaVisible.length}</span></div>
+              <div className="wm-fil">
+                <input className="wm-in" placeholder={`Buscar ${quien.toLowerCase()}...`} value={buscaLista} onChange={(e) => setBuscaLista(e.target.value)} />
+                <select className="wm-in" value={ordenLista} onChange={(e) => setOrdenLista(e.target.value as "saldo" | "nombre")} aria-label="Orden">
+                  <option value="saldo">Orden: mayor saldo</option>
+                  <option value="nombre">Orden: nombre</option>
+                </select>
+                <button
+                  type="button"
+                  className="wm-in wm-btn"
+                  onClick={() =>
+                    exportCsv(
+                      agentesModo ? "agentes-cuentas.csv" : "supervisores.csv",
+                      listaVisible.map((x) => ({
+                        nombre: x.name,
+                        sistema: esWinLose(x) ? "WIN_LOSE" : "PREPAGO",
+                        fichas_reales: esWinLose(x) ? "" : x.fichas_reales,
+                        cuenta_corriente: x.cuenta_corriente,
+                        saldo_total: esWinLose(x) ? x.cuenta_corriente : saldoTotalSup(x),
+                      }))
+                    )
+                  }
+                >
+                  Exportar CSV
+                </button>
               </div>
-            </>
-          )}
+            </div>
+            <WmTabs
+              actual={tipoListaActual}
+              onChange={setTipoLista}
+              tabs={[
+                { k: "prepago", t: "Prepago", n: supervisoresPrepago.length },
+                { k: "winlose", t: "Win/Lose", n: supervisoresWinLose.length },
+              ]}
+            />
 
-          {supervisoresWinLose.length > 0 && (
-            <>
-              <div style={{ margin: "22px 0 8px", display: "flex", alignItems: "center", gap: 10 }}>
-                <h3 style={{ margin: 0, fontSize: 17 }}>{agentesModo ? "Agentes Win/Lose" : "Supervisores Win/Lose"}</h3>
-                <span className="pill">{supervisoresWinLose.length} cuenta{supervisoresWinLose.length === 1 ? "" : "s"}</span>
-              </div>
-              <div className="muted" style={{ margin: "0 0 10px", fontSize: 12.5 }}>{agentesModo ? "Una sola cuenta corriente por agente: el cierre completo de cada semana, que se salda con cobros y pagos en USDT." : "Una sola cuenta: el cierre completo de sus agentes, que se salda con cobros y pagos en USDT."}</div>
-              <div className="stat-row">
-                <div className="stat-card">
-                  <div className="l">Cuenta corriente</div>
-                  <div className="v">{montoSignoSup(supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}</div>
-                  <div className="s">suma de las cuentas</div>
-                </div>
-                {!agentesModo && (
-                  <div className="stat-card">
-                    <div className="l">Agentes a cargo</div>
-                    <div className="v">{supervisoresWinLose.reduce((acc, x) => acc + Number(x.n_sub ?? 0), 0)}</div>
-                    <div className="s">Win/Lose</div>
-                  </div>
+            <div className="ag-table-wrap">
+              <div className={`sp-th ${tipoListaActual === "winlose" ? "w" : ""}`}>
+                <span>{quien.toUpperCase()}</span>
+                {tipoListaActual === "prepago" ? (
+                  <>
+                    <span>FICHAS REALES</span><span>CUENTA CORRIENTE</span><span>SALDO TOTAL</span>
+                  </>
+                ) : (
+                  <>
+                    <span>CUENTA CORRIENTE</span><span style={{ textAlign: "left" }}>ESTADO</span>
+                  </>
                 )}
+                <span />
               </div>
+              {pgSup.recorte.map((x) => {
+                const win = tipoListaActual === "winlose";
+                const cc = Number(x.cuenta_corriente);
+                const total = win ? cc : saldoTotalSup(x);
+                return (
+                  <div key={x.id} className={`sp-fila ${win ? "w" : ""} ${seleccionado?.id === x.id ? "sel" : ""}`} onClick={() => abrirSupervisor(x)}>
+                    <div className="who">
+                      <span className={`av ${total < -0.004 ? "n" : ""}`}>{String(x.name).trim().slice(0, 2).toUpperCase()}</span>
+                      <div><b>{x.name}</b><span>{subTxt(x)}</span></div>
+                    </div>
+                    {win ? (
+                      <>
+                        <span className={`t ${cc > 0.004 ? "p" : cc < -0.004 ? "r" : ""}`}>{montoSignoSup(cc)}</span>
+                        <span className="muted" style={{ fontSize: 12.5 }}>{estadoWinLose(cc)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="n">{montoSignoSup(Number(x.fichas_reales))}</span>
+                        <span className={`n ${cc < -0.004 ? "r" : ""}`}>{montoSignoSup(cc)}</span>
+                        <span className={`t ${total > 0.004 ? "p" : total < -0.004 ? "r" : ""}`}>{montoSignoSup(total)}</span>
+                      </>
+                    )}
+                    <button className={`btn small ${seleccionado?.id === x.id ? "" : "secondary"}`} onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>
+                      {seleccionado?.id === x.id ? "Abierta" : "Ver cuenta"}
+                    </button>
+                  </div>
+                );
+              })}
+              {listaVisible.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>Ninguna cuenta coincide con la búsqueda.</div>}
+            </div>
 
-              <div className="panel">
-                <div className="ag-table-wrap">
-                  <table className="saldos-table">
-                    <thead>
-                      <tr><th>{quien}</th><th className="num">Cuenta corriente</th><th>Estado</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                      {supervisoresWinLose.map((x) => {
-                        const cc = Number(x.cuenta_corriente);
-                        return (
-                          <tr
-                            key={x.id}
-                            className={`row-click ${cc > 0 ? "row-pos" : cc < 0 ? "row-neg" : ""}`}
-                            style={seleccionado?.id === x.id ? { outline: "1px solid var(--accent)", outlineOffset: -1 } : undefined}
-                            onClick={() => abrirSupervisor(x)}
-                          >
-                            <td>
-                              <div className="saldo-name">{x.name}</div>
-                              <div className="saldo-sub">{subTxt(x)}</div>
-                            </td>
-                            <td className="num"><span className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</span></td>
-                            <td className="muted" style={{ fontSize: 12.5 }}>{estadoWinLose(cc)}</td>
-                            <td style={{ width: 100, textAlign: "right" }}>
-                              <button className="btn secondary small" onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>Ver cuenta</button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="ag-cards">
-                  {supervisoresWinLose.map((x) => {
-                    const cc = Number(x.cuenta_corriente);
-                    return (
-                      <div
-                        key={x.id}
-                        className={`saldo-card ${cc > 0 ? "is-pos" : cc < 0 ? "is-neg" : ""}`}
-                        style={seleccionado?.id === x.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
-                        onClick={() => abrirSupervisor(x)}
-                      >
-                        <div className="saldo-card-body">
-                          <div className="saldo-card-top">
-                            <div className="saldo-name">{x.name}</div>
-                            <div className={`saldo-big ${cc > 0 ? "pos" : cc < 0 ? "neg" : "neutral"}`}>{montoSignoSup(cc)}</div>
-                          </div>
-                          <div className="saldo-card-mid">
-                            <div className="saldo-sub">{subTxt(x)} · {estadoWinLose(cc)}</div>
-                          </div>
-                        </div>
+            <div className="ag-cards">
+              {pgSup.recorte.map((x) => {
+                const win = tipoListaActual === "winlose";
+                const cc = Number(x.cuenta_corriente);
+                const total = win ? cc : saldoTotalSup(x);
+                return (
+                  <div
+                    key={x.id}
+                    className={`saldo-card ${total > 0 ? "is-pos" : total < 0 ? "is-neg" : ""}`}
+                    style={seleccionado?.id === x.id ? { boxShadow: "0 0 0 1px var(--accent)" } : undefined}
+                    onClick={() => abrirSupervisor(x)}
+                  >
+                    <div className="saldo-card-body">
+                      <div className="saldo-card-top">
+                        <div className="saldo-name">{x.name}</div>
+                        <div className={`saldo-big ${total > 0 ? "pos" : total < 0 ? "neg" : "neutral"}`}>{montoSignoSup(total)}</div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="saldo-card-mid">
+                        <div className="saldo-sub">{subTxt(x)}{win ? ` · ${estadoWinLose(cc)}` : ""}</div>
+                      </div>
+                      {!win && (
+                        <div className="saldo-card-foot" style={{ gap: 16 }}>
+                          <span>Fichas reales <b>{montoSignoSup(Number(x.fichas_reales))}</b></span>
+                          <span>Cuenta corriente <b>{montoSignoSup(cc)}</b></span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="wm-pie">
+              <div className="wm-tot">
+                <span>Saldo de las cuentas <b className={listaVisible.reduce((acc, x) => acc + (tipoListaActual === "winlose" ? Number(x.cuenta_corriente) : saldoTotalSup(x)), 0) >= 0 ? "in" : "out"}>{montoSignoSup(listaVisible.reduce((acc, x) => acc + (tipoListaActual === "winlose" ? Number(x.cuenta_corriente) : saldoTotalSup(x)), 0))}</b></span>
+                <small>{listaVisible.length} cuenta{listaVisible.length === 1 ? "" : "s"}</small>
               </div>
-            </>
-          )}
-        </>
+            </div>
+            <WmPaginacion p={pgSup} unidad="cuentas" />
+          </div>
+        </div>
       )}
 
       {seleccionado && (
@@ -536,23 +531,32 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                   {!agentesModo && subordinados ? ` · ${subordinados.length} agente${subordinados.length === 1 ? "" : "s"} a cargo` : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <button className="btn" onClick={() => setPagoCobro("PAGO")}>Pagar</button>
-                <button className="btn secondary" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
+                <button className="btn" onClick={() => setPagoCobro("COBRO")}>Cobrar</button>
                 {agentesModo && !esWinLose(seleccionado) && (
                   <>
-                    <button className="btn" onClick={() => { setMovTipoInicial("CARGA"); setShowMovimiento(true); }}>Cargar</button>
-                    <button className="btn" onClick={() => { setMovTipoInicial("DESCARGA"); setShowMovimiento(true); }}>Descargar</button>
+                    <button className="btn secondary" onClick={() => { setMovTipoInicial("CARGA"); setShowMovimiento(true); }}>Cargar</button>
+                    <button className="btn secondary" onClick={() => { setMovTipoInicial("DESCARGA"); setShowMovimiento(true); }}>Descargar</button>
                   </>
                 )}
-                {agentesModo && <button className="btn secondary" onClick={() => setShowDescuento(true)}>+ Descuento</button>}
-                {agentesModo && <button className="btn secondary" onClick={() => setPdfPara(seleccionado.id)}>PDF</button>}
-                <button className="btn secondary" onClick={() => { setMovTipoInicial(agentesModo ? "AJUSTE" : null); setShowMovimiento(true); }}>
-                  {esWinLose(seleccionado) || agentesModo ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}
-                </button>
-                <button className="btn secondary" onClick={() => setShowImportar(true)} title={agentesModo ? "Traer a esta cuenta el saldo que el agente tiene hoy" : "Traer a esta cuenta el saldo que ya tienen sus agentes"}>
-                  {agentesModo ? "Importar saldo" : "Importar saldos"}{importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}
-                </button>
+                {!agentesModo && (
+                  <button className="btn secondary" onClick={() => { setMovTipoInicial(null); setShowMovimiento(true); }}>
+                    {esWinLose(seleccionado) ? "+ Ajuste" : "+ Carga / Descarga / Ajuste"}
+                  </button>
+                )}
+                <ActionsMenu
+                  label="⋯ Más ▾"
+                  items={[
+                    ...(agentesModo ? [{ label: "+ Descuento", onClick: () => setShowDescuento(true) }] : []),
+                    ...(agentesModo ? [{ label: "PDF", onClick: () => setPdfPara(seleccionado.id) }] : []),
+                    ...(agentesModo ? [{ label: "+ Ajuste", onClick: () => { setMovTipoInicial("AJUSTE"); setShowMovimiento(true); } }] : []),
+                    {
+                      label: `${agentesModo ? "Importar saldo" : "Importar saldos"}${importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}`,
+                      onClick: () => setShowImportar(true),
+                    },
+                  ]}
+                />
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
               </div>
             </div>
@@ -566,7 +570,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                 </div>
               </div>
             ) : (
-            <div style={{ display: "flex", gap: 28, marginTop: 14, flexWrap: "wrap" }}>
+            <div className="sp-kp">
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Saldo total</div>
                 <div className={`saldo-big ${saldoTotalSup(seleccionado) > 0 ? "pos" : saldoTotalSup(seleccionado) < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
@@ -579,7 +583,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               </div>
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Cuenta corriente</div>
-                <div className="saldo-big" style={{ fontSize: 20 }}>{montoSignoSup(Number(seleccionado.cuenta_corriente), true)}</div>
+                <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) < -0.004 ? "neg" : ""}`} style={{ fontSize: 20 }}>{montoSignoSup(Number(seleccionado.cuenta_corriente), true)}</div>
               </div>
             </div>
             )}
@@ -587,13 +591,19 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
           <div className="panel">
             <div className="ag-toolbar" style={{ marginBottom: 12 }}>
-              <span className="seg tabs-scroll" style={{ overflowX: "auto", maxWidth: "100%" }}>
-                <button className={tabDet === "resumen" ? "on" : ""} onClick={() => setTabDet("resumen")}>Resumen</button>
-                <button className={tabDet === "cierre" ? "on" : ""} onClick={() => setTabDet("cierre")}>Cierre semanal</button>
-                {!agentesModo && <button className={tabDet === "agentes" ? "on" : ""} onClick={() => setTabDet("agentes")}>Agentes a cargo{subordinados && <span className="n">{subordinados.length}</span>}</button>}
-                <button className={tabDet === "movs" ? "on" : ""} onClick={() => setTabDet("movs")}>Movimientos{movimientos && <span className="n">{movimientos.length}</span>}</button>
-                <button className={tabDet === "origen" ? "on" : ""} onClick={() => setTabDet("origen")}>Origen del saldo{migracion && <span className="n">{migracion.length}</span>}</button>
-              </span>
+              <WmTabs
+                actual={tabDet}
+                onChange={setTabDet}
+                tabs={
+                  [
+                    { k: "resumen", t: "Resumen" },
+                    { k: "cierre", t: "Cierre semanal" },
+                    ...(!agentesModo ? [{ k: "agentes", t: "Agentes a cargo", n: subordinados?.length }] : []),
+                    { k: "movs", t: "Movimientos", n: movimientos?.length },
+                    { k: "origen", t: "Origen del saldo", n: migracion?.length },
+                  ] as WmTab<typeof tabDet>[]
+                }
+              />
               <span className="ag-toolbar-spacer" />
               {tabDet === "movs" && (
                 <label className="switch">

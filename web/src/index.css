@@ -2957,3 +2957,26 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .ag-fila .sl.p { color: #34c759; } .ag-fila .sl.n { color: #ff6b6b; }
 :root[data-theme="light"] .ag-fila .sl.p { color: #167a32; }
 :root[data-theme="light"] .ag-fila .sl.n { color: #c62828; }
+
+/* Supervisores / Agentes > lista y cuenta con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.sp-th, .sp-fila { display: grid; grid-template-columns: minmax(0, 1.6fr) 1fr 1fr 1fr 120px; gap: 12px; align-items: center; }
+.sp-th.w, .sp-fila.w { grid-template-columns: minmax(0, 1.6fr) 1fr 1fr 120px; }
+.sp-th { padding: 10px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.sp-th:not(.w) > span:nth-child(n+2):nth-child(-n+4) { text-align: right; }
+.sp-th.w > span:nth-child(2) { text-align: right; }
+.sp-fila { padding: 11px 8px; border-top: 1px solid var(--border); cursor: pointer; }
+.sp-fila:hover { background: var(--panel-2); }
+.sp-fila.sel { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); box-shadow: inset 3px 0 0 var(--accent); }
+.sp-fila .who { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.sp-fila .who b { display: block; font-size: 14px; }
+.sp-fila .who > div > span { display: block; font-size: 12px; color: var(--text-dim); }
+.sp-fila .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex-shrink: 0; background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); color: var(--accent); }
+.sp-fila .av.n { background: rgba(198, 40, 40, 0.12); color: #c62828; }
+.sp-fila .n { text-align: right; font-size: 14.5px; white-space: nowrap; }
+.sp-fila .t { text-align: right; font-size: 16px; font-weight: 750; white-space: nowrap; }
+.sp-fila .p { color: #34c759; } .sp-fila .r { color: #ff6b6b; }
+:root[data-theme="light"] .sp-fila .p { color: #167a32; }
+:root[data-theme="light"] .sp-fila .r { color: #c62828; }
+.sp-kp { display: flex; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; flex-wrap: wrap; row-gap: 12px; }
+.sp-kp > div { padding: 0 28px; border-left: 1px solid var(--border); }
+.sp-kp > div:first-child { padding-left: 0; border-left: 0; }
