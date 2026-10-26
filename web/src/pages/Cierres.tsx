@@ -7,6 +7,7 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 import ActionsMenu from "../components/ActionsMenu";
 import Modal from "../components/Modal";
 import Ayuda from "../components/Ayuda";
+import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 // Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
 // entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
@@ -54,6 +55,9 @@ export default function Cierres() {
   const [clubFiltro, setClubFiltro] = useState<string>(clubObjetivo ?? "");
   const [mostrarCero, setMostrarCero] = useState(false);
   const [borrandoSemana, setBorrandoSemana] = useState(false);
+  // Historial con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): buscador, filtro de sistema y paginación.
+  const [busca, setBusca] = useState("");
+  const [sistemaFiltro, setSistemaFiltro] = useState("");
 
   const esRaro = (c: any) => !!c.is_manual || String(c.week_end).slice(0, 10) <= String(c.week_start).slice(0, 10);
   const filasRaras = cierres.filter(esRaro);
@@ -80,9 +84,16 @@ export default function Cierres() {
   const clubesDeLaSemana = Array.from(new Set(filasSemana.map((c) => c.club_name)));
   const filasDelClub = filasSemana.filter((c) => !clubFiltro || c.club_id === clubFiltro);
   const cantEnCero = filasDelClub.filter(enCero).length;
+  const qb = busca.trim().toLowerCase();
   const filasVisibles = filasDelClub
     .filter((c) => mostrarCero || !enCero(c))
+    .filter((c) => (sistemaFiltro === "" || c.system === sistemaFiltro) && (qb === "" || `${c.agent_name} ${c.club_name}`.toLowerCase().includes(qb)))
     .sort((a, b) => Math.abs(Number(b.final_closing)) - Math.abs(Number(a.final_closing)));
+  const pgCierres = usePaginado(filasVisibles, "dp_cierres_tamano", [semanaActiva, clubFiltro, mostrarCero, busca, sistemaFiltro]);
+  const iniciales = (n: string) => {
+    const p = String(n ?? "").trim().split(/\s+/).filter(Boolean);
+    return p.length === 0 ? "?" : ((p[0][0] ?? "") + (p.length > 1 ? p[1][0] ?? "" : p[0][1] ?? "")).toUpperCase();
+  };
   // Las cifras de arriba no cuentan los cierres revertidos (ya no valen).
   const vigentes = filasDelClub.filter((c) => c.status !== "REVERTIDO");
   const sumar = (k: string) => vigentes.reduce((s, c) => s + Number(c[k] ?? 0), 0);
@@ -287,12 +298,39 @@ export default function Cierres() {
         />
       )}
 
-      <div id="cierres-semana" className="panel">
-        <div className="topbar" style={{ marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Historial de cierres</h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div id="cierres-semana" className="wm">
+        {cierres.length > 0 && (
+          <WmSaldoCard
+            etiqueta={`CIERRE FINAL${semanaActiva === RAROS ? "" : " DE LA SEMANA"}${grupoActivo ? ` · ${dm(grupoActivo.weekStart)} AL ${dm(grupoActivo.weekEnd)}` : " · CARGAS APARTE"}`}
+            monto={montoTxt(totFinal)}
+            signo={totFinal >= 0 ? "pos" : "neg"}
+            sub={`${vigentes.length} cierre${vigentes.length === 1 ? "" : "s"} · ${new Set(vigentes.map((c) => c.club_id)).size} club${new Set(vigentes.map((c) => c.club_id)).size === 1 ? "" : "es"}${filasDelClub.length > vigentes.length ? ` · ${filasDelClub.length - vigentes.length} revertido${filasDelClub.length - vigentes.length === 1 ? "" : "s"}` : ""}`}
+          >
+            <WmConteos
+              items={[
+                { etiqueta: "RAKE", valor: <>{usd(totRake)}<span className="muted" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>rakeback {usd(totRakeback)}</span></> },
+                { etiqueta: "RESULTADO DE MESAS", valor: <>{montoTxt(totResultado)}<span className="muted" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>suma de los agentes</span></> },
+              ]}
+            />
+          </WmSaldoCard>
+        )}
+
+        <div className="wm-card">
+        <div className="wm-cab">
+          <div className="wm-h">Historial de cierres <span className="wm-n">{filasDelClub.length}</span></div>
+          <div className="wm-fil">
+            <input className="wm-in" placeholder="Buscar agente o club..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <select className="wm-in" value={sistemaFiltro} onChange={(e) => setSistemaFiltro(e.target.value)} aria-label="Sistema">
+              <option value="">Sistema: todos</option>
+              <option value="PREPAGO">Prepago</option>
+              <option value="WIN_LOSE">Win/Lose</option>
+            </select>
+            {cantEnCero > 0 && (
+              <button type="button" className={`wm-in wm-btn ${mostrarCero ? "on" : ""}`} onClick={() => setMostrarCero((v) => !v)}>Mostrar los {cantEnCero} en US$ 0</button>
+            )}
             <button
-              className="btn secondary small"
+              type="button"
+              className="wm-in wm-btn"
               disabled={filasVisibles.length === 0}
               onClick={() => exportCsv("cierres_semanales.csv", filasDelClub.map(filaCsv))}
             >
@@ -362,101 +400,55 @@ export default function Cierres() {
               )}
             </div>
 
-            <div className="stat-row">
-              <div className="stat-card">
-                <div className="l">Cierre final{semanaActiva === RAROS ? "" : " de la semana"}</div>
-                <div className={`v ${totFinal >= 0 ? "pos" : "neg"}`}>{usd(totFinal)}</div>
-                <div className="s">{grupoActivo ? `${dm(grupoActivo.weekStart)} al ${dm(grupoActivo.weekEnd)}` : "cargas aparte"}</div>
-              </div>
-              <div className="stat-card">
-                <div className="l">Rake</div>
-                <div className="v">{usd(totRake)}</div>
-                <div className="s">rakeback {usd(totRakeback)}</div>
-              </div>
-              <div className="stat-card">
-                <div className="l">Resultado de mesas</div>
-                <div className={`v ${totResultado >= 0 ? "pos" : "neg"}`}>{montoTxt(totResultado)}</div>
-                <div className="s">suma de los agentes</div>
-              </div>
-              <div className="stat-card">
-                <div className="l">Cierres</div>
-                <div className="v">{vigentes.length}</div>
-                <div className="s">{new Set(vigentes.map((c) => c.club_id)).size} club{new Set(vigentes.map((c) => c.club_id)).size === 1 ? "" : "es"}{filasDelClub.length > vigentes.length ? ` · ${filasDelClub.length - vigentes.length} revertido${filasDelClub.length - vigentes.length === 1 ? "" : "s"}` : ""}</div>
-              </div>
-            </div>
-
-            <div className="ag-toolbar">
-              <span className="seg">
-                <button className={!clubFiltro ? "on" : ""} onClick={() => setClubFiltro("")}>
-                  Todos<span className="n">{filasSemana.length}</span>
-                </button>
-                {clubesDeLaSemana.map((nombre) => {
-                  const id = filasSemana.find((c) => c.club_name === nombre)?.club_id;
-                  return (
-                    <button key={id} className={clubFiltro === id ? "on" : ""} onClick={() => setClubFiltro(id)}>
-                      {nombre}<span className="n">{filasSemana.filter((c) => c.club_id === id).length}</span>
-                    </button>
-                  );
-                })}
-              </span>
-              <span className="ag-toolbar-spacer" />
-              {cantEnCero > 0 && (
-                <label className="switch">
-                  <input type="checkbox" checked={mostrarCero} onChange={(e) => setMostrarCero(e.target.checked)} />
-                  <i />
-                  Mostrar los {cantEnCero} en US$ 0
-                </label>
-              )}
-            </div>
+            <WmTabs
+              actual={clubFiltro}
+              onChange={setClubFiltro}
+              tabs={
+                [
+                  { k: "", t: "Todos", n: filasSemana.length },
+                  ...clubesDeLaSemana.map((nombre) => {
+                    const id = filasSemana.find((c) => c.club_name === nombre)?.club_id;
+                    return { k: id, t: nombre, n: filasSemana.filter((c) => c.club_id === id).length };
+                  }),
+                ] as WmTab<string>[]
+              }
+            />
 
             <div className="ag-table-wrap">
-              <table className="saldos-table">
-                <thead>
-                  <tr>
-                    <th>Agente · club</th><th>Sistema</th>
-                    <th className="num">Resultado</th><th className="num">Rake</th><th className="num">Rakeback</th><th className="num">Cierre final</th><th>Extra</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filasVisibles.map((c) => {
-                    const final = Number(c.final_closing);
-                    const abierto = expandido.has(c.id);
-                    const resaltada = c.week_start === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
-                    return (
-                      <Fragment key={c.id}>
-                        <tr
-                          className={`${final > 0 ? "row-pos" : final < 0 ? "row-neg" : ""}${resaltada ? " fila-destacada" : ""}`}
-                          style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}
-                        >
-                          <td>
-                            <div className="saldo-name">{c.agent_name}</div>
-                            <div className="saldo-sub">{c.club_name}</div>
-                          </td>
-                          <td className="muted">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                          <td className="num money">{montoTxt(c.result)}</td>
-                          <td className="num money">{usd(c.rake_total)}</td>
-                          <td className="num money">{usd(c.rakeback)}</td>
-                          <td className="num"><span className={`saldo-big ${final > 0 ? "pos" : final < 0 ? "neg" : "neutral"}`}>{montoTxt(final)}</span></td>
-                          <td>{extraCierre(c)}</td>
-                          <td style={{ width: 56, textAlign: "right" }}><ActionsMenu items={itemsCierre(c)} /></td>
-                        </tr>
-                        {abierto && tieneDesglose(c) && (
-                          <tr className="muted" style={{ background: "rgba(255,255,255,0.02)" }}>
-                            <td colSpan={8}>{desgloseCierre(c)}</td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                  {filasVisibles.length === 0 && (
-                    <tr><td colSpan={8} className="muted">No hay cierres para mostrar con estos filtros.</td></tr>
-                  )}
-                </tbody>
-              </table>
+              <div className="cz-th">
+                <span>AGENTE · CLUB</span><span>SISTEMA</span><span>RESULTADO</span><span>RAKE</span><span>RAKEBACK</span><span>CIERRE FINAL</span><span>EXTRA</span><span />
+              </div>
+              {pgCierres.recorte.map((c) => {
+                const final = Number(c.final_closing);
+                const abierto = expandido.has(c.id);
+                const resaltada = c.week_start === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
+                return (
+                  <Fragment key={c.id}>
+                    <div className={`cz-fila${resaltada ? " fila-destacada" : ""}`} style={c.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
+                      <div className="wm-who">
+                        <span className={`wm-av ${final < -0.004 ? "n" : ""}`}>{iniciales(c.agent_name)}</span>
+                        <div>
+                          <div className="saldo-name">{c.agent_name}</div>
+                          <div className="saldo-sub">{c.club_name}</div>
+                        </div>
+                      </div>
+                      <span><span className={`wm-pill ${c.system === "PREPAGO" ? "neutro" : "gris"}`}>{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span></span>
+                      <span className={`n ${Number(c.result) < -0.004 ? "r" : ""}`}>{montoTxt(c.result)}</span>
+                      <span className="n">{usd(c.rake_total)}</span>
+                      <span className="n">{usd(c.rakeback)}</span>
+                      <span className={`t ${final > 0.004 ? "p" : final < -0.004 ? "r" : ""}`}>{montoTxt(final)}</span>
+                      <span className="ex">{extraCierre(c)}</span>
+                      <div style={{ textAlign: "right" }}><ActionsMenu items={itemsCierre(c)} /></div>
+                    </div>
+                    {abierto && tieneDesglose(c) && <div className="cz-desglose muted">{desgloseCierre(c)}</div>}
+                  </Fragment>
+                );
+              })}
+              {filasVisibles.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>No hay cierres para mostrar con estos filtros.</div>}
             </div>
 
             <div className="ag-cards">
-              {filasVisibles.map((c) => {
+              {pgCierres.recorte.map((c) => {
                 const final = Number(c.final_closing);
                 const abierto = expandido.has(c.id);
                 const resaltada = c.week_start === weekObjetivo && (!clubObjetivo || c.club_id === clubObjetivo);
@@ -490,12 +482,19 @@ export default function Cierres() {
               })}
               {filasVisibles.length === 0 && <div className="muted">No hay cierres para mostrar con estos filtros.</div>}
             </div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-              Mostrando {filasVisibles.length} de {filasDelClub.length}
-              {!mostrarCero && cantEnCero > 0 ? ` · ${cantEnCero} en US$ 0 oculto${cantEnCero === 1 ? "" : "s"}` : ""}.
+            <div className="wm-pie">
+              <div className="wm-tot">
+                <span>Cierre final de lo filtrado <b className={filasVisibles.filter((c) => c.status !== "REVERTIDO").reduce((a, c) => a + Number(c.final_closing), 0) >= 0 ? "in" : "out"}>{montoTxt(filasVisibles.filter((c) => c.status !== "REVERTIDO").reduce((a, c) => a + Number(c.final_closing), 0))}</b></span>
+                <small>
+                  {filasVisibles.length} cierre{filasVisibles.length === 1 ? "" : "s"}
+                  {!mostrarCero && cantEnCero > 0 ? ` · ${cantEnCero} en US$ 0 oculto${cantEnCero === 1 ? "" : "s"}` : ""}
+                </small>
+              </div>
             </div>
+            <WmPaginacion p={pgCierres} unidad="cierres" />
           </>
         )}
+        </div>
       </div>
 
       {bancados.length > 0 && (

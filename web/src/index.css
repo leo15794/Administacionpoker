@@ -2987,3 +2987,17 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .wm-who { display: flex; gap: 12px; align-items: center; }
 .wm-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex-shrink: 0; background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); color: var(--accent); }
 .wm-av.n { background: rgba(198, 40, 40, 0.12); color: #c62828; }
+
+/* Cierres semanales > historial con el estilo de la Wallet (23/10/2026, mockup aprobado) */
+.cz-th, .cz-fila { display: grid; grid-template-columns: minmax(0, 1.5fr) 100px 1fr 1fr 1fr 1fr 1.1fr 44px; gap: 10px; align-items: center; }
+.cz-th { padding: 10px 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.cz-th > span:nth-child(n+3):nth-child(-n+6) { text-align: right; }
+.cz-fila { padding: 10px 8px; border-top: 1px solid var(--border); }
+.cz-fila:hover { background: var(--panel-2); }
+.cz-fila .n { text-align: right; font-size: 14px; white-space: nowrap; }
+.cz-fila .t { text-align: right; font-size: 15.5px; font-weight: 750; white-space: nowrap; }
+.cz-fila .p { color: #34c759; } .cz-fila .r { color: #ff6b6b; }
+:root[data-theme="light"] .cz-fila .p { color: #167a32; }
+:root[data-theme="light"] .cz-fila .r { color: #c62828; }
+.cz-fila .ex { font-size: 12.5px; color: var(--text-dim); min-width: 0; }
+.cz-desglose { padding: 6px 12px 12px 54px; border-top: 1px dashed var(--border); }
