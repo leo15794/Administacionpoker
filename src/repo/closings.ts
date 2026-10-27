@@ -613,6 +613,20 @@ async function aplicarCierreCompensacionPersonaTx(client: PoolClient, input: Apl
     ]
   );
 
+  // Detalle por jugador (27/10/2026, portal de socio): el socio necesita ver sus jugadores de la semana. Mismos % que se usaron en el agregado.
+  for (const j of input.jugadoresDetalle ?? []) {
+    const rebateJugador = (j.resultado + j.rake) * input.rebatePct;
+    const resultadoAjustado = j.resultado + rebateJugador;
+    const rakebackBruto = j.rake * calc.rakebackPct;
+    const pRes = await client.query(`SELECT id FROM players WHERE club_id = $1 AND external_id = $2`, [input.clubId, j.playerExternalId]);
+    await client.query(
+      `INSERT INTO weekly_closing_player_details
+        (id, closing_id, player_id, player_external_id, player_name, resultado, rake, rebate_pct, rebate, resultado_ajustado, rakeback_pct, rakeback, cierre_jugador)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [newId("wcpd"), id, pRes.rows[0]?.id ?? null, j.playerExternalId, j.playerName, j.resultado, j.rake, input.rebatePct, rebateJugador, resultadoAjustado, calc.rakebackPct, rakebackBruto, resultadoAjustado + rakebackBruto]
+    );
+  }
+
   await client.query(
     `INSERT INTO partner_account_entries
       (id, account_id, category, concept, amount, entry_date, notes, idempotency_key, source_agent_id, source_club_id, source_week_start)

@@ -2466,3 +2466,10 @@ CREATE INDEX IF NOT EXISTS idx_tb_player_mov_player ON tb_player_movimientos(pla
 -- Cuenta de prueba de TeamBack Afiliados (23/10/2026, pedido de Leo): jugadores marcados como "prueba" para mostrar cómo funciona el
 -- portal con cierres cargados a mano. Quedan fuera de totales, ganancias, historial de pagos, árbol, cuentas y avisos reales (ver repo/tbPrueba.ts).
 ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS es_prueba BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Rol SOCIO de acceso al portal (27/10/2026, pedido de Leo: "crearle cuenta a los socios para que vean el desglose de sus cierres y sus jugadores") --
+-- un login de agent_users puede colgar de una cuenta de socio (partner_accounts) en vez de un agente. Mismo criterio que PROVEEDOR: agent_id NULL,
+-- partner_account_id seteado. Ver repo/socios.ts y GET /portal/mi-socio.
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS partner_account_id TEXT REFERENCES partner_accounts(id);
+ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
+ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR','SOCIO'));

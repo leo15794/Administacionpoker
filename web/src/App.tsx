@@ -30,6 +30,7 @@ import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
 import Notificaciones from "./pages/Notificaciones";
 import MiProveedor from "./pages/MiProveedor";
+import MiSocio from "./pages/MiSocio";
 import MiProveedorCierre from "./pages/MiProveedorCierre";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import { api } from "./api";
@@ -44,7 +45,7 @@ function Inicio() {
   } catch {
     return <Navigate to="/login" replace />;
   }
-  return <Navigate to={role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : "/mi-cuenta"} replace />;
+  return <Navigate to={role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} replace />;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -114,6 +115,17 @@ export default function App() {
           }
         >
           <Route index element={<MiSupervision />} />
+        </Route>
+
+        <Route
+          path="/mi-socio"
+          element={
+            <RequireAuth>
+              <Shell role="SOCIO" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MiSocio />} />
         </Route>
 
         <Route

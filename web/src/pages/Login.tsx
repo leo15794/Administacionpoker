@@ -25,6 +25,7 @@ export default function Login() {
         role === "ADMIN" ? "/dashboard" :
         role === "SUPERVISOR" ? "/mi-supervision" :
         role === "PROVEEDOR" ? "/mi-proveedor" :
+        role === "SOCIO" ? "/mi-socio" :
         "/mi-cuenta"
       );
     } catch (err: any) {

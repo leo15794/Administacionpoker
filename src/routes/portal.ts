@@ -14,6 +14,7 @@ import {
   agenteTieneCuentaPropia,
   getMiCuentaAgente,
 } from "../repo/supervisores.js";
+import { getMiSocio } from "../repo/socios.js";
 import {
   listSaldosProveedores,
   listCierresProveedor,
@@ -277,6 +278,19 @@ portalRouter.get("/mi-supervision/cierre-semanal/:weekStart", requireAuth, async
 // ve en Administración -> Proveedores (saldo, cierres, pagos) pero SIEMPRE filtrado a sí mismo,
 // vía req.user!.proveedorId (nunca a un :id de la URL) -- mismo criterio que /mi-supervision.
 // ---------------------------------------------------------------------------------------------
+// Portal de socio (27/10/2026): SOLO confía en partnerAccountId del token, nunca en un id que mande el cliente.
+portalRouter.get("/mi-socio", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "SOCIO" || !req.user!.partnerAccountId) {
+    return res.status(403).json({ error: "Esta cuenta no es de tipo Socio." });
+  }
+  try {
+    res.json(await getMiSocio(req.user!.partnerAccountId));
+  } catch (err: any) {
+    console.error("Error en /portal/mi-socio:", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar tu cuenta." });
+  }
+});
+
 portalRouter.get("/mi-proveedor", requireAuth, async (req: AuthedRequest, res) => {
   if (req.user!.role !== "PROVEEDOR" || !req.user!.proveedorId) {
     return res.status(403).json({ error: "Esta cuenta no es de tipo Proveedor." });

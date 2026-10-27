@@ -74,8 +74,13 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
       role: user.role,
       email: user.email,
       proveedorId: user.proveedor_id,
+      partnerAccountId: user.partner_account_id ?? null,
     });
-    res.json({ token, agentName: user.agent_name ?? user.proveedor_name, role: user.role });
+    let nombreSocio: string | null = null;
+    if (user.role === "SOCIO" && user.partner_account_id) {
+      nombreSocio = (await pool.query(`SELECT name FROM partner_accounts WHERE id = $1`, [user.partner_account_id])).rows[0]?.name ?? null;
+    }
+    res.json({ token, agentName: user.agent_name ?? user.proveedor_name ?? nombreSocio, role: user.role });
   } catch (err: any) {
     // (24/09/2026, encontrado en análisis de seguridad) -- antes esto devolvía el mensaje crudo
     // del error (podía ser un error de Postgres con nombres de tabla/columna) al cliente. El

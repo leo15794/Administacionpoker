@@ -175,6 +175,7 @@ export const api = {
     request("/portal/mi-supervision/solicitudes-retiro", { method: "POST", body: JSON.stringify(data) }),
   // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- portal de solo lectura, ver routes/portal.ts.
   miProveedor: () => request("/portal/mi-proveedor"),
+  miSocio: () => request("/portal/mi-socio"),
   miProveedorDetalleCierre: (cierreId: string) => request(`/portal/mi-proveedor/cierres/${cierreId}/detalle`),
   miProveedorLineasCierre: (cierreId: string) => request(`/portal/mi-proveedor/cierres/${cierreId}/lineas`),
   // Solicitudes de retiro/pago del propio proveedor (16/10/2026, pedido de Leo: "necesito todo
@@ -893,21 +894,23 @@ export const api = {
     agentIds?: string[];
     defaultAgentId?: string;
     proveedorId?: string;
+    partnerAccountId?: string;
     email: string;
     password: string;
-    role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR";
+    role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO";
   }) => request("/users", { method: "POST", body: JSON.stringify(data) }),
   actualizarUsuario: (
     id: string,
     data: {
       email?: string;
-      role?: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR";
+      role?: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO";
       active?: boolean;
       password?: string;
       agentIds?: string[];
       // Obligatorio si se manda agentIds: cuál de esos usar como cuenta de acceso por defecto.
       defaultAgentId?: string;
       proveedorId?: string;
+      partnerAccountId?: string;
     }
   ) => request(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   eliminarUsuario: (id: string) => request(`/users/${id}`, { method: "DELETE" }),

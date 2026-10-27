@@ -4,19 +4,27 @@ import { z } from "zod";
 import { pool, newId } from "../db/pool.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { eliminarMovimientoReferido } from "../repo/supervisorReferidos.js";
+import { asegurarSchemaSocios } from "../repo/socios.js";
 
 export const usersRouter = Router();
+
+// Antes de la migración la columna partner_account_id puede no existir: solo se toca si ya está.
+async function colSocioExiste() {
+  const r = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`, ["agent_users", "partner_account_id"]);
+  return r.rows.length > 0;
+}
 
 // Listado de usuarios de acceso (para el panel de administración de usuarios). Un mismo login
 // puede tener varios agentes/clubes asociados (agent_user_agents) — se traen todos agregados
 // para que la tabla muestre "TeamBack Suprema, Fénix GG" en vez de un solo nombre.
 usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
+  await asegurarSchemaSocios();
   // LEFT JOIN a los dos (16/10/2026, rol PROVEEDOR): un login ahora puede colgar de un agente
   // O de un proveedor -- con INNER JOIN de antes, un usuario PROVEEDOR (agent_id NULL) hubiera
   // desaparecido entero de este listado.
   const r = await pool.query(
-    `SELECT u.id, u.email, u.role, u.active, u.created_at, u.agent_id, u.proveedor_id,
-            p.name as proveedor_name,
+    `SELECT u.id, u.email, u.role, u.active, u.created_at, u.agent_id, u.proveedor_id, u.partner_account_id,
+            p.name as proveedor_name, pa.name as socio_name,
             COALESCE(
               (SELECT json_agg(json_build_object('id', a2.id, 'name', a2.name) ORDER BY a2.name)
                FROM agent_user_agents uax JOIN agents a2 ON a2.id = uax.agent_id
@@ -26,6 +34,7 @@ usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
      FROM agent_users u
      LEFT JOIN agents a ON a.id = u.agent_id
      LEFT JOIN proveedores p ON p.id = u.proveedor_id
+     LEFT JOIN partner_accounts pa ON pa.id = u.partner_account_id
      ORDER BY u.created_at DESC`
   );
   res.json(r.rows);
@@ -41,7 +50,7 @@ const usuarioField = z.string().trim().min(3, "Mínimo 3 caracteres.");
 // login, ver el superRefine de abajo).
 const createSchema = z
   .object({
-    role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR"]),
+    role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR", "SOCIO"]),
     email: usuarioField,
     password: z.string().min(6),
     agentIds: z.array(z.string()).optional(),
@@ -50,9 +59,14 @@ const createSchema = z
     // pesan igual en el selector de arriba, esto es una decisión aparte.
     defaultAgentId: z.string().optional(),
     proveedorId: z.string().optional(),
+    partnerAccountId: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.role === "PROVEEDOR") {
+    if (data.role === "SOCIO") {
+      if (!data.partnerAccountId) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Elegí la cuenta de socio.", path: ["partnerAccountId"] });
+      }
+    } else if (data.role === "PROVEEDOR") {
       if (!data.proveedorId) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Elegí un proveedor.", path: ["proveedorId"] });
       }
@@ -68,8 +82,9 @@ const createSchema = z
 usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { role, agentIds, defaultAgentId, proveedorId, email, password } = parsed.data;
-  if (role !== "PROVEEDOR" && agentIds && defaultAgentId && !agentIds.includes(defaultAgentId)) {
+  const { role, agentIds, defaultAgentId, proveedorId, partnerAccountId, email, password } = parsed.data;
+  if (role === "SOCIO") await asegurarSchemaSocios();
+  if (role !== "PROVEEDOR" && role !== "SOCIO" && agentIds && defaultAgentId && !agentIds.includes(defaultAgentId)) {
     return res.status(400).json({ error: "La cuenta de acceso por defecto tiene que ser uno de los agentes tildados." });
   }
   const client = await pool.connect();
@@ -77,7 +92,12 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
     await client.query("BEGIN");
     const hash = await bcrypt.hash(password, 10);
     const id = newId("user");
-    if (role === "PROVEEDOR") {
+    if (role === "SOCIO") {
+      await client.query(
+        `INSERT INTO agent_users (id, agent_id, partner_account_id, email, password_hash, role) VALUES ($1,NULL,$2,$3,$4,$5)`,
+        [id, partnerAccountId, email, hash, role]
+      );
+    } else if (role === "PROVEEDOR") {
       await client.query(
         `INSERT INTO agent_users (id, agent_id, proveedor_id, email, password_hash, role) VALUES ($1,NULL,$2,$3,$4,$5)`,
         [id, proveedorId, email, hash, role]
@@ -107,7 +127,7 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
 
 const updateSchema = z.object({
   email: usuarioField.optional(),
-  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR"]).optional(),
+  role: z.enum(["ADMIN", "AGENT", "SUPERVISOR", "PROVEEDOR", "SOCIO"]).optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
   agentIds: z.array(z.string()).min(1).optional(),
@@ -116,11 +136,14 @@ const updateSchema = z.object({
   defaultAgentId: z.string().min(1).optional(),
   // Rol PROVEEDOR (16/10/2026) -- mutuamente excluyente con defaultAgentId, ver abajo.
   proveedorId: z.string().min(1).optional(),
+  // Rol SOCIO (27/10/2026) -- mutuamente excluyente con defaultAgentId y proveedorId.
+  partnerAccountId: z.string().min(1).optional(),
 });
 usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { email, role, active, password, agentIds, defaultAgentId, proveedorId } = parsed.data;
+  const { email, role, active, password, agentIds, defaultAgentId, proveedorId, partnerAccountId } = parsed.data;
+  if (role === "SOCIO" || partnerAccountId !== undefined) await asegurarSchemaSocios();
 
   // Nunca dejar que un admin se saque su propio acceso por error (quedaría el sistema sin admin).
   if (req.params.id === req.user?.userId && (active === false || role === "AGENT")) {
@@ -161,11 +184,18 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
     // Mutuamente excluyente con proveedorId (16/10/2026) -- si este login vuelve a ser
     // AGENT/SUPERVISOR/ADMIN, se suelta cualquier proveedor que tuviera colgado de antes.
     sets.push(`proveedor_id = NULL`);
+    if (partnerAccountId === undefined && (await colSocioExiste())) sets.push(`partner_account_id = NULL`);
   }
   if (proveedorId !== undefined) {
     sets.push(`proveedor_id = $${i++}`);
     values.push(proveedorId);
     sets.push(`agent_id = NULL`);
+  }
+  if (partnerAccountId !== undefined) {
+    sets.push(`partner_account_id = $${i++}`);
+    values.push(partnerAccountId);
+    sets.push(`agent_id = NULL`);
+    sets.push(`proveedor_id = NULL`);
   }
 
   if (sets.length === 0 && agentIds === undefined) return res.status(400).json({ error: "Nada para actualizar." });

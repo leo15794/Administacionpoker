@@ -281,7 +281,7 @@ function getInitialNavOrder(): string[] {
   }
 }
 
-export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" }) {
+export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO" }) {
   const nav = useNavigate();
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
@@ -464,6 +464,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     role === "ADMIN" ? "Panel administrativo" :
     role === "SUPERVISOR" ? "Portal de supervisor" :
     role === "PROVEEDOR" ? "Portal de proveedor" :
+    role === "SOCIO" ? "Portal de socio" :
     "Portal de agente";
 
   return (
@@ -501,8 +502,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               );
             })
           ) : (
-            <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : "/mi-cuenta"} className="tn-item tn-solo">
-              {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : "Mi cuenta"}
+            <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} className="tn-item tn-solo">
+              {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : role === "SOCIO" ? "Mi cuenta de socio" : "Mi cuenta"}
             </NavLink>
           )}
         </nav>
@@ -613,6 +614,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} Mi supervisión</NavLink>
           ) : role === "PROVEEDOR" ? (
             <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} Mi proveedor</NavLink>
+          ) : role === "SOCIO" ? (
+            <NavLink to="/mi-socio" className="nav-link" title="Mi cuenta de socio">{icon.cuenta} Mi cuenta de socio</NavLink>
           ) : (
             <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} Mi cuenta</NavLink>
           )}

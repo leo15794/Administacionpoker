@@ -361,6 +361,8 @@ export default function Usuarios() {
   // Rol PROVEEDOR (16/10/2026, pedido de Leo) -- reusa la misma tabla proveedores que ya existe
   // en Administración -> Proveedores, no hay que cargar nada de nuevo.
   const [proveedores, setProveedores] = useState<any[]>([]);
+  // Rol SOCIO (27/10/2026, pedido de Leo): un login que ve el portal de una cuenta de socio (Cuentas de socios).
+  const [cuentasSocio, setCuentasSocio] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editando, setEditando] = useState<any | null>(null);
   const [preseleccionarAgente, setPreseleccionarAgente] = useState<{ id: string; name: string } | null>(null);
@@ -394,6 +396,7 @@ export default function Usuarios() {
     refresh();
     refreshAgentes();
     api.proveedores().then(setProveedores);
+    api.cuentasSocios().then((c: any[]) => setCuentasSocio(c.filter((x) => x.kind !== "OPERATIVA"))).catch(() => {});
     window.addEventListener("digiplayers:agentes-actualizados", refreshAgentes);
     return () => window.removeEventListener("digiplayers:agentes-actualizados", refreshAgentes);
   }, []);
@@ -454,6 +457,7 @@ export default function Usuarios() {
         <NuevoUsuario
           agentes={agentes}
           proveedores={proveedores}
+          cuentasSocio={cuentasSocio}
           preseleccionado={preseleccionarAgente ? { agentId: preseleccionarAgente.id, agentName: preseleccionarAgente.name, role: "SUPERVISOR" } : undefined}
           onCreated={() => {
             refresh();
@@ -601,13 +605,15 @@ export default function Usuarios() {
               <tr key={u.id}>
                 <td>{u.email}</td>
                 <td className="muted">
-                  {u.role === "PROVEEDOR" ? (u.proveedor_name ?? "—") : (u.agentes ?? []).map((a: any) => a.name).join(", ")}
+                  {u.role === "SOCIO" ? (u.socio_name ?? "—") : u.role === "PROVEEDOR" ? (u.proveedor_name ?? "—") : (u.agentes ?? []).map((a: any) => a.name).join(", ")}
                 </td>
                 <td>
                   {/* El switch rápido solo cubre Agente/Supervisor/Admin a propósito (16/10/2026)
                       -- pasar a/desde Proveedor necesita elegir CUÁL proveedor, eso se hace
                       siempre desde "Editar" para no dejar un usuario a medio configurar. */}
-                  {u.role === "PROVEEDOR" ? (
+                  {u.role === "SOCIO" ? (
+                    <span className="badge neutral">Socio</span>
+                  ) : u.role === "PROVEEDOR" ? (
                     <span className="badge neutral">Proveedor</span>
                   ) : (
                     <select value={u.role} onChange={(e) => cambiarRole(u, e.target.value as any)} style={{ fontSize: 12.5 }}>
@@ -641,6 +647,7 @@ export default function Usuarios() {
             usuario={editando}
             agentes={agentes}
             proveedores={proveedores}
+            cuentasSocio={cuentasSocio}
             supervisoresData={supervisoresData}
             onDone={() => {
               setEditando(null);
@@ -656,20 +663,23 @@ export default function Usuarios() {
 function NuevoUsuario({
   agentes,
   proveedores,
+  cuentasSocio,
   onCreated,
   preseleccionado,
 }: {
   agentes: any[];
   proveedores: any[];
+  cuentasSocio: any[];
   onCreated: () => void;
   preseleccionado?: { agentId: string; agentName?: string; role?: "ADMIN" | "AGENT" | "SUPERVISOR" };
 }) {
   const [agentIds, setAgentIds] = useState<string[]>(preseleccionado ? [preseleccionado.agentId] : []);
   const [defaultAgentId, setDefaultAgentId] = useState(preseleccionado?.agentId ?? "");
   const [proveedorId, setProveedorId] = useState("");
+  const [partnerAccountId, setPartnerAccountId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR">(preseleccionado?.role ?? "AGENT");
+  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO">(preseleccionado?.role ?? "AGENT");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -686,19 +696,23 @@ function NuevoUsuario({
     if (!email.trim() || password.length < 6) {
       return setMsg({ ok: false, text: "Un usuario y una contraseña de al menos 6 caracteres son obligatorios." });
     }
-    if (role === "PROVEEDOR") {
+    if (role === "SOCIO") {
+      if (!partnerAccountId) return setMsg({ ok: false, text: "Elegí la cuenta de socio." });
+    } else if (role === "PROVEEDOR") {
       if (!proveedorId) return setMsg({ ok: false, text: "Elegí un proveedor." });
     } else if (agentIds.length === 0) {
       return setMsg({ ok: false, text: "Elegí al menos un agente." });
     }
     const defaultId = defaultAgentId || agentIds[0];
-    if (role !== "PROVEEDOR" && !defaultId) {
+    if (role !== "PROVEEDOR" && role !== "SOCIO" && !defaultId) {
       return setMsg({ ok: false, text: "Elegí cuál va a ser la cuenta de acceso por defecto." });
     }
     setLoading(true);
     try {
       await api.crearUsuario(
-        role === "PROVEEDOR"
+        role === "SOCIO"
+          ? { partnerAccountId, email: email.trim(), password, role }
+          : role === "PROVEEDOR"
           ? { proveedorId, email: email.trim(), password, role }
           : { agentIds, defaultAgentId: defaultId, email: email.trim(), password, role }
       );
@@ -708,6 +722,7 @@ function NuevoUsuario({
       setAgentIds([]);
       setDefaultAgentId("");
       setProveedorId("");
+      setPartnerAccountId("");
       onCreated();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo crear el usuario." });
@@ -741,10 +756,19 @@ function NuevoUsuario({
               <option value="SUPERVISOR">Supervisor (resumen de su grupo)</option>
               <option value="ADMIN">Admin (control total)</option>
               <option value="PROVEEDOR">Proveedor (solo su propia ficha)</option>
+              <option value="SOCIO">Socio (su cuenta, cierres y jugadores)</option>
             </select>
           </div>
         </div>
-        {role === "PROVEEDOR" ? (
+        {role === "SOCIO" ? (
+          <div className="field">
+            <label>Cuenta de socio</label>
+            <select value={partnerAccountId} onChange={(e) => setPartnerAccountId(e.target.value)}>
+              <option value="">Elegir...</option>
+              {cuentasSocio.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        ) : role === "PROVEEDOR" ? (
           <div className="field">
             <label>Proveedor</label>
             <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
@@ -769,12 +793,14 @@ function EditarUsuario({
   usuario,
   agentes,
   proveedores,
+  cuentasSocio,
   supervisoresData,
   onDone,
 }: {
   usuario: any;
   agentes: any[];
   proveedores: any[];
+  cuentasSocio: any[];
   supervisoresData: any[];
   onDone: () => void;
 }) {
@@ -783,7 +809,8 @@ function EditarUsuario({
   // Rol editable acá (16/10/2026, antes solo se cambiaba desde el switch rápido de la tabla,
   // que a propósito no cubre Proveedor -- ver nota donde se renderiza esa columna) -- pasar
   // a/desde Proveedor necesita elegir CUÁL proveedor en el mismo paso.
-  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR">(usuario.role);
+  const [role, setRole] = useState<"ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO">(usuario.role);
+  const [partnerAccountId, setPartnerAccountId] = useState<string>(usuario.partner_account_id ?? "");
   const [agentIds, setAgentIds] = useState<string[]>((usuario.agentes ?? []).map((a: any) => a.id));
   const [defaultAgentId, setDefaultAgentId] = useState<string>(usuario.agent_id ?? "");
   const [proveedorId, setProveedorId] = useState<string>(usuario.proveedor_id ?? "");
@@ -803,20 +830,24 @@ function EditarUsuario({
     if (password && password.length < 6) {
       return setMsg({ ok: false, text: "La nueva contraseña tiene que tener al menos 6 caracteres." });
     }
-    if (role === "PROVEEDOR") {
+    if (role === "SOCIO") {
+      if (!partnerAccountId) return setMsg({ ok: false, text: "Elegí la cuenta de socio." });
+    } else if (role === "PROVEEDOR") {
       if (!proveedorId) return setMsg({ ok: false, text: "Elegí un proveedor." });
     } else if (agentIds.length === 0) {
       return setMsg({ ok: false, text: "Elegí al menos un agente." });
     }
     const defaultId = defaultAgentId || agentIds[0];
-    if (role !== "PROVEEDOR" && !defaultId) {
+    if (role !== "PROVEEDOR" && role !== "SOCIO" && !defaultId) {
       return setMsg({ ok: false, text: "Elegí cuál va a ser la cuenta de acceso por defecto." });
     }
     setLoading(true);
     try {
       const data: any = { email: email.trim(), role };
       if (password) data.password = password;
-      if (role === "PROVEEDOR") {
+      if (role === "SOCIO") {
+        data.partnerAccountId = partnerAccountId;
+      } else if (role === "PROVEEDOR") {
         data.proveedorId = proveedorId;
       } else {
         data.agentIds = agentIds;
@@ -849,10 +880,19 @@ function EditarUsuario({
             <option value="SUPERVISOR">Supervisor (resumen de su grupo)</option>
             <option value="ADMIN">Admin (control total)</option>
             <option value="PROVEEDOR">Proveedor (solo su propia ficha)</option>
+            <option value="SOCIO">Socio (su cuenta, cierres y jugadores)</option>
           </select>
         </div>
       </div>
-      {role === "PROVEEDOR" ? (
+      {role === "SOCIO" ? (
+        <div className="field">
+          <label>Cuenta de socio</label>
+          <select value={partnerAccountId} onChange={(e) => setPartnerAccountId(e.target.value)}>
+            <option value="">Elegir...</option>
+            {cuentasSocio.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      ) : role === "PROVEEDOR" ? (
         <div className="field">
           <label>Proveedor</label>
           <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>

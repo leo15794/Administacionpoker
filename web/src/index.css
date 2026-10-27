@@ -3067,3 +3067,26 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .cifra .d .col > span { display: block; height: 1.15em; width: 0.62em; text-align: center; }
 .cifra .sep { display: inline-block; height: 1.15em; line-height: 1.15em; white-space: pre; }
 @media (prefers-reduced-motion: reduce) { .cifra .d .col { transition: none !important; } }
+
+/* ---------- Portal de socio (27/10/2026): desglose de cierres con la cuenta paso a paso ---------- */
+.sc-sem { background: var(--panel-2); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
+.sc-sem-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; }
+.sc-t { font-weight: 750; font-size: 14.5px; }
+.sc-caret { color: var(--text-faint); margin-right: 6px; }
+.sc-s { font-size: 12px; color: var(--text-faint); }
+.sc-r { text-align: right; }
+.sc-l { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-dim); }
+.sc-m { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sc-ag { border-top: 1px solid var(--border); padding: 12px 16px 14px; background: var(--panel); }
+.sc-ag-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sc-hint { font-size: 12.5px; color: var(--text-dim); margin: 8px 0 10px; }
+.sc-eq { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.sc-b { flex: 1; min-width: 140px; background: var(--panel-2); border-radius: 12px; padding: 9px 12px; }
+.sc-b small { display: block; font-size: 11px; color: var(--text-dim); }
+.sc-b b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.sc-b em { display: block; font-style: normal; font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+.sc-b.sc-fin { background: var(--green-soft, rgba(30, 154, 110, 0.12)); }
+.sc-op { align-self: center; font-weight: 800; font-size: 18px; color: var(--text-dim); }
+.sc-more { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: var(--accent); cursor: pointer; }
+.sc-tabla { overflow-x: auto; margin-top: 8px; }
+@media (max-width: 768px) { .sc-b { min-width: 100%; } .sc-op { display: none; } .sc-sem-h { padding: 12px; } }
