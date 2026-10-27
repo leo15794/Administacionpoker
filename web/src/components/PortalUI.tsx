@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { usdCents, dateShort } from "../fmt";
 import { TIPO_LABEL } from "./MovimientosHistorial";
+import Cifra from "./Cifra";
 
 // (19/10/2026, pedido de Leo: "programá los 3 portales" -- mockups aprobados) Piezas compartidas
 // por los portales de agente, supervisor y proveedor (Mi cuenta / Mi supervisión / Mi proveedor):
@@ -60,7 +61,7 @@ export function PortalHero({
   return (
     <div className="tb-hero pt-hero">
       <div className="tb-hero-label">{label}</div>
-      <div className="tb-hero-amount" style={{ color }}>{amount}</div>
+      <div className="tb-hero-amount" style={{ color }}><Cifra texto={amount} /></div>
       {foot && <div className="tb-hero-foot">{foot}</div>}
       {cta && (
         <button className="btn pt-cta" onClick={cta.onClick}>
@@ -75,7 +76,7 @@ export function PortalMini({ label, value, sub, color }: { label: string; value:
   return (
     <div className="pt-kmini">
       <div className="l">{label}</div>
-      <div className="v" style={color ? { color } : undefined}>{value}</div>
+      <div className="v" style={color ? { color } : undefined}><Cifra texto={value} /></div>
       {sub && <div className="s">{sub}</div>}
     </div>
   );

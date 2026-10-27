@@ -4,6 +4,7 @@ import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import { colorSigno, montoSigno } from "../components/PortalUI";
+import Cifra from "../components/Cifra";
 
 // Desglose completo de un cierre semanal del proveedor (19/10/2026, pedido de Leo: una página aparte para no
 // cargar el panel). Por cada línea del cierre muestra los agentes del club esa semana (línea de club) o el
@@ -122,7 +123,7 @@ export default function MiProveedorCierre() {
         <div className="deals-eyebrow">Cierre semanal</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontSize: 22, fontWeight: 750 }}>{dateShort(c.week_start)} al {dateShort(c.week_end)}</div>
-          <div className="saldo-big" style={{ fontSize: 26, color: colorSigno(monto) }}>{montoSigno(monto)}</div>
+          <div className="saldo-big" style={{ fontSize: 26, color: colorSigno(monto) }}><Cifra texto={montoSigno(monto)} /></div>
         </div>
         <div className="saldo-sub" style={{ marginTop: 4 }}>
           {c.status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>} · saldo antes {usdCents(Number(c.saldo_anterior))} → después {usdCents(Number(c.saldo_nuevo))}

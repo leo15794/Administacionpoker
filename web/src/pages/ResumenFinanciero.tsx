@@ -7,6 +7,7 @@ import GananciasPorPeriodo from "./GananciasPorPeriodo";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import Ayuda from "../components/Ayuda";
+import Cifra from "../components/Cifra";
 
 // Resumen financiero (18/09/2026, pedido explícito de Leo): "un resumen de todas las
 // ganancias, cada ingreso y cada egreso que se contabiliza, filtrable por día/semana/mes, para
@@ -225,7 +226,7 @@ export default function ResumenFinanciero() {
           >
             <div className="deals-eyebrow">Ganancia de cierres semanales · {diaMesCorto(desde)} al {diaMesCorto(hasta)}</div>
             <div className={`saldo-big ${cls(Number(data.totales.gananciaCierres))}`} style={{ fontSize: 32 }}>
-              {(() => { const n = Number(data.desgloseCierres?.gananciaNeta ?? data.totales.gananciaCierres); return `${n < -0.004 ? "−" : ""}${usdCents(Math.abs(n))}`; })()}
+              <Cifra texto={(() => { const n = Number(data.desgloseCierres?.gananciaNeta ?? data.totales.gananciaCierres); return `${n < -0.004 ? "−" : ""}${usdCents(Math.abs(n))}`; })()} />
             </div>
             {data.desgloseCierres && (
               <div className="saldo-sub">
@@ -238,13 +239,13 @@ export default function ResumenFinanciero() {
           <div className="stat-row">
             <div className="stat-card">
               <div className="l">Neto Wallet / Caja</div>
-              <div className={`v ${cls(Number(data.totales.walletNeto))}`}>{usdSigno(Number(data.totales.walletNeto))}</div>
+              <div className={`v ${cls(Number(data.totales.walletNeto))}`}><Cifra texto={usdSigno(Number(data.totales.walletNeto))} /></div>
               <div className="s">ingresos {usd(data.totales.walletIngresos)} · egresos {usd(data.totales.walletEgresos)}</div>
             </div>
             {Number(data.totales.gananciaTeamback ?? 0) !== 0 && (
               <div className="stat-card row-click" onClick={() => nav("/teamback")} title="Ver TeamBack Afiliados">
                 <div className="l">Ganancia TeamBack Afiliados</div>
-                <div className={`v ${cls(Number(data.totales.gananciaTeamback))}`}>{usdCents(Number(data.totales.gananciaTeamback))}</div>
+                <div className={`v ${cls(Number(data.totales.gananciaTeamback))}`}><Cifra texto={usdCents(Number(data.totales.gananciaTeamback))} /></div>
                 <div className="s">rake × 80% − liquidado a los jugadores</div>
               </div>
             )}
@@ -252,11 +253,11 @@ export default function ResumenFinanciero() {
               <>
                 <div className="stat-card">
                   <div className="l">Ganancia bancados</div>
-                  <div className="v">{usd(data.totales.gananciaBancados)}</div>
+                  <div className="v"><Cifra texto={usd(data.totales.gananciaBancados)} /></div>
                 </div>
                 <div className="stat-card">
                   <div className="l">Comisiones por referido</div>
-                  <div className="v">{usd(data.totales.comisionesAcreditadas)}</div>
+                  <div className="v"><Cifra texto={usd(data.totales.comisionesAcreditadas)} /></div>
                   <div className="s">acreditadas / pagadas: {usd(data.totales.comisionesAcreditadas)} / {usd(data.totales.comisionesPagadas)}</div>
                 </div>
               </>

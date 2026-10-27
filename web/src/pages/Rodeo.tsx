@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import Cifra from "../components/Cifra";
 
 // "Resumen de Rodeo" (23/09/2026, pedido de Leo): una fila por agente+club con la memoria
 // vigente y el acumulado histórico de rodeo pagado -- para poder ver de un vistazo si la
@@ -132,12 +133,12 @@ export default function Rodeo() {
               </div>
               <div className="stat-card">
                 <div className="l">Rodeo del club</div>
-                <div className="v">{usdCents(totClub)}</div>
+                <div className="v"><Cifra texto={usdCents(totClub)} /></div>
                 <div className="s">informativo, no se acredita</div>
               </div>
               <div className="stat-card">
                 <div className="l">Memoria pendiente</div>
-                <div className={`v ${totMemoria > 0.004 ? "neg" : "pos"}`}>{usdCents(totMemoria)}</div>
+                <div className={`v ${totMemoria > 0.004 ? "neg" : "pos"}`}><Cifra texto={usdCents(totMemoria)} /></div>
                 <div className="s">{conMemoria.length === 0 ? "ningún agente" : `${conMemoria.length} agente${conMemoria.length === 1 ? "" : "s"} (${conMemoria.map((r) => r.agentName).join(", ")})`}</div>
               </div>
             </div>

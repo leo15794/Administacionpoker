@@ -5,6 +5,7 @@ import { usd, pct, dateShort } from "../fmt";
 import MovimientosHistorial from "./MovimientosHistorial";
 import { useConfirmDialog } from "./ConfirmProvider";
 import Loading from "./Loading";
+import Cifra from "./Cifra";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
 // sumarle el resultado acumulado de mesas (ver fichasTotal() en Resumen.tsx, misma fórmula).
@@ -152,7 +153,7 @@ export default function EstadoCuentaAgente({ agentId }: { agentId: string }) {
         <div className="kpi-grid" style={{ margin: 0 }}>
           <div className="kpi-card">
             <div className="label">Saldo neto total</div>
-            <div className={`value ${totalNeto >= 0 ? "pos" : "neg"}`}>{usd(totalNeto)}</div>
+            <div className={`value ${totalNeto >= 0 ? "pos" : "neg"}`}><Cifra texto={usd(totalNeto)} /></div>
           </div>
           {data.garantia && (
             <div className="kpi-card">

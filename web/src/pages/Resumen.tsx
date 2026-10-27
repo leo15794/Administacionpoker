@@ -7,6 +7,7 @@ import Modal from "../components/Modal";
 import MovimientosHistorial from "../components/MovimientosHistorial";
 import Loading from "../components/Loading";
 import Ayuda, { Leyenda } from "../components/Ayuda";
+import Cifra from "../components/Cifra";
 
 // ================================================================================================
 // Resumen ejecutivo -- rediseño visual/UX (25/09/2026, pedido de Leo: "mejorar visualmente y a
@@ -284,7 +285,7 @@ export default function Resumen() {
         >
           <div className="kpi-hero-label">Ganancia semanal</div>
           <div className={`kpi-hero-amount ${data.kpis.gananciaSemana == null ? "neutral" : Number(data.kpis.gananciaSemana) > 0 ? "pos" : Number(data.kpis.gananciaSemana) < 0 ? "neg" : "neutral"}`}>
-            {data.kpis.gananciaSemana != null ? usd(data.kpis.gananciaSemana) : "—"}
+            <Cifra texto={data.kpis.gananciaSemana != null ? usd(data.kpis.gananciaSemana) : "—"} />
           </div>
           <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             {variacionGanancia != null && (
@@ -308,7 +309,7 @@ export default function Resumen() {
           }
         >
           <div className="kpi-hero-label">Rake semanal</div>
-          <div className="kpi-hero-amount neutral">{data.kpis.rakeSemana != null ? usd(data.kpis.rakeSemana) : "—"}</div>
+          <div className="kpi-hero-amount neutral"><Cifra texto={data.kpis.rakeSemana != null ? usd(data.kpis.rakeSemana) : "—"} /></div>
           <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             {data.kpis.rakeSemanaWinLose != null && (
               <span>Win/Lose {usd(data.kpis.rakeSemanaWinLose)} · Prepago {usd(data.kpis.rakeSemanaPrepago)}</span>
@@ -318,7 +319,7 @@ export default function Resumen() {
 
         <div className="kpi-hero-card row-click" onClick={() => nav("/dashboard/wallet")} title="Ir a Wallet — historial completo de movimientos">
           <div className="kpi-hero-label">Saldo Wallet</div>
-          <div className={`kpi-hero-amount ${walletEstado}`}>{usd(data.kpis.saldoWallet)}</div>
+          <div className={`kpi-hero-amount ${walletEstado}`}><Cifra texto={usd(data.kpis.saldoWallet)} /></div>
           <div className="kpi-hero-sub">
             <span className={`status-pill ${walletEstado}`}>{walletTexto}</span>
           </div>
@@ -330,7 +331,7 @@ export default function Resumen() {
           title="Agentes nos deben + adelantos de rakeback pendientes — comparable contra la fila 'Nos debe' de la planilla. Click para ver Adelantos."
         >
           <div className="kpi-hero-label">Por cobrar</div>
-          <div className="kpi-hero-amount pos">{usd(porCobrar)}</div>
+          <div className="kpi-hero-amount pos"><Cifra texto={usd(porCobrar)} /></div>
           <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             <span>Win/Lose {usd(nosDebenWinLose)} · Prepago {usd(nosDebenPrepago)}</span>
             <span>Incluye adelantos {usd(data.kpis.adelantosPendientes)}</span>
@@ -343,7 +344,7 @@ export default function Resumen() {
           title="Debemos a agentes + garantías pendientes — comparable contra la fila 'Debemos' de la planilla. Click para ver Garantías."
         >
           <div className="kpi-hero-label">Por pagar</div>
-          <div className="kpi-hero-amount neg">{usd(porPagar)}</div>
+          <div className="kpi-hero-amount neg"><Cifra texto={usd(porPagar)} /></div>
           <div className="kpi-hero-sub" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             <span>Win/Lose {usd(debemosWinLose)} · Prepago {usd(debemosPrepago)}</span>
             <span>Incluye garantías {usd(data.kpis.garantiasPendientes)}</span>
@@ -611,12 +612,12 @@ export default function Resumen() {
         <div className="stat-row">
           <div className="stat-card">
             <div className="l">Fichas Prepago</div>
-            <div className="v">{usd(totalPrepago)}</div>
+            <div className="v"><Cifra texto={usd(totalPrepago)} /></div>
             <div className="s">{nPrepago} cuenta{nPrepago === 1 ? "" : "s"}</div>
           </div>
           <div className="stat-card">
             <div className="l">Saldo Win/Lose</div>
-            <div className="v">{usd(totalWinLose)}</div>
+            <div className="v"><Cifra texto={usd(totalWinLose)} /></div>
             <div className="s">{nWinLose} cuenta{nWinLose === 1 ? "" : "s"}</div>
           </div>
         </div>

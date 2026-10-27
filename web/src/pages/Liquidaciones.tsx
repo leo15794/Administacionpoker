@@ -7,6 +7,7 @@ import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import Cifra from "../components/Cifra";
 
 // Resumen de liquidación semanal, para mandarle el pago a una persona/grupo: una fila por
 // agente+club con lo que generó en rakeback esa semana, un total, y (abajo) lo que
@@ -1965,22 +1966,22 @@ export default function Liquidaciones() {
           <div className="stat-row">
             <div className="stat-card">
               <div className="l">Rakeback final</div>
-              <div className="v">{usd(data.total)}</div>
+              <div className="v"><Cifra texto={usd(data.total)} /></div>
               <div className="s">{data.filas.length} fila{data.filas.length === 1 ? "" : "s"}</div>
             </div>
             <div className="stat-card">
               <div className="l">Descuentos</div>
-              <div className="v">{totalDescontar > 0 ? "−" : ""}{usd(totalDescontar)}</div>
+              <div className="v"><Cifra texto={[totalDescontar > 0 ? "−" : "", usd(totalDescontar)].join("")} /></div>
               <div className="s">adelantos, cargas, manual, ventas</div>
             </div>
             <div className="stat-card">
               <div className="l">Total a pagar</div>
-              <div className={`v ${totalAPagar >= 0 ? "pos" : "neg"}`}>{totalAPagar < 0 ? "−" : ""}{usd(Math.abs(totalAPagar))}</div>
+              <div className={`v ${totalAPagar >= 0 ? "pos" : "neg"}`}><Cifra texto={[totalAPagar < 0 ? "−" : "", usd(Math.abs(totalAPagar))].join("")} /></div>
               <div className="s">{totalAPagar < 0 ? "el agente nos debe" : "a pagarle al agente"}</div>
             </div>
             <div className="stat-card">
               <div className="l">Rakeback pendiente</div>
-              <div className="v">{usd(pendienteTotalFilas)}</div>
+              <div className="v"><Cifra texto={usd(pendienteTotalFilas)} /></div>
               <div className="s">todavía sin pagar</div>
             </div>
           </div>
@@ -2648,17 +2649,17 @@ export default function Liquidaciones() {
             <div className="stat-row">
               <div className="stat-card">
                 <div className="l">Pendientes de pago</div>
-                <div className="v">{histResumen.PENDIENTE.n}</div>
+                <div className="v"><Cifra texto={String(histResumen.PENDIENTE.n)} /></div>
                 <div className="s">a pagar {usd(histResumen.PENDIENTE.pagar)} · a cobrar {usd(histResumen.PENDIENTE.cobrar)}</div>
               </div>
               <div className="stat-card">
                 <div className="l">Cerradas (sin pagar)</div>
-                <div className="v">{histResumen.CERRADA.n}</div>
+                <div className="v"><Cifra texto={String(histResumen.CERRADA.n)} /></div>
                 <div className="s">a pagar {usd(histResumen.CERRADA.pagar)} · a cobrar {usd(histResumen.CERRADA.cobrar)}</div>
               </div>
               <div className="stat-card">
                 <div className="l">Pagadas</div>
-                <div className="v">{histResumen.PAGADA.n}</div>
+                <div className="v"><Cifra texto={String(histResumen.PAGADA.n)} /></div>
                 <div className="s">ya registradas</div>
               </div>
             </div>

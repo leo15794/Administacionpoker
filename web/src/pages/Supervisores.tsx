@@ -8,6 +8,7 @@ import { generarPdfCuentasAgentes, type ContenidoPdf, type FormatoPdf } from "..
 import Ayuda from "../components/Ayuda";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
+import Cifra from "../components/Cifra";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -566,7 +567,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                   {Number(seleccionado.cuenta_corriente) < -0.004 ? (agentesModo ? "Cuenta corriente · el agente nos debe" : "Cuenta corriente · el grupo nos debe") : Number(seleccionado.cuenta_corriente) > 0.004 ? "Cuenta corriente · le debemos" : "Cuenta corriente"}
                 </div>
                 <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) > 0 ? "pos" : Number(seleccionado.cuenta_corriente) < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
-                  {montoSignoSup(Number(seleccionado.cuenta_corriente), true)}
+                  <Cifra texto={montoSignoSup(Number(seleccionado.cuenta_corriente), true)} />
                 </div>
               </div>
             ) : (
@@ -574,16 +575,16 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Saldo total</div>
                 <div className={`saldo-big ${saldoTotalSup(seleccionado) > 0 ? "pos" : saldoTotalSup(seleccionado) < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
-                  {montoSignoSup(saldoTotalSup(seleccionado), true)}
+                  <Cifra texto={montoSignoSup(saldoTotalSup(seleccionado), true)} />
                 </div>
               </div>
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Fichas reales</div>
-                <div className="saldo-big" style={{ fontSize: 20 }}>{montoSignoSup(Number(seleccionado.fichas_reales), true)}</div>
+                <div className="saldo-big" style={{ fontSize: 20 }}><Cifra texto={montoSignoSup(Number(seleccionado.fichas_reales), true)} /></div>
               </div>
               <div>
                 <div className="saldo-sub" style={{ margin: 0 }}>Cuenta corriente</div>
-                <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) < -0.004 ? "neg" : ""}`} style={{ fontSize: 20 }}>{montoSignoSup(Number(seleccionado.cuenta_corriente), true)}</div>
+                <div className={`saldo-big ${Number(seleccionado.cuenta_corriente) < -0.004 ? "neg" : ""}`} style={{ fontSize: 20 }}><Cifra texto={montoSignoSup(Number(seleccionado.cuenta_corriente), true)} /></div>
               </div>
             </div>
             )}

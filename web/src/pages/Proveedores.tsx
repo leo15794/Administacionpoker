@@ -8,6 +8,7 @@ import Loading from "../components/Loading";
 import Ayuda, { Leyenda } from "../components/Ayuda";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
+import Cifra from "../components/Cifra";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -402,7 +403,7 @@ export default function Proveedores() {
             return (
               <div style={{ marginTop: 14 }} title="Deuda operativa (todos sus clubes) + garantía vigente">
                 <div className="saldo-sub" style={{ margin: 0 }}>Saldo total · {d > 0.004 ? "nos debe" : d < -0.004 ? "le debemos" : "al día"}</div>
-                <div className="saldo-big" style={{ fontSize: 30, color: d > 0.004 ? "var(--amber)" : d < -0.004 ? "var(--red)" : "var(--text-dim)" }}>{usd(Math.abs(d))}</div>
+                <div className="saldo-big" style={{ fontSize: 30, color: d > 0.004 ? "var(--amber)" : d < -0.004 ? "var(--red)" : "var(--text-dim)" }}><Cifra texto={usd(Math.abs(d))} /></div>
               </div>
             );
           })()}
@@ -583,11 +584,11 @@ export default function Proveedores() {
             <div className="stat-row">
               <div className="stat-card">
                 <div className="l">Garantizado</div>
-                <div className="v">{usd(totalGarantizado)}</div>
+                <div className="v"><Cifra texto={usd(totalGarantizado)} /></div>
               </div>
               <div className="stat-card">
                 <div className="l">Garantía pendiente</div>
-                <div className="v">{usd(totalGarantiaPendiente)}</div>
+                <div className="v"><Cifra texto={usd(totalGarantiaPendiente)} /></div>
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>

@@ -5,6 +5,7 @@ import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import Modal from "../components/Modal";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, PortalEmpty, MovRow, SolicitudesRetiro, colorSigno, montoSigno, tipoVisual } from "../components/PortalUI";
+import Cifra from "../components/Cifra";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   PREPAGO: "Prepago",
@@ -216,18 +217,18 @@ export default function MiSupervision() {
                 <div className="stat-row" style={{ marginBottom: 12 }}>
                   <div className="stat-card">
                     <div className="l">Cierre de la semana</div>
-                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.totalCierre)) }}>{montoSigno(Number(cierreSemana.totalCierre))}</div>
+                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.totalCierre)) }}><Cifra texto={montoSigno(Number(cierreSemana.totalCierre))} /></div>
                     <div className="s">{cierreSemana.aplicado ? "aplicado a tu cuenta" : "todavía no aplicado"}</div>
                   </div>
                   <div className="stat-card">
                     <div className="l">Resultado de mesas</div>
-                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.resultadoTotal)) }}>{montoSigno(Number(cierreSemana.resultadoTotal))}</div>
+                    <div className="v" style={{ color: colorSigno(Number(cierreSemana.resultadoTotal)) }}><Cifra texto={montoSigno(Number(cierreSemana.resultadoTotal))} /></div>
                     <div className="s">de tus agentes</div>
                   </div>
                   <div className="stat-card">
                     <div className="l">Rakeback y rebate</div>
                     <div className="v" style={{ color: colorSigno(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal)) }}>
-                      {montoSigno(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal))}
+                      <Cifra texto={montoSigno(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal))} />
                     </div>
                     <div className="s">a favor del grupo</div>
                   </div>

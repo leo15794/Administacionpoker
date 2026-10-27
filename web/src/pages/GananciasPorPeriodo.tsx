@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
+import Cifra from "../components/Cifra";
 
 // Recreación de las pestañas GANANCIAS_POR_PERIODO + AJUSTES EXTRAORDINARIOS de la planilla
 // (15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre ("Agosto 2026") y, al
@@ -283,7 +284,7 @@ function ResumenPreview({ preview }: { preview: any }) {
       </div>
       <div className="kpi-card">
         <div className="label">Ganancia neta final</div>
-        <div className={`value ${Number(preview.gananciaNetaFinal) >= 0 ? "pos" : "neg"}`}>{usd(preview.gananciaNetaFinal)}</div>
+        <div className={`value ${Number(preview.gananciaNetaFinal) >= 0 ? "pos" : "neg"}`}><Cifra texto={usd(preview.gananciaNetaFinal)} /></div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { dateShort, usdCents } from "../fmt";
 import { PortalPane, colorSigno, montoSigno } from "./PortalUI";
+import Cifra from "./Cifra";
 
 // Calculadora de cierre del portal (21/10/2026, pedido de Leo): supervisores y agentes simulan un cierre "de la misma manera que nosotros
 // liquidamos". La cuenta la hace el servidor con la MISMA función del cierre real (POST /portal/calculadora-cierre); acá solo se cargan los números.
@@ -366,7 +367,7 @@ export default function CalculadoraCierre({
 
       <div className="panel" style={{ margin: 0, padding: "14px 16px", background: "var(--panel-2)" }}>
         <div className="saldo-sub" style={{ margin: 0 }}>Cierre total ({lineas.length} línea{lineas.length === 1 ? "" : "s"})</div>
-        <div className="saldo-big" style={{ fontSize: 28, color: t ? colorSigno(t.cierreFinal) : "var(--text-dim)" }}>{t ? montoSigno(t.cierreFinal) : "—"}</div>
+        <div className="saldo-big" style={{ fontSize: 28, color: t ? colorSigno(t.cierreFinal) : "var(--text-dim)" }}><Cifra texto={t ? montoSigno(t.cierreFinal) : "—"} /></div>
         <div className="saldo-sub" style={{ marginTop: 6 }}>
           {perspectiva === "supervisor"
             ? "Positivo: se le debe a los agentes. Negativo: te deben a vos."

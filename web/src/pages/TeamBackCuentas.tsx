@@ -4,6 +4,7 @@ import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { usdCents as usd } from "../fmt";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
+import Cifra from "../components/Cifra";
 
 // Cuentas de jugadores de TeamBack Affiliates (21/10/2026, pedido de Leo): una cuenta corriente por jugador, como las de supervisores y agentes del
 // sistema principal. Sus liquidaciones suman a favor; lo que se le entrega a cuenta (fichas) queda como deuda y se compensa SOLO contra las liquidaciones
@@ -149,14 +150,14 @@ function DetalleCuenta({ playerId, onVolver }: { playerId: string; onVolver: () 
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="muted" style={{ fontSize: 12 }}>Saldo neto · {r.neto < -0.004 ? "nos debe" : r.neto > 0.004 ? "le debemos" : "al día"}</div>
-            <div className="saldo-big" style={{ fontSize: 30, color: r.neto < 0 ? "var(--red)" : undefined }}>{signo(r.neto)}</div>
+            <div className="saldo-big" style={{ fontSize: 30, color: r.neto < 0 ? "var(--red)" : undefined }}><Cifra texto={signo(r.neto)} /></div>
           </div>
         </div>
         <div className="stat-row" style={{ margin: "14px 0" }}>
-          <div className="stat-card"><div className="l">A pagar (liquidaciones)</div><div className="v">{usd(r.pendiente)}</div></div>
-          <div className="stat-card"><div className="l">Deuda actual</div><div className="v" style={{ color: r.deuda > 0 ? "var(--red)" : undefined }}>{usd(r.deuda)}</div></div>
-          <div className="stat-card"><div className="l">Compensado</div><div className="v">{usd(r.compensado)}</div></div>
-          <div className="stat-card"><div className="l">Ya pagado</div><div className="v">{usd(r.pagado)}</div></div>
+          <div className="stat-card"><div className="l">A pagar (liquidaciones)</div><div className="v"><Cifra texto={usd(r.pendiente)} /></div></div>
+          <div className="stat-card"><div className="l">Deuda actual</div><div className="v" style={{ color: r.deuda > 0 ? "var(--red)" : undefined }}><Cifra texto={usd(r.deuda)} /></div></div>
+          <div className="stat-card"><div className="l">Compensado</div><div className="v"><Cifra texto={usd(r.compensado)} /></div></div>
+          <div className="stat-card"><div className="l">Ya pagado</div><div className="v"><Cifra texto={usd(r.pagado)} /></div></div>
         </div>
         {r.compensado_de_mas > 0.004 && (
           <div className="error" style={{ marginBottom: 10 }}>

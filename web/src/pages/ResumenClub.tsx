@@ -7,6 +7,7 @@ import ActionsMenu from "../components/ActionsMenu";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import { ClubPicker } from "../components/ClubPicker";
 import Ayuda from "../components/Ayuda";
+import Cifra from "../components/Cifra";
 
 /**
  * "Resumen por club" — reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion
@@ -436,7 +437,7 @@ export default function ResumenClub() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div className="deals-eyebrow">Ganancia neta · {resumen.clubName}</div>
-                <div className={`saldo-big ${cls(Number(resumen.gananciaNeta))}`} style={{ fontSize: 32 }}>{usdCents(Number(resumen.gananciaNeta))}</div>
+                <div className={`saldo-big ${cls(Number(resumen.gananciaNeta))}`} style={{ fontSize: 32 }}><Cifra texto={usdCents(Number(resumen.gananciaNeta))} /></div>
                 {resumen.clubFamily !== "TINY" && (
                   <div className="saldo-sub">ingresos {usd(totalIngresosRc)} − egresos {usd(totalEgresosRc)} · semana {dateShort(resumen.weekStart)} al {dateShort(resumen.weekEnd ?? resumen.weekStart)}</div>
                 )}
@@ -452,22 +453,22 @@ export default function ResumenClub() {
           <div className="stat-row">
             <div className="stat-card">
               <div className="l">Rake generado</div>
-              <div className="v">{usd(resumen.rakeTotal)}</div>
+              <div className="v"><Cifra texto={usd(resumen.rakeTotal)} /></div>
               <div className="s">nuestra parte {usd(nuestraParteRc)}</div>
             </div>
             <div className="stat-card">
               <div className="l">Resultado de mesas</div>
-              <div className={`v ${cls(Number(resumen.resultadoTotal))}`}>{usdSigno(Number(resumen.resultadoTotal))}</div>
+              <div className={`v ${cls(Number(resumen.resultadoTotal))}`}><Cifra texto={usdSigno(Number(resumen.resultadoTotal))} /></div>
               <div className="s">{resumen.jugadoresTotal ?? "-"} jugadores · {resumen.agentesConCierre} agentes</div>
             </div>
             <div className="stat-card">
               <div className="l">Cierre total agentes</div>
-              <div className={`v ${cls(Number(resumen.cierreTotalAgentes))}`}>{usdSigno(Number(resumen.cierreTotalAgentes))}</div>
+              <div className={`v ${cls(Number(resumen.cierreTotalAgentes))}`}><Cifra texto={usdSigno(Number(resumen.cierreTotalAgentes))} /></div>
               <div className="s">lo que se les liquida</div>
             </div>
             <div className="stat-card">
               <div className="l">Rakeback pagado</div>
-              <div className="v">{usd(resumen.comisionesAgentes)}</div>
+              <div className="v"><Cifra texto={usd(resumen.comisionesAgentes)} /></div>
               <div className="s">a los agentes</div>
             </div>
           </div>
