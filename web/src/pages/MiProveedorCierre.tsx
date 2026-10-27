@@ -142,8 +142,13 @@ export default function MiProveedorCierre() {
           <div key={l.id ?? i} className="panel" style={{ padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <div style={{ fontSize: 17, fontWeight: 750 }}>{l.club_name}{esAgente && l.agent_name ? ` · ${l.agent_name}` : ""}</div>
-              <span className="pill">{esAgente ? "Agente" : "Club total"}</span>
+              <span className="pill">{l.tipo === "AJUSTE" ? "Ajuste" : esAgente ? "Agente" : "Club total"}</span>
             </div>
+            {l.tipo === "AJUSTE" ? (
+              <div className="saldo-sub" style={{ margin: "12px 0 0" }}>
+                {l.notes || "Ajuste manual"} · Aplicado a tu saldo: <b style={{ color: colorSigno(aplicado) }}>{montoSigno(aplicado)}</b>
+              </div>
+            ) : (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px 16px", margin: "12px 0" }}>
               <div><div className="saldo-sub" style={{ margin: 0 }}>Resultado</div><b>{dato(resultado) ? usdCents(Number(resultado)) : "—"}</b></div>
               <div><div className="saldo-sub" style={{ margin: 0 }}>Rake</div><b>{dato(rake) ? usdCents(Number(rake)) : "—"}</b></div>
@@ -253,6 +258,7 @@ export default function MiProveedorCierre() {
                 </div>
               </>
             )}
+            </>)}
           </div>
         );
       })}

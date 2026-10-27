@@ -160,8 +160,13 @@ export default function MiProveedor() {
                             <div key={l.id ?? i} style={{ marginTop: i ? 12 : 0, paddingTop: i ? 12 : 0, borderTop: i ? "1px dashed var(--border)" : undefined }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                 <div style={{ fontWeight: 650 }}>{l.club_name}{esAgente && l.agent_name ? ` · ${l.agent_name}` : ""}</div>
-                                <span className="pill">{esAgente ? "Agente" : "Club total"}</span>
+                                <span className="pill">{l.tipo === "AJUSTE" ? "Ajuste" : esAgente ? "Agente" : "Club total"}</span>
                               </div>
+                              {l.tipo === "AJUSTE" ? (
+                                <div className="saldo-sub" style={{ marginTop: 8 }}>
+                                  {l.notes || "Ajuste manual"} · Aplicado a tu saldo: <b style={{ color: colorSigno(Number(l.monto_aplicado)) }}>{montoSigno(Number(l.monto_aplicado))}</b>
+                                </div>
+                              ) : (<>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 14px", fontSize: 12.5, marginTop: 8 }}>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Resultado</div><b>{dato(resultado) ? usdCents(Number(resultado)) : "—"}</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rake</div><b>{dato(rake) ? usdCents(Number(rake)) : "—"}</b></div>
@@ -171,6 +176,7 @@ export default function MiProveedor() {
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Monto bruto</div><b>{usdCents(Number(l.monto_crudo))}</b></div>
                               </div>
                               <div className="saldo-sub" style={{ marginTop: 8 }}>Aplicado a tu saldo: <b style={{ color: colorSigno(Number(l.monto_aplicado)) }}>{montoSigno(Number(l.monto_aplicado))}</b></div>
+                              </>)}
                             </div>
                           );
                         })

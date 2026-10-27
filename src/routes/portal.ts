@@ -316,6 +316,7 @@ portalRouter.get("/mi-proveedor/cierres/:id/lineas", requireAuth, async (req: Au
       lineas.map((l: any) => ({
         id: l.id,
         tipo: l.tipo,
+        notes: l.tipo === "AJUSTE" ? l.notes : null,
         club_name: l.club_name,
         agent_name: l.agent_name,
         resultado_total: l.resultado_total,
@@ -355,7 +356,9 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
     const salida = [];
     for (const l of lineas as any[]) {
       const filas =
-        l.tipo === "AGENTE" && l.weekly_closing_id
+        l.tipo === "AJUSTE"
+          ? { rows: [] as any[] }
+          : l.tipo === "AGENTE" && l.weekly_closing_id
           ? await pool.query(
               `SELECT wc.id as closing_id, a.name as agent_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rodeo, wc.final_closing
                FROM weekly_closings wc JOIN agents a ON a.id = wc.agent_id WHERE wc.id = $1`,
@@ -418,6 +421,7 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
       salida.push({
         id: l.id,
         tipo: l.tipo,
+        notes: l.tipo === "AJUSTE" ? l.notes : null,
         club_name: l.club_name,
         agent_name: l.agent_name,
         resultado_total: l.resultado_total,

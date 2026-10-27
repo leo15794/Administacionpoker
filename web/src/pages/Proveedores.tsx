@@ -821,7 +821,7 @@ function LineasCierre({ lineas }: { lineas: any[] | null }) {
             const rodeo = esAgente ? l.wc_rodeo : l.impacto_rodeo;
             return (
               <tr key={l.id}>
-                <td>{l.tipo === "CLUB" ? "Club total" : "Agente"}</td>
+                <td>{l.tipo === "CLUB" ? "Club total" : l.tipo === "AJUSTE" ? `Ajuste${l.notes ? `: ${l.notes}` : ""}` : "Agente"}</td>
                 <td>{l.club_name}</td>
                 <td>{l.agent_name ?? "—"}</td>
                 <td>{resultado !== null && resultado !== undefined ? usd(resultado) : "—"}</td>
@@ -1101,6 +1101,16 @@ interface LineaState {
   agentId: string; // solo AGENTE
 }
 
+// Ajuste manual del popup de confirmación del cierre (27/10/2026): signo + monto + motivo, se guarda como una línea tipo AJUSTE.
+interface AjusteState {
+  key: number;
+  signo: "+" | "-";
+  motivo: string;
+  monto: string;
+  clubId: string;
+}
+let ajusteSeq = 1;
+
 let lineaKeySeq = 1;
 function nuevaLinea(): LineaState {
   return { key: lineaKeySeq++, tipo: "CLUB", clubId: "", rakebackPct: "75", agentId: "" };
@@ -1264,6 +1274,8 @@ function CierreForm({
   const [lineas, setLineas] = useState<LineaState[]>([nuevaLinea()]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [revision, setRevision] = useState<Array<{ label: string; monto: number }> | null>(null);
+  const [ajustes, setAjustes] = useState<AjusteState[]>([]);
 
   function actualizarLinea(idx: number, l: LineaState) {
     setLineas((prev) => prev.map((x, i) => (i === idx ? l : x)));
@@ -1289,16 +1301,63 @@ function CierreForm({
         return setMsg({ ok: false, text: "Todas las líneas de agente necesitan un agente." });
       }
     }
+    // Antes de aplicar: popup "¿querés agregar algo más?" con lo calculado de cada línea y los ajustes manuales
+    // (27/10/2026, pedido de Leo). Se calcula con los mismos previews que ya muestra cada línea.
+    setLoading(true);
+    try {
+      const calculo = await Promise.all(
+        lineas.map(async (l) => {
+          const club = clubes.find((c) => c.id === l.clubId)?.name ?? "Club";
+          if (l.tipo === "CLUB") {
+            const pv: any = await api.cierreClubPreview(l.clubId, weekStart, (Number(l.rakebackPct) || 0) / 100);
+            return { label: `${club} · club total (rakeback ${Number(l.rakebackPct) || 0}%)`, monto: Number(pv.montoAplicado) };
+          }
+          const pv: any = await api.cierreAgentePreview(l.agentId, l.clubId, weekStart);
+          if (!pv) throw new Error(`${agentes.find((a) => a.id === l.agentId)?.name ?? "El agente"} no tiene un cierre aplicado en ${club} para esa semana -- cargalo primero en "Cierres semanales".`);
+          return { label: `${club} · agente ${pv.agent_name ?? ""}`.trim(), monto: Number(pv.final_closing) };
+        })
+      );
+      setAjustes([]);
+      setRevision(calculo);
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo calcular el cierre." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function agregarAjuste() {
+    setAjustes((prev) => [...prev, { key: ++ajusteSeq, signo: "+", motivo: "", monto: "", clubId: lineas[0]?.clubId ?? "" }]);
+  }
+  function actualizarAjuste(key: number, patch: Partial<AjusteState>) {
+    setAjustes((prev) => prev.map((a) => (a.key === key ? { ...a, ...patch } : a)));
+  }
+
+  const montoAjuste = (a: AjusteState) => (a.signo === "-" ? -1 : 1) * (Math.abs(Number(a.monto)) || 0);
+  const ajustesCargados = ajustes.filter((a) => Math.abs(Number(a.monto)) > 0);
+  const calculado = (revision ?? []).reduce((acc, r) => acc + r.monto, 0);
+  const totalAjustes = ajustesCargados.reduce((acc, a) => acc + montoAjuste(a), 0);
+  const clubesDelCierre = Array.from(new Set(lineas.map((l) => l.clubId)));
+
+  async function aplicar(conAjustes: boolean) {
+    const validos = conAjustes ? ajustesCargados : [];
+    if (validos.some((a) => !a.motivo.trim())) {
+      return setMsg({ ok: false, text: "Cada ajuste necesita un motivo (para que quede rastreable)." });
+    }
+    setMsg(null);
     setLoading(true);
     try {
       await api.aplicarCierreProveedor({
         proveedorId,
         weekStart,
-        lineas: lineas.map((l) =>
-          l.tipo === "CLUB"
-            ? { tipo: "CLUB" as const, clubId: l.clubId, rakebackPct: (Number(l.rakebackPct) || 0) / 100 }
-            : { tipo: "AGENTE" as const, clubId: l.clubId, agentId: l.agentId }
-        ),
+        lineas: [
+          ...lineas.map((l) =>
+            l.tipo === "CLUB"
+              ? { tipo: "CLUB" as const, clubId: l.clubId, rakebackPct: (Number(l.rakebackPct) || 0) / 100 }
+              : { tipo: "AGENTE" as const, clubId: l.clubId, agentId: l.agentId }
+          ),
+          ...validos.map((a) => ({ tipo: "AJUSTE" as const, clubId: a.clubId || lineas[0].clubId, monto: montoAjuste(a), notes: a.motivo.trim() })),
+        ],
         notes: notes.trim() || undefined,
       });
       onDone();
@@ -1310,6 +1369,69 @@ function CierreForm({
   }
 
   return (
+    <>
+    {revision && (
+      <Modal title="Antes de aplicar el cierre" onClose={() => !loading && setRevision(null)}>
+        <p className="muted" style={{ margin: "0 0 12px", fontSize: 13.5 }}>
+          {proveedores.find((p) => p.id === proveedorId)?.name ?? "Proveedor"} · semana del {dateShort(weekStart)}. ¿Querés agregar algo más? Podés sumar o restar ajustes manuales.
+        </p>
+        <div style={{ background: "var(--panel-2)", borderRadius: 14, padding: "10px 14px", marginBottom: 14 }}>
+          {revision.map((r, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "3px 0" }}>
+              <span className="muted">{r.label}</span><b>{usd(r.monto)}</b>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0 2px", marginTop: 4, borderTop: "1px solid var(--border)" }}>
+            <span className="muted">Cierre calculado</span><b>{usd(calculado)}</b>
+          </div>
+        </div>
+        <div className="saldo-sub" style={{ fontWeight: 800, letterSpacing: ".08em", fontSize: 11, margin: "0 0 8px" }}>AJUSTES MANUALES (OPCIONAL)</div>
+        {ajustes.map((a) => (
+          <div key={a.key} style={{ display: "grid", gridTemplateColumns: `88px ${clubesDelCierre.length > 1 ? "110px " : ""}1fr 110px 28px`, gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+              {(["+", "-"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => actualizarAjuste(a.key, { signo: s })}
+                  style={{ flex: 1, border: 0, padding: "8px 0", fontWeight: 800, fontSize: 15, cursor: "pointer", background: a.signo === s ? (s === "+" ? "#167a32" : "#c23744") : "transparent", color: a.signo === s ? "#fff" : "var(--text-dim)" }}
+                >
+                  {s === "-" ? "−" : "+"}
+                </button>
+              ))}
+            </div>
+            {clubesDelCierre.length > 1 && (
+              <select value={a.clubId} onChange={(e) => actualizarAjuste(a.key, { clubId: e.target.value })}>
+                {clubesDelCierre.map((id) => <option key={id} value={id}>{clubes.find((c) => c.id === id)?.name ?? "Club"}</option>)}
+              </select>
+            )}
+            <input placeholder="Motivo" value={a.motivo} onChange={(e) => actualizarAjuste(a.key, { motivo: e.target.value })} />
+            <input type="number" step="0.01" min="0" placeholder="0,00" value={a.monto} onChange={(e) => actualizarAjuste(a.key, { monto: e.target.value })} />
+            <button type="button" className="modal-close" aria-label="Quitar ajuste" onClick={() => setAjustes((prev) => prev.filter((x) => x.key !== a.key))}>×</button>
+          </div>
+        ))}
+        <button type="button" className="btn secondary small" onClick={agregarAjuste}>+ Agregar {ajustes.length ? "otro " : "un "}ajuste</button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+          <div>
+            <div className="saldo-sub" style={{ margin: 0, fontWeight: 800, letterSpacing: ".1em", fontSize: 11 }}>CIERRE FINAL</div>
+            {ajustesCargados.length > 0 && (
+              <div className="muted" style={{ fontSize: 12.5 }}>
+                {usd(calculado)}{ajustesCargados.map((a) => ` ${a.signo === "-" ? "−" : "+"} ${usd(Math.abs(Number(a.monto)))}`).join("")}
+              </div>
+            )}
+          </div>
+          <div className={`saldo-big ${calculado + totalAjustes > 0 ? "pos" : calculado + totalAjustes < 0 ? "neg" : "neutral"}`} style={{ fontSize: 30 }}>
+            <Cifra texto={usd(calculado + totalAjustes)} />
+          </div>
+        </div>
+        {msg && !msg.ok && <div className="error" style={{ marginTop: 10 }}>{msg.text}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+          <button type="button" className="btn secondary" disabled={loading} onClick={() => setRevision(null)}>Volver</button>
+          {ajustesCargados.length > 0 && <button type="button" className="btn secondary" disabled={loading} onClick={() => aplicar(false)}>Aplicar sin ajustes</button>}
+          <button type="button" className="btn" disabled={loading} onClick={() => aplicar(true)}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
+        </div>
+      </Modal>
+    )}
     <form onSubmit={onSubmit}>
       <div className="form-grid">
         <div className="field">
@@ -1367,8 +1489,9 @@ function CierreForm({
       </div>
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-      <button className="btn" disabled={loading}>{loading ? "Aplicando..." : "Aplicar cierre"}</button>
+      <button className="btn" disabled={loading}>{loading ? "Calculando..." : "Aplicar cierre"}</button>
     </form>
+    </>
   );
 }
 
@@ -1530,7 +1653,7 @@ function PagoForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedor
                           <td><input type="checkbox" checked={!!sel?.checked} onChange={() => toggleLinea(l)} /></td>
                           <td className="muted" style={{ fontSize: 12 }}>{dateShort(l.week_start)} - {dateShort(l.week_end)}</td>
                           <td>{l.club_name}</td>
-                          <td className="muted" style={{ fontSize: 12 }}>{l.tipo === "AGENTE" ? (l.agent_name ?? "Agente") : "Total club"}</td>
+                          <td className="muted" style={{ fontSize: 12 }}>{l.tipo === "AGENTE" ? (l.agent_name ?? "Agente") : l.tipo === "AJUSTE" ? "Ajuste manual" : "Total club"}</td>
                           <td className={`num ${Number(l.disponible) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.disponible))}</td>
                           <td className="num">
                             <input
@@ -2049,7 +2172,7 @@ function LiquidacionProveedorForm({
                 checked={!!seleccion[l.id]}
                 onChange={(e) => setSeleccion((prev) => ({ ...prev, [l.id]: e.target.checked }))}
               />
-              {l.tipo === "AGENTE" ? `${l.agent_name ?? "?"} (agente) -- ${l.club_name}` : `Club total -- ${l.club_name}`}
+              {l.tipo === "AGENTE" ? `${l.agent_name ?? "?"} (agente) -- ${l.club_name}` : l.tipo === "AJUSTE" ? `Ajuste manual -- ${l.club_name}` : `Club total -- ${l.club_name}`}
               <span className="muted">({usd(l.monto_aplicado)})</span>
             </label>
           ))}

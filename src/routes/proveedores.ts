@@ -138,10 +138,11 @@ proveedoresRouter.get("/saldos/movimientos", requireAuth, requireAdmin, async (r
 });
 
 const lineaCierreSchema = z.object({
-  tipo: z.enum(["CLUB", "AGENTE"]),
+  tipo: z.enum(["CLUB", "AGENTE", "AJUSTE"]),
   clubId: z.string(),
   rakebackPct: z.number().optional(),
   agentId: z.string().optional(),
+  monto: z.number().optional(),
   notes: z.string().optional(),
 });
 const cierreSchema = z.object({

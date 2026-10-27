@@ -1236,7 +1236,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS proveedor_cierres_proveedor_week_active_key
 CREATE TABLE IF NOT EXISTS proveedor_cierre_lineas (
   id                TEXT PRIMARY KEY,
   cierre_id         TEXT NOT NULL REFERENCES proveedor_cierres(id),
-  tipo              TEXT NOT NULL CHECK (tipo IN ('CLUB','AGENTE')),
+  tipo              TEXT NOT NULL CHECK (tipo IN ('CLUB','AGENTE','AJUSTE')),
   club_id           TEXT NOT NULL REFERENCES clubs(id),
   agent_id          TEXT REFERENCES agents(id),                    -- solo tipo AGENTE
   weekly_closing_id TEXT REFERENCES weekly_closings(id),            -- solo tipo AGENTE (trazabilidad)
@@ -1270,6 +1270,18 @@ CREATE INDEX IF NOT EXISTS proveedor_cierre_lineas_cierre_idx ON proveedor_cierr
 -- exist" -- bug real detectado 22/09/2026.
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS club_rebate NUMERIC(18,4);
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS impacto_rodeo NUMERIC(18,4);
+
+-- Ajustes manuales del cierre (27/10/2026, pedido de Leo: al dar OK al cierre, un popup "¿querés agregar algo más?" para
+-- los ultimos ajustes a mano, positivos o negativos). Cada ajuste es una linea mas del cierre, tipo AJUSTE: suma su monto
+-- al saldo del club elegido, se revierte/paga/borra igual que el resto de las lineas, y el motivo va en notes.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'proveedor_cierre_lineas_tipo_check'
+             AND pg_get_constraintdef(oid) NOT LIKE '%AJUSTE%') THEN
+    ALTER TABLE proveedor_cierre_lineas DROP CONSTRAINT proveedor_cierre_lineas_tipo_check;
+    ALTER TABLE proveedor_cierre_lineas ADD CONSTRAINT proveedor_cierre_lineas_tipo_check CHECK (tipo IN ('CLUB','AGENTE','AJUSTE'));
+  END IF;
+END $$;
 
 -- Pagos/cobros (USDT u otro medio) contra el saldo del proveedor -- separados del cálculo del
 -- cierre semanal (Leo, punto 4 del texto sobre Manzur: "los pagos USDT deben mostrarse por

@@ -494,10 +494,12 @@ export const api = {
     proveedorId: string;
     weekStart: string;
     lineas: Array<{
-      tipo: "CLUB" | "AGENTE";
+      tipo: "CLUB" | "AGENTE" | "AJUSTE";
       clubId: string;
       rakebackPct?: number;
       agentId?: string;
+      /** Solo AJUSTE: monto con signo que se suma al cierre. */
+      monto?: number;
       notes?: string;
     }>;
     notes?: string;

@@ -154,7 +154,7 @@ export interface MovimientoSaldoProveedor {
 
 export async function listMovimientosSaldoProveedor(proveedorId: string, clubId: string): Promise<MovimientoSaldoProveedor[]> {
   const cierresR = await pool.query(
-    `SELECT pcl.id, pcl.tipo, pcl.monto_aplicado, pcl.saldo_anterior, pcl.saldo_nuevo, pcl.created_at,
+    `SELECT pcl.id, pcl.tipo, pcl.notes, pcl.monto_aplicado, pcl.saldo_anterior, pcl.saldo_nuevo, pcl.created_at,
             pc.week_start, pc.status, a.name as agent_name
      FROM proveedor_cierre_lineas pcl
      JOIN proveedor_cierres pc ON pc.id = pcl.cierre_id
@@ -180,7 +180,9 @@ export async function listMovimientosSaldoProveedor(proveedorId: string, clubId:
       label:
         row.tipo === "AGENTE"
           ? `Cierre de agente (${row.agent_name ?? "?"}) -- semana ${row.week_start}`
-          : `Cierre de club -- semana ${row.week_start}`,
+          : row.tipo === "AJUSTE"
+            ? `Ajuste manual del cierre${row.notes ? ` (${row.notes})` : ""} -- semana ${row.week_start}`
+            : `Cierre de club -- semana ${row.week_start}`,
       delta: Number(row.monto_aplicado),
       saldoAnterior: Number(row.saldo_anterior),
       saldoNuevo: Number(row.saldo_nuevo),
@@ -218,7 +220,7 @@ async function getSaldoParaUpdate(client: PoolClient, proveedorId: string, clubI
   return r.rows[0];
 }
 
-export type TipoLineaCierreProveedor = "CLUB" | "AGENTE";
+export type TipoLineaCierreProveedor = "CLUB" | "AGENTE" | "AJUSTE";
 
 export interface LineaCierreProveedorInput {
   tipo: TipoLineaCierreProveedor;
@@ -228,6 +230,8 @@ export interface LineaCierreProveedorInput {
   /** Requerido para tipo AGENTE: el agente cuyo weekly_closing (Cierres semanales) ya
    * aplicado para este club+semana se va a tomar tal cual (ver repo/closings.ts). */
   agentId?: string;
+  /** Solo tipo AJUSTE: monto con signo que se suma tal cual al cierre (positivo = le debemos, negativo = nos debe). */
+  monto?: number;
   notes?: string;
 }
 
@@ -264,6 +268,22 @@ export interface CierreProveedorInput {
  * mismo cierre puede tocar varios clubes a la vez, ej. Fénix Suprema y Fénix GG). Todo en
  * una sola transacción: o se aplican todas las líneas, o ninguna.
  */
+// Ajustes manuales del cierre (27/10/2026): si la base todavía no corrió "npm run migrate", acepta el tipo AJUSTE igual.
+let tipoAjusteListo = false;
+async function asegurarTipoAjuste() {
+  if (tipoAjusteListo) return;
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'proveedor_cierre_lineas_tipo_check'
+                 AND pg_get_constraintdef(oid) NOT LIKE '%AJUSTE%') THEN
+        ALTER TABLE proveedor_cierre_lineas DROP CONSTRAINT proveedor_cierre_lineas_tipo_check;
+        ALTER TABLE proveedor_cierre_lineas ADD CONSTRAINT proveedor_cierre_lineas_tipo_check CHECK (tipo IN ('CLUB','AGENTE','AJUSTE'));
+      END IF;
+    END $$;`);
+  tipoAjusteListo = true;
+}
+
 export async function aplicarCierreProveedor(input: CierreProveedorInput) {
   if (!input.lineas || input.lineas.length === 0) {
     throw new Error("El cierre necesita al menos una línea (club o agente).");
@@ -275,9 +295,19 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       }
     } else if (linea.tipo === "AGENTE") {
       if (!linea.agentId) throw new Error("Cada línea de tipo agente necesita un agente.");
+    } else if (linea.tipo === "AJUSTE") {
+      if (!Number.isFinite(linea.monto) || Math.abs(linea.monto as number) < 0.005) {
+        throw new Error("Cada ajuste manual necesita un monto distinto de cero.");
+      }
+      if (!linea.notes?.trim()) throw new Error("Cada ajuste manual necesita un motivo.");
     } else {
       throw new Error("Tipo de línea inválido.");
     }
+  }
+
+  if (input.lineas.some((l) => l.tipo === "AJUSTE")) {
+    if (input.lineas.every((l) => l.tipo === "AJUSTE")) throw new Error("El cierre necesita al menos una línea de club o de agente además de los ajustes.");
+    await asegurarTipoAjuste();
   }
 
   const client: PoolClient = await pool.connect();
@@ -341,6 +371,9 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           saldoNuevo: entry.actual,
           notes: linea.notes ?? null,
         });
+      } else if (linea.tipo === "AJUSTE") {
+        // Los ajustes se aplican al final (después de las líneas de club/agente), así quedan encadenados al saldo de su club.
+        continue;
       } else {
         const wc = await client.query(
           `SELECT wc.*, a.name as agent_name FROM weekly_closings wc
@@ -381,6 +414,30 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           notes: linea.notes ?? null,
         });
       }
+    }
+
+    for (const linea of input.lineas) {
+      if (linea.tipo !== "AJUSTE") continue;
+      const monto = Math.round((linea.monto as number) * 100) / 100;
+      const entry = await getOrInitSaldo(linea.clubId);
+      const saldoAnterior = entry.actual;
+      entry.actual += monto;
+      lineasPreparadas.push({
+        tipo: "AJUSTE",
+        clubId: linea.clubId,
+        agentId: null,
+        weeklyClosingId: null,
+        resultadoTotal: null,
+        rakeTotal: null,
+        rakebackPct: null,
+        clubRebate: null,
+        impactoRodeo: null,
+        montoCrudo: monto,
+        montoAplicado: monto,
+        saldoAnterior,
+        saldoNuevo: entry.actual,
+        notes: (linea.notes as string).trim(),
+      });
     }
 
     if (!weekEnd) throw new Error("No se pudo determinar la fecha de fin de semana.");
@@ -504,6 +561,7 @@ export async function recalcularCierreProveedor(id: string, createdBy?: string) 
     clubId: l.club_id,
     rakebackPct: l.rakeback_pct != null ? Number(l.rakeback_pct) : undefined,
     agentId: l.agent_id ?? undefined,
+    monto: l.tipo === "AJUSTE" ? Number(l.monto_aplicado) : undefined,
     notes: l.notes ?? undefined,
   }));
 
