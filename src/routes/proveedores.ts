@@ -26,6 +26,7 @@ import {
   eliminarGarantiaProveedorDefinitivo,
   eliminarProveedorDefinitivo,
   calcularLineaClubPreview,
+  proveedorRodeoAFavorNuestro,
   listAutoCierreClubesProveedor,
   listAutoCierreClubesTodos,
   agregarAutoCierreClub,
@@ -68,6 +69,7 @@ const actualizarSchema = z.object({
   active: z.boolean().optional(),
   autoCierreClubId: z.string().nullable().optional(),
   autoCierreRakebackPct: z.number().nullable().optional(),
+  rodeoAFavorNuestro: z.boolean().optional(),
 });
 proveedoresRouter.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   const parsed = actualizarSchema.safeParse(req.body);
@@ -184,7 +186,8 @@ proveedoresRouter.get("/cierre-club-preview", requireAuth, requireAdmin, async (
     return res.status(400).json({ error: "rakebackPct inválido." });
   }
   try {
-    res.json(await calcularLineaClubPreview(clubId, weekStart, pct));
+    const provId = typeof req.query.proveedorId === "string" ? req.query.proveedorId : undefined;
+    res.json(await calcularLineaClubPreview(clubId, weekStart, pct, await proveedorRodeoAFavorNuestro(provId)));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

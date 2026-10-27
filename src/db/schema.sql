@@ -1271,6 +1271,10 @@ CREATE INDEX IF NOT EXISTS proveedor_cierre_lineas_cierre_idx ON proveedor_cierr
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS club_rebate NUMERIC(18,4);
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS impacto_rodeo NUMERIC(18,4);
 
+-- Rodeo a favor nuestro (27/10/2026, pedido de Leo: en el proveedor Suprema el rodeo es a favor nuestro, no del proveedor). Si es true,
+-- el rodeo (35% Union) suma al cierre bruto de las lineas de club en vez de restar, y asi baja lo que le debemos al proveedor.
+ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS rodeo_a_favor_nuestro BOOLEAN NOT NULL DEFAULT false;
+
 -- Ajustes manuales del cierre (27/10/2026, pedido de Leo: al dar OK al cierre, un popup "¿querés agregar algo más?" para
 -- los ultimos ajustes a mano, positivos o negativos). Cada ajuste es una linea mas del cierre, tipo AJUSTE: suma su monto
 -- al saldo del club elegido, se revierte/paga/borra igual que el resto de las lineas, y el motivo va en notes.

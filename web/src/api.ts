@@ -477,6 +477,7 @@ export const api = {
       active?: boolean;
       autoCierreClubId?: string | null;
       autoCierreRakebackPct?: number | null;
+      rodeoAFavorNuestro?: boolean;
     }
   ) => request(`/proveedores/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   proveedoresClubes: () => request("/proveedores/clubes"),
@@ -488,8 +489,8 @@ export const api = {
   lineasCierreProveedor: (cierreId: string) => request(`/proveedores/cierres/${cierreId}/lineas`),
   cierreAgentePreview: (agentId: string, clubId: string, weekStart: string) =>
     request(`/proveedores/cierre-agente-preview?agentId=${agentId}&clubId=${clubId}&weekStart=${weekStart}`),
-  cierreClubPreview: (clubId: string, weekStart: string, rakebackPct: number) =>
-    request(`/proveedores/cierre-club-preview?clubId=${clubId}&weekStart=${weekStart}&rakebackPct=${rakebackPct}`),
+  cierreClubPreview: (clubId: string, weekStart: string, rakebackPct: number, proveedorId?: string) =>
+    request(`/proveedores/cierre-club-preview?clubId=${clubId}&weekStart=${weekStart}&rakebackPct=${rakebackPct}${proveedorId ? `&proveedorId=${proveedorId}` : ""}`),
   aplicarCierreProveedor: (data: {
     proveedorId: string;
     weekStart: string;

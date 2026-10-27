@@ -946,6 +946,7 @@ function NuevoProveedorForm({
 }) {
   const [name, setName] = useState(proveedor?.name ?? "");
   const [notes, setNotes] = useState(proveedor?.notes ?? "");
+  const [rodeoAFavor, setRodeoAFavor] = useState(proveedor?.rodeo_a_favor_nuestro === true);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -957,7 +958,7 @@ function NuevoProveedorForm({
     const payload = { name: name.trim(), notes: notes.trim() || undefined };
     try {
       if (proveedor) {
-        await api.actualizarProveedor(proveedor.id, payload);
+        await api.actualizarProveedor(proveedor.id, { ...payload, rodeoAFavorNuestro: rodeoAFavor });
       } else {
         await api.crearProveedor(payload);
       }
@@ -980,6 +981,12 @@ function NuevoProveedorForm({
           <label>Notas (opcional)</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Descripción de la relación, referencia, etc." />
         </div>
+        {proveedor && (
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "6px 0 12px", fontSize: 13.5 }}>
+            <input type="checkbox" checked={rodeoAFavor} onChange={(e) => setRodeoAFavor(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>El rodeo es a favor nuestro <span className="muted">(en el cierre de club, el rodeo baja lo que le debemos al proveedor en vez de sumarle)</span></span>
+          </label>
+        )}
         {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
         <button className="btn" disabled={loading}>{loading ? "Guardando..." : proveedor ? "Guardar cambios" : "Crear"}</button>
       </form>
@@ -1120,6 +1127,7 @@ function LineaClubEditor({
   linea,
   clubes,
   weekStart,
+  proveedorId,
   onChange,
   onRemove,
   soloUna,
@@ -1127,6 +1135,7 @@ function LineaClubEditor({
   linea: LineaState;
   clubes: any[];
   weekStart: string;
+  proveedorId: string;
   onChange: (l: LineaState) => void;
   onRemove: () => void;
   soloUna: boolean;
@@ -1142,11 +1151,11 @@ function LineaClubEditor({
     const pctNum = (Number(linea.rakebackPct) || 0) / 100;
     setCargando(true);
     api
-      .cierreClubPreview(linea.clubId, weekStart, pctNum)
+      .cierreClubPreview(linea.clubId, weekStart, pctNum, proveedorId)
       .then(setPreview)
       .catch((err) => setError(err.message || "No se pudo calcular el preview."))
       .finally(() => setCargando(false));
-  }, [linea.tipo, linea.clubId, linea.rakebackPct, weekStart]);
+  }, [linea.tipo, linea.clubId, linea.rakebackPct, weekStart, proveedorId]);
 
   const resumen = preview?.resumen ?? null;
 
@@ -1309,7 +1318,7 @@ function CierreForm({
         lineas.map(async (l) => {
           const club = clubes.find((c) => c.id === l.clubId)?.name ?? "Club";
           if (l.tipo === "CLUB") {
-            const pv: any = await api.cierreClubPreview(l.clubId, weekStart, (Number(l.rakebackPct) || 0) / 100);
+            const pv: any = await api.cierreClubPreview(l.clubId, weekStart, (Number(l.rakebackPct) || 0) / 100, proveedorId);
             return { label: `${club} · club total (rakeback ${Number(l.rakebackPct) || 0}%)`, monto: Number(pv.montoAplicado) };
           }
           const pv: any = await api.cierreAgentePreview(l.agentId, l.clubId, weekStart);
@@ -1462,6 +1471,7 @@ function CierreForm({
               linea={l}
               clubes={clubes}
               weekStart={weekStart}
+              proveedorId={proveedorId}
               onChange={(nl) => actualizarLinea(idx, nl)}
               onRemove={() => quitarLinea(idx)}
               soloUna={lineas.length === 1}

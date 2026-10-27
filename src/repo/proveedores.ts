@@ -42,10 +42,26 @@ export interface LineaClubPreview {
 // Preview de una línea tipo CLUB (usado por el formulario de Proveedores antes de confirmar, y
 // por aplicarCierreProveedor -- misma función en los dos lados, así el número que Leo ve antes
 // de aplicar es EXACTAMENTE el que se va a guardar, nunca dos fórmulas que se puedan desincronizar.
+let columnaRodeoLista = false;
+async function asegurarColumnaRodeo() {
+  if (columnaRodeoLista) return;
+  await pool.query(`ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS rodeo_a_favor_nuestro BOOLEAN NOT NULL DEFAULT false`);
+  columnaRodeoLista = true;
+}
+
+// Proveedores donde el rodeo es a favor nuestro (ej. Suprema): suma al cierre bruto en vez de restar.
+export async function proveedorRodeoAFavorNuestro(proveedorId?: string | null): Promise<boolean> {
+  if (!proveedorId) return false;
+  await asegurarColumnaRodeo();
+  const r = await pool.query(`SELECT rodeo_a_favor_nuestro FROM proveedores WHERE id = $1`, [proveedorId]);
+  return r.rows[0]?.rodeo_a_favor_nuestro === true;
+}
+
 export async function calcularLineaClubPreview(
   clubId: string,
   weekStart: string,
-  rakebackPct: number
+  rakebackPct: number,
+  rodeoAFavorNuestro = false
 ): Promise<LineaClubPreview> {
   const resumen = await getResumenClubSemanal(clubId, weekStart);
   if (!resumen) throw new Error("Club no encontrado.");
@@ -58,7 +74,7 @@ export async function calcularLineaClubPreview(
 
   const participacionRake = resumen.rakeTotal * rakebackPct;
   const clubRebate = await calcularClubRebate(resumen);
-  const impactoRodeo = -round2(resumen.rodeoUnionProveedor); // 35% del rodeo a repartir (antes: el 15% del agente)
+  const impactoRodeo = (rodeoAFavorNuestro ? 1 : -1) * round2(resumen.rodeoUnionProveedor); // 35% del rodeo a repartir (antes: el 15% del agente)
   const montoCrudo = resumen.resultadoTotal + participacionRake + clubRebate + impactoRodeo;
   const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
 
@@ -98,15 +114,18 @@ export async function actualizarProveedor(
     active?: boolean;
     autoCierreClubId?: string | null;
     autoCierreRakebackPct?: number | null;
+    rodeoAFavorNuestro?: boolean;
   }
 ) {
+  await asegurarColumnaRodeo();
   const r = await pool.query(
     `UPDATE proveedores SET
        name = COALESCE($2, name),
        notes = CASE WHEN $3::boolean THEN $4 ELSE notes END,
        active = COALESCE($5, active),
        auto_cierre_club_id = CASE WHEN $6::boolean THEN $7 ELSE auto_cierre_club_id END,
-       auto_cierre_rakeback_pct = CASE WHEN $8::boolean THEN $9 ELSE auto_cierre_rakeback_pct END
+       auto_cierre_rakeback_pct = CASE WHEN $8::boolean THEN $9 ELSE auto_cierre_rakeback_pct END,
+       rodeo_a_favor_nuestro = COALESCE($10, rodeo_a_favor_nuestro)
      WHERE id = $1 RETURNING *`,
     [
       id,
@@ -118,6 +137,7 @@ export async function actualizarProveedor(
       patch.autoCierreClubId || null,
       patch.autoCierreRakebackPct !== undefined,
       patch.autoCierreRakebackPct ?? null,
+      patch.rodeoAFavorNuestro ?? null,
     ]
   );
   if (!r.rows[0]) throw new Error("Proveedor no encontrado.");
@@ -329,6 +349,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       return entry;
     }
 
+    const rodeoAFavor = await proveedorRodeoAFavorNuestro(input.proveedorId);
     const lineasPreparadas: Array<{
       tipo: TipoLineaCierreProveedor;
       clubId: string;
@@ -348,7 +369,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
 
     for (const linea of input.lineas) {
       if (linea.tipo === "CLUB") {
-        const preview = await calcularLineaClubPreview(linea.clubId, input.weekStart, linea.rakebackPct as number);
+        const preview = await calcularLineaClubPreview(linea.clubId, input.weekStart, linea.rakebackPct as number, rodeoAFavor);
         weekEnd = weekEnd ?? preview.resumen.weekEnd;
 
         const entry = await getOrInitSaldo(linea.clubId);
@@ -813,7 +834,7 @@ async function aplicarOAgregarLineaClubAutomatica(
       throw new Error("Ya existe una línea de este club en el cierre de esta semana.");
     }
 
-    const preview = await calcularLineaClubPreview(clubId, weekStart, rakebackPct);
+    const preview = await calcularLineaClubPreview(clubId, weekStart, rakebackPct, await proveedorRodeoAFavorNuestro(proveedorId));
     const saldo = await getSaldoParaUpdate(client, proveedorId, clubId);
     const saldoAnterior = Number(saldo.amount);
     const saldoNuevo = round2(saldoAnterior + preview.montoAplicado);
