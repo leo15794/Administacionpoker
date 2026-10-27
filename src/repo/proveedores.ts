@@ -58,7 +58,7 @@ export async function calcularLineaClubPreview(
 
   const participacionRake = resumen.rakeTotal * rakebackPct;
   const clubRebate = await calcularClubRebate(resumen);
-  const impactoRodeo = -resumen.rodeoPagadoAgentes;
+  const impactoRodeo = -round2(resumen.rodeoUnionProveedor); // 35% del rodeo a repartir (antes: el 15% del agente)
   const montoCrudo = resumen.resultadoTotal + participacionRake + clubRebate + impactoRodeo;
   const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
 

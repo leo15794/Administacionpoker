@@ -78,6 +78,8 @@ export interface ResumenClubSemanal {
   comisionPlataformaTotal: number;
   rebateTotal: number;
   rodeoPagadoAgentes: number;
+  /** Parte de la Unión (35%) del rodeo a repartir de los agentes del club: es lo que toma el cierre de Proveedores. */
+  rodeoUnionProveedor: number;
   gananciaRodeoClub: number;
   gananciaPorRake: number;
   ingresoPorVentas: number;
@@ -116,7 +118,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
-            wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share, wc.system,
+            wc.rakeback, wc.rebate, wc.final_closing, wc.rodeo, wc.rodeo_club_share, wc.rodeo_detalle, wc.system,
             wc.jugadores, wc.ring_game, wc.mtt, wc.sng, wc.spin, wc.ajuste_manual,
             (SELECT d.club_payout_ratio_override FROM agent_club_deals d
              WHERE d.agent_id = wc.agent_id AND d.club_id = wc.club_id AND d.valid_to IS NULL
@@ -152,6 +154,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   let comisionPlataformaTotal = 0;
   let rebateTotal = 0;
   let rodeoPagadoAgentes = 0;
+  let rodeoUnionProveedor = 0;
   let gananciaRodeoClub = 0;
   let gananciaPorRake = 0;
   let cierreTotalAgentes = 0;
@@ -200,6 +203,15 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     comisionPlataformaTotal += comisionPlataformaFila;
     rebateTotal += Number(r.rebate);
     rodeoPagadoAgentes += Number(r.rodeo);
+    // Proveedores toma el 35% (Unión) del rodeo a repartir, ya neto de memoria (27/10/2026, pedido de Leo). Un cierre con rodeo
+    // cargado a mano no guarda el total a repartir: ahí se mantiene el monto cargado.
+    const detRodeo = r.rodeo_detalle;
+    if (detRodeo) {
+      const bruto = (detRodeo.jugadores ?? []).reduce((t: number, j: any) => t + Number(j.baseRodeo), 0);
+      rodeoUnionProveedor += Math.max(0, bruto - Number(detRodeo.memoriaAnterior ?? 0)) * 0.35;
+    } else {
+      rodeoUnionProveedor += Number(r.rodeo);
+    }
     gananciaRodeoClub += Number(r.rodeo_club_share);
     gananciaPorRake += gananciaFila;
     cierreTotalAgentes += Number(r.final_closing);
@@ -252,6 +264,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     comisionPlataformaTotal,
     rebateTotal,
     rodeoPagadoAgentes,
+    rodeoUnionProveedor,
     gananciaRodeoClub,
     gananciaPorRake,
     ingresoPorVentas,
