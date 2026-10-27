@@ -20,6 +20,7 @@ import TbIdleGuard from "../components/TbIdleGuard";
 import CuentasJugadoresTab from "./TeamBackCuentas";
 import TeamBackPruebaTab from "./TeamBackPrueba";
 import { clearBadge } from "../badge";
+import Cifra from "../components/Cifra";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
@@ -765,7 +766,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
               su favor, no un error. */}
           <div className="tb-hero">
             <div className="tb-hero-label">{totalPendiente > 0.004 ? "Te falta cobrar" : "Estás al día"}</div>
-            <div className={`tb-hero-amount${totalPendiente > 0.004 ? "" : " ok"}`}>{usd(totalPendiente > 0.004 ? totalPendiente : totalPagado)}</div>
+            <div className={`tb-hero-amount${totalPendiente > 0.004 ? "" : " ok"}`}><Cifra texto={usd(totalPendiente > 0.004 ? totalPendiente : totalPagado)} /></div>
             <div className="tb-bar">
               <i style={{ width: `${totalHistorico > 0 ? Math.min(100, (totalPagado / totalHistorico) * 100) : 0}%`, background: "var(--green)" }} />
             </div>
@@ -779,7 +780,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
           <div className="kpi-grid">
             <div className="kpi-card">
               <div className="label">Total histórico</div>
-              <div className="value">{usd(totalHistorico)}</div>
+              <div className="value"><Cifra texto={usd(totalHistorico)} retraso={150} /></div>
             </div>
             <div className="kpi-card">
               <div className="label">Escalón actual</div>

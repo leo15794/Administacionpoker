@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import Cifra from "./Cifra";
 
 // Piezas comunes de las listas con el estilo de la Wallet (23/10/2026, pedido de Leo: "que quede uniforme en todo el sistema"): tarjeta de
 // saldo, pestañas con contador, pie con totales y paginación (10 / 25 / 50 / 100 / todos). Los estilos son los `wm-*` de index.css. Las usan
@@ -94,7 +95,7 @@ export function WmSaldoCard({ etiqueta, monto, sub, signo, color, children }: { 
     <div className="wm-card wm-saldo">
       <div>
         <div className="wm-lbl">{etiqueta}</div>
-        <div className={`wm-big ${signo ?? ""}`} style={color ? { color } : undefined}>{monto}</div>
+        <div className={`wm-big ${signo ?? ""}`} style={color ? { color } : undefined}>{typeof monto === "string" ? <Cifra texto={monto} /> : monto}</div>
         {sub && <div className="muted" style={{ fontSize: 13 }}>{sub}</div>}
       </div>
       {children}
@@ -106,7 +107,7 @@ export function WmSaldoCard({ etiqueta, monto, sub, signo, color, children }: { 
 export function WmConteos({ items }: { items: { etiqueta: string; valor: ReactNode }[] }) {
   return (
     <div className="ag-resumen">
-      {items.map((x) => <div key={x.etiqueta}><span className="wm-lbl">{x.etiqueta}</span><b>{x.valor}</b></div>)}
+      {items.map((x, i) => <div key={x.etiqueta}><span className="wm-lbl">{x.etiqueta}</span><b>{typeof x.valor === "string" || typeof x.valor === "number" ? <Cifra texto={String(x.valor)} retraso={150 * (i + 1)} /> : x.valor}</b></div>)}
     </div>
   );
 }

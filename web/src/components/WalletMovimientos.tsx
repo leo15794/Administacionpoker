@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportCsv } from "../csv";
 import ActionsMenu from "./ActionsMenu";
+import Cifra from "./Cifra";
 import { usePaginado, WmPaginacion, WmTabs } from "./ListaWm";
 
 // Saldo y movimientos de la Wallet (22/10/2026, pedido de Leo, inspirado en una referencia que trajo): saldo con los botones de ingreso y egreso,
@@ -139,7 +140,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
       <div className="wm-card wm-saldo">
         <div>
           <div className="wm-lbl">SALDO NETO</div>
-          <div className={`wm-big ${saldo >= 0 ? "pos" : "neg"}`}>{nf(saldo)} <small>USDT</small></div>
+          <div className={`wm-big ${saldo >= 0 ? "pos" : "neg"}`}><Cifra texto={nf(saldo)} /> <small>USDT</small></div>
           <div className="muted" style={{ fontSize: 12.5 }}>Saldo de todos los movimientos ({totalMovimientos})</div>
         </div>
         <div className="wm-btns">

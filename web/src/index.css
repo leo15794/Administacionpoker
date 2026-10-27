@@ -3059,3 +3059,11 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
   .cj-fila > :nth-child(4) { grid-column: 2; grid-row: 1; }
   .cj-fila > :nth-child(5) { grid-column: 1; } .cj-fila > :nth-child(6) { grid-column: 2; }
 }
+
+/* Cifra animada (27/10/2026): ver components/Cifra.tsx. Cada dígito es una columna 0-9 que sube o baja con una transición. */
+.cifra { display: inline-flex; align-items: flex-start; line-height: 1.15; height: 1.15em; overflow: hidden; font-variant-numeric: tabular-nums; vertical-align: bottom; }
+.cifra .d { position: relative; display: inline-block; width: 0.62em; height: 1.15em; overflow: hidden; }
+.cifra .d .col { position: absolute; left: 0; top: 0; transition: transform 1.1s cubic-bezier(0.16, 1, 0.3, 1); }
+.cifra .d .col > span { display: block; height: 1.15em; width: 0.62em; text-align: center; }
+.cifra .sep { display: inline-block; height: 1.15em; line-height: 1.15em; white-space: pre; }
+@media (prefers-reduced-motion: reduce) { .cifra .d .col { transition: none !important; } }
