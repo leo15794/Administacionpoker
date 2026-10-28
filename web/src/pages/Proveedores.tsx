@@ -1255,7 +1255,7 @@ function LineaAgenteEditor({
       {preview && (
         <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
           {preview.referencia ? (
-            <>Referencia {preview.agent_name} en {preview.club_name}: resultado {usd(preview.ref_resultado)} + rake {usd(preview.ref_rake)} x {Math.round(preview.ref_pct * 100)}% = <b>{usd(preview.final_closing)}</b> -- suma al cierre (sin invertir).</>
+            <>Referencia {preview.agent_name} en {preview.club_name}: resultado {usd(preview.ref_resultado)} + rake {usd(preview.ref_rake)} x {Math.round(preview.ref_pct * 100)}% = {usd(preview.ref_resultado + preview.ref_rake * preview.ref_pct)}, invertido como una linea de club: <b>{usd(preview.final_closing)}</b>.</>
           ) : (
             <>Cierre de {preview.agent_name} en {preview.club_name}: <b>{usd(preview.final_closing)}</b> -- se agrega tal cual (sin invertir).</>
           )}

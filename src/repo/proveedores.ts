@@ -59,13 +59,14 @@ export async function proveedorRodeoAFavorNuestro(proveedorId?: string | null): 
 
 // Agente SOLO DE REFERENCIA (F coco, 28/10/2026, pedido de Leo): su cierre operativo queda en cero y no suma a ningun lado, pero en el cierre de
 // Suprema entra como una linea mas, calculada con sus numeros reales (weekly_closings.ref_result/ref_rake, o result/rake_total en los cierres
-// viejos que se cargaron antes de la regla): resultado + rake x 80%, sin invertir.
+// viejos que se cargaron antes de la regla): -(resultado + rake x 80%), invertido como una linea de club.
 const PCT_REFERENCIA = 0.8;
 function montoAgenteDeCierre(c: any): { referencia: boolean; monto: number; resultado: number; rake: number } {
   if (!c.solo_referencia) return { referencia: false, monto: Number(c.final_closing), resultado: 0, rake: 0 };
   const resultado = Number(c.ref_result ?? c.result ?? 0);
   const rake = Number(c.ref_rake ?? c.rake_total ?? 0);
-  return { referencia: true, monto: round2(resultado + rake * PCT_REFERENCIA), resultado, rake };
+  // Se invierte igual que las lineas de club (F coco es parte del resultado de TeamBack Suprema): resultado negativo de sus jugadores = a favor del proveedor.
+  return { referencia: true, monto: -round2(resultado + rake * PCT_REFERENCIA), resultado, rake };
 }
 
 export async function calcularLineaClubPreview(
