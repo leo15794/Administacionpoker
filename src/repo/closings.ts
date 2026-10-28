@@ -139,7 +139,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         observation: `[Solo referencia: no suma ni resta saldo ni ganancia] Valores del reporte (no se cuentan): ${originales}.` + (input.observation ? ` ${input.observation}` : ""),
       };
     }
-    if (agentRes.rows[0]?.account_type === "BANCADO") {
+    // Un bancado "solo referencia" (MatiasFx) sigue el camino generico en cero, igual que F coco: no pasa por el motor de bancados.
+    if (agentRes.rows[0]?.account_type === "BANCADO" && !agentRes.rows[0]?.solo_referencia) {
       const result = await aplicarCierreBancadoTx(client, input);
       await client.query(input.preview ? "ROLLBACK" : "COMMIT");
       return { ...result, preview: input.preview ?? false };

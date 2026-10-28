@@ -352,6 +352,14 @@ export async function analizarImportacionSuprema(
       continue;
     }
 
+    const soloRefCache = new Map<string, boolean>();
+    const agenteSoloReferencia = async (agentId: string) => {
+      if (!soloRefCache.has(agentId)) {
+        const r = await pool.query(`SELECT solo_referencia FROM agents WHERE id = $1`, [agentId]);
+        soloRefCache.set(agentId, r.rows[0]?.solo_referencia === true);
+      }
+      return soloRefCache.get(agentId) as boolean;
+    };
     const agentesMap = new Map<string, AgenteAgregado>();
     const sinAgente: JugadorSinAgente[] = [];
     const bancados: JugadorBancadoOmitido[] = [];
@@ -373,7 +381,9 @@ export async function analizarImportacionSuprema(
         continue;
       }
 
-      if (jugadorUpsert.bancado) {
+      // Un bancado cuyo agente esta marcado "solo referencia" (ej. MatiasFx) NO se omite: entra al agregado de su agente como cualquier otro, y el
+      // cierre (que lo deja en cero, ver aplicarCierreSemanal) guarda sus numeros reales para la linea del cierre de Proveedores (28/10/2026).
+      if (jugadorUpsert.bancado && !(await agenteSoloReferencia(resolucion.agentId))) {
         bancados.push({
           playerId: jugadorUpsert.id,
           playerExternalId: row.playerId,
