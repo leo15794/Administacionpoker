@@ -24,8 +24,10 @@ export type ClubFamily = "SUPREMA" | "GG" | "FENIX_GG" | "XPOKER" | "TINY" | "OT
 // quiera desde "Configurar clubes", pero import_platform se setea solo a 'TINY_GG' la primera
 // vez que se importa un archivo de esa plataforma (ver repo/importsTinyGG.ts) -- mucho mas
 // confiable que adivinar por nombre.
-function familiaDeClub(nombre: string, importPlatform: string | null): ClubFamily {
-  if (importPlatform === "TINY_GG") return "TINY";
+// 28/10/2026: si el import_platform quedó en otro valor (ej. "GG" puesto a mano desde Configurar clubes,
+// el COALESCE del import ya no lo pisa), el club igual es Tiny cuando tiene filas en tiny_rebate_union.
+function familiaDeClub(nombre: string, importPlatform: string | null, tieneRebateTiny = false): ClubFamily {
+  if (importPlatform === "TINY_GG" || tieneRebateTiny) return "TINY";
   if (nombre === "TeamBack Suprema" || nombre === "Fénix Suprema") return "SUPREMA";
   if (nombre === "TeamBack GG") return "GG";
   if (nombre === "Fénix GG") return "FENIX_GG";
@@ -114,7 +116,8 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   if (clubRes.rows.length === 0) return null;
   const club = clubRes.rows[0];
   const ratioDefaultClub = 1 - Number(club.platform_pct);
-  const clubFamily = familiaDeClub(club.name, club.import_platform ?? null);
+  const rebateTinyRes = await pool.query(`SELECT 1 FROM tiny_rebate_union WHERE club_id = $1 LIMIT 1`, [clubId]);
+  const clubFamily = familiaDeClub(club.name, club.import_platform ?? null, rebateTinyRes.rows.length > 0);
 
   const cierresRes = await pool.query(
     `SELECT wc.agent_id, a.name as agent_name, wc.week_end, wc.result, wc.rake_total, wc.rakeback_pct,
