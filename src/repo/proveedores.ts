@@ -24,8 +24,9 @@ async function calcularClubRebate(resumen: ResumenClubSemanal): Promise<number> 
     return round2((resumen.resultadoTotal + resumen.rakeTotal) * -0.1);
   }
   if (resumen.clubFamily === "TINY") {
+    // tiny_rebate_union está en moneda de Tiny; el resto de la línea está en USDT -> se divide por la tasa de la semana (28/10/2026).
     const tinyExtra = await getResumenTinyExtra(resumen.clubId, resumen.weekStart);
-    return tinyExtra ? tinyExtra.rebateGlobal : 0;
+    return tinyExtra && tinyExtra.rateSemanal ? round2(tinyExtra.rebateGlobal / tinyExtra.rateSemanal) : 0;
   }
   return 0;
 }
