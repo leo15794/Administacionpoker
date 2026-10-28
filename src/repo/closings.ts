@@ -111,7 +111,11 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     // Agente SOLO DE REFERENCIA (21/10/2026, pedido de Leo, caso F coco -- su red de referidos se maneja en TeamBack Afiliados): el cierre se
     // hace igual (queda la fila de la semana) pero NO suma ni resta a ninguna ganancia, saldo, rake, rakeback, rodeo ni comisión. Se logra pasándolo por
     // el flujo normal con todos los importes en cero; los valores del reporte quedan anotados en la observación para poder auditarlos.
+    // Los numeros reales quedan guardados aparte (ref_result/ref_rake/ref_jugadores) para que el cierre de Suprema los tome (28/10/2026).
+    let refReal: { result: number; rake: number; jugadores: number | null } | null = null;
     if (agentRes.rows[0]?.solo_referencia) {
+      refReal = { result: input.result, rake: input.rakeTotal, jugadores: input.jugadores ?? null };
+      await client.query(`ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ref_result NUMERIC, ADD COLUMN IF NOT EXISTS ref_rake NUMERIC, ADD COLUMN IF NOT EXISTS ref_jugadores INTEGER`);
       const originales =
         `resultado ${input.result}, rake ${input.rakeTotal}, rakeback ${Math.round(input.rakebackPct * 10000) / 100}%` +
         (input.rodeoManual ? `, rodeo ${input.rodeoManual}` : "") +
@@ -290,6 +294,9 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
         input.bbjContribution ?? 0,
       ]
     );
+    if (refReal) {
+      await client.query(`UPDATE weekly_closings SET ref_result = $2, ref_rake = $3, ref_jugadores = $4 WHERE id = $1`, [id, refReal.result, refReal.rake, refReal.jugadores]);
+    }
 
     // Detalle por jugador (23/09/2026, "Resumen por agente"): mismo % de rebate/rakeback que
     // se usó arriba para el agregado del agente (input.rebatePct/calc.rakebackPct) -- fórmula

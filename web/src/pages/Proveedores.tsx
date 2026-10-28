@@ -1254,7 +1254,11 @@ function LineaAgenteEditor({
       )}
       {preview && (
         <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-          Cierre de {preview.agent_name} en {preview.club_name}: <b>{usd(preview.final_closing)}</b> -- se agrega tal cual (sin invertir).
+          {preview.referencia ? (
+            <>Referencia {preview.agent_name} en {preview.club_name}: resultado {usd(preview.ref_resultado)} + rake {usd(preview.ref_rake)} x {Math.round(preview.ref_pct * 100)}% = <b>{usd(preview.final_closing)}</b> -- suma al cierre (sin invertir).</>
+          ) : (
+            <>Cierre de {preview.agent_name} en {preview.club_name}: <b>{usd(preview.final_closing)}</b> -- se agrega tal cual (sin invertir).</>
+          )}
         </div>
       )}
       {!soloUna && (

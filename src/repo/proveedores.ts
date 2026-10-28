@@ -57,6 +57,17 @@ export async function proveedorRodeoAFavorNuestro(proveedorId?: string | null): 
   return r.rows[0]?.rodeo_a_favor_nuestro === true;
 }
 
+// Agente SOLO DE REFERENCIA (F coco, 28/10/2026, pedido de Leo): su cierre operativo queda en cero y no suma a ningun lado, pero en el cierre de
+// Suprema entra como una linea mas, calculada con sus numeros reales (weekly_closings.ref_result/ref_rake, o result/rake_total en los cierres
+// viejos que se cargaron antes de la regla): resultado + rake x 80%, sin invertir.
+const PCT_REFERENCIA = 0.8;
+function montoAgenteDeCierre(c: any): { referencia: boolean; monto: number; resultado: number; rake: number } {
+  if (!c.solo_referencia) return { referencia: false, monto: Number(c.final_closing), resultado: 0, rake: 0 };
+  const resultado = Number(c.ref_result ?? c.result ?? 0);
+  const rake = Number(c.ref_rake ?? c.rake_total ?? 0);
+  return { referencia: true, monto: round2(resultado + rake * PCT_REFERENCIA), resultado, rake };
+}
+
 export async function calcularLineaClubPreview(
   clubId: string,
   weekStart: string,
@@ -397,7 +408,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
         continue;
       } else {
         const wc = await client.query(
-          `SELECT wc.*, a.name as agent_name FROM weekly_closings wc
+          `SELECT wc.*, a.name as agent_name, a.solo_referencia FROM weekly_closings wc
            JOIN agents a ON a.id = wc.agent_id
            WHERE wc.agent_id = $1 AND wc.club_id = $2 AND wc.week_start = $3 AND wc.status <> 'REVERTIDO'
            ORDER BY wc.created_at DESC LIMIT 1`,
@@ -411,7 +422,11 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
         }
         weekEnd = weekEnd ?? closing.week_end;
 
-        const montoCrudo = Number(closing.final_closing);
+        const calcAgente = montoAgenteDeCierre(closing);
+        if (calcAgente.referencia && Math.abs(calcAgente.resultado) < 0.005 && Math.abs(calcAgente.rake) < 0.005) {
+          throw new Error(`${closing.agent_name} no tiene los datos reales de esa semana -- volvé a importar el reporte de ese club en "Cierres semanales".`);
+        }
+        const montoCrudo = calcAgente.monto;
         const montoAplicado = montoCrudo; // sin invertir (las dos inversiones se cancelan)
 
         const entry = await getOrInitSaldo(linea.clubId);
@@ -423,9 +438,9 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           clubId: linea.clubId,
           agentId: linea.agentId as string,
           weeklyClosingId: closing.id,
-          resultadoTotal: null,
-          rakeTotal: null,
-          rakebackPct: null,
+          resultadoTotal: calcAgente.referencia ? calcAgente.resultado : null,
+          rakeTotal: calcAgente.referencia ? calcAgente.rake : null,
+          rakebackPct: calcAgente.referencia ? PCT_REFERENCIA : null,
           clubRebate: null,
           impactoRodeo: null,
           montoCrudo,
@@ -543,14 +558,17 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
 // que Leo confirme agregar esa línea al cierre del proveedor.
 export async function obtenerCierreAgentePreview(agentId: string, clubId: string, weekStart: string) {
   const r = await pool.query(
-    `SELECT wc.*, a.name as agent_name, c.name as club_name FROM weekly_closings wc
+    `SELECT wc.*, a.name as agent_name, a.solo_referencia, c.name as club_name FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
      JOIN clubs c ON c.id = wc.club_id
      WHERE wc.agent_id = $1 AND wc.club_id = $2 AND wc.week_start = $3 AND wc.status <> 'REVERTIDO'
      ORDER BY wc.created_at DESC LIMIT 1`,
     [agentId, clubId, weekStart]
   );
-  return r.rows[0] ?? null;
+  const row = r.rows[0];
+  if (!row) return null;
+  const m = montoAgenteDeCierre(row);
+  return m.referencia ? { ...row, final_closing: m.monto, referencia: true, ref_resultado: m.resultado, ref_rake: m.rake, ref_pct: PCT_REFERENCIA } : row;
 }
 
 // Recalcula un cierre ya aplicado, tomando los datos actuales en vez de tener que revertir a

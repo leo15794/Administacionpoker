@@ -1771,6 +1771,11 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS oculto_en_supervisor BOOLEAN NOT NUL
 -- semanal del agente se carga igual (club, rake y ganancia no cambian) pero NO suma ni resta saldo: no genera rakeback pendiente, no
 -- se aplica a ninguna cuenta de Supervisores/Agentes y no se ofrece para activarle una cuenta.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS solo_referencia BOOLEAN NOT NULL DEFAULT FALSE;
+-- (28/10/2026) Los numeros reales del reporte de un agente solo de referencia quedan aca: el cierre operativo sigue en cero, pero el cierre de
+-- Proveedores (Suprema) los toma para su linea (resultado + rake x 80%).
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ref_result NUMERIC;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ref_rake NUMERIC;
+ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ref_jugadores INTEGER;
 
 -- Saldo ÚNICO por supervisor (a propósito NO por club, a diferencia de proveedor_saldos --
 -- confirmado por Leo: "todo lo que pase con sus agentes va todo al mismo lugar"). club_id se
