@@ -216,7 +216,8 @@ function getInitialPinned() {
 const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof icon; label: string; group: "operacion" | "finanzas" | "reportes" }[] = [
   { key: "resumen", to: "/dashboard", end: true, icon: "resumen", label: "Resumen", group: "operacion" },
   { key: "agentes", to: "/dashboard/agentes", icon: "agentes", label: "Administración", group: "operacion" },
-  { key: "movimientos", to: "/dashboard/movimientos", icon: "movimientos", label: "Cargar movimiento", group: "operacion" },
+  // "Cargar movimiento" salió del menú (29/10/2026, pedido de Leo: no se usa más). La ruta /dashboard/movimientos sigue existiendo
+  // por los accesos de Resumen ("Por cobrar") y Cierres ("Ir a Adelantos").
   { key: "cierres", to: "/dashboard/cierres", icon: "cierres", label: "Cierres semanales", group: "operacion" },
   { key: "jugadoresBancados", to: "/dashboard/jugadores-bancados", icon: "jugadoresBancados", label: "Jugadores bancados", group: "operacion" },
   { key: "usuarios", to: "/dashboard/usuarios", icon: "usuarios", label: "Usuarios y permisos", group: "operacion" },
@@ -695,9 +696,6 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         <nav className="bottom-nav" aria-label="Accesos rápidos">
           <NavLink to="/dashboard" end className="bottom-nav-item">{icon.resumen}<span>Resumen</span></NavLink>
           <NavLink to="/dashboard/agentes" className="bottom-nav-item">{icon.agentes}<span>Administración</span></NavLink>
-          <NavLink to="/dashboard/movimientos" className="bottom-nav-fab" title="Cargar movimiento" aria-label="Cargar movimiento">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          </NavLink>
           <NavLink to="/dashboard/cierres" className="bottom-nav-item">{icon.cierres}<span>Cierres</span></NavLink>
           <button type="button" className="bottom-nav-item" onClick={() => setMobileOpen(true)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
