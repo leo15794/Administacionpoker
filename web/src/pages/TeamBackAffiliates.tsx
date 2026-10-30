@@ -2210,6 +2210,7 @@ function JugadoresTab() {
   // Estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador y paginación en una sola lista.
   const [tabJug, setTabJug] = useState<"todos" | "directos" | "referidos" | "sinconfig" | "inactivos">("todos");
   const [buscaJug, setBuscaJug] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function cargar() {
     setJugadores(await api.teamback.listPlayers(true));
@@ -2217,6 +2218,24 @@ function JugadoresTab() {
   useEffect(() => {
     cargar();
   }, []);
+
+  // (30/10/2026, pedido de Leo: eliminar jugadores que ya no están en el panel) -- ver eliminarTbPlayer en repo/teamback.ts.
+  async function eliminarJugador(j: any) {
+    const confirmado = window.confirm(
+      `¿Eliminar a ${j.name} (${j.suprema_player_id})?
+
+Sale de las listas, del import y del cálculo semanal, y no puede entrar más al portal. Sus liquidaciones pasadas quedan en el historial.`
+    );
+    if (!confirmado) return;
+    setMsg(null);
+    try {
+      await api.teamback.eliminarPlayer(j.id);
+      setMsg({ ok: true, text: `${j.name} eliminado.` });
+      await cargar();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo eliminar." });
+    }
+  }
 
   // (25/09/2026, pedido de Leo: "separar el jugador del jugador referido") -- antes era una
   // sola tabla con todos mezclados (columna "Referido por" en "—" para la mayoría). Ahora son
@@ -2257,6 +2276,9 @@ function JugadoresTab() {
           <button className="btn secondary small" onClick={() => setConfigurando(j)}>
             % Configurar
           </button>
+          <button className="btn secondary small" onClick={() => eliminarJugador(j)}>
+            Eliminar
+          </button>
         </td>
       </tr>
     );
@@ -2289,6 +2311,7 @@ function JugadoresTab() {
         <div className="muted" style={{ marginBottom: 8, fontSize: 12.5 }}>
           Cada jugador tiene su propio % de rakeback, escalones y comisión -- no hay un % general para todos. Un jugador marcado "Sin % configurar" no se liquida hasta que le cargues el suyo (botón "% Configurar").
         </div>
+        {msg && <div className={msg.ok ? "success" : "error"} style={{ marginBottom: 8 }}>{msg.text}</div>}
         <WmTabs
           actual={tabJug}
           onChange={setTabJug}

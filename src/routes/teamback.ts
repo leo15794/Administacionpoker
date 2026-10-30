@@ -56,6 +56,7 @@ import {
   enviarBroadcast,
   eliminarLogNotificacion,
   type ImportRow,
+  eliminarTbPlayer,
 } from "../repo/teamback.js";
 
 export const teambackRouter = Router();
@@ -165,6 +166,14 @@ teambackRouter.patch("/players/:id", requireTbAuth, requireTbAdmin, async (req, 
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await actualizarTbPlayer(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+teambackRouter.delete("/players/:id", requireTbAuth, requireTbAdmin, async (req, res) => {
+  try {
+    res.json(await eliminarTbPlayer(req.params.id));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

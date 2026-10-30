@@ -151,7 +151,7 @@ export async function listTbPlayers(includeInactive = true) {
   await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT p.*, ref.name as referido_por_name, ref.suprema_player_id as referido_por_suprema_id,
-            (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id) as referidos_count,
+            (SELECT COUNT(*) FROM tb_players h WHERE h.referido_por_id = p.id AND NOT h.eliminado) as referidos_count,
             -- (25/09/2026) para que la lista pueda avisar qué jugadores todavía no tienen su %
             -- propio cargado, sin tener que pedir la config de cada uno por separado.
             EXISTS (SELECT 1 FROM tb_player_config c WHERE c.player_id = p.id) as tiene_config,
@@ -165,7 +165,7 @@ export async function listTbPlayers(includeInactive = true) {
             (SELECT COALESCE(SUM(l.comision_3pct_acreditada), 0) FROM tb_weekly_liquidations l WHERE l.player_id = p.id AND l.pagado = true) as comision_pagada
      FROM tb_players p
      LEFT JOIN tb_players ref ON ref.id = p.referido_por_id
-     WHERE ($1 OR p.active = true) AND NOT p.es_prueba
+     WHERE ($1 OR p.active = true) AND NOT p.es_prueba AND NOT p.eliminado
      ORDER BY p.name`,
     [includeInactive]
   );
@@ -177,15 +177,31 @@ export async function getTbPlayer(id: string) {
   return r.rows[0] ?? null;
 }
 
+// Un jugador eliminado cuenta como desconocido en el import: su rake no entra y aparece para darlo de alta de nuevo si volvió.
 export async function getTbPlayerBySupremaId(supremaPlayerId: string) {
-  const r = await pool.query(`SELECT * FROM tb_players WHERE suprema_player_id = $1`, [supremaPlayerId]);
+  await asegurarColumnasPago();
+  const r = await pool.query(`SELECT * FROM tb_players WHERE suprema_player_id = $1 AND NOT eliminado`, [supremaPlayerId]);
   return r.rows[0] ?? null;
 }
 
 export async function crearTbPlayer(input: TbPlayerInput) {
+  await asegurarColumnasPago();
   if (input.referidoPorId) {
     const ref = await getTbPlayer(input.referidoPorId);
     if (!ref) throw new Error("El jugador que referís no existe.");
+  }
+  // Si vuelve un jugador eliminado se recupera el mismo registro (el ID de Suprema es único), con su historial y su login.
+  const eliminado = await pool.query(`SELECT id FROM tb_players WHERE suprema_player_id = $1 AND eliminado`, [input.supremaPlayerId.trim()]);
+  if (eliminado.rows.length > 0) {
+    const previo = eliminado.rows[0].id;
+    const r = await pool.query(
+      `UPDATE tb_players
+       SET eliminado = FALSE, active = TRUE, name = $2, fecha_alta = COALESCE($3, fecha_alta), referido_por_id = $4, notes = $5, updated_at = now()
+       WHERE id = $1 RETURNING *`,
+      [previo, input.name.trim(), input.fechaAlta ?? null, input.referidoPorId ?? null, input.notes ?? null]
+    );
+    await pool.query(`UPDATE tb_users SET active = TRUE WHERE player_id = $1`, [previo]);
+    return r.rows[0];
   }
   const id = newId("tbp");
   try {
@@ -248,6 +264,38 @@ export async function actualizarTbPlayer(id: string, input: Partial<TbPlayerInpu
   return r.rows[0];
 }
 
+/** (30/10/2026, pedido de Leo: eliminar jugadores que ya no están en el panel) -- no borra filas: las liquidaciones pagadas, la ganancia por
+ * semana y el desglose del referente siguen necesitando al jugador. Sale de las listas, del import y del cálculo, y pierde el login y los avisos.
+ * No deja eliminar si queda algo abierto: referidos, liquidaciones sin pagar o saldo en su cuenta. */
+export async function eliminarTbPlayer(id: string) {
+  await asegurarColumnasPago();
+  const jugador = await getTbPlayer(id);
+  if (!jugador || jugador.eliminado) throw new Error("No se encontró ese jugador.");
+  if (jugador.es_prueba) throw new Error("Las cuentas de prueba se borran desde Cuenta de prueba.");
+
+  const referidos = await pool.query(`SELECT name FROM tb_players WHERE referido_por_id = $1 AND NOT eliminado ORDER BY name`, [id]);
+  if (referidos.rows.length > 0) {
+    throw new Error(`${jugador.name} todavía tiene referidos (${referidos.rows.map((r) => r.name).join(", ")}). Cambiales el referente o eliminalos primero.`);
+  }
+  const pendientes = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM tb_weekly_liquidations WHERE player_id = $1 AND pagado = FALSE AND total_acreditado - compensado > 0`,
+    [id]
+  );
+  if (pendientes.rows[0].n > 0) throw new Error(`${jugador.name} tiene ${pendientes.rows[0].n} liquidación(es) sin pagar. Pagalas antes de eliminarlo.`);
+  const saldo = await pool.query(
+    `SELECT COALESCE((SELECT SUM(CASE tipo WHEN 'CARGO' THEN amount WHEN 'COBRO' THEN -amount ELSE amount END)
+                      FROM tb_player_movimientos WHERE player_id = $1 AND revertido = FALSE), 0)
+          - COALESCE((SELECT SUM(compensado) FROM tb_weekly_liquidations WHERE player_id = $1), 0) AS neto`,
+    [id]
+  );
+  if (Math.abs(Number(saldo.rows[0].neto)) >= 0.01) throw new Error(`${jugador.name} tiene saldo abierto en su cuenta. Cerralo en Cuentas de jugadores antes de eliminarlo.`);
+
+  await pool.query(`UPDATE tb_players SET eliminado = TRUE, active = FALSE, updated_at = now() WHERE id = $1`, [id]);
+  await pool.query(`UPDATE tb_users SET active = FALSE WHERE player_id = $1`, [id]);
+  await pool.query(`DELETE FROM tb_push_subscriptions WHERE player_id = $1`, [id]);
+  return { ok: true };
+}
+
 /** Árbol completo (todos los niveles) -- V1 solo paga el nivel directo, pero se expone completo
  * para que la UI lo pueda mostrar y para tenerlo listo el día que se pague un segundo nivel. */
 export async function getArbolReferidos() {
@@ -256,12 +304,12 @@ export async function getArbolReferidos() {
     `WITH RECURSIVE arbol AS (
        SELECT id, suprema_player_id, name, referido_por_id, active, 0 as nivel,
               ARRAY[id] as camino
-       FROM tb_players WHERE referido_por_id IS NULL AND NOT es_prueba
+       FROM tb_players WHERE referido_por_id IS NULL AND NOT es_prueba AND NOT eliminado
        UNION ALL
        SELECT p.id, p.suprema_player_id, p.name, p.referido_por_id, p.active, a.nivel + 1,
               a.camino || p.id
        FROM tb_players p JOIN arbol a ON p.referido_por_id = a.id
-       WHERE NOT p.id = ANY(a.camino) AND NOT p.es_prueba -- corta cualquier ciclo por las dudas, nunca debería pasar
+       WHERE NOT p.id = ANY(a.camino) AND NOT p.es_prueba AND NOT p.eliminado -- corta cualquier ciclo por las dudas, nunca debería pasar
      )
      SELECT * FROM arbol ORDER BY camino`
   );
@@ -531,6 +579,7 @@ export async function asegurarColumnasPago() {
   if (columnasPagoListas) return;
   // es_prueba (23/10/2026): marca de la cuenta de prueba -- se asegura acá para que ningún reporte falle si todavía no se corrió el migrate.
   await pool.query(`ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS es_prueba BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS eliminado BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(
     `ALTER TABLE tb_weekly_liquidations
        ADD COLUMN IF NOT EXISTS pagado BOOLEAN NOT NULL DEFAULT FALSE,

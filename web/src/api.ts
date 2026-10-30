@@ -1285,6 +1285,7 @@ export const api = {
       id: string,
       data: Partial<{ supremaPlayerId: string; name: string; fechaAlta: string; referidoPorId: string | null; notes: string | null; active: boolean }>
     ) => requestTb(`/teamback/players/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    eliminarPlayer: (id: string) => requestTb(`/teamback/players/${id}`, { method: "DELETE" }),
     arbol: () => requestTb("/teamback/arbol"),
 
     previsualizarImport: (file: File) => {

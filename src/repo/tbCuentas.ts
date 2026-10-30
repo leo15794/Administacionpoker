@@ -161,7 +161,7 @@ export async function listarCuentas() {
        SELECT player_id, SUM(CASE tipo WHEN 'CARGO' THEN amount WHEN 'COBRO' THEN -amount ELSE amount END) AS neto
        FROM tb_player_movimientos WHERE revertido = FALSE GROUP BY player_id
      ) m ON m.player_id = p.id
-     WHERE (l.player_id IS NOT NULL OR m.player_id IS NOT NULL) AND NOT p.es_prueba
+     WHERE (l.player_id IS NOT NULL OR m.player_id IS NOT NULL) AND NOT p.es_prueba AND NOT p.eliminado
      ORDER BY p.name`
   );
   const cuentas = r.rows.map((x: any) => {
