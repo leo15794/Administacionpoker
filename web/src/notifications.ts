@@ -28,15 +28,6 @@ export function getNotificationPermission(): NotificationPermission | "unsupport
   return Notification.permission;
 }
 
-/** true si este navegador ya tiene una suscripción push activa (no implica que el permiso siga
- * siendo "granted" del lado del SO -- eso se chequea aparte con getNotificationPermission()). */
-export async function yaEstaSuscripto(): Promise<boolean> {
-  if (!isPushSupported()) return false;
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  return sub !== null;
-}
-
 /** Pide permiso de notificaciones y, si lo dan, suscribe este navegador y manda la suscripción
  * al backend. Devuelve el resultado para que el banner pueda mostrar el mensaje justo (aceptó /
  * rechazó / no soportado). */
@@ -46,6 +37,18 @@ export interface DestinoPush {
   unsubscribe: (endpoint: string) => Promise<unknown>;
 }
 const DESTINO_TEAMBACK: DestinoPush = { subscribe: (sub) => api.teamback.push.subscribe(sub), unsubscribe: (e) => api.teamback.push.unsubscribe(e) };
+
+/** Al abrir la app, vuelve a mandar al backend la suscripción de este navegador (30/10/2026, pedido de Leo). Si el navegador la renovó o el backend
+ * ya no la tenía, los avisos dejaban de llegar sin que nadie se enterara. Devuelve true si este dispositivo quedó registrado. */
+export async function sincronizarSuscripcion(destino: DestinoPush = DESTINO_TEAMBACK): Promise<boolean> {
+  if (!isPushSupported() || getNotificationPermission() !== "granted") return false;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) return false;
+  const json = sub.toJSON();
+  await destino.subscribe({ endpoint: json.endpoint!, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  return true;
+}
 
 export async function activarNotificaciones(destino: DestinoPush = DESTINO_TEAMBACK): Promise<"ok" | "denegado" | "no-soportado"> {
   if (!isPushSupported()) return "no-soportado";

@@ -42,6 +42,14 @@ self.addEventListener("push", (event) => {
   );
 });
 
+// Si el navegador renueva la suscripción (30/10/2026, pedido de Leo), se vuelve a crear acá. El service worker no tiene sesión: el backend la
+// recibe la próxima vez que se abre la app (ver sincronizarSuscripcion en notifications.ts).
+self.addEventListener("pushsubscriptionchange", (event) => {
+  const clave = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+  if (!clave) return;
+  event.waitUntil(self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: clave }));
+});
+
 // Número en el ícono de la app instalada (23/10/2026, pedido de Leo). Si el aviso trae el número (portales: avisos sin leer, lo calcula el
 // servidor) se usa tal cual; si no (TeamBack), se suma uno a una cuenta guardada en un caché, que la app borra al abrirse (ver badge.ts).
 const CACHE_CONTADOR = "dp-badge-v1";

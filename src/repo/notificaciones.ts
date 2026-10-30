@@ -5,7 +5,7 @@
 // lo ven (y descargan las imágenes) aunque no hayan activado las notificaciones.
 import { createHmac } from "node:crypto";
 import { pool, newId } from "../db/pool.js";
-import { enviarPushAUnaSuscripcion } from "../lib/push.js";
+import { enviarPushAUnaSuscripcion, motivoFallaPush } from "../lib/push.js";
 
 export const MAX_IMAGENES_POR_AVISO = 10;
 export const MAX_BYTES_IMAGEN = 4 * 1024 * 1024;
@@ -126,13 +126,16 @@ export async function enviarAvisos(input: {
 
   let entregados = 0;
   const sinActivar: { id: string; nombre: string }[] = [];
+  const fallidos: { id: string; nombre: string }[] = [];
   const recibieron: { id: string; nombre: string }[] = [];
+  let motivo: string | null = null;
   for (const u of usuarios.rows) {
     const subs = await pool.query(`SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = $1`, [u.id]);
     // Número del ícono: lo que tenía sin leer + este aviso (que se guarda en la bandeja más abajo).
     const sinLeer = await pool.query(`SELECT COUNT(*)::int AS n FROM aviso_destinatarios WHERE user_id = $1 AND leido_at IS NULL`, [u.id]);
     const badge = Number(sinLeer.rows[0]?.n ?? 0) + 1;
     let ok = 0;
+    let fallo = false;
     for (const s of subs.rows) {
       try {
         await enviarPushAUnaSuscripcion(
@@ -143,13 +146,18 @@ export async function enviarAvisos(input: {
       } catch (err: any) {
         if (err?.statusCode === 404 || err?.statusCode === 410) {
           await pool.query(`DELETE FROM push_subs WHERE endpoint = $1`, [s.endpoint]);
+        } else {
+          // No frena al resto, pero se informa al admin: no es lo mismo que "no activó las notificaciones".
+          fallo = true;
+          motivo = motivo ?? motivoFallaPush(err);
         }
-        // Cualquier otro error de red se ignora para esta suscripción: no frena al resto.
       }
     }
     if (ok > 0) {
       entregados++;
       recibieron.push({ id: u.id, nombre: u.nombre });
+    } else if (fallo) {
+      fallidos.push({ id: u.id, nombre: u.nombre });
     } else {
       sinActivar.push({ id: u.id, nombre: u.nombre });
     }
@@ -158,7 +166,7 @@ export async function enviarAvisos(input: {
   await pool.query(
     `INSERT INTO push_envios_log (id, titulo, mensaje, elegidos, entregados, sin_activar, actor, imagenes)
      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb)`,
-    [avisoId, input.titulo, input.mensaje, usuarios.rows.length, entregados, JSON.stringify(sinActivar), input.actor ?? null, JSON.stringify(imagenes)]
+    [avisoId, input.titulo, input.mensaje, usuarios.rows.length, entregados, JSON.stringify([...sinActivar, ...fallidos]), input.actor ?? null, JSON.stringify(imagenes)]
   );
   if (usuarios.rows.length > 0) {
     await pool.query(
@@ -166,7 +174,7 @@ export async function enviarAvisos(input: {
       [avisoId, usuarios.rows.map((u) => u.id)]
     );
   }
-  return { elegidos: usuarios.rows.length, entregados, recibieron, sinActivar, imagenes: imagenes.length };
+  return { elegidos: usuarios.rows.length, entregados, recibieron, sinActivar, fallidos, motivo, imagenes: imagenes.length };
 }
 
 export async function listarHistorial() {

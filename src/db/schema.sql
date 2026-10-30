@@ -2292,6 +2292,16 @@ CREATE INDEX IF NOT EXISTS idx_tb_push_log_tipo_semana ON tb_push_notifications_
 -- eso ALTER, no se reescribe el CREATE TABLE de arriba.
 ALTER TABLE tb_push_notifications_log ADD COLUMN IF NOT EXISTS imagen_url TEXT;
 
+-- Bandeja de avisos del portal de TeamBack (30/10/2026, pedido de Leo): a quién iba cada aviso, si le llegó al celular y si ya lo leyó.
+CREATE TABLE IF NOT EXISTS tb_aviso_destinatarios (
+  log_id    TEXT NOT NULL REFERENCES tb_push_notifications_log(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL REFERENCES tb_players(id) ON DELETE CASCADE,
+  recibido  BOOLEAN NOT NULL DEFAULT FALSE,
+  leido_at  TIMESTAMPTZ,
+  PRIMARY KEY (log_id, player_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tb_aviso_dest_player ON tb_aviso_destinatarios(player_id);
+
 -- Revertir cierre consolidado de supervisor (15/10/2026, pedido de Leo: "necesito poder
 -- desaplicar en supervisores un cierre semanal") -- hasta ahora aplicarCierreConsolidadoSupervisor
 -- (repo/supervisores.ts) dejaba registro en supervisor_cierres/supervisor_cierre_lineas pero no

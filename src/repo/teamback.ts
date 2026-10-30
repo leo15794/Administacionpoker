@@ -16,7 +16,7 @@ import {
   type OrigenLiquidacionSemanal,
 } from "../engine/teambackAffiliates.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
-import { enviarPushAUnaSuscripcion, type PushPayload } from "../lib/push.js";
+import { enviarPushAUnaSuscripcion, motivoFallaPush, verificarPushConfigurado, type PushPayload } from "../lib/push.js";
 import { aplicarCompensaciones } from "./tbCuentas.js";
 
 // ---------------------------------------------------------------------------------------------
@@ -960,23 +960,17 @@ async function getPushSubscripcionesDeJugador(playerId: string) {
   return r.rows;
 }
 
-async function getTodasLasPushSubscripciones() {
-  await asegurarColumnasPago();
-  const r = await pool.query(
-    `SELECT s.endpoint, s.p256dh, s.auth FROM tb_push_subscriptions s JOIN tb_players p ON p.id = s.player_id WHERE NOT p.es_prueba`
-  );
-  return r.rows;
-}
-
 /** Manda el mismo payload a TODAS las suscripciones de un jugador (puede tener más de una: celu
  * + compu). Si alguna quedó muerta del otro lado (desinstaló, revocó el permiso), la borra de la
- * base en vez de reintentar -- así no se acumulan suscripciones fantasma para siempre. Devuelve
- * cuántas recibieron el push de verdad. */
+ * base en vez de reintentar -- así no se acumulan suscripciones fantasma para siempre. Cualquier
+ * otro error no frena el envío al resto, pero se cuenta para informárselo al admin. */
 async function mandarATodasLasSuscripcionesDe(
   subs: { endpoint: string; p256dh: string; auth: string }[],
   payload: PushPayload
 ) {
   let enviados = 0;
+  let fallidos = 0;
+  let motivo: string | null = null;
   for (const s of subs) {
     try {
       await enviarPushAUnaSuscripcion({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
@@ -986,12 +980,85 @@ async function mandarATodasLasSuscripcionesDe(
       if (status === 404 || status === 410) {
         // El navegador/SO dio de baja esta suscripción del otro lado -- limpiar acá.
         await eliminarPushSubscription(s.endpoint);
+      } else {
+        fallidos++;
+        motivo = motivo ?? motivoFallaPush(err);
       }
-      // Cualquier otro error (red, etc.) se ignora para esta suscripción puntual -- no frena el
-      // envío al resto de suscripciones/jugadores.
     }
   }
-  return enviados;
+  return { enviados, fallidos, motivo };
+}
+
+export interface ResultadoEnvioTb {
+  personas: number; // a cuántos jugadores iba
+  recibieron: number; // a cuántos les llegó al menos a un dispositivo
+  fallidos: number; // dispositivos que dieron error (no los dados de baja)
+  motivo: string | null;
+}
+
+/** Manda el aviso a cada jugador y arma el detalle por persona, que es lo que se guarda para la bandeja y lo que ve el admin. */
+async function enviarAJugadores(playerIds: string[], payload: PushPayload) {
+  verificarPushConfigurado();
+  let enviados = 0;
+  let fallidos = 0;
+  let motivo: string | null = null;
+  const destinatarios: { playerId: string; recibido: boolean }[] = [];
+  for (const playerId of playerIds) {
+    const subs = await getPushSubscripcionesDeJugador(playerId);
+    const r = await mandarATodasLasSuscripcionesDe(subs, payload);
+    enviados += r.enviados;
+    fallidos += r.fallidos;
+    motivo = motivo ?? r.motivo;
+    destinatarios.push({ playerId, recibido: r.enviados > 0 });
+  }
+  return { enviados, fallidos, motivo, destinatarios };
+}
+
+function resumenEnvio(envios: Awaited<ReturnType<typeof enviarAJugadores>>[]): ResultadoEnvioTb {
+  const destinatarios = envios.flatMap((e) => e.destinatarios);
+  return {
+    personas: destinatarios.length,
+    recibieron: destinatarios.filter((d) => d.recibido).length,
+    fallidos: envios.reduce((a, e) => a + e.fallidos, 0),
+    motivo: envios.find((e) => e.motivo)?.motivo ?? null,
+  };
+}
+
+// Bandeja de avisos (30/10/2026, pedido de Leo): cada aviso queda guardado para todos sus destinatarios, tengan o no las notificaciones activadas.
+let tablaAvisosLista = false;
+async function asegurarTablaAvisos() {
+  if (tablaAvisosLista) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS tb_aviso_destinatarios (
+       log_id    TEXT NOT NULL REFERENCES tb_push_notifications_log(id) ON DELETE CASCADE,
+       player_id TEXT NOT NULL REFERENCES tb_players(id) ON DELETE CASCADE,
+       recibido  BOOLEAN NOT NULL DEFAULT FALSE,
+       leido_at  TIMESTAMPTZ,
+       PRIMARY KEY (log_id, player_id)
+     )`
+  );
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tb_aviso_dest_player ON tb_aviso_destinatarios(player_id)`);
+  tablaAvisosLista = true;
+}
+
+export async function getBandejaJugador(playerId: string) {
+  await asegurarTablaAvisos();
+  const r = await pool.query(
+    `SELECT l.id, l.titulo, l.mensaje, l.imagen_url, l.created_at, d.leido_at
+     FROM tb_aviso_destinatarios d JOIN tb_push_notifications_log l ON l.id = d.log_id
+     WHERE d.player_id = $1 ORDER BY l.created_at DESC LIMIT 30`,
+    [playerId]
+  );
+  return r.rows;
+}
+
+export async function marcarAvisosLeidos(playerId: string, avisoIds: string[]) {
+  if (avisoIds.length === 0) return;
+  await asegurarTablaAvisos();
+  await pool.query(
+    `UPDATE tb_aviso_destinatarios SET leido_at = now() WHERE player_id = $1 AND log_id = ANY($2::text[]) AND leido_at IS NULL`,
+    [playerId, avisoIds]
+  );
 }
 
 async function registrarLogNotificacion(input: {
@@ -1003,12 +1070,29 @@ async function registrarLogNotificacion(input: {
   enviadoA: number;
   actor?: string | null;
   imagenUrl?: string | null;
+  destinatarios: { playerId: string; recibido: boolean }[];
 }) {
+  await asegurarTablaAvisos();
+  const id = newId("tbnl");
   await pool.query(
     `INSERT INTO tb_push_notifications_log (id, tipo, week_start, player_id, titulo, mensaje, enviado_a, actor, imagen_url)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [newId("tbnl"), input.tipo, input.weekStart ?? null, input.playerId ?? null, input.titulo, input.mensaje, input.enviadoA, input.actor ?? null, input.imagenUrl ?? null]
+    [id, input.tipo, input.weekStart ?? null, input.playerId ?? null, input.titulo, input.mensaje, input.enviadoA, input.actor ?? null, input.imagenUrl ?? null]
   );
+  if (input.destinatarios.length > 0) {
+    await pool.query(
+      `INSERT INTO tb_aviso_destinatarios (log_id, player_id, recibido)
+       SELECT $1, x.player_id, x.recibido FROM unnest($2::text[], $3::boolean[]) AS x(player_id, recibido)
+       ON CONFLICT DO NOTHING`,
+      [id, input.destinatarios.map((d) => d.playerId), input.destinatarios.map((d) => d.recibido)]
+    );
+  }
+}
+
+// "2026-10-19" -> "19/10", para los textos de los avisos.
+function diaMesAviso(fecha: string) {
+  const [, m, d] = String(fecha).slice(0, 10).split("-");
+  return `${d}/${m}`;
 }
 
 /** Borra un aviso del historial (13/10/2026, pedido de Leo) -- no revoca la notificación ya
@@ -1018,6 +1102,7 @@ export async function eliminarLogNotificacion(id: string) {
 }
 
 export async function getLogNotificaciones(tipo?: string, weekStart?: string) {
+  await asegurarTablaAvisos();
   const condiciones: string[] = [];
   const values: any[] = [];
   if (tipo) {
@@ -1030,7 +1115,13 @@ export async function getLogNotificaciones(tipo?: string, weekStart?: string) {
   }
   const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
   const r = await pool.query(
-    `SELECT l.*, p.name as player_name FROM tb_push_notifications_log l
+    `SELECT l.*, p.name as player_name,
+            (SELECT COUNT(*)::int FROM tb_aviso_destinatarios d WHERE d.log_id = l.id) as personas,
+            (SELECT COUNT(*)::int FROM tb_aviso_destinatarios d WHERE d.log_id = l.id AND d.recibido) as recibieron,
+            (SELECT COALESCE(json_agg(j.name ORDER BY j.name), '[]'::json)
+             FROM tb_aviso_destinatarios d JOIN tb_players j ON j.id = d.player_id
+             WHERE d.log_id = l.id AND NOT d.recibido) as sin_recibir
+     FROM tb_push_notifications_log l
      LEFT JOIN tb_players p ON p.id = l.player_id
      ${where} ORDER BY l.created_at DESC LIMIT 100`,
     values
@@ -1044,18 +1135,14 @@ export async function notificarLiquidacionCerrada(weekStart: string, actor?: str
   await asegurarColumnasPago();
   const r = await pool.query(
     `SELECT DISTINCT l.player_id, p.name FROM tb_weekly_liquidations l
-     JOIN tb_players p ON p.id = l.player_id WHERE l.week_start = $1::date AND NOT p.es_prueba`,
+     JOIN tb_players p ON p.id = l.player_id WHERE l.week_start = $1::date AND NOT p.es_prueba AND NOT p.eliminado`,
     [weekStart]
   );
   const titulo = "Tu liquidación ya está lista";
-  const mensaje = `Ya calculamos tu liquidación de la semana del ${weekStart}. Entrá a la app para verla.`;
-  let totalEnviados = 0;
-  for (const row of r.rows) {
-    const subs = await getPushSubscripcionesDeJugador(row.player_id);
-    totalEnviados += await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
-  }
-  await registrarLogNotificacion({ tipo: "liquidacion_cerrada", weekStart, titulo, mensaje, enviadoA: totalEnviados, actor });
-  return { jugadoresNotificados: r.rows.length, pushEnviados: totalEnviados };
+  const mensaje = `Ya calculamos tu liquidación de la semana del ${diaMesAviso(weekStart)}. Tocá para verla.`;
+  const envio = await enviarAJugadores(r.rows.map((row) => row.player_id), { title: titulo, body: mensaje, url: `/teamback?semana=${weekStart}` });
+  await registrarLogNotificacion({ tipo: "liquidacion_cerrada", weekStart, titulo, mensaje, enviadoA: envio.enviados, actor, destinatarios: envio.destinatarios });
+  return resumenEnvio([envio]);
 }
 
 /** Manda "te pagamos" a UN jugador puntual, por su liquidación ya marcada como pagada. */
@@ -1067,20 +1154,25 @@ export async function notificarLiquidacionPagada(liquidacionId: string, actor?: 
   );
   const liq = r.rows[0];
   if (!liq) throw new Error("No se encontró esa liquidación.");
-  const titulo = "Te acreditamos tu pago";
-  const mensaje = `Te pagamos tu comisión de la semana del ${String(liq.week_start).slice(0, 10)}.`;
-  const subs = await getPushSubscripcionesDeJugador(liq.player_id);
-  const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
+  const semana = String(liq.week_start).slice(0, 10);
+  const monto = (Number(liq.total_acreditado) - Number(liq.compensado ?? 0)).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const titulo = liq.medio_pago === "COMPENSACION" ? "Descontamos tu liquidación" : "Te acreditamos tu pago";
+  const mensaje =
+    liq.medio_pago === "COMPENSACION"
+      ? `Tu liquidación de la semana del ${diaMesAviso(semana)} se descontó de tu deuda.`
+      : `Te pagamos US$ ${monto} de tu liquidación de la semana del ${diaMesAviso(semana)}${liq.medio_pago === "USDT" ? " en USDT" : liq.medio_pago === "FICHAS" ? " en fichas" : ""}.`;
+  const envio = await enviarAJugadores([liq.player_id], { title: titulo, body: mensaje, url: `/teamback?semana=${semana}` });
   await registrarLogNotificacion({
     tipo: "liquidacion_pagada",
     weekStart: liq.week_start,
     playerId: liq.player_id,
     titulo,
     mensaje,
-    enviadoA: enviados,
+    enviadoA: envio.enviados,
     actor,
+    destinatarios: envio.destinatarios,
   });
-  return { jugador: liq.player_name, pushEnviados: enviados };
+  return { jugador: liq.player_name, ...resumenEnvio([envio]) };
 }
 
 /** Para cada jugador que referenció a alguien que llegó a "activo" ESTA semana (mismo criterio
@@ -1095,33 +1187,34 @@ export async function notificarReferidosActivos(weekStart: string, actor?: strin
      JOIN tb_players p ON p.id = l.player_id
      JOIN tb_players ref ON ref.referido_por_id = l.player_id
      LEFT JOIN tb_weekly_stats s ON s.player_id = ref.id AND s.week_start = $1::date
-     WHERE l.week_start = $1::date AND NOT p.es_prueba
+     WHERE l.week_start = $1::date AND NOT p.es_prueba AND NOT p.eliminado
        AND COALESCE(s.rake_bruto, 0) >= (l.config_snapshot->>'umbralReferidoActivoUsd')::numeric
      GROUP BY l.player_id, p.name`,
     [weekStart]
   );
-  let totalEnviados = 0;
+  const envios: Awaited<ReturnType<typeof enviarAJugadores>>[] = [];
   for (const row of r.rows) {
     const cantidad = Number(row.activos);
-    const titulo = "¡Uno de tus referidos se activó!";
+    // No dice "se activó": se manda todas las semanas, también por referidos que ya venían activos.
+    const titulo = "Tus referidos activos de la semana";
     const mensaje =
       cantidad === 1
-        ? "Uno de tus referidos llegó al umbral de activo esta semana -- sumá su comisión."
-        : `${cantidad} de tus referidos llegaron al umbral de activo esta semana -- sumá sus comisiones.`;
-    const subs = await getPushSubscripcionesDeJugador(row.referrer_id);
-    const enviados = await mandarATodasLasSuscripcionesDe(subs, { title: titulo, body: mensaje, url: "/teamback" });
-    totalEnviados += enviados;
+        ? `Tuviste 1 referido activo la semana del ${diaMesAviso(weekStart)}. Tocá para ver tu comisión.`
+        : `Tuviste ${cantidad} referidos activos la semana del ${diaMesAviso(weekStart)}. Tocá para ver tu comisión.`;
+    const envio = await enviarAJugadores([row.referrer_id], { title: titulo, body: mensaje, url: `/teamback?semana=${weekStart}` });
+    envios.push(envio);
     await registrarLogNotificacion({
       tipo: "referido_activo",
       weekStart,
       playerId: row.referrer_id,
       titulo,
       mensaje,
-      enviadoA: enviados,
+      enviadoA: envio.enviados,
       actor,
+      destinatarios: envio.destinatarios,
     });
   }
-  return { referentesNotificados: r.rows.length, pushEnviados: totalEnviados };
+  return resumenEnvio(envios);
 }
 
 /** Anuncio libre: a todos los jugadores con alguna suscripción, o a uno puntual si se pasa
@@ -1133,11 +1226,15 @@ export async function enviarBroadcast(
   actor?: string | null,
   imagenUrl?: string | null
 ) {
-  const subs = playerId ? await getPushSubscripcionesDeJugador(playerId) : await getTodasLasPushSubscripciones();
-  const enviados = await mandarATodasLasSuscripcionesDe(subs, {
+  await asegurarColumnasPago();
+  // A todos los jugadores activos, no solo a los que activaron las notificaciones: el resto lo ve en su bandeja.
+  const ids = playerId
+    ? [playerId]
+    : (await pool.query(`SELECT id FROM tb_players WHERE active = TRUE AND NOT es_prueba AND NOT eliminado`)).rows.map((r) => r.id as string);
+  const envio = await enviarAJugadores(ids, {
     title: titulo,
     body: mensaje,
-    url: "/teamback",
+    url: "/teamback?avisos=1",
     image: imagenUrl || undefined,
   });
   await registrarLogNotificacion({
@@ -1145,9 +1242,10 @@ export async function enviarBroadcast(
     playerId: playerId ?? null,
     titulo,
     mensaje,
-    enviadoA: enviados,
+    enviadoA: envio.enviados,
     actor,
     imagenUrl: imagenUrl ?? null,
+    destinatarios: envio.destinatarios,
   });
-  return { pushEnviados: enviados };
+  return resumenEnvio([envio]);
 }

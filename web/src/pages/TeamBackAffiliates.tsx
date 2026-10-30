@@ -26,7 +26,8 @@ import LoginSwitch from "../components/LoginSwitch";
 import { DockOverlay, useMenuFijo, useMenuPos } from "../components/MenuDock";
 import { iconosPoker } from "../components/IconosPoker";
 import { getInstallPromptEvent, onInstallPromptChange, isStandaloneDisplay, isIos } from "../installPrompt";
-import { isPushSupported, getNotificationPermission, yaEstaSuscripto, activarNotificaciones } from "../notifications";
+import { isPushSupported, getNotificationPermission, sincronizarSuscripcion, activarNotificaciones } from "../notifications";
+import BandejaAvisos from "../components/BandejaAvisos";
 
 type Tab = "resumen" | "cuentas" | "jugadores" | "import" | "ganancia" | "config" | "usuarios" | "wallet" | "avisos" | "pagos" | "prueba";
 
@@ -652,8 +653,11 @@ function NotificationsBanner() {
       if (isIos() && !isStandaloneDisplay()) return setEstado("oculto"); // iPhone: primero instalar
       const permiso = getNotificationPermission();
       if (permiso === "denied") return setEstado("denegado");
-      if (await yaEstaSuscripto()) return setEstado("suscripto");
-      setEstado("ofrecer");
+      try {
+        setEstado((await sincronizarSuscripcion()) ? "suscripto" : "ofrecer");
+      } catch {
+        setEstado("ofrecer");
+      }
     })();
   }, []);
 
@@ -700,13 +704,21 @@ function NotificationsBanner() {
   );
 }
 
+// Bandeja del portal del jugador (30/10/2026, pedido de Leo): mismos avisos que el push, los vea o no en el celular.
+const FUENTE_AVISOS_TB = {
+  bandeja: () => api.teamback.portal.avisos(),
+  marcarLeidos: (ids: string[]) => api.teamback.portal.marcarAvisosLeidos(ids),
+};
+
 function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLogout: () => void }) {
   const [cuenta, setCuenta] = useState<any | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
+  // Al tocar una notificación, la url trae qué abrir: ?semana=AAAA-MM-DD despliega esa semana, ?avisos=1 abre la bandeja (ver repo/teamback.ts).
+  const [paramsAviso] = useState(() => new URLSearchParams(window.location.search));
   // (09/10/2026, pedido de Leo: "lo mejor seria que se despliegue abajo y se pueda ver los
   // jugadores") -- antes abria un Modal; ahora la semana elegida se despliega inline, debajo de
   // su propia fila (ver la tabla mas abajo). null = ninguna semana desplegada.
-  const [expandida, setExpandida] = useState<string | null>(null);
+  const [expandida, setExpandida] = useState<string | null>(paramsAviso.get("semana"));
 
   useEffect(() => {
     api.teamback.portal.miCuenta().then(setCuenta);
@@ -758,6 +770,7 @@ function TeamBackPortalJugador({ session, onLogout }: { session: TbSession; onLo
 
       <InstallAppBanner />
       <NotificationsBanner />
+      <BandejaAvisos fuente={FUENTE_AVISOS_TB} abrirAlCargar={paramsAviso.get("avisos") === "1"} />
 
       {historial.length > 0 && (
         <>
@@ -1016,6 +1029,13 @@ function EstadoPill({ l }: { l: any }) {
   );
 }
 
+// Resultado de un envío de avisos para mostrarle al admin (30/10/2026, pedido de Leo): personas, no dispositivos, y el error real si hubo.
+function textoEnvio(r: { personas: number; recibieron: number; fallidos: number; motivo: string | null }) {
+  if (r.personas === 0) return "No había nadie a quien avisarle.";
+  const falla = r.fallidos > 0 ? ` Falló la entrega en ${r.fallidos} dispositivo(s): ${r.motivo}.` : "";
+  return `Le llegó al celular a ${r.recibieron} de ${r.personas}. Todos lo ven en la bandeja de su portal.${falla}`;
+}
+
 function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
   const [semanas, setSemanas] = useState<any[]>([]);
   const [weekStart, setWeekStart] = useState("");
@@ -1041,13 +1061,22 @@ function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
   const [nuevaInicio, setNuevaInicio] = useState("");
   const [nuevaFin, setNuevaFin] = useState("");
 
+  // Evita mandar dos veces lo mismo sin darse cuenta (30/10/2026, pedido de Leo).
+  async function confirmarSiYaSeAviso(tipo: string, etiqueta: string, playerId?: string) {
+    const previos: any[] = await api.teamback.push.log({ tipo, weekStart });
+    const ultimo = playerId ? previos.find((p) => p.player_id === playerId) : previos[0];
+    if (!ultimo) return true;
+    return window.confirm(`Ya avisaste ${etiqueta} el ${dateShort(ultimo.created_at)}. ¿Mandar de nuevo?`);
+  }
+
   async function notificarLiquidacionSemana() {
     if (!weekStart) return;
     setNotificando("semana");
     setMsg(null);
     try {
+      if (!(await confirmarSiYaSeAviso("liquidacion_cerrada", "la liquidación de esta semana"))) return;
       const r = await api.teamback.push.notificarLiquidacionCerrada(weekStart);
-      setMsg({ ok: true, text: `Notificados ${r.jugadoresNotificados} jugador(es) -- ${r.pushEnviados} push enviados.` });
+      setMsg({ ok: true, text: textoEnvio(r) });
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo notificar." });
     } finally {
@@ -1060,8 +1089,9 @@ function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
     setNotificando("referidos");
     setMsg(null);
     try {
+      if (!(await confirmarSiYaSeAviso("referido_activo", "los referidos activos de esta semana"))) return;
       const r = await api.teamback.push.notificarReferidosActivos(weekStart);
-      setMsg({ ok: true, text: `Notificados ${r.referentesNotificados} referente(s) -- ${r.pushEnviados} push enviados.` });
+      setMsg({ ok: true, text: textoEnvio(r) });
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo notificar a los referentes." });
     } finally {
@@ -1073,8 +1103,9 @@ function LiquidacionesTab({ topbarSlot }: { topbarSlot: HTMLElement | null }) {
     setNotificando(f.id);
     setMsg(null);
     try {
+      if (!(await confirmarSiYaSeAviso("liquidacion_pagada", `este pago a ${f.player_name}`, f.player_id))) return;
       const r = await api.teamback.push.notificarLiquidacionPagada(f.id);
-      setMsg({ ok: true, text: `${r.jugador} notificado -- ${r.pushEnviados} push enviados.` });
+      setMsg({ ok: true, text: `${r.jugador}: ${textoEnvio(r)}` });
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo notificar el pago." });
     } finally {
@@ -1492,8 +1523,9 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
         <Modal title={`Pagar — ${pagando.player_name}`} onClose={() => setPagando(null)}>
           <FormPagarLiquidacion
             liquidacion={pagando}
-            onPagado={() => {
+            onPagado={(aviso) => {
               setPagando(null);
+              if (aviso) setMsg(aviso);
               cargarFilas(weekStart);
             }}
           />
@@ -1508,8 +1540,10 @@ Esto borra la liquidación calculada Y el rake importado de esa semana. No se pu
 // USDT, el backend (marcarLiquidacionPagada) registra un egreso real en la Wallet del sistema
 // principal (WALLET_MANOS) -- acá solo se avisa que eso va a pasar, el movimiento en sí lo hace
 // el backend. Fichas nunca toca la Wallet.
-function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onPagado: () => void }) {
+function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onPagado: (aviso?: { ok: boolean; text: string }) => void }) {
   const [medioPago, setMedioPago] = useState<"USDT" | "FICHAS">("USDT");
+  // Sigue siendo manual (30/10/2026, pedido de Leo): el aviso sale solo si se tilda la casilla.
+  const [avisar, setAvisar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -1518,7 +1552,15 @@ function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onP
     setMsg(null);
     try {
       await api.teamback.marcarLiquidacionPagada(liquidacion.id, medioPago);
-      onPagado();
+      let aviso: { ok: boolean; text: string } | undefined;
+      if (avisar) {
+        try {
+          aviso = { ok: true, text: `Pago registrado. ${textoEnvio(await api.teamback.push.notificarLiquidacionPagada(liquidacion.id))}` };
+        } catch (err: any) {
+          aviso = { ok: false, text: `El pago quedó registrado, pero no se pudo avisar al jugador: ${err.message || "error desconocido"}.` };
+        }
+      }
+      onPagado(aviso);
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo marcar como pagada." });
     } finally {
@@ -1544,6 +1586,10 @@ function FormPagarLiquidacion({ liquidacion, onPagado }: { liquidacion: any; onP
           ? `Se va a registrar un egreso de ${usd(Number(liquidacion.total_acreditado) - Number(liquidacion.compensado ?? 0))} en la Wallet del sistema principal.`
           : "Pago en fichas del club -- no mueve la Wallet."}
       </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
+        <input type="checkbox" checked={avisar} onChange={(e) => setAvisar(e.target.checked)} style={{ width: "auto" }} />
+        Avisarle al jugador que se le pagó
+      </label>
       {msg && (
         <div className={msg.ok ? "success" : "error"} style={{ marginTop: 10 }}>
           {msg.text}
@@ -1746,7 +1792,7 @@ function AvisosTab() {
     setMsg(null);
     try {
       const r = await api.teamback.push.broadcast(titulo.trim(), mensaje.trim(), destino || null, imagenUrl.trim() || null);
-      setMsg({ ok: true, text: `Enviado -- ${r.pushEnviados} push entregados.` });
+      setMsg({ ok: true, text: textoEnvio(r) });
       setTitulo("");
       setMensaje("");
       setDestino("");
@@ -1801,8 +1847,8 @@ function AvisosTab() {
   return (
     <div className="wm-card wm-tabla">
       <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
-        Mandá una notificación push libre -- novedades, torneos, lo que necesites avisar. Solo le
-        llega a quien ya activó las notificaciones en su celular/navegador.
+        Mandá un aviso libre -- novedades, torneos, lo que necesites avisar. Le llega como
+        notificación a quien la activó en su celular/navegador; los demás lo ven en la bandeja de su portal.
       </div>
 
       <div className="form-grid" style={{ marginBottom: 12 }}>
@@ -1859,7 +1905,7 @@ function AvisosTab() {
             <th>Para</th>
             <th>Título</th>
             <th>Mensaje</th>
-            <th className="num">Entregados</th>
+            <th className="num">Al celular</th>
             <th></th>
           </tr>
         </thead>
@@ -1870,7 +1916,11 @@ function AvisosTab() {
               <td>{h.player_name || "Todos"}</td>
               <td>{h.titulo}</td>
               <td className="muted">{h.mensaje}</td>
-              <td className="num">{h.enviado_a}</td>
+              <td className="num">
+                {/* Los avisos anteriores al 30/10/2026 no guardaron el detalle por persona: solo dispositivos. */}
+                {h.personas > 0 ? `${h.recibieron} de ${h.personas}` : `${h.enviado_a} disp.`}
+                {h.sin_recibir?.length > 0 && <div className="muted" style={{ fontSize: 11 }}>Sin recibir: {h.sin_recibir.join(", ")}</div>}
+              </td>
               <td>
                 <button className="btn secondary small" disabled={borrandoId === h.id} onClick={() => borrarAviso(h.id)} title="Borrar este aviso del historial">
                   {borrandoId === h.id ? "..." : "🗑"}

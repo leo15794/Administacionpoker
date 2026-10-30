@@ -44,6 +44,24 @@ export interface PushPayload {
   badge?: number;
 }
 
+// (30/10/2026, pedido de Leo) Un aviso que no se entregó en 3 días ya no sirve (por defecto web-push lo guarda 4 semanas), y con prioridad alta
+// Android no lo demora mientras el celular está en reposo.
+const VENCIMIENTO_SEGUNDOS = 3 * 24 * 60 * 60;
+
+/** Para que un envío corte con el mensaje real si faltan las claves, en vez de terminar como "0 enviados". */
+export function verificarPushConfigurado() {
+  asegurarConfigurado();
+}
+
+/** Texto para el admin de por qué falló un envío que NO es una suscripción dada de baja (esas se limpian solas). */
+export function motivoFallaPush(err: any): string {
+  const status = err?.statusCode;
+  if (status === 401 || status === 403) return "el servicio de notificaciones rechazó las claves VAPID";
+  if (status === 413) return "el aviso es demasiado largo";
+  if (status === 429) return "el servicio de notificaciones pidió esperar un rato";
+  return err?.message || "error desconocido";
+}
+
 /** Manda un push a UNA suscripción puntual. Si el navegador/SO la dio de baja del otro lado
  * (desinstaló la app, por ejemplo), web-push tira 404/410 -- eso lo interpreta el llamador
  * (sendPushATodasLasSuscripcionesDe) para limpiar la suscripción vieja de la base. */
@@ -51,6 +69,7 @@ export async function enviarPushAUnaSuscripcion(sub: PushSubscriptionInput, payl
   asegurarConfigurado();
   await webpush.sendNotification(
     { endpoint: sub.endpoint, keys: sub.keys } as any,
-    JSON.stringify(payload)
+    JSON.stringify(payload),
+    { TTL: VENCIMIENTO_SEGUNDOS, urgency: "high" }
   );
 }

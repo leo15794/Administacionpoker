@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { activarNotificaciones, getNotificationPermission, isPushSupported } from "../notifications";
+import { activarNotificaciones, getNotificationPermission, isPushSupported, sincronizarSuscripcion } from "../notifications";
 import { isIos, isStandaloneDisplay } from "../installPrompt";
 
 // Activar los avisos en el celular desde el portal de supervisor, proveedor o agente (21/10/2026, pedido de Leo).
@@ -21,9 +21,8 @@ export default function PortalNotificacionesBanner() {
       if (isIos() && !isStandaloneDisplay()) return vivo && setEstado("instalar-primero");
       if (!isPushSupported()) return vivo && setEstado("oculto");
       try {
-        const r: { dispositivos: number } = await api.notificaciones.miEstado();
-        const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
-        if (vivo) setEstado(r.dispositivos > 0 && sub ? "activo" : "ofrecer");
+        const registrado = await sincronizarSuscripcion(destino);
+        if (vivo) setEstado(registrado ? "activo" : "ofrecer");
       } catch {
         if (vivo) setEstado("oculto");
       }

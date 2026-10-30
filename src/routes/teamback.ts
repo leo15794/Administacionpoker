@@ -57,6 +57,8 @@ import {
   eliminarLogNotificacion,
   type ImportRow,
   eliminarTbPlayer,
+  getBandejaJugador,
+  marcarAvisosLeidos,
 } from "../repo/teamback.js";
 
 export const teambackRouter = Router();
@@ -453,6 +455,18 @@ teambackRouter.get("/portal/liquidacion/:weekStart", requireTbAuth, requireTbPla
   } catch (err: any) {
     res.status(404).json({ error: err.message });
   }
+});
+
+// Bandeja de avisos del portal (30/10/2026, pedido de Leo) -- siempre con el playerId del propio token.
+teambackRouter.get("/portal/avisos", requireTbAuth, requireTbPlayer, async (req: any, res) => {
+  res.json(await getBandejaJugador(req.tbUser.playerId));
+});
+
+teambackRouter.post("/portal/avisos/leidos", requireTbAuth, requireTbPlayer, async (req: any, res) => {
+  const parsed = z.object({ ids: z.array(z.string()).max(100) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  await marcarAvisosLeidos(req.tbUser.playerId, parsed.data.ids);
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { dateTime } from "../fmt";
 import { GrillaDescarga, ImagenAuth, type ImagenAviso } from "./AvisoImagenes";
@@ -7,13 +7,21 @@ import { setBadge } from "../badge";
 // Bandeja de avisos recibidos en el portal de supervisor, proveedor o agente (21/10/2026, pedido de Leo). Arriba del portal queda UNA sola fila
 // compacta con el último aviso (miniaturas + título + "Ver"); al tocarla se abre a pantalla completa con el aviso, las imágenes (para descargar)
 // y los avisos anteriores. Sin avisos, no se muestra nada.
+// (30/10/2026, pedido de Leo) También la usa el portal de TeamBack, pasando su `fuente`: sus avisos traen una sola imagen por link (imagen_url) y
+// el número del ícono lo sigue llevando el service worker (ver badge.ts).
 interface Aviso {
   id: string;
   titulo: string;
   mensaje: string;
-  imagenes: ImagenAviso[];
+  imagenes?: ImagenAviso[];
+  imagen_url?: string | null;
   created_at: string;
   leido_at: string | null;
+}
+
+interface FuenteAvisos {
+  bandeja: () => Promise<Aviso[]>;
+  marcarLeidos: (ids: string[]) => Promise<unknown>;
 }
 
 function hace(fecha: string): string {
@@ -24,19 +32,21 @@ function hace(fecha: string): string {
   return dateTime(fecha);
 }
 
-export default function BandejaAvisos() {
+export default function BandejaAvisos({ fuente, abrirAlCargar = false }: { fuente?: FuenteAvisos; abrirAlCargar?: boolean }) {
   const [avisos, setAvisos] = useState<Aviso[] | null>(null);
   const [abierta, setAbierta] = useState(false);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  const yaAbrioSola = useRef(false);
+  const origen: FuenteAvisos = fuente ?? api.notificaciones;
 
   // Al abrir la app y cada vez que se vuelve a ella se refresca la bandeja, y el número del ícono queda igual a los avisos sin leer.
   useEffect(() => {
     function cargar() {
-      api.notificaciones
+      origen
         .bandeja()
         .then((r: Aviso[]) => {
           setAvisos(r);
-          setBadge(r.filter((a) => !a.leido_at).length);
+          if (!fuente) setBadge(r.filter((a) => !a.leido_at).length);
         })
         .catch(() => setAvisos([]));
     }
@@ -44,6 +54,7 @@ export default function BandejaAvisos() {
     const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
     document.addEventListener("visibilitychange", alVolver);
     return () => document.removeEventListener("visibilitychange", alVolver);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // bloquear el scroll de la página de atrás mientras la hoja está abierta
@@ -56,23 +67,32 @@ export default function BandejaAvisos() {
     };
   }, [abierta]);
 
-  if (!avisos || avisos.length === 0) return null;
-  const ultimo = avisos[0];
-  const actual = avisos.find((a) => a.id === (seleccionado ?? ultimo.id)) ?? ultimo;
-  const sinLeer = avisos.filter((a) => !a.leido_at);
-  const hayNuevo = !ultimo.leido_at;
-
   function abrir(id?: string) {
     setSeleccionado(id ?? null);
     setAbierta(true);
+    const sinLeer = (avisos ?? []).filter((a) => !a.leido_at);
     if (sinLeer.length > 0) {
-      api.notificaciones.marcarLeidos(sinLeer.map((a) => a.id)).catch(() => {});
-      setBadge(0);
+      origen.marcarLeidos(sinLeer.map((a) => a.id)).catch(() => {});
+      if (!fuente) setBadge(0);
       // se sigue viendo el punto/“nuevo” de esta visita; al volver a entrar ya figuran como leídos
     }
   }
 
+  // Al tocar una notificación de aviso, la app abre directamente la bandeja.
+  useEffect(() => {
+    if (!abrirAlCargar || yaAbrioSola.current || !avisos || avisos.length === 0) return;
+    yaAbrioSola.current = true;
+    abrir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avisos, abrirAlCargar]);
+
+  if (!avisos || avisos.length === 0) return null;
+  const ultimo = avisos[0];
+  const actual = avisos.find((a) => a.id === (seleccionado ?? ultimo.id)) ?? ultimo;
+  const hayNuevo = !ultimo.leido_at;
+
   const imgs = ultimo.imagenes ?? [];
+  const cantidadImagenes = (a: Aviso) => (a.imagenes?.length ?? 0) + (a.imagen_url ? 1 : 0);
   return (
     <>
       <button
@@ -81,7 +101,9 @@ export default function BandejaAvisos() {
         className="bandeja-fila"
         style={{ display: "flex", width: "100%", alignItems: "center", gap: 12, padding: "12px 14px", margin: "0 0 14px", border: "1px solid var(--border)", borderRadius: 16, background: "var(--panel)", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
       >
-        {imgs.length > 0 ? (
+        {ultimo.imagen_url ? (
+          <img src={ultimo.imagen_url} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0, background: "var(--panel-2)" }} />
+        ) : imgs.length > 0 ? (
           <span style={{ display: "flex", flexShrink: 0 }}>
             {imgs.slice(0, 2).map((im, i) => (
               <ImagenAuth key={im.id} id={im.id} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", border: "2px solid var(--panel)", marginLeft: i === 0 ? 0 : -12, background: "var(--panel-2)" }} />
@@ -100,7 +122,7 @@ export default function BandejaAvisos() {
           </b>
           <span className="muted" style={{ fontSize: 12, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {hace(ultimo.created_at)}
-            {imgs.length > 0 ? ` · ${imgs.length} ${imgs.length === 1 ? "imagen" : "imágenes"}` : ""}
+            {cantidadImagenes(ultimo) > 0 ? ` · ${cantidadImagenes(ultimo)} ${cantidadImagenes(ultimo) === 1 ? "imagen" : "imágenes"}` : ""}
           </span>
         </span>
         <span aria-label="Ver" style={{ background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 16, width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 999, flexShrink: 0 }}>›</span>
@@ -115,6 +137,7 @@ export default function BandejaAvisos() {
           <div style={{ flex: 1, overflow: "auto", padding: "14px 16px 30px" }}>
             <div className="muted" style={{ fontSize: 12 }}>{dateTime(actual.created_at)}</div>
             <p style={{ margin: "6px 0 4px", whiteSpace: "pre-wrap" }}>{actual.mensaje}</p>
+            {actual.imagen_url && <img src={actual.imagen_url} alt="" style={{ display: "block", maxWidth: "100%", borderRadius: 12, marginTop: 10 }} />}
             <GrillaDescarga imagenes={actual.imagenes ?? []} />
             {avisos.length > 1 && (
               <>
@@ -124,7 +147,7 @@ export default function BandejaAvisos() {
                   .map((a) => (
                     <button key={a.id} type="button" onClick={() => setSeleccionado(a.id)} style={{ display: "flex", width: "100%", justifyContent: "space-between", gap: 10, alignItems: "center", padding: "10px 12px", marginTop: 8, border: "1px solid var(--border)", borderRadius: 12, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}>
                       <b style={{ fontSize: 13.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.titulo}</b>
-                      <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{(a.imagenes?.length ?? 0) > 0 ? `🖼 ${a.imagenes.length} · ` : ""}{new Date(a.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
+                      <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{cantidadImagenes(a) > 0 ? `🖼 ${cantidadImagenes(a)} · ` : ""}{new Date(a.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}</span>
                     </button>
                   ))}
               </>

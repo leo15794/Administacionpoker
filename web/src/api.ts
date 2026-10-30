@@ -1365,6 +1365,8 @@ export const api = {
       // que liquidacionIndividual del admin ({ player, liquidacion, referidos }), pero siempre
       // scopeado a uno mismo del lado del backend.
       liquidacionSemana: (weekStart: string) => requestTb(`/teamback/portal/liquidacion/${weekStart}`),
+      avisos: () => requestTb("/teamback/portal/avisos"),
+      marcarAvisosLeidos: (ids: string[]) => requestTb("/teamback/portal/avisos/leidos", { method: "POST", body: JSON.stringify({ ids }) }),
     },
 
     // Notificaciones push (13/10/2026, pedido de Leo) -- ver notifications.ts (lo usa el

@@ -283,6 +283,11 @@ Desaparece del portal de los ${h.elegidos} que lo recibieron${(h.imagenes ?? [])
                   Sin notificaciones activadas (lo ven al entrar a su portal): {resultado.sinActivar.map((x: any) => x.nombre).join(", ")}.
                 </div>
               )}
+              {resultado.fallidos?.length > 0 && (
+                <div className="error" style={{ fontSize: 12.5, marginTop: 6 }}>
+                  No se les pudo entregar (lo ven al entrar a su portal): {resultado.fallidos.map((x: any) => x.nombre).join(", ")}. Motivo: {resultado.motivo}.
+                </div>
+              )}
             </div>
           )}
         </div>
