@@ -177,6 +177,12 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
     // (primera ocurrencia).
     const colIndex: Record<string, number> = {};
     for (const [col, text] of headerByCol) {
+      // FIX 02/11/2026 (Leo: "el % del Spin no se está aplicando"): en la semana del 26/10 el Spin quedó en 0 en todos los
+      // cierres de Suprema. Se acepta la columna de stakes de Spin aunque cambie mayúsculas/espacios ("Total Stakes SPIN (Local)", etc.).
+      const plano = text.toLowerCase().replace(/\s+/g, "");
+      if (plano.includes("stake") && plano.includes("spin") && colIndex[SPIN_STAKES_HEADER] === undefined) {
+        colIndex[SPIN_STAKES_HEADER] = col;
+      }
       if (
         ((REQUIRED_HEADERS as readonly string[]).includes(text) || (OPTIONAL_HEADERS as readonly string[]).includes(text)) &&
         colIndex[text] === undefined
@@ -217,10 +223,12 @@ export async function parseSupremaWorkbook(buffer: Buffer): Promise<SupremaParse
       // usa SIEMPRE el calculo (8% del stake, confirmado por Leo) -- la columna nativa
       // "SPIN Total(Local)" viene rota (en 0) desde este cambio de reporte. Fallback al valor
       // nativo solo para poder re-parsear un archivo viejo que no tenga la columna de stakes.
+      // (02/11/2026) Si Suprema vuelve a mandar el rake de Spin ya calculado en la columna nativa, se usa ese; si viene en 0, el 8% del stake.
+      const spinNativo = toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value);
       const spin =
-        colIndex[SPIN_STAKES_HEADER] !== undefined
+        spinNativo === 0 && colIndex[SPIN_STAKES_HEADER] !== undefined
           ? toNumber(row.getCell(colIndex[SPIN_STAKES_HEADER]).value) * SPIN_RAKE_PCT
-          : toNumber(row.getCell(colIndex["SPIN Total(Local)"]).value);
+          : spinNativo;
       const rake = RAKE_HEADERS.reduce((sum, h) => sum + toNumber(row.getCell(colIndex[h]).value), 0) + spin;
       // Ver FIX 13/10/2026: con el alias nuevo, "Total Winnings Rodeo(Local)" es bruto -- hay
       // que restarle "Total Stakes Rodeo(Local)" para llegar al neto real. Si el archivo no
