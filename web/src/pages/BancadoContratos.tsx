@@ -1076,9 +1076,22 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
     }
   }
 
+  // (02/11/2026, pedido de Leo) Eliminar un split extraordinario cargado por error: vuelve la memoria y lo repartido a como estaban.
+  async function eliminarLiquidacion(l: any) {
+    if (!(await confirmDialog(`¿Eliminar este split extraordinario del ${dateShort(l.created_at)}? La memoria vuelve a ${usd(l.memoria_anterior)} y se deshace el reparto (jugador ${usd(l.split_jugador)}, TeamBack ${usd(l.split_teamback)}). Queda en la lista como eliminado.`))) return;
+    try {
+      await api.bancadoContratos.eliminarLiquidacion(l.id);
+      refresh();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo eliminar.");
+    }
+  }
+
   if (!estado) return <div className="panel" style={{ marginTop: 16 }}><Loading /></div>;
   const { periodo } = estado;
   const cerrado = periodo.estado === "CERRADO";
+  // Solo se puede eliminar la última aplicada (ver eliminarLiquidacionExtraordinaria): la lista viene de la más nueva a la más vieja.
+  const ultimaAplicada = (liquidaciones ?? []).find((l) => l.status === "APLICADO");
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1202,7 +1215,7 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
         <h3 style={{ marginTop: 0 }}>Liquidaciones de este período</h3>
         {!liquidaciones ? <Loading /> : liquidaciones.length === 0 ? <div className="muted">Ninguna todavía.</div> : (
           <table>
-            <thead><tr><th>Tipo</th><th>Semana</th><th className="num">Memoria antes</th><th className="num">Aplicada</th><th className="num">Memoria después</th><th className="num">Split jugador</th><th className="num">Split TeamBack</th><th>Fecha</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Semana</th><th className="num">Memoria antes</th><th className="num">Aplicada</th><th className="num">Memoria después</th><th className="num">Split jugador</th><th className="num">Split TeamBack</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {liquidaciones.map((l) => (
                 <tr key={l.id} style={l.status === "REVERTIDO" ? { opacity: 0.5 } : undefined}>
@@ -1214,7 +1227,12 @@ function PeriodoPanel({ contrato, periodoId, onPeriodoCambiado }: { contrato: an
                   <td className="num money">{usd(l.split_jugador)}</td>
                   <td className="num">{usd(l.split_teamback)}</td>
                   <td className="muted">{dateShort(l.created_at)}</td>
-                  <td className="muted">{l.status === "REVERTIDO" ? "Revertido (reabierto)" : "Aplicado"}</td>
+                  <td className="muted">{l.status === "REVERTIDO" ? (l.tipo === "EXTRAORDINARIO" ? "Eliminada" : "Revertido (reabierto)") : "Aplicado"}</td>
+                  <td>
+                    {!cerrado && l.tipo === "EXTRAORDINARIO" && l.id === ultimaAplicada?.id && (
+                      <button className="btn secondary small" onClick={() => eliminarLiquidacion(l)}>Eliminar</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

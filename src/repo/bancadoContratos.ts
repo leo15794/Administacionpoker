@@ -710,6 +710,54 @@ export async function ejecutarSplitExtraordinario(input: SplitExtraordinarioInpu
   }
 }
 
+// Eliminar un split extraordinario (02/11/2026, pedido de Leo: "se duplicó y necesito que todo vuelva para atrás"). Deshace exacto lo que
+// hizo ejecutarSplitExtraordinario: la memoria del período vuelve a memoria_anterior, resultado_ya_distribuido baja lo que se había
+// repartido y el ajuste PAGO_PENDIENTE que haya generado se revierte. La fila queda como REVERTIDO (no se borra, mismo criterio que el
+// resto). Solo la ÚLTIMA liquidación aplicada de un período ABIERTO: con una posterior encima, la cadena de memoria quedaría desordenada.
+// Un cierre MENSUAL se deshace reabriendo el período (reabrirPeriodo).
+export async function eliminarLiquidacionExtraordinaria(liquidacionId: string, usuario: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const liqRes = await client.query(`SELECT * FROM bancado_contrato_liquidaciones WHERE id = $1 FOR UPDATE`, [liquidacionId]);
+    const liq = liqRes.rows[0];
+    if (!liq || liq.status !== "APLICADO") throw new Error("Liquidación no encontrada o ya eliminada.");
+    if (liq.tipo !== "EXTRAORDINARIO") throw new Error("El cierre mensual se deshace con \"Reabrir período\".");
+    const periodoRes = await client.query(`SELECT * FROM bancado_contrato_periodos WHERE id = $1 FOR UPDATE`, [liq.periodo_id]);
+    const periodo = periodoRes.rows[0];
+    if (!periodo || periodo.estado !== "ABIERTO") throw new Error("El período está cerrado: reabrilo primero.");
+    const posterior = await client.query(
+      // la fecha se compara en la base: en JS pierde los microsegundos y la propia fila quedaría como "más nueva"
+      `SELECT 1 FROM bancado_contrato_liquidaciones o
+       WHERE o.periodo_id = $1 AND o.status = 'APLICADO' AND o.id <> $2
+         AND o.created_at > (SELECT created_at FROM bancado_contrato_liquidaciones WHERE id = $2) LIMIT 1`,
+      [liq.periodo_id, liquidacionId]
+    );
+    if (posterior.rows.length > 0) throw new Error("Hay una liquidación más nueva en este período: eliminá primero esa.");
+    if (Math.abs(Number(periodo.memoria_actual) - Number(liq.memoria_final)) > 0.005) {
+      throw new Error("La memoria del período ya no coincide con la que dejó esta liquidación; revisalo antes de eliminarla.");
+    }
+
+    await client.query(
+      `UPDATE bancado_contrato_periodos SET memoria_actual = $1, resultado_ya_distribuido = resultado_ya_distribuido - $2 WHERE id = $3`,
+      [liq.memoria_anterior, liq.base_liberada_split, liq.periodo_id]
+    );
+    await client.query(`UPDATE bancado_contrato_liquidaciones SET status = 'REVERTIDO' WHERE id = $1`, [liquidacionId]);
+    await client.query(
+      `UPDATE bancado_contrato_ajustes SET estado = 'REVERTIDO', resuelto_en = now(), resuelto_por = $1
+       WHERE liquidacion_origen_id = $2 AND tipo = 'PAGO_PENDIENTE' AND estado <> 'REVERTIDO'`,
+      [usuario, liquidacionId]
+    );
+    await client.query("COMMIT");
+    return { ok: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Cierre mensual (secciones 12-16, 19-22, 27)
 // ---------------------------------------------------------------------------------------------

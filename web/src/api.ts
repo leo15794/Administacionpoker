@@ -1194,6 +1194,7 @@ export const api = {
     ) => request(`/bancado-contratos/${contratoId}/cierre-rmf`, { method: "POST", body: JSON.stringify(data) }),
 
     historialRmf: (contratoId: string) => request(`/bancado-contratos/${contratoId}/historial-rmf`),
+    eliminarLiquidacion: (liquidacionId: string) => request(`/bancado-contratos/liquidaciones/${liquidacionId}`, { method: "DELETE" }),
     revertirCierreRmf: (cierreId: string, motivo?: string) =>
       request(`/bancado-contratos/historial-rmf/${cierreId}`, { method: "DELETE", body: JSON.stringify({ motivo }) }),
 

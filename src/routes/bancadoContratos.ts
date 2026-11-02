@@ -23,6 +23,7 @@ import {
   listHistorialRmf,
   revertirCierreRmf,
   listLiquidaciones,
+  eliminarLiquidacionExtraordinaria,
   crearAjuste,
   resolverAjuste,
   listAjustes,
@@ -252,6 +253,14 @@ bancadoContratosRouter.post("/:id/cierre-rmf", requireAuth, requireAdmin, async 
 
 bancadoContratosRouter.get("/:id/historial-rmf", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listHistorialRmf(req.params.id));
+});
+
+bancadoContratosRouter.delete("/liquidaciones/:liquidacionId", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await eliminarLiquidacionExtraordinaria(req.params.liquidacionId, req.user?.email ?? "admin"));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 bancadoContratosRouter.delete("/historial-rmf/:cierreId", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
