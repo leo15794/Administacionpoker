@@ -186,13 +186,14 @@ portalRouter.get("/mi-supervision", requireAuth, async (req: AuthedRequest, res)
     // acá agregado para todo el grupo del supervisor, con el nombre del agente en cada fila para
     // poder distinguir). Incluye también al propio supervisor (puede tener su propia cuenta con
     // movimientos). REVERTIDO se excluye -- esos quedan reemplazados por el movimiento de reversa.
+    // (02/11/2026, pedido de Leo) Sin los cierres semanales: no mueven el saldo (van en 0) y confundían; el cierre se ve en su pestaña.
     const agentIdsGrupo = [supervisor.id, ...agentesACargo.rows.map((a: any) => a.id)];
     const movimientosAgentes = await pool.query(
       `SELECT m.*, a.name as agent_name, c.name as club_name
        FROM ledger_movements m
        JOIN agents a ON a.id = m.agent_id
        JOIN clubs c ON c.id = m.club_id
-       WHERE m.agent_id = ANY($1::text[]) AND m.status <> 'REVERTIDO'
+       WHERE m.agent_id = ANY($1::text[]) AND m.status <> 'REVERTIDO' AND m.type <> 'CIERRE_SEMANAL'
        ORDER BY m.occurred_at DESC
        LIMIT 300`,
       [agentIdsGrupo]

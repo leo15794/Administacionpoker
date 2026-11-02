@@ -368,7 +368,7 @@ export default function MiSupervision() {
         <>
           <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
             Todo lo que pasó con las cuentas de tu grupo: pagos que les enviamos, cargas y descargas de fichas, transferencias entre clubes y
-            ajustes -- para que puedan ver de un vistazo cuándo les mandamos plata o hicimos algún cambio.
+            ajustes -- para que puedan ver de un vistazo cuándo les mandamos plata o hicimos algún cambio.{consolidada ? " Los cierres semanales se ven en su pestaña." : ""}
           </div>
           {movimientos.length === 0 ? (
             <div className="muted">Todavía no hay movimientos.</div>
