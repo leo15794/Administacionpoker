@@ -811,7 +811,7 @@ export async function ejecutarCierreMensual(input: CierreMensualInput, createdBy
        VALUES ($1,$2,$3,'MENSUAL',
                (SELECT MIN(desde) FROM bancado_contrato_parciales WHERE periodo_id = $3),
                (SELECT MAX(hasta) FROM bancado_contrato_parciales WHERE periodo_id = $3),
-               $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+               $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
       [
         liqId,
         periodo.contrato_id,
