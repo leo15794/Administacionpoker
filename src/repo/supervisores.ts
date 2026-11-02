@@ -1083,9 +1083,11 @@ export async function importarSaldosSupervisor(supervisorAgentId: string, agentI
 // esto) pero sin ningún código que las usara todavía.
 //
 // Fichas ganadas en la semana (weekly_closings.result, el resultado de mesas) -> fichas_reales.
-// Rakeback generado en la semana (weekly_closings.rakeback) -> cuenta_corriente.
-// NUNCA el rebate (es un campo distinto, del mecanismo viejo rebate_destino=RAKEBACK_SUPERVISOR,
-// que convive aparte y no hay que mezclar acá).
+// Rakeback + rebate del agente (weekly_closings.rakeback + rebate) -> cuenta_corriente.
+// (02/11/2026, pedido de Leo: antes iba solo el rakeback y el rebate de TeamBack GG se perdía -- el agente ya no
+// tiene rakeback pendiente que lo junte.) El rebate desviado al supervisor (rebate_destino=RAKEBACK_SUPERVISOR, el
+// mecanismo viejo) sigue aparte y NO se suma acá.
+const REBATE_A_CUENTA_SQL = `(CASE WHEN wc.rebate_destino = 'RAKEBACK_SUPERVISOR' THEN 0 ELSE wc.rebate END)`;
 // ---------------------------------------------------------------------------------------------
 
 // Cierres que NO se vuelven a sumar (20/10/2026): los de un agente cuyo saldo ya fue importado con el botón "Importar
@@ -1124,7 +1126,8 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
             COALESCE(SUM(wc.rakeback), 0) as rakeback,
             COALESCE(SUM(wc.rebate), 0) as rebate,
             COALESCE(SUM(wc.rodeo), 0) as rodeo,
-            COALESCE(SUM(wc.final_closing), 0) as total
+            COALESCE(SUM(wc.final_closing), 0) as total,
+            COALESCE(SUM(wc.rakeback + ${REBATE_A_CUENTA_SQL}), 0) as a_cuenta_corriente
      FROM agents a
      LEFT JOIN weekly_closings wc
        ON wc.agent_id = a.id AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}
@@ -1146,7 +1149,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
   // el cierre de cada agente) -- una fila por weekly_closing real de esa semana, solo lectura, nunca recalcula nada.
   const detalle = await pool.query(
     `SELECT wc.agent_id, c.name as club_name, wc.system, wc.jugadores, wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback,
-            wc.rebate, wc.rodeo, wc.final_closing
+            wc.rebate, wc.rodeo, wc.final_closing, wc.rakeback + ${REBATE_A_CUENTA_SQL} as a_cuenta_corriente
      FROM weekly_closings wc
      JOIN agents a ON a.id = wc.agent_id
      JOIN clubs c ON c.id = wc.club_id
@@ -1168,6 +1171,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
       rebate: Number(d.rebate),
       rodeo: Number(d.rodeo),
       total: Number(d.final_closing),
+      a_cuenta_corriente: Number(d.a_cuenta_corriente),
     });
     detallePorAgente.set(d.agent_id, arr);
   }
@@ -1180,6 +1184,7 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
   const resultadoTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.result), 0));
   const rakebackTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.rakeback), 0));
   const totalCierre = round2(lineas.rows.reduce((s, l) => s + Number(l.total), 0));
+  const aCuentaCorrienteTotal = round2(lineas.rows.reduce((s, l) => s + Number(l.a_cuenta_corriente), 0));
 
   return {
     sistema: winLose ? "WIN_LOSE" : "PREPAGO",
@@ -1187,9 +1192,9 @@ export async function getCierreSemanalSupervisor(supervisorAgentId: string, week
     resultadoTotal,
     rakebackTotal,
     // Lo que de verdad se suma a la cuenta corriente al aplicar: en Win/Lose el cierre completo; en Prepago solo
-    // el rakeback (el resultado va a fichas reales).
+    // el rakeback + rebate (el resultado va a fichas reales).
     totalCierre,
-    efectoCuentaCorriente: winLose ? totalCierre : rakebackTotal,
+    efectoCuentaCorriente: winLose ? totalCierre : aCuentaCorrienteTotal,
     agentesYaIncluidosEnSaldo: yaIncluidos.rows.map((r) => r.name as string),
     aplicado: aplicado.rows[0] ?? null,
   };
@@ -1224,7 +1229,8 @@ export async function aplicarCierreConsolidadoSupervisor(
 
     const lineasRes = await client.query(
       `SELECT wc.id as weekly_closing_id, wc.agent_id, wc.club_id,
-              wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate, wc.final_closing
+              wc.result, wc.rake_total, wc.rakeback_pct, wc.rakeback, wc.rebate_pct, wc.rebate, wc.final_closing,
+              wc.rakeback + ${REBATE_A_CUENTA_SQL} as a_cuenta_corriente
        FROM weekly_closings wc
        JOIN agents a ON a.id = wc.agent_id
        WHERE a.id = ANY($1::text[]) AND wc.week_start = $2::date AND wc.status <> 'REVERTIDO' AND ${noImportadoSql("$3")}`,
@@ -1235,7 +1241,6 @@ export async function aplicarCierreConsolidadoSupervisor(
     }
 
     const resultadoTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.result), 0));
-    const rakebackTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rakeback), 0));
     const rakeTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rake_total), 0));
     const rebateTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.rebate), 0));
 
@@ -1247,7 +1252,9 @@ export async function aplicarCierreConsolidadoSupervisor(
     const winLose = esSupervisorWinLose(sup.rows[0]);
     const totalCierre = round2(lineasRes.rows.reduce((s, l) => s + Number(l.final_closing), 0));
     const deltaFichas = winLose ? 0 : resultadoTotal;
-    const deltaCc = winLose ? totalCierre : rakebackTotal;
+    // Prepago: rakeback + rebate (ver REBATE_A_CUENTA_SQL).
+    const aCuentaCorrienteTotal = round2(lineasRes.rows.reduce((s, l) => s + Number(l.a_cuenta_corriente), 0));
+    const deltaCc = winLose ? totalCierre : aCuentaCorrienteTotal;
 
     const cuenta = await getCuentaParaUpdate(client, supervisorAgentId);
     const fichasAntes = Number(cuenta.fichas_reales);
@@ -1274,7 +1281,8 @@ export async function aplicarCierreConsolidadoSupervisor(
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           newId("svcl"), cierreId, l.agent_id, l.club_id, winLose ? 0 : l.result, l.rake_total, l.rakeback_pct,
-          winLose ? l.final_closing : l.rakeback, l.rebate_pct, l.rebate, l.weekly_closing_id,
+          // la columna rakeback es lo que esta línea sumó a cuenta corriente (lo leen "Origen del saldo" y revertir)
+          winLose ? l.final_closing : l.a_cuenta_corriente, l.rebate_pct, l.rebate, l.weekly_closing_id,
         ]
       );
     }

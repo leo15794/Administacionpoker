@@ -151,7 +151,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
     if (
       !confirm(
         `¿Aplicar el cierre de la semana del ${dateShort(weekCierre)} al ${dateShort(weekEnd)}? ` +
-          (esWinLose(seleccionado) ? `Esto suma ${usd(cierreSemana.totalCierre)} a Cuenta corriente (el cierre completo de los agentes). ` : `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.rakebackTotal)} a Cuenta corriente. `) +
+          (esWinLose(seleccionado) ? `Esto suma ${usd(cierreSemana.totalCierre)} a Cuenta corriente (el cierre completo de los agentes). ` : `Esto suma ${usd(cierreSemana.resultadoTotal)} a Fichas reales y ${usd(cierreSemana.efectoCuentaCorriente)} (rakeback y rebate) a Cuenta corriente. `) +
           `Si te equivocaste se puede desaplicar después desde el botón "Desaplicar".`
       )
     )
@@ -844,7 +844,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 ) : (
                                   <>
                                     <th className="num">Fichas ganadas en la semana</th>
-                                    <th className="num">Rakeback generado en la semana</th>
+                                    <th className="num">Rakeback y rebate de la semana</th>
                                   </>
                                 )}
                               </tr>
@@ -867,7 +867,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                     >
                                       <td><div className="saldo-name"><span style={{ color: "var(--text-faint)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>{l.agent_name}</div></td>
                                       <td className={`num ${Number(l.result) >= 0 ? "pos" : "neg"}`}>{montoSignoSup(Number(l.result), true)}</td>
-                                      <td className="num">{usd(Number(l.rakeback))}</td>
+                                      <td className="num">{esWinLose(seleccionado) ? usd(Number(l.rakeback)) : montoSignoSup(Number(l.a_cuenta_corriente), true)}</td>
                                       {esWinLose(seleccionado) && (
                                         <>
                                           <td className="num">{montoSignoSup(Number(l.total) - Number(l.result) - Number(l.rakeback), true)}</td>
@@ -884,7 +884,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                             <div style={{ overflowX: "auto" }}>
                                               <table style={{ margin: 0 }}>
                                                 <thead>
-                                                  <tr><th>Club</th><th>Sistema</th><th className="num">Jugadores</th><th className="num">Resultado de mesas</th><th className="num">Rake generado</th><th className="num">% rakeback</th><th className="num">Rakeback</th>{esWinLose(seleccionado) && <><th className="num">Rebate</th><th className="num">Total</th></>}</tr>
+                                                  <tr><th>Club</th><th>Sistema</th><th className="num">Jugadores</th><th className="num">Resultado de mesas</th><th className="num">Rake generado</th><th className="num">% rakeback</th><th className="num">Rakeback</th><th className="num">Rebate</th>{esWinLose(seleccionado) && <th className="num">Total</th>}</tr>
                                                 </thead>
                                                 <tbody>
                                                   {l.detalle.map((d: any) => (
@@ -896,11 +896,9 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                                       <td className="num">{usd(Number(d.rake_total))}</td>
                                                       <td className="num muted">{Math.round(Number(d.rakeback_pct) * 10000) / 100}%</td>
                                                       <td className="num">{usd(Number(d.rakeback))}</td>
+                                                      <td className="num">{montoSignoSup(Number(d.rebate), true)}</td>
                                                       {esWinLose(seleccionado) && (
-                                                        <>
-                                                          <td className="num">{usd(Number(d.rebate))}</td>
-                                                          <td className={`num ${Number(d.total) >= 0 ? "pos" : "neg"}`}><b>{montoSignoSup(Number(d.total), true)}</b></td>
-                                                        </>
+                                                        <td className={`num ${Number(d.total) >= 0 ? "pos" : "neg"}`}><b>{montoSignoSup(Number(d.total), true)}</b></td>
                                                       )}
                                                     </tr>
                                                   ))}
@@ -912,7 +910,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                             {esWinLose(seleccionado) ? (
                                               <>Se suma a la cuenta corriente: <b>{montoSignoSup(Number(l.total), true)}</b></>
                                             ) : (
-                                              <>Se suma a la cuenta: fichas reales <b>{montoSignoSup(Number(l.result), true)}</b> · cuenta corriente <b>{montoSignoSup(Number(l.rakeback), true)}</b></>
+                                              <>Se suma a la cuenta: fichas reales <b>{montoSignoSup(Number(l.result), true)}</b> · cuenta corriente <b>{montoSignoSup(Number(l.a_cuenta_corriente), true)}</b></>
                                             )}
                                           </div>
                                         </td>
@@ -926,7 +924,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                               <tr style={{ fontWeight: 700 }}>
                                 <td>Total de la semana</td>
                                 <td className="num">{usd(cierreSemana.resultadoTotal)}</td>
-                                <td className="num">{usd(cierreSemana.rakebackTotal)}</td>
+                                <td className="num">{esWinLose(seleccionado) ? usd(cierreSemana.rakebackTotal) : montoSignoSup(Number(cierreSemana.efectoCuentaCorriente), true)}</td>
                                 {esWinLose(seleccionado) && (
                                   <>
                                     <td className="num">{montoSignoSup(Number(cierreSemana.totalCierre) - Number(cierreSemana.resultadoTotal) - Number(cierreSemana.rakebackTotal), true)}</td>

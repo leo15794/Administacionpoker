@@ -255,7 +255,7 @@ export default function MiSupervision() {
                         ) : (
                           <>
                             <span>Fichas ganadas en la semana</span>
-                            <span>Rakeback {usdCents(Number(l.rakeback))}</span>
+                            <span>Rakeback {usdCents(Number(l.rakeback))}{Math.abs(Number(l.rebate)) > 0.004 ? ` · rebate ${montoSigno(Number(l.rebate))}` : ""}</span>
                           </>
                         )}
                       </div>
@@ -277,7 +277,7 @@ export default function MiSupervision() {
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rake generado</div><b>{usdCents(Number(d.rake_total))}</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>% de rakeback</div><b>{Math.round(Number(d.rakeback_pct) * 10000) / 100}%</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rakeback</div><b>{usdCents(Number(d.rakeback))}</b></div>
-                                {winLose && Math.abs(Number(d.rebate)) > 0.004 && (
+                                {Math.abs(Number(d.rebate)) > 0.004 && (
                                   <div><div className="saldo-sub" style={{ margin: 0 }}>Rebate</div><b style={{ color: colorSigno(Number(d.rebate)) }}>{montoSigno(Number(d.rebate))}</b></div>
                                 )}
                               </div>
@@ -285,7 +285,7 @@ export default function MiSupervision() {
                                 {winLose ? (
                                   <>Se suma a tu cuenta corriente: <b style={{ color: colorSigno(Number(d.total)) }}>{montoSigno(Number(d.total))}</b></>
                                 ) : (
-                                  <>Se suma a tu cuenta: fichas reales <b>{montoSigno(Number(d.result))}</b> · cuenta corriente <b>{usdCents(Number(d.rakeback))}</b></>
+                                  <>Se suma a tu cuenta: fichas reales <b>{montoSigno(Number(d.result))}</b> · cuenta corriente <b>{montoSigno(Number(d.a_cuenta_corriente))}</b></>
                                 )}
                               </div>
                             </div>
@@ -300,7 +300,7 @@ export default function MiSupervision() {
                 <b>
                   {winLose
                     ? montoSigno(Number(cierreSemana.totalCierre))
-                    : `${montoSigno(Number(cierreSemana.resultadoTotal))} · rakeback ${usdCents(Number(cierreSemana.rakebackTotal))}`}
+                    : `${montoSigno(Number(cierreSemana.resultadoTotal))} · rakeback y rebate ${montoSigno(Number(cierreSemana.efectoCuentaCorriente))}`}
                 </b>
               </div>
             </>
