@@ -237,6 +237,18 @@ export default function ResumenFinanciero() {
           </div>
 
           <div className="stat-row">
+            {/* (03/11/2026, pedido de Leo) Ganancia total = cierres semanales + bancados. TeamBack Afiliados queda aparte, como siempre. */}
+            {Number(data.totales.gananciaBancados) !== 0 && (() => {
+              const cierres = Number(data.desgloseCierres?.gananciaNeta ?? data.totales.gananciaCierres);
+              const total = cierres + Number(data.totales.gananciaBancados);
+              return (
+                <div className="stat-card">
+                  <div className="l">Ganancia total</div>
+                  <div className={`v ${cls(total)}`}><Cifra texto={usdSigno(total)} /></div>
+                  <div className="s">cierres {usd(cierres)} + bancados {usd(data.totales.gananciaBancados)}</div>
+                </div>
+              );
+            })()}
             <div className="stat-card">
               <div className="l">Neto Wallet / Caja</div>
               <div className={`v ${cls(Number(data.totales.walletNeto))}`}><Cifra texto={usdSigno(Number(data.totales.walletNeto))} /></div>
