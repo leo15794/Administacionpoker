@@ -60,6 +60,68 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// Contratos de bancado (03/11/2026, pedido de Leo: "la ganancia de los jugadores bancados debería sumar al resumen financiero"). El
+// Resumen solo leía bancado_historial (el motor viejo, hoy vacío); los contratos guardan su ganancia en sus propias tablas:
+//  - Regla V1: cada liquidación aplicada (split extraordinario o cierre mensual) trae ganancia_teamback_total (split TeamBack, más el
+//    rake directo del mes en el cierre mensual). Se fecha en el lunes de la última semana jugada que cubre: el cierre mensual en la de
+//    su "hasta", el extraordinario en la del último parcial cargado antes de hacerlo.
+//  - Regla RMF: cada cierre semanal aplicado trae ganancia_banca_mesas (mismo motor y mismo campo que bancado_historial), en su semana.
+// El jugador bancado no entra al cierre de su agente (el import lo deja aparte), así que esto no se cuenta dos veces.
+interface GananciaContratoBancado {
+  id: string;
+  fecha: string; // lunes de la semana
+  monto: number;
+  detalle: string;
+  clubId: string | null;
+  clubName: string | null;
+}
+async function gananciasContratosBancado(): Promise<GananciaContratoBancado[]> {
+  const [v1, rmf] = await Promise.all([
+    pool.query(
+      `SELECT l.id, l.tipo, l.ganancia_teamback_total, l.split_teamback, l.rake_teamback_directo,
+              COALESCE(l.hasta, (SELECT MAX(p.hasta) FROM bancado_contrato_parciales p WHERE p.periodo_id = l.periodo_id AND p.created_at <= l.created_at), l.created_at::date) as fecha,
+              COALESCE(c.nombre, pl.display_name, a.name, 'Contrato') as nombre, cl.id as club_id, cl.name as club_name
+       FROM bancado_contrato_liquidaciones l
+       JOIN bancado_contratos c ON c.id = l.contrato_id
+       LEFT JOIN players pl ON pl.id = c.player_id
+       LEFT JOIN agents a ON a.id = c.agent_id
+       LEFT JOIN clubs cl ON cl.id = c.club_id
+       WHERE l.status = 'APLICADO'`
+    ),
+    pool.query(
+      `SELECT r.id, r.desde as fecha, r.ganancia_banca_mesas, r.rakeback_banca_total,
+              COALESCE(c.nombre, pl.display_name, a.name, 'Contrato') as nombre, cl.id as club_id, cl.name as club_name
+       FROM bancado_contrato_rmf_cierres r
+       JOIN bancado_contratos c ON c.id = r.contrato_id
+       LEFT JOIN players pl ON pl.id = c.player_id
+       LEFT JOIN agents a ON a.id = c.agent_id
+       LEFT JOIN clubs cl ON cl.id = c.club_id
+       WHERE r.status = 'APLICADO'`
+    ),
+  ]);
+  return [
+    ...v1.rows.map((r) => ({
+      id: r.id,
+      fecha: lunesDe(toFecha(r.fecha)),
+      monto: Number(r.ganancia_teamback_total),
+      detalle:
+        r.tipo === "MENSUAL"
+          ? `${r.nombre} — cierre mensual (rake directo ${round2(Number(r.rake_teamback_directo))} + split ${round2(Number(r.split_teamback))})`
+          : `${r.nombre} — split extraordinario`,
+      clubId: r.club_id,
+      clubName: r.club_name,
+    })),
+    ...rmf.rows.map((r) => ({
+      id: r.id,
+      fecha: lunesDe(toFecha(r.fecha)),
+      monto: Number(r.ganancia_banca_mesas),
+      detalle: `${r.nombre} (incluye Rakeback Banca ${round2(Number(r.rakeback_banca_total))})`,
+      clubId: r.club_id,
+      clubName: r.club_name,
+    })),
+  ];
+}
+
 export async function getResumenFinanciero(desde: string, hasta: string) {
   // "hasta" es inclusivo desde el punto de vista del usuario (eligió un día y quiere ver ESE
   // día completo) — se arma el límite exclusivo sumando un día para el filtro real.
@@ -188,6 +250,19 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
       tipo: "GANANCIA",
       monto: Number(row.ganancia_banca_mesas),
       detalle: `${row.player_name} (incluye Rakeback Banca ${row.rakeback_banca_total})`,
+    });
+  }
+
+  const contratos = (await gananciasContratosBancado()).filter((g) => g.fecha >= desde && g.fecha < hastaParam);
+  for (const g of contratos) {
+    eventos.push({
+      id: g.id,
+      fecha: g.fecha,
+      categoria: "BANCADO",
+      subcategoria: `Contrato de bancado${g.clubName ? ` — ${g.clubName}` : ""}`,
+      tipo: "GANANCIA",
+      monto: round2(g.monto),
+      detalle: g.detalle,
     });
   }
 
@@ -351,6 +426,15 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     }
     fila.gananciaBancados += Number(row.ganancia_banca_mesas);
   }
+  for (const g of contratos) {
+    if (!g.clubId) continue;
+    let fila = porClubMap.get(g.clubId);
+    if (!fila) {
+      fila = { clubId: g.clubId, clubName: g.clubName ?? "", gananciaCierres: 0, gananciaBancados: 0, semanas: 0 };
+      porClubMap.set(g.clubId, fila);
+    }
+    fila.gananciaBancados += g.monto;
+  }
   const porClub = [...porClubMap.values()]
     .map((f) => ({
       clubId: f.clubId,
@@ -394,7 +478,11 @@ export async function computeGananciaCierresYBancadosPorSemanas(weekStarts: stri
   );
 
   const gananciaCierres = round2(resumenesClubSemana.reduce((acc, r) => acc + (r ? Number(r.gananciaNeta) : 0), 0));
-  const gananciaBancados = round2(bancados.rows.reduce((acc, row) => acc + Number(row.ganancia_banca_mesas), 0));
+  const semanas = new Set(weekStarts.map((w) => String(w).slice(0, 10)));
+  const contratos = (await gananciasContratosBancado()).filter((g) => semanas.has(g.fecha));
+  const gananciaBancados = round2(
+    bancados.rows.reduce((acc, row) => acc + Number(row.ganancia_banca_mesas), 0) + contratos.reduce((acc, g) => acc + g.monto, 0)
+  );
 
   return { gananciaCierres, gananciaBancados, gananciaOperativa: round2(gananciaCierres + gananciaBancados) };
 }
