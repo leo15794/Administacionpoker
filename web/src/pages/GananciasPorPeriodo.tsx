@@ -815,7 +815,7 @@ function PagoSueldoForm({ esperado, onSubmit }: { esperado: number; onSubmit: (d
       {equivalente != null && (
         <div className={Math.abs(diferencia!) <= 0.01 ? "success" : "error"} style={{ marginBottom: 10 }}>
           Equivalente {usd(equivalente)} · esperado {usd(esperado)}
-          {Math.abs(diferencia!) > 0.01 && <> · diferencia {usd(diferencia)} (quedaría en "Revisar diferencia")</>}
+          {Math.abs(diferencia!) > 0.01 && <> · diferencia {usd(diferencia!)} (quedaría en "Revisar diferencia")</>}
         </div>
       )}
       <div className="field">
