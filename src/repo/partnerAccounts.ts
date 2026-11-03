@@ -7,6 +7,12 @@ import { pool, newId } from "../db/pool.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
 
+// Monto de un movimiento para los totales de categoría: RETIRO y GASTO siempre cuentan como lo
+// que salió (valor absoluto), se hayan cargado en positivo o en negativo -- el monto es libre y
+// un gasto cargado con "-" se terminaba sumando a la ganancia. AJUSTE mantiene el signo (puede
+// ser ingreso o descuento). Lo usan Cuentas de socios y Ganancia por período.
+export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') THEN ABS(amount) ELSE amount END)`;
+
 // "YYYY-MM-DD" (o una fecha DATE de la base, que pg devuelve como medianoche UTC) interpretada
 // tal cual en una zona con offset negativo (Argentina, UTC-3) aparece un día antes al mostrarla
 // -- se re-ancla para que el día de calendario se mantenga sin importar la zona del servidor.
@@ -307,7 +313,7 @@ export async function getAgregadosSocios() {
   const gananciaOperativa = round2(gananciaCierres + Number(ajustesHistoricos.rows[0].total));
 
   const porCategoria = await pool.query(
-    `SELECT category, COALESCE(SUM(amount), 0) as total
+    `SELECT category, COALESCE(SUM(${MONTO_CATEGORIA_SQL}), 0) as total
      FROM partner_account_entries
      WHERE category IN ('RETIRO','GASTO','AJUSTE')
      GROUP BY category`

@@ -540,8 +540,8 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
   return (
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
-        El monto es libre (positivo o negativo) — vos decidís el signo. Para que "Retiros de socios" y "Gastos operativos" salgan bien en los totales,
-        cargalos como monto positivo (la cantidad que salió) con esa categoría.
+        El monto es libre (positivo o negativo) — vos decidís el signo para el saldo de la cuenta. En los totales de "Retiros de socios" y
+        "Gastos operativos" siempre cuenta como plata que salió, con cualquier signo.
       </div>
       <div className="form-grid">
         <div className="field">

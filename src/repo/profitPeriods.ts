@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
 import { computeGananciaCierresYBancadosPorSemanas } from "./resumenFinanciero.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
+import { MONTO_CATEGORIA_SQL } from "./partnerAccounts.js";
 
 // ============================================================
 // AJUSTES EXTRAORDINARIOS
@@ -170,7 +171,7 @@ async function computeRangoFechas(client: PoolClient, weekStarts: string[]) {
 async function computeCategoriasSocios(client: PoolClient, desde: string | null, hasta: string | null) {
   if (!desde || !hasta) return { retiros: 0, gastos: 0, ingresosAjustes: 0 };
   const r = await client.query(
-    `SELECT category, COALESCE(SUM(amount), 0) as total
+    `SELECT category, COALESCE(SUM(${MONTO_CATEGORIA_SQL}), 0) as total
      FROM partner_account_entries
      WHERE entry_date BETWEEN $1 AND $2 AND category IN ('RETIRO','GASTO','AJUSTE')
      GROUP BY category`,
@@ -178,9 +179,8 @@ async function computeCategoriasSocios(client: PoolClient, desde: string | null,
   );
   const map: Record<string, number> = {};
   for (const row of r.rows) map[row.category] = Number(row.total);
-  // Mismo criterio que getAgregadosSocios (Cuentas de socios): suma cruda, sin abs — la
-  // convención ya es "cargalo en positivo" (ver ayuda del formulario de movimientos). Usar abs
-  // acá desalinearía este cálculo del histórico si alguna vez se carga algo con signo distinto.
+  // Mismo criterio que getAgregadosSocios (Cuentas de socios): retiros y gastos siempre restan,
+  // se hayan cargado en positivo o en negativo (ver MONTO_CATEGORIA_SQL).
   return {
     retiros: map.RETIRO ?? 0,
     gastos: map.GASTO ?? 0,
