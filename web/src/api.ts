@@ -694,6 +694,7 @@ export const api = {
     request("/profit-periods", { method: "POST", body: JSON.stringify({ name, weekStarts }) }),
   editarPeriodo: (id: string, data: { name?: string; weekStarts?: string[] }) =>
     request(`/profit-periods/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  revisionCierrePeriodo: (id: string) => request(`/profit-periods/${id}/revision-cierre`),
   cerrarPeriodo: (id: string) => request(`/profit-periods/${id}/cerrar`, { method: "POST" }),
   reabrirPeriodo: (id: string) => request(`/profit-periods/${id}/reabrir`, { method: "POST" }),
   eliminarPeriodo: (id: string) => request(`/profit-periods/${id}`, { method: "DELETE" }),

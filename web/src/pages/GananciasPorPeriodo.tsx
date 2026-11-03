@@ -23,6 +23,7 @@ export default function GananciasPorPeriodo() {
   const [showNuevoAjuste, setShowNuevoAjuste] = useState(false);
   const [showEditarAjuste, setShowEditarAjuste] = useState<any | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showRevision, setShowRevision] = useState<string | null>(null);
 
   function refresh() {
     setError("");
@@ -34,17 +35,9 @@ export default function GananciasPorPeriodo() {
     refresh();
   }, []);
 
-  async function cerrar(p: any) {
-    if (!(await confirmDialog(`¿Cerrar el período "${p.name}"? Se congelan los números y se consume una cuota de cada ajuste extraordinario todavía activo. Se puede reabrir después si hace falta.`))) return;
-    setBusy(p.id);
-    try {
-      await api.cerrarPeriodo(p.id);
-      refresh();
-    } catch (err: any) {
-      await alertDialog(err.message || "No se pudo cerrar el período.");
-    } finally {
-      setBusy(null);
-    }
+  // Cerrar pasa siempre por la revisión previa (RevisionCierre), que es la que cierra.
+  function cerrar(p: any) {
+    setShowRevision(p.id);
   }
 
   async function reabrir(p: any) {
@@ -213,6 +206,18 @@ export default function GananciasPorPeriodo() {
         </Modal>
       )}
 
+      {showRevision && (
+        <Modal title="Revisión antes de cerrar" onClose={() => setShowRevision(null)} wide>
+          <RevisionCierre
+            id={showRevision}
+            onCerrado={() => {
+              setShowRevision(null);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
+
       {showNuevoAjuste && (
         <Modal title="Nuevo ajuste extraordinario" onClose={() => setShowNuevoAjuste(false)}>
           <AjusteForm
@@ -377,6 +382,7 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
   const [periodo, setPeriodo] = useState<any | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+  const [revisando, setRevisando] = useState(false);
 
   function load() {
     api.periodoDetalle(id).then((p) => {
@@ -393,18 +399,8 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
 
   if (!periodo) return <Loading />;
 
-  async function cerrar() {
-    if (!(await confirmDialog(`¿Cerrar "${periodo.name}"? Se congelan los números.`))) return;
-    setBusy(true);
-    try {
-      await api.cerrarPeriodo(id);
-      load();
-      onChanged();
-    } catch (err: any) {
-      await alertDialog(err.message || "No se pudo cerrar el período.");
-    } finally {
-      setBusy(false);
-    }
+  function cerrar() {
+    setRevisando(true);
   }
 
   async function reabrir() {
@@ -463,6 +459,19 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
         }}
       />
 
+      {revisando && (
+        <Modal title="Revisión antes de cerrar" onClose={() => setRevisando(false)} wide>
+          <RevisionCierre
+            id={id}
+            onCerrado={() => {
+              setRevisando(false);
+              load();
+              onChanged();
+            }}
+          />
+        </Modal>
+      )}
+
       <h4 style={{ marginTop: 20 }}>Detalle por semana y club</h4>
       {periodo.detalle?.length === 0 ? (
         <div className="muted">Sin cierres en las semanas elegidas.</div>
@@ -481,6 +490,109 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+// Revisión antes de cerrar (03/11/2026, pedido de Leo): muestra lo que se va a congelar y los
+// chequeos del backend (revisionCierrePeriodo). Una alerta no bloquea: pide tildar que se revisó.
+function RevisionCierre({ id, onCerrado }: { id: string; onCerrado: () => void }) {
+  const { alertDialog } = useConfirmDialog();
+  const [data, setData] = useState<any | null>(null);
+  const [error, setError] = useState("");
+  const [revisado, setRevisado] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+
+  useEffect(() => {
+    api.revisionCierrePeriodo(id).then(setData).catch((e) => setError(e.message || "No se pudo armar la revisión."));
+  }, [id]);
+
+  if (error) return <div className="error">{error}</div>;
+  if (!data) return <Loading />;
+
+  const alertas = data.chequeos.filter((c: any) => c.estado === "ALERTA").length;
+  const s = data.numeros.sueldoManos;
+
+  async function cerrar() {
+    setCerrando(true);
+    try {
+      await api.cerrarPeriodo(id);
+      onCerrado();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo cerrar el período.");
+    } finally {
+      setCerrando(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3 style={{ margin: 0 }}>{data.periodo.name}</h3>
+      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+        Esto es lo que va a quedar congelado al cerrar. Todavía no se guardó nada.
+      </div>
+
+      <ResumenPreview preview={data.numeros} />
+
+      <div className="kpi-grid" style={{ marginTop: 12 }}>
+        <div className="kpi-card">
+          <div className="label">Sueldo Manos</div>
+          <div className="value">{usd(s.sueldo)}</div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{s.aplicaMinimo ? "mínimo de US$ 400" : "10% de la ganancia neta final"}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="label">Ganancia disponible para socios</div>
+          <div className={`value ${Number(s.gananciaDisponibleSocios) >= 0 ? "pos" : "neg"}`}><Cifra texto={usd(s.gananciaDisponibleSocios)} /></div>
+        </div>
+      </div>
+
+      <h4 style={{ marginTop: 20 }}>Chequeos {alertas > 0 ? <span className="badge neg">{alertas} con alertas</span> : <span className="badge pos">Todo bien</span>}</h4>
+      {data.chequeos.map((c: any) => (
+        <div key={c.id} className="panel" style={{ marginTop: 8, padding: 12, borderLeft: `4px solid var(${c.estado === "OK" ? "--green" : "--red"})` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className={`badge ${c.estado === "OK" ? "pos" : "neg"}`}>{c.estado === "OK" ? "OK" : "Revisar"}</span>
+            <strong>{c.titulo}</strong>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{c.resumen}</div>
+          {c.items.length > 0 && (
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
+              {c.items.map((it: string, i: number) => <li key={i}>{it}</li>)}
+            </ul>
+          )}
+        </div>
+      ))}
+
+      <h4 style={{ marginTop: 20 }}>Movimientos de socios que entran</h4>
+      {data.movimientos.length === 0 ? (
+        <div className="muted">Ninguno en el rango del período.</div>
+      ) : (
+        <table>
+          <thead><tr><th>Fecha</th><th>Cuenta</th><th>Categoría</th><th>Concepto</th><th className="num">Monto</th></tr></thead>
+          <tbody>
+            {data.movimientos.map((m: any) => (
+              <tr key={m.id}>
+                <td>{dateShort(m.fecha)}</td>
+                <td>{m.cuenta}</td>
+                <td className="muted">{m.category === "GASTO" ? "Gasto" : m.category === "RETIRO" ? "Retiro" : "Ajuste"}</td>
+                <td>{m.concept}</td>
+                <td className={`num money ${m.category !== "AJUSTE" && m.amount < 0 ? "neg" : ""}`}>{usd(m.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {alertas > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={revisado} onChange={(e) => setRevisado(e.target.checked)} />
+            Revisé las alertas y quiero cerrar igual
+          </label>
+        )}
+        <button className="btn" disabled={cerrando || (alertas > 0 && !revisado)} onClick={cerrar}>
+          {cerrando ? "Cerrando..." : "Cerrar período"}
+        </button>
+      </div>
     </div>
   );
 }

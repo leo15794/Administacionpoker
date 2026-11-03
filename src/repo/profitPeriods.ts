@@ -229,6 +229,192 @@ export async function previewPeriodo(weekStarts: string[]) {
   }
 }
 
+// ============================================================
+// REVISIÓN ANTES DE CERRAR (03/11/2026, pedido de Leo: "debería haber un paso previo para
+// analizar si está todo bien"). Solo lee: arma los números que se van a congelar y una lista de
+// chequeos. Una alerta no bloquea el cierre -- la pantalla pide confirmar que se revisaron.
+// ============================================================
+
+export interface ChequeoCierre {
+  id: string;
+  titulo: string;
+  estado: "OK" | "ALERTA";
+  resumen: string;
+  items: string[];
+}
+
+const DIAS_CERCA_DEL_RANGO = 10;
+
+export async function revisionCierrePeriodo(id: string) {
+  await asegurarTablaSueldosManos();
+  const periodoRes = await pool.query(`SELECT * FROM profit_periods WHERE id = $1`, [id]);
+  const periodo = periodoRes.rows[0];
+  if (!periodo) throw new Error("No se encontró ese período.");
+  const semanasRes = await pool.query(`SELECT week_start::text AS ws FROM profit_period_weeks WHERE period_id = $1 ORDER BY week_start`, [id]);
+  const semanas: string[] = semanasRes.rows.map((r) => r.ws);
+  if (!semanas.length) throw new Error("Este período no tiene semanas cargadas.");
+
+  const numeros = await previewPeriodo(semanas);
+  const desde = numeros.rangoFechas.desde ? toFechaStr(numeros.rangoFechas.desde) : null;
+  const hasta = numeros.rangoFechas.hasta ? toFechaStr(numeros.rangoFechas.hasta) : null;
+  const chequeos: ChequeoCierre[] = [];
+  const fmt = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+  // --- Semanas -------------------------------------------------------------
+  {
+    const items: string[] = [];
+    const ultima = semanas[semanas.length - 1];
+    const sueltas = await pool.query(
+      `SELECT DISTINCT wc.week_start::text AS ws FROM weekly_closings wc
+       WHERE wc.status <> 'REVERTIDO' AND wc.week_start <= $1::date
+         AND NOT EXISTS (SELECT 1 FROM profit_period_weeks w WHERE w.week_start = wc.week_start)
+       ORDER BY 1`,
+      [ultima]
+    );
+    for (const r of sueltas.rows) items.push(`La semana del ${dm(r.ws)} tiene cierres y no está en ningún período.`);
+    const compartidas = await pool.query(
+      `SELECT w.week_start::text AS ws, p.name FROM profit_period_weeks w JOIN profit_periods p ON p.id = w.period_id
+       WHERE w.period_id <> $1 AND w.week_start = ANY($2::date[]) ORDER BY 1`,
+      [id, semanas]
+    );
+    for (const r of compartidas.rows) items.push(`La semana del ${dm(r.ws)} también está en "${r.name}": se contaría dos veces.`);
+    for (const ws of semanas) {
+      if (new Date(ws + "T00:00:00Z").getUTCDay() !== 1) items.push(`La semana del ${dm(ws)} no empieza un lunes.`);
+    }
+    const sinCierres = await pool.query(
+      `SELECT s.ws::text AS ws FROM unnest($1::date[]) AS s(ws)
+       WHERE NOT EXISTS (SELECT 1 FROM weekly_closings wc WHERE wc.week_start = s.ws AND wc.status <> 'REVERTIDO')`,
+      [semanas]
+    );
+    for (const r of sinCierres.rows) items.push(`La semana del ${dm(r.ws)} no tiene ningún cierre.`);
+    chequeos.push({
+      id: "semanas",
+      titulo: "Semanas del período",
+      estado: items.length ? "ALERTA" : "OK",
+      resumen: `${semanas.length} semanas: ${semanas.map(dm).join(", ")}${desde && hasta ? ` (del ${dm(desde)} al ${dm(hasta)})` : ""}.`,
+      items,
+    });
+  }
+
+  // --- Cierres semanales y de proveedores ---------------------------------
+  {
+    const items: string[] = [];
+    const borradores = await pool.query(
+      `SELECT wc.week_start::text AS ws, c.name AS club, COUNT(*)::int AS n FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+       WHERE wc.status = 'BORRADOR' AND wc.week_start = ANY($1::date[])
+       GROUP BY 1, 2 ORDER BY 1, 2`,
+      [semanas]
+    );
+    for (const r of borradores.rows) items.push(`${r.club}, semana del ${dm(r.ws)}: ${r.n} cierre${r.n === 1 ? "" : "s"} en borrador (no suman a la ganancia).`);
+    const aplicados = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM weekly_closings WHERE status IN ('APLICADO','CORREGIDO') AND week_start = ANY($1::date[])`,
+      [semanas]
+    );
+    // Proveedores que cierran en este tramo (o en las 4 semanas anteriores) y les falta alguna semana.
+    const faltantesProv = await pool.query(
+      `WITH activos AS (
+         SELECT DISTINCT pc.proveedor_id FROM proveedor_cierres pc
+         WHERE pc.status = 'APLICADO' AND pc.week_start BETWEEN ($1::date - 28) AND $2::date
+       )
+       SELECT p.name, s.ws::text AS ws
+       FROM activos a JOIN proveedores p ON p.id = a.proveedor_id AND p.active
+       CROSS JOIN unnest($3::date[]) AS s(ws)
+       WHERE NOT EXISTS (SELECT 1 FROM proveedor_cierres pc WHERE pc.proveedor_id = a.proveedor_id AND pc.week_start = s.ws AND pc.status = 'APLICADO')
+       ORDER BY 1, 2`,
+      [semanas[0], semanas[semanas.length - 1], semanas]
+    );
+    const porProv: Record<string, string[]> = {};
+    for (const r of faltantesProv.rows) (porProv[r.name] ??= []).push(dm(r.ws));
+    for (const [nombre, ws] of Object.entries(porProv)) items.push(`Proveedor ${nombre}: sin cierre aplicado la${ws.length === 1 ? "" : "s"} semana${ws.length === 1 ? "" : "s"} del ${ws.join(", ")}.`);
+    chequeos.push({
+      id: "cierres",
+      titulo: "Cierres semanales y de proveedores",
+      estado: items.length ? "ALERTA" : "OK",
+      resumen: `${aplicados.rows[0].n} cierres semanales aplicados en estas semanas.`,
+      items,
+    });
+  }
+
+  // --- Movimientos de socios ----------------------------------------------
+  const movimientosRes = desde && hasta
+    ? await pool.query(
+        `SELECT e.id, a.name AS cuenta, e.category, e.concept, e.amount, e.entry_date::text AS fecha
+         FROM partner_account_entries e JOIN partner_accounts a ON a.id = e.account_id
+         WHERE e.category IN ('RETIRO','GASTO','AJUSTE') AND e.entry_date BETWEEN $1 AND $2
+         ORDER BY e.entry_date, e.created_at`,
+        [desde, hasta]
+      )
+    : { rows: [] as any[] };
+  const movimientos = movimientosRes.rows.map((m) => ({ ...m, amount: Number(m.amount), fecha: String(m.fecha).slice(0, 10) }));
+  {
+    const items: string[] = [];
+    for (const m of movimientos) {
+      if (m.category !== "AJUSTE" && m.amount < 0) {
+        items.push(`${dm(m.fecha)} "${m.concept}" (${m.cuenta}) está como ${m.category.toLowerCase()} en negativo (${fmt(m.amount)}): cuenta igual como salida de ${fmt(Math.abs(m.amount))}.`);
+      }
+      if (/sueldo/i.test(m.concept)) {
+        items.push(`${dm(m.fecha)} "${m.concept}" (${m.cuenta}) parece un sueldo cargado a mano: el sueldo de Manos ya lo descuenta el período, se restaría dos veces.`);
+      }
+    }
+    if (desde && hasta) {
+      const cerca = await pool.query(
+        `SELECT a.name AS cuenta, e.category, e.concept, e.amount, e.entry_date::text AS fecha
+         FROM partner_account_entries e JOIN partner_accounts a ON a.id = e.account_id
+         WHERE e.category IN ('RETIRO','GASTO','AJUSTE')
+           AND ((e.entry_date > $2::date AND e.entry_date <= $2::date + $3::int) OR (e.entry_date < $1::date AND e.entry_date >= $1::date - $3::int))
+           AND NOT EXISTS (
+             SELECT 1 FROM profit_periods p
+             JOIN LATERAL (SELECT MIN(w.week_start) AS d, MAX(w.week_start) + 6 AS h FROM profit_period_weeks w WHERE w.period_id = p.id) r ON TRUE
+             WHERE p.id <> $4 AND e.entry_date BETWEEN r.d AND r.h
+           )
+         ORDER BY e.entry_date`,
+        [desde, hasta, DIAS_CERCA_DEL_RANGO, id]
+      );
+      for (const m of cerca.rows) {
+        items.push(`${dm(String(m.fecha).slice(0, 10))} "${m.concept}" (${m.cuenta}, ${m.category.toLowerCase()} ${fmt(Number(m.amount))}) queda fuera del rango y de cualquier otro período: no entra en ninguno.`);
+      }
+    }
+    chequeos.push({
+      id: "movimientos",
+      titulo: "Gastos, ajustes y retiros de socios",
+      estado: items.length ? "ALERTA" : "OK",
+      resumen: `${movimientos.length} movimientos en el rango: gastos ${fmt(numeros.gastos)}, ingresos/ajustes ${fmt(numeros.ingresosAjustes)}, retiros ${fmt(numeros.retiros)} (los retiros no restan de la ganancia del período).`,
+      items,
+    });
+  }
+
+  // --- Sueldo de Manos y ajustes extraordinarios -------------------------
+  {
+    const items: string[] = [];
+    const s = numeros.sueldoManos;
+    const diez = round2(s.base * s.porcentaje);
+    const pendientes = await pool.query(
+      `SELECT period_name, estado, sueldo_usdt FROM manos_sueldos WHERE period_id <> $1 AND estado <> 'PAGADO' ORDER BY generado_at`,
+      [id]
+    );
+    const estados: Record<string, string> = { PENDIENTE: "sin pagar", REVISAR_DIFERENCIA: "con una diferencia por revisar", REQUIERE_REVISION: "que requiere revisión" };
+    for (const r of pendientes.rows) items.push(`El sueldo de "${r.period_name}" (${fmt(Number(r.sueldo_usdt))}) está ${estados[r.estado] ?? r.estado}.`);
+    const existente = await getSueldoDePeriodo(id);
+    if (existente && existente.estado !== "PENDIENTE") {
+      items.push(`Este período ya tiene un sueldo ${existente.estado === "PAGADO" ? "pagado" : "registrado"} de ${fmt(Number(existente.sueldo_usdt))}: si el importe cambia, va a quedar para revisar.`);
+    }
+    if (s.base < 0) items.push(`La ganancia neta final es negativa: igual se genera el mínimo de ${fmt(s.minimo)}.`);
+    const ajustes = numeros.ajustesExtraordinariosDetalle.map((a: any) => `${a.descripcion}: ${fmt(a.cuota)}`);
+    chequeos.push({
+      id: "sueldo",
+      titulo: "Sueldo de Manos y ajustes extraordinarios",
+      estado: items.length ? "ALERTA" : "OK",
+      resumen:
+        `Sueldo ${fmt(s.sueldo)} (${s.aplicaMinimo ? `10% = ${fmt(diez)}, se aplica el mínimo de ${fmt(s.minimo)}` : `10% de ${fmt(s.base)}`}); quedan ${fmt(s.gananciaDisponibleSocios)} para socios. ` +
+        (ajustes.length ? `Cuotas de ajustes DP que se consumen: ${ajustes.join(" · ")}.` : "No se consume ninguna cuota de ajustes DP."),
+      items,
+    });
+  }
+
+  return { periodo: { id: periodo.id, name: periodo.name, status: periodo.status }, numeros, chequeos, movimientos };
+}
+
 export async function listSemanasDisponibles() {
   const r = await pool.query(
     `SELECT DISTINCT week_start, week_end FROM weekly_closings WHERE status <> 'REVERTIDO' ORDER BY week_start DESC LIMIT 60`

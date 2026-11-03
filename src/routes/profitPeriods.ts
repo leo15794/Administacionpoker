@@ -14,6 +14,7 @@ import {
   editarPeriodo,
   cerrarPeriodo,
   reabrirPeriodo,
+  revisionCierrePeriodo,
   eliminarPeriodo,
 } from "../repo/profitPeriods.js";
 import { registrarPagoSueldo, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
@@ -127,6 +128,15 @@ profitPeriodsRouter.put("/:id", requireAuth, requireAdmin, async (req: AuthedReq
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await editarPeriodo(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Revisión antes de cerrar: solo lee (números a congelar + chequeos). No bloquea el cierre.
+profitPeriodsRouter.get("/:id/revision-cierre", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await revisionCierrePeriodo(req.params.id));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
