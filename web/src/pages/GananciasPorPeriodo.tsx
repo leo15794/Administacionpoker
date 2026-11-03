@@ -453,6 +453,16 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
 
       <ResumenPreview preview={numeros} />
 
+      <SueldoManos
+        sueldo={cerrado ? periodo.sueldoManos : null}
+        previa={!cerrado ? preview?.sueldoManos : null}
+        gananciaNetaFinal={numeros?.gananciaNetaFinal}
+        onChanged={() => {
+          load();
+          onChanged();
+        }}
+      />
+
       <h4 style={{ marginTop: 20 }}>Detalle por semana y club</h4>
       {periodo.detalle?.length === 0 ? (
         <div className="muted">Sin cierres en las semanas elegidas.</div>
@@ -472,6 +482,237 @@ function PeriodoDetalle({ id, onChanged }: { id: string; onChanged: () => void }
         </table>
       )}
     </div>
+  );
+}
+
+// Sueldo de Manos (03/11/2026): 10% de la ganancia neta final, mínimo US$ 400. Con el período
+// abierto es solo una vista previa; al cerrarlo queda guardado como PENDIENTE y se paga desde acá
+// (Juan lo paga en pesos: le baja la deuda, no mueve Wallet Manos). Ver repo/sueldoManos.ts.
+const ESTADOS_SUELDO: Record<string, { texto: string; clase: string }> = {
+  PENDIENTE: { texto: "Pendiente", clase: "neutral" },
+  PAGADO: { texto: "Pagado", clase: "pos" },
+  REVISAR_DIFERENCIA: { texto: "Revisar diferencia", clase: "neg" },
+  REQUIERE_REVISION: { texto: "Requiere revisión", clase: "neg" },
+};
+
+function SueldoManos({ sueldo, previa, gananciaNetaFinal, onChanged }: { sueldo: any | null; previa: any | null; gananciaNetaFinal: any; onChanged: () => void }) {
+  const { confirmDialog, alertDialog } = useConfirmDialog();
+  const [pagando, setPagando] = useState(false);
+  const [complemento, setComplemento] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!sueldo && !previa) return null;
+
+  const base = sueldo ? Number(sueldo.base_calculo_usdt) : Number(previa.base);
+  const importe = sueldo ? Number(sueldo.sueldo_usdt) : Number(previa.sueldo);
+  const disponible = sueldo ? Number(sueldo.ganancia_disponible_socios) : Number(previa.gananciaDisponibleSocios);
+  const neta = gananciaNetaFinal != null ? Number(gananciaNetaFinal) : base;
+  const estado = sueldo ? ESTADOS_SUELDO[sueldo.estado] : null;
+  const diezPorCiento = Math.round(base * 10) / 100;
+
+  async function accion(fn: () => Promise<any>, pregunta?: string) {
+    if (pregunta && !(await confirmDialog(pregunta))) return;
+    setBusy(true);
+    try {
+      await fn();
+      onChanged();
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo completar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <div className="topbar" style={{ marginBottom: 8 }}>
+        <h4 style={{ margin: 0 }}>Sueldo de Manos</h4>
+        {estado ? <span className={`badge ${estado.clase}`}>{estado.texto}</span> : <span className="badge neutral">Vista previa</span>}
+      </div>
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="label">Ganancia neta final antes del sueldo</div>
+          <div className="value">{usd(neta)}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="label">Sueldo Manos</div>
+          <div className="value">{usd(importe)}</div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+            {sueldo?.regla_manual
+              ? "Cargado a mano (antes de la regla automática)"
+              : `10% = ${usd(diezPorCiento)}${diezPorCiento < 400 ? " → se aplica el mínimo de US$ 400" : ""}`}
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="label">Ganancia disponible para socios</div>
+          <div className={`value ${disponible >= 0 ? "pos" : "neg"}`}><Cifra texto={usd(disponible)} /></div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>ganancia neta final − sueldo Manos</div>
+        </div>
+      </div>
+
+      {!sueldo && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          Es una vista previa: el sueldo se genera como pendiente al cerrar el período.
+        </div>
+      )}
+
+      {sueldo && (sueldo.estado === "PAGADO" || sueldo.equivalente_usdt != null) && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          {sueldo.fecha_pago && <>Pago del {dateShort(sueldo.fecha_pago)}</>}
+          {sueldo.pesos_pagados != null && <> · ARS {Number(sueldo.pesos_pagados).toLocaleString("es-AR")} a {Number(sueldo.cotizacion_ars_usdt)} = {usd(sueldo.equivalente_usdt)}</>}
+          {sueldo.estado === "PAGADO" && <> · bajó la deuda de Juan, no movió Wallet Manos</>}
+        </div>
+      )}
+
+      {sueldo?.estado === "REVISAR_DIFERENCIA" && (
+        <div className="error" style={{ marginTop: 10 }}>
+          Esperado {usd(sueldo.sueldo_usdt)} · ingresado {usd(sueldo.equivalente_usdt)} · diferencia{" "}
+          {usd(Number(sueldo.equivalente_usdt) - Number(sueldo.sueldo_usdt))}. No se tocó la cuenta de Juan.
+        </div>
+      )}
+
+      {sueldo?.estado === "REQUIERE_REVISION" && (
+        <div className="error" style={{ marginTop: 10 }}>
+          El período se volvió a cerrar con otra ganancia ({usd(sueldo.revision_base_usdt)}). Con la regla el sueldo sería{" "}
+          {usd(sueldo.revision_sueldo_usdt)} y se pagó {usd(sueldo.sueldo_usdt)}: diferencia{" "}
+          {usd(Number(sueldo.revision_sueldo_usdt) - Number(sueldo.sueldo_usdt))}.
+        </div>
+      )}
+
+      {sueldo?.observaciones && (
+        <div className="muted" style={{ fontSize: 11, marginTop: 8, whiteSpace: "pre-line" }}>{sueldo.observaciones}</div>
+      )}
+
+      {sueldo && (
+        <div className="row-actions" style={{ marginTop: 10, justifyContent: "flex-start" }}>
+          {(sueldo.estado === "PENDIENTE" || sueldo.estado === "REVISAR_DIFERENCIA") && (
+            <button className="btn small" disabled={busy} onClick={() => setPagando(true)}>
+              {sueldo.estado === "PENDIENTE" ? "Registrar pago" : "Corregir pago"}
+            </button>
+          )}
+          {sueldo.estado === "REVISAR_DIFERENCIA" && (
+            <button
+              className="btn secondary small"
+              disabled={busy}
+              onClick={() =>
+                accion(
+                  () => api.aceptarDiferenciaSueldoManos(sueldo.id),
+                  `¿Aceptar la diferencia? A Juan se le baja lo que pagó (${usd(sueldo.equivalente_usdt)}) y el sueldo queda pagado.`
+                )
+              }
+            >
+              Aceptar diferencia
+            </button>
+          )}
+          {sueldo.estado === "REQUIERE_REVISION" && (
+            <>
+              <button
+                className="btn secondary small"
+                disabled={busy}
+                onClick={() => accion(() => api.revisionSueldoManos(sueldo.id, { accion: "MANTENER" }), "¿Mantener el sueldo que ya se pagó como definitivo?")}
+              >
+                Mantener lo pagado
+              </button>
+              {Number(sueldo.revision_sueldo_usdt) > Number(sueldo.sueldo_usdt) && (
+                <button className="btn small" disabled={busy} onClick={() => setComplemento(true)}>Registrar complemento</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {pagando && sueldo && (
+        <Modal title={`Pago del sueldo de Manos · ${sueldo.period_name}`} onClose={() => setPagando(false)}>
+          <PagoSueldoForm
+            esperado={Number(sueldo.sueldo_usdt)}
+            onSubmit={async (d) => {
+              const r = await api.pagarSueldoManos(sueldo.id, d);
+              setPagando(false);
+              onChanged();
+              if (r.sueldo?.estado === "REVISAR_DIFERENCIA") {
+                await alertDialog(`No coincide: esperado ${usd(r.esperado)}, ingresado ${usd(r.equivalente)} (diferencia ${usd(r.diferencia)}). Quedó en "Revisar diferencia" y no se tocó la cuenta de Juan.`);
+              }
+            }}
+          />
+        </Modal>
+      )}
+
+      {complemento && sueldo && (
+        <Modal title={`Complemento del sueldo de Manos · ${sueldo.period_name}`} onClose={() => setComplemento(false)}>
+          <PagoSueldoForm
+            esperado={Math.round((Number(sueldo.revision_sueldo_usdt) - Number(sueldo.sueldo_usdt)) * 100) / 100}
+            onSubmit={async (d) => {
+              await api.revisionSueldoManos(sueldo.id, { accion: "AJUSTAR", fechaPago: d.fechaPago, pesos: d.pesos, cotizacion: d.cotizacion });
+              setComplemento(false);
+              onChanged();
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function PagoSueldoForm({ esperado, onSubmit }: { esperado: number; onSubmit: (d: { fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }) => Promise<void> }) {
+  const [fechaPago, setFechaPago] = useState(new Date().toISOString().slice(0, 10));
+  const [pesos, setPesos] = useState("");
+  const [cotizacion, setCotizacion] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const p = Number(pesos);
+  const c = Number(cotizacion);
+  const equivalente = p > 0 && c > 0 ? Math.round((p / c) * 100) / 100 : null;
+  const diferencia = equivalente != null ? Math.round((equivalente - esperado) * 100) / 100 : null;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg("");
+    if (!fechaPago) return setMsg("La fecha de pago es obligatoria.");
+    if (!(p > 0)) return setMsg("Los pesos pagados tienen que ser mayores a 0.");
+    if (!(c > 0)) return setMsg("La cotización tiene que ser mayor a 0.");
+    setLoading(true);
+    try {
+      await onSubmit({ fechaPago, pesos: p, cotizacion: c, observaciones: observaciones.trim() || null });
+    } catch (err: any) {
+      setMsg(err.message || "No se pudo registrar el pago.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div className="muted" style={{ marginBottom: 10 }}>
+        Juan lo paga en pesos: al quedar pagado se le baja la deuda por {usd(esperado)}. No mueve Wallet Manos ni la cuenta de Manos.
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Fecha de pago</label>
+          <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Pesos pagados (ARS)</label>
+          <input type="number" step="0.01" min="0" value={pesos} onChange={(e) => setPesos(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Cotización ARS/USDT</label>
+          <input type="number" step="0.0001" min="0" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} />
+        </div>
+      </div>
+      {equivalente != null && (
+        <div className={Math.abs(diferencia!) <= 0.01 ? "success" : "error"} style={{ marginBottom: 10 }}>
+          Equivalente {usd(equivalente)} · esperado {usd(esperado)}
+          {Math.abs(diferencia!) > 0.01 && <> · diferencia {usd(diferencia)} (quedaría en "Revisar diferencia")</>}
+        </div>
+      )}
+      <div className="field">
+        <label>Observaciones (opcional)</label>
+        <input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+      </div>
+      {msg && <div className="error">{msg}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar pago"}</button>
+    </form>
   );
 }
 

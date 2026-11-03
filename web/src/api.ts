@@ -697,6 +697,11 @@ export const api = {
   cerrarPeriodo: (id: string) => request(`/profit-periods/${id}/cerrar`, { method: "POST" }),
   reabrirPeriodo: (id: string) => request(`/profit-periods/${id}/reabrir`, { method: "POST" }),
   eliminarPeriodo: (id: string) => request(`/profit-periods/${id}`, { method: "DELETE" }),
+  pagarSueldoManos: (id: string, data: { fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }) =>
+    request(`/profit-periods/sueldos-manos/${id}/pagar`, { method: "POST", body: JSON.stringify(data) }),
+  aceptarDiferenciaSueldoManos: (id: string) => request(`/profit-periods/sueldos-manos/${id}/aceptar-diferencia`, { method: "POST" }),
+  revisionSueldoManos: (id: string, data: { accion: "MANTENER" | "AJUSTAR"; fechaPago?: string; pesos?: number; cotizacion?: number }) =>
+    request(`/profit-periods/sueldos-manos/${id}/revision`, { method: "POST", body: JSON.stringify(data) }),
 
   crearDeal: (data: {
     agentId: string;

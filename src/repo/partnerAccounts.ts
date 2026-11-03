@@ -6,6 +6,7 @@
 import { pool, newId } from "../db/pool.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
 import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "./treasury.js";
+import { periodoDeMovimientoDeSueldo, totalSueldosPeriodosCerrados } from "./sueldoManos.js";
 
 // Monto de un movimiento para los totales de categoría: RETIRO y GASTO siempre cuentan como lo
 // que salió (valor absoluto), se hayan cargado en positivo o en negativo -- el monto es libre y
@@ -151,6 +152,7 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
   const existing = await pool.query(`SELECT * FROM partner_account_entries WHERE id = $1`, [id]);
   const actual = existing.rows[0];
   if (!actual) throw new Error("No se encontró ese movimiento.");
+  await bloquearSiEsPagoDeSueldo(id);
   if (input.amount !== undefined && input.amount === 0) throw new Error("El monto no puede ser 0.");
 
   // Si este movimiento ya tenía un ingreso/egreso real en Wallet linkeado, y ahora se destilda
@@ -209,11 +211,19 @@ export async function editarMovimiento(id: string, input: Partial<PartnerEntryIn
   return r.rows[0];
 }
 
+// El pago del sueldo de Manos (repo/sueldoManos.ts) queda atado al sueldo del período: editarlo o
+// borrarlo desde acá dejaría el sueldo como pagado con la deuda de Juan sin bajar.
+async function bloquearSiEsPagoDeSueldo(id: string) {
+  const periodo = await periodoDeMovimientoDeSueldo(id);
+  if (periodo) throw new Error(`Este movimiento es el pago del sueldo de Manos de "${periodo}": se maneja desde Ganancias por período.`);
+}
+
 // Borrado real — control 100% pedido explícitamente por el usuario.
 export async function eliminarMovimiento(id: string, createdBy?: string | null) {
   const existing = await pool.query(`SELECT * FROM partner_account_entries WHERE id = $1`, [id]);
   const actual = existing.rows[0];
   if (!actual) throw new Error("No se encontró ese movimiento.");
+  await bloquearSiEsPagoDeSueldo(id);
   if (actual.treasury_adjustment_id) {
     await revertirAjusteTesoreria(
       actual.treasury_adjustment_id,
@@ -322,7 +332,10 @@ export async function getAgregadosSocios() {
   for (const row of porCategoria.rows) totales[row.category] = Number(row.total);
 
   const gananciaNeta = round2(gananciaOperativa - totales.GASTO + totales.AJUSTE);
-  const saldoDespuesRetiros = round2(gananciaNeta - totales.RETIRO);
+  // Sueldo de Manos: se descuenta una sola vez, el de cada período cerrado (no cuando se paga).
+  const sueldosManos = round2(await totalSueldosPeriodosCerrados());
+  const gananciaDisponibleSocios = round2(gananciaNeta - sueldosManos);
+  const saldoDespuesRetiros = round2(gananciaDisponibleSocios - totales.RETIRO);
 
   return {
     gananciaOperativaHistorica: gananciaOperativa,
@@ -330,6 +343,8 @@ export async function getAgregadosSocios() {
     gastosOperativos: totales.GASTO,
     ingresosAjustes: totales.AJUSTE,
     gananciaNetaHistorica: gananciaNeta,
+    sueldosManos,
+    gananciaDisponibleSocios,
     saldoDespuesRetiros,
   };
 }

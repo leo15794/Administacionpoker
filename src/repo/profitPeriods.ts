@@ -3,6 +3,7 @@ import { pool, newId } from "../db/pool.js";
 import { computeGananciaCierresYBancadosPorSemanas } from "./resumenFinanciero.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
 import { MONTO_CATEGORIA_SQL } from "./partnerAccounts.js";
+import { asegurarTablaSueldosManos, calcularSueldoManos, generarSueldoEnCierre, getSueldoDePeriodo } from "./sueldoManos.js";
 
 // ============================================================
 // AJUSTES EXTRAORDINARIOS
@@ -219,6 +220,8 @@ export async function previewPeriodo(weekStarts: string[]) {
       ajustesExtraordinariosDp: ajustes.total,
       ajustesExtraordinariosDetalle: ajustes.detalle,
       gananciaNetaFinal,
+      // Vista previa del sueldo de Manos -- no se guarda nada hasta cerrar el período.
+      sueldoManos: calcularSueldoManos(gananciaNetaFinal),
       rangoFechas: { desde, hasta },
     };
   } finally {
@@ -315,7 +318,8 @@ export async function getPeriodoDetalle(id: string) {
      WHERE a.period_id = $1 ORDER BY a.applied_at`,
     [id]
   );
-  return { ...periodo, semanas, detalle, ajustesAplicados: aplicacionesRes.rows };
+  const sueldoManos = await getSueldoDePeriodo(id);
+  return { ...periodo, semanas, detalle, ajustesAplicados: aplicacionesRes.rows, sueldoManos };
 }
 
 export async function crearPeriodo(name: string, weekStarts: string[]) {
@@ -379,6 +383,9 @@ export async function editarPeriodo(id: string, input: { name?: string; weekStar
 /** Cierra el período: congela los números (calculados en vivo, igual que previewPeriodo) y
  * consume una cuota de cada ajuste extraordinario todavía activo. */
 export async function cerrarPeriodo(id: string) {
+  // Fuera de la transacción: crear la tabla con su FK a profit_periods choca con el lock de la
+  // fila del período que se toma adentro.
+  await asegurarTablaSueldosManos();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -429,6 +436,9 @@ export async function cerrarPeriodo(id: string) {
       [gananciaOperativa, gananciaCierres, gananciaBancados, retiros, gastos, ingresosAjustes, gananciaAntesAjustesDp, ajustesExtraordinariosDp, gananciaNetaFinal, id]
     );
 
+    // Sueldo de Manos: se reconoce acá, una sola vez, sobre la ganancia neta final (ver repo/sueldoManos.ts).
+    await generarSueldoEnCierre(client, { id, name: periodo.name }, gananciaNetaFinal);
+
     await client.query("COMMIT");
     return getPeriodoDetalle(id);
   } catch (err) {
@@ -443,7 +453,9 @@ export async function cerrarPeriodo(id: string) {
  * ACTIVO si estaba FINALIZADO) y borra el snapshot. OJO: asume que se reabre en orden inverso
  * al que se fue cerrando — reabrir un período viejo con otros más nuevos ya cerrados que
  * también consumieron cuotas del mismo ajuste deja el contador desincronizado (mismo caveat
- * que la memoria de bancados/rodeo en repo/closings.ts). */
+ * que la memoria de bancados/rodeo en repo/closings.ts). El sueldo de Manos del período no se
+ * toca: queda como está y se recalcula (o pasa a revisión si ya estaba pagado) al volver a
+ * cerrarlo -- ver generarSueldoEnCierre. */
 export async function reabrirPeriodo(id: string) {
   const client = await pool.connect();
   try {
@@ -487,8 +499,14 @@ export async function reabrirPeriodo(id: string) {
 export async function eliminarPeriodo(id: string) {
   const periodoRes = await pool.query(`SELECT status FROM profit_periods WHERE id = $1`, [id]);
   if (!periodoRes.rows[0]) throw new Error("No se encontró ese período.");
+  // Un sueldo de Manos ya pagado no se borra nunca en silencio (el pago bajó la deuda de Juan).
+  const sueldo = await getSueldoDePeriodo(id);
+  if (sueldo && sueldo.movimiento_cuenta_juan_id) {
+    throw new Error("Este período tiene el sueldo de Manos pagado: no se puede eliminar.");
+  }
   if (periodoRes.rows[0].status === "CERRADO") {
     await reabrirPeriodo(id);
   }
+  if (sueldo) await pool.query(`DELETE FROM manos_sueldos WHERE id = $1`, [sueldo.id]);
   await pool.query(`DELETE FROM profit_periods WHERE id = $1`, [id]);
 }

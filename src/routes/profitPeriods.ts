@@ -16,6 +16,7 @@ import {
   reabrirPeriodo,
   eliminarPeriodo,
 } from "../repo/profitPeriods.js";
+import { registrarPagoSueldo, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
 
 export const profitPeriodsRouter = Router();
 
@@ -152,6 +153,50 @@ profitPeriodsRouter.delete("/:id", requireAuth, requireAdmin, async (req: Authed
   try {
     await eliminarPeriodo(req.params.id);
     res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------- Sueldo de Manos (ver repo/sueldoManos.ts) ----------
+
+const pagoSueldoSchema = z.object({
+  fechaPago: z.string().min(1, "La fecha de pago es obligatoria."),
+  pesos: z.number().positive("Los pesos pagados tienen que ser mayores a 0."),
+  cotizacion: z.number().positive("La cotización tiene que ser mayor a 0."),
+  observaciones: z.string().nullable().optional(),
+});
+
+profitPeriodsRouter.post("/sueldos-manos/:id/pagar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = pagoSueldoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await registrarPagoSueldo(req.params.id, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+profitPeriodsRouter.post("/sueldos-manos/:id/aceptar-diferencia", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await aceptarDiferenciaSueldo(req.params.id, req.user?.email ?? null));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const revisionSueldoSchema = z.object({
+  accion: z.enum(["MANTENER", "AJUSTAR"]),
+  fechaPago: z.string().optional(),
+  pesos: z.number().optional(),
+  cotizacion: z.number().optional(),
+});
+
+profitPeriodsRouter.post("/sueldos-manos/:id/revision", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = revisionSueldoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await resolverRevisionSueldo(req.params.id, parsed.data, req.user?.email ?? null));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

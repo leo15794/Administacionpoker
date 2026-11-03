@@ -166,7 +166,9 @@ export default function CuentasSocios() {
                 { etiqueta: "RETIROS DE SOCIOS", valor: usd(agregados.retirosSocios) },
                 { etiqueta: "GASTOS OPERATIVOS", valor: usd(agregados.gastosOperativos) },
                 { etiqueta: "INGRESOS / AJUSTES", valor: usd(agregados.ingresosAjustes) },
-                { etiqueta: "GANANCIA NETA HISTÓRICA", valor: usd(agregados.gananciaNetaHistorica) },
+                { etiqueta: "GANANCIA NETA HISTÓRICA (ANTES DE SUELDO)", valor: usd(agregados.gananciaNetaHistorica) },
+                { etiqueta: "SUELDOS MANOS ACUMULADOS", valor: usd(agregados.sueldosManos ?? 0) },
+                { etiqueta: "GANANCIA DISPONIBLE PARA SOCIOS", valor: usd(agregados.gananciaDisponibleSocios ?? agregados.gananciaNetaHistorica) },
                 { etiqueta: "SALDO DESPUÉS DE RETIROS", valor: usd(agregados.saldoDespuesRetiros) },
               ]}
             />

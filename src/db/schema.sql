@@ -2489,3 +2489,35 @@ ALTER TABLE tb_players ADD COLUMN IF NOT EXISTS eliminado BOOLEAN NOT NULL DEFAU
 ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS partner_account_id TEXT REFERENCES partner_accounts(id);
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
 ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR','SOCIO'));
+
+-- Sueldo de Manos (03/11/2026, pedido de Leo): 10% de la ganancia neta final de cada período cerrado, mínimo US$ 400. Uno por período
+-- (period_id e idempotency_key UNIQUE). Se reconoce al cerrar el período (baja la ganancia disponible para socios) y, al pagarlo Juan en
+-- pesos, se le baja la deuda con un movimiento PAGO en su cuenta. No mueve Wallet Manos ni la cuenta de Manos. Ver repo/sueldoManos.ts
+-- (que también crea la tabla si falta).
+CREATE TABLE IF NOT EXISTS manos_sueldos (
+  id                         TEXT PRIMARY KEY,
+  period_id                  TEXT NOT NULL UNIQUE REFERENCES profit_periods(id),
+  period_name                TEXT NOT NULL,
+  generado_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  base_calculo_usdt          NUMERIC(18,4) NOT NULL,
+  porcentaje                 NUMERIC(8,4) NOT NULL,
+  minimo_usdt                NUMERIC(18,4) NOT NULL,
+  sueldo_usdt                NUMERIC(18,4) NOT NULL,
+  ganancia_disponible_socios NUMERIC(18,4) NOT NULL,
+  regla_manual               BOOLEAN NOT NULL DEFAULT FALSE,
+  estado                     TEXT NOT NULL DEFAULT 'PENDIENTE'
+                             CHECK (estado IN ('PENDIENTE','PAGADO','REVISAR_DIFERENCIA','REQUIERE_REVISION')),
+  fecha_pago                 DATE,
+  pesos_pagados              NUMERIC(18,2),
+  cotizacion_ars_usdt        NUMERIC(18,4),
+  equivalente_usdt           NUMERIC(18,4),
+  cuenta_pagadora            TEXT REFERENCES partner_accounts(id),
+  movimiento_cuenta_juan_id  TEXT REFERENCES partner_account_entries(id),
+  revision_base_usdt         NUMERIC(18,4),
+  revision_sueldo_usdt       NUMERIC(18,4),
+  movimiento_complemento_id  TEXT REFERENCES partner_account_entries(id),
+  idempotency_key            TEXT NOT NULL UNIQUE,
+  observaciones              TEXT,
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
