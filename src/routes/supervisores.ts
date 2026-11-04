@@ -12,6 +12,7 @@ import {
   registrarMovimientoSupervisor,
   listMovimientosSupervisor,
   revertirMovimientoSupervisor,
+  actualizarLinkPagoMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
   previsualizarImportacionSaldos,
@@ -111,6 +112,18 @@ supervisoresRouter.post("/:id/movimientos", requireAuth, requireAdmin, async (re
       createdBy: req.user?.email,
     });
     res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const linkPagoSchema = z.object({ paymentLink: z.string().nullable() });
+
+supervisoresRouter.put("/movimientos/:movId/link-pago", requireAuth, requireAdmin, async (req, res) => {
+  const parsed = linkPagoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await actualizarLinkPagoMovimientoSupervisor(req.params.movId, parsed.data.paymentLink));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

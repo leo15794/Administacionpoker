@@ -220,6 +220,27 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
     api.saldosPorAgenteSupervisor(seleccionado.id).then(setSaldosPorAgente);
   }
 
+  // Link del pago de un movimiento ya cargado: se agrega o cambia después (si se olvidó, o el pago
+  // salió más tarde). Solo el comprobante, no toca saldos.
+  async function onLinkPago(m: any) {
+    const actual = m.payment_link ?? "";
+    const nuevo = prompt(actual ? "Link del pago (dejalo vacío para quitarlo):" : "Pegá el link del pago:", actual);
+    if (nuevo === null || nuevo.trim() === actual) return;
+    try {
+      await api.linkPagoMovimientoSupervisor(m.id, nuevo.trim() || null);
+      refrescarSeleccionado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo guardar el link.");
+    }
+  }
+
+  function accionesMovimiento(m: any) {
+    return [
+      { label: m.payment_link ? "Cambiar link de pago" : "Agregar link de pago", onClick: () => onLinkPago(m) },
+      { label: "Revertir", onClick: () => onRevertirMovimiento(m.id), danger: true },
+    ];
+  }
+
   async function onRevertirMovimiento(id: string) {
     if (!confirm("¿Revertir este movimiento? Aplica el efecto contrario sobre la cuenta.")) return;
     try {
@@ -1036,7 +1057,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 {m.payment_link && <> <a className="link-pago" href={m.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a></>}
                               </td>
                               <td style={{ width: 60, textAlign: "right" }}>
-                                {m.status !== "REVERTIDO" && <ActionsMenu items={[{ label: "Revertir", onClick: () => onRevertirMovimiento(m.id), danger: true }]} />}
+                                {m.status !== "REVERTIDO" && <ActionsMenu items={accionesMovimiento(m)} />}
                               </td>
                             </tr>
                           ))}
@@ -1056,7 +1077,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 {m.status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>}
                                 {dateShort(m.occurred_at)} · {m.club_name}{m.agent_name ? ` · ${m.agent_name}` : ""}
                               </div>
-                              {m.status !== "REVERTIDO" && <ActionsMenu items={[{ label: "Revertir", onClick: () => onRevertirMovimiento(m.id), danger: true }]} />}
+                              {m.status !== "REVERTIDO" && <ActionsMenu items={accionesMovimiento(m)} />}
                             </div>
                             {m.notes && <div className="saldo-card-foot"><span style={{ fontSize: 12 }}>{m.notes.length > 90 ? `${m.notes.slice(0, 90)}…` : m.notes}</span></div>}
                           </div>

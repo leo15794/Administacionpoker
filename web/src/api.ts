@@ -426,6 +426,8 @@ export const api = {
     }
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
+  linkPagoMovimientoSupervisor: (movId: string, paymentLink: string | null) =>
+    request(`/supervisores/movimientos/${movId}/link-pago`, { method: "PUT", body: JSON.stringify({ paymentLink }) }),
   migracionHistoricaSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/migracion-historica`),
   previsualizarImportacionSaldos: (supervisorId: string) => request(`/supervisores/${supervisorId}/importar-saldos`),
   importarSaldosSupervisor: (supervisorId: string, agentIds: string[]) =>

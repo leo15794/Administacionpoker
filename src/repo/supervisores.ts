@@ -562,6 +562,23 @@ export async function listMovimientosSupervisor(supervisorAgentId: string) {
   return r.rows;
 }
 
+// Link del pago de un movimiento ya cargado (04/11/2026, pedido de Leo: "si nos olvidamos de
+// cargarlo o si salió después"). Es solo el comprobante -- no toca importes ni saldos, por eso se
+// puede cambiar sin revertir. Vacío lo quita. Si el movimiento salió de una solicitud de retiro,
+// se actualiza también el link de la solicitud para que el supervisor vea el mismo.
+export async function actualizarLinkPagoMovimientoSupervisor(movimientoId: string, link: string | null) {
+  let limpio = link?.trim() || null;
+  if (limpio && /\s/.test(limpio)) throw new Error("El link no puede tener espacios.");
+  if (limpio && !/^https?:\/\//i.test(limpio)) limpio = `https://${limpio}`;
+  const r = await pool.query(
+    `UPDATE supervisor_movimientos SET payment_link = $2 WHERE id = $1 AND status <> 'REVERTIDO' RETURNING id, payment_link`,
+    [movimientoId, limpio]
+  );
+  if (!r.rows[0]) throw new Error("No se encontró el movimiento, o está revertido.");
+  await pool.query(`UPDATE supervisor_solicitudes_retiro SET payment_link = $2 WHERE movimiento_id = $1`, [movimientoId, limpio]);
+  return r.rows[0];
+}
+
 // Revierte un movimiento manual cargado por error -- LEDGER INMUTABLE, no lo borra: aplica el
 // delta contrario sobre la cuenta y marca REVERTIDO (mismo criterio que revertirPagoProveedor).
 export async function revertirMovimientoSupervisor(movimientoId: string) {
