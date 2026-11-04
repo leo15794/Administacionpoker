@@ -1,0 +1,12 @@
+name = "1win-postback"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+META_PIXEL_ID = "1089915630582788"
+# 1win no manda la moneda en el postback: confirmar en que moneda llega {amount}.
+CURRENCY = "USD"
+
+# Secrets (no van en el repo):
+#   npx wrangler secret put META_ACCESS_TOKEN
+#   npx wrangler secret put POSTBACK_SECRET

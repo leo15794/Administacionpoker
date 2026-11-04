@@ -1,0 +1,5 @@
+name = "epicbet-postback"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Secrets (no van en el repo): npx wrangler secret put META_PIXEL_ID / META_ACCESS_TOKEN
