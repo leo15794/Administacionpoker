@@ -2935,6 +2935,19 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .pc-ag .pc-imp { margin: 0; text-align: right; font-weight: 700; }
 .pc-ag .pc-imp:disabled { opacity: 0.45; }
 .pc-tot { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 14px; }
+/* Pago/cobro unificado (04/11/2026, mockup 68): importe grande, total de lo tildado, selector segmentado y resumen */
+.pc-big { font-size: 24px !important; font-weight: 750; }
+.pc-big-ro { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); }
+.pc-big-ro small { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.pc-fill { font-size: 10.5px; font-weight: 700; color: var(--accent); text-align: right; margin-top: 3px; }
+.pc-seg { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.pc-seg button { flex: 1; padding: 9px 6px; border: 0; border-right: 1px solid var(--border); background: var(--panel); color: var(--text-dim); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pc-seg button:last-child { border-right: 0; }
+.pc-seg button.on { background: var(--accent); color: #fff; }
+.pc-res { background: var(--panel-2); border-radius: var(--radius-sm); padding: 12px 14px; margin: 6px 0 12px; font-size: 14px; }
+.pc-res > div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.pc-res > div.t { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 7px; font-weight: 700; }
+.pc-mas { background: none; border: 0; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 6px 0 0; }
 @media (max-width: 520px) { .pc-ag { grid-template-columns: 22px minmax(0, 1fr); } .pc-ag .pc-imp { grid-column: 2; } }
 
 /* Administración > Lista con el estilo de la Wallet (23/10/2026, mockup aprobado): filas con círculo de iniciales, supervisor en su columna */

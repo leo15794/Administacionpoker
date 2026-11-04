@@ -9,6 +9,7 @@ import Ayuda from "../components/Ayuda";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
+import { PcImporte, PcTotal, PcLista, PcResumen, fmtPc } from "../components/PagoPiezas";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -1273,7 +1274,26 @@ function PagoCobroForm({
   const ccNuevo = montoValido ? Math.round((cc + signo * monto) * 100) / 100 : cc;
   const totalAntes = fichas + cc;
   const totalNuevo = fichas + ccNuevo;
-  const fmt = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmt = fmtPc;
+  // Al tildar un agente se completa solo con lo pendiente en la dirección del movimiento (mockup 68): Pagar → lo que le
+  // debemos (su cuenta corriente positiva); Cobrar → lo que nos debe. Se puede corregir para pagar una parte.
+  const [completadas, setCompletadas] = useState<Record<string, boolean>>({});
+  function pendienteAgente(a: any): number | null {
+    const mv = Number(a.cc_agente ?? 0);
+    if (tipo === "PAGO" && mv > 0.004) return Math.round(mv * 100) / 100;
+    if (tipo === "COBRO" && mv < -0.004) return Math.round(-mv * 100) / 100;
+    return null;
+  }
+  function toggleAgente(id: string, on: boolean) {
+    const a = subordinados.find((x) => x.id === id);
+    const p = a ? pendienteAgente(a) : null;
+    setSel((prev) => {
+      const n = { ...prev };
+      if (on) n[id] = p != null ? p.toFixed(2) : ""; else delete n[id];
+      return n;
+    });
+    setCompletadas((prev) => ({ ...prev, [id]: on && p != null }));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1320,68 +1340,50 @@ function PagoCobroForm({
           ? "Le mandamos USDT: se resta de su cuenta corriente y sale de Wallet Manos."
           : "Nos manda USDT: se suma a su cuenta corriente y entra a Wallet Manos."}
       </div>
-      {!hayAgentes && (
-      <div className="field">
-        <label>Importe (USDT)</label>
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0,00"
-          inputMode="decimal"
-          autoFocus
-          style={{ fontSize: 24, fontWeight: 750 }}
+      {hayAgentes ? (
+        <PcTotal
+          label={tipo === "PAGO" ? "Total a pagar" : "Total a cobrar"}
+          monto={monto}
+          sub={`${tildados.length} agente${tildados.length === 1 ? "" : "s"} tildado${tildados.length === 1 ? "" : "s"}`}
         />
-        {tipo === "PAGO" && (
-          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-            {cc > 0.004 && (
-              <button type="button" className="chip" onClick={() => setAmount(String(cc))}>
-                Pagar todo ({fmt(cc)})
-              </button>
-            )}
-            <button type="button" className="chip" onClick={() => setAmount("500")}>500</button>
-            <button type="button" className="chip" onClick={() => setAmount("1000")}>1.000</button>
-          </div>
-        )}
-      </div>
+      ) : (
+        <PcImporte
+          label="Importe (USDT)"
+          value={amount}
+          onChange={setAmount}
+          chips={[
+            ...(tipo === "PAGO" && cc > 0.004 ? [{ label: `Pagar todo (${fmt(cc)})`, value: String(cc) }] : []),
+            ...(tipo === "COBRO" && cc < -0.004 ? [{ label: `Cobrar todo (${fmt(-cc)})`, value: String(-cc) }] : []),
+            { label: "500", value: "500" },
+            { label: "1.000", value: "1000" },
+          ]}
+        />
       )}
-      {!sinAgente && (
+      {!sinAgente && subordinados.length > 0 && (
         <div className="field">
-          <label>Agentes {agenteObligatorio ? "(elegí al menos uno)" : winLose ? "(opcional: si es de todo el grupo, no tildes ninguno)" : "(opcional: tildá uno o varios y poné el importe de cada uno)"}</label>
-          <div className="pc-ags">
-            {subordinados.map((a) => {
-              const on = a.id in sel;
+          <label>Agentes {agenteObligatorio ? "(elegí al menos uno)" : winLose ? "(opcional: si es de todo el grupo, no tildes ninguno)" : "(opcional)"}</label>
+          <PcLista
+            filas={subordinados.map((a) => {
               const mv = Number(a.cc_agente ?? 0);
-              return (
-                <div key={a.id} className={`pc-ag ${on ? "on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    onChange={(e) => setSel((prev) => {
-                      const n = { ...prev };
-                      if (e.target.checked) n[a.id] = ""; else delete n[a.id];
-                      return n;
-                    })}
-                    aria-label={`Elegir ${a.name}`}
-                  />
-                  <div>
-                    <b>{a.name}</b>
-                    <small>Su cuenta corriente: <b className={mv < -0.004 ? "neg" : mv > 0.004 ? "pos" : ""}>{fmt(mv)}</b></small>
-                  </div>
-                  <input
-                    className="pc-imp"
-                    value={on ? sel[a.id] : ""}
-                    disabled={!on}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    onChange={(e) => setSel((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                  />
-                </div>
-              );
+              return {
+                id: a.id,
+                titulo: a.name,
+                detalle: (
+                  <>
+                    {mv > 0.004 ? "Le debemos: " : mv < -0.004 ? "Nos debe: " : "Su cuenta corriente: "}
+                    <b className={mv < -0.004 ? "neg" : mv > 0.004 ? "pos" : ""}>{fmt(Math.abs(mv))}</b>
+                  </>
+                ),
+              };
             })}
-          </div>
-          {hayAgentes && (
-            <div className="pc-tot"><span className="muted">{tildados.length} agente{tildados.length === 1 ? "" : "s"} elegido{tildados.length === 1 ? "" : "s"}</span><b>Total {tipo === "PAGO" ? "a pagar" : "a cobrar"}: {fmt(monto)}</b></div>
-          )}
+            sel={sel}
+            completadas={completadas}
+            onToggle={toggleAgente}
+            onMonto={(id, v) => {
+              setSel((prev) => ({ ...prev, [id]: v }));
+              setCompletadas((prev) => ({ ...prev, [id]: false }));
+            }}
+          />
         </div>
       )}
       <div className="field">
@@ -1392,24 +1394,17 @@ function PagoCobroForm({
         <label>Observación</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opcional" />
       </div>
-      <div className="panel" style={{ margin: "6px 0 12px", padding: "12px 14px", background: "var(--panel-2)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-          <span className="muted">Cuenta corriente</span>
-          <span>{fmt(cc)} → <b className={ccNuevo < -0.004 ? "neg" : ""}>{fmt(ccNuevo)}</b></span>
-        </div>
-        {!winLose && (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-              <span className="muted">Fichas reales</span>
-              <span>{fmt(fichas)} <span className="muted">(sin cambios)</span></span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", borderTop: "1px solid var(--border)", marginTop: 4 }}>
-              <b>Saldo total</b>
-              <span>{fmt(totalAntes)} → <b className={totalNuevo > 0.004 ? "pos" : totalNuevo < -0.004 ? "neg" : ""}>{fmt(totalNuevo)}</b></span>
-            </div>
-          </>
-        )}
-      </div>
+      <PcResumen
+        filas={[
+          { label: "Cuenta corriente", antes: cc, despues: ccNuevo },
+          ...(!winLose
+            ? [
+                { label: "Fichas reales", valor: <>{fmt(fichas)} <span className="muted">(sin cambios)</span></> },
+                { label: "Saldo total", antes: totalAntes, despues: totalNuevo, total: true },
+              ]
+            : []),
+        ]}
+      />
       {montoValido && ccNuevo < -0.004 && (
         <div className="warnbox" style={{ marginBottom: 10 }}>
           {tipo === "PAGO" ? "Supera su cuenta corriente: queda en negativo." : "La cuenta corriente queda en negativo."}
@@ -1419,7 +1414,7 @@ function PagoCobroForm({
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
         <button className="btn" disabled={loading || !montoValido}>
-          {loading ? "Guardando..." : `Confirmar ${tipo === "PAGO" ? "pago" : "cobro"}${tildados.length > 1 ? "s (" + tildados.length + ")" : ""}`}
+          {loading ? "Guardando..." : `${tipo === "PAGO" ? "Pagar" : "Cobrar"}${montoValido ? " " + fmt(monto) : ""}${tildados.length > 1 ? " (" + tildados.length + " agentes)" : ""}`}
         </button>
       </div>
     </form>

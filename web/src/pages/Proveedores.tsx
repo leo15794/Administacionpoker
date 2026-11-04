@@ -9,6 +9,7 @@ import Ayuda, { Leyenda } from "../components/Ayuda";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
+import { PcImporte, PcTotal, PcLista, PcSeg, PcResumen, fmtPc, numPc } from "../components/PagoPiezas";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -685,12 +686,14 @@ export default function Proveedores() {
         </Modal>
       )}
       {showPago && (
-        <Modal title="Pago / cobro a proveedor" onClose={() => setShowPago(false)}>
+        <Modal title={sel ? `Pago / cobro a ${sel.name}` : "Pago / cobro a proveedor"} onClose={() => setShowPago(false)}>
           <PagoForm
             proveedores={proveedores}
             clubes={clubes}
+            saldos={saldos ?? []}
             proveedorInicial={sel?.id}
             onDone={() => { setShowPago(false); refresh(); }}
+            onCancel={() => setShowPago(false)}
           />
         </Modal>
       )}
@@ -1519,8 +1522,17 @@ function CierreForm({
 //  - "Suelto" (comportamiento de siempre): un pago directo contra el saldo total de un
 //    proveedor+club, sin atarlo a ninguna línea -- para casos sin una línea que matchee (o
 //    cierres viejos, de antes de este cambio, que no tienen nada que trackear todavía).
-function PagoForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedores: any[]; clubes: any[]; proveedorInicial?: string; onDone: () => void }) {
-  const [modo, setModo] = useState<"lineas" | "suelto">("lineas");
+// Pago / cobro a proveedor con el diseño unificado (04/11/2026, mockup 68 aprobado por Leo): mismas piezas que
+// "Pagar a" de Supervisores. Sin pestañas: tildando líneas de cierre se completa cada una sola con su disponible (se
+// puede corregir para pagar una parte) y el total es la suma; sin tildar nada es un pago/cobro suelto contra un club.
+function PagoForm({ proveedores, clubes, saldos, proveedorInicial, onDone, onCancel }: {
+  proveedores: any[];
+  clubes: any[];
+  saldos: any[];
+  proveedorInicial?: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
   const [proveedorId, setProveedorId] = useState(proveedorInicial ?? "");
   const [medio, setMedio] = useState<"USDT" | "EFECTIVO" | "ZELLE" | "OTRO">("USDT");
   const [custodio, setCustodio] = useState("");
@@ -1529,196 +1541,199 @@ function PagoForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedor
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Modo "Por línea"
   const [lineas, setLineas] = useState<any[] | null>(null);
-  const [seleccion, setSeleccion] = useState<Record<string, { checked: boolean; monto: string }>>({});
+  const [sel, setSel] = useState<Record<string, string>>({});
+  const [completadas, setCompletadas] = useState<Record<string, boolean>>({});
+  const [verTodas, setVerTodas] = useState(false);
 
-  useEffect(() => {
-    setLineas(null);
-    setSeleccion({});
-    if (!proveedorId || modo !== "lineas") return;
-    api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => setLineas([]));
-  }, [proveedorId, modo]);
-
-  function toggleLinea(l: any) {
-    setSeleccion((prev) => {
-      const actual = prev[l.id];
-      if (actual?.checked) return { ...prev, [l.id]: { checked: false, monto: actual.monto } };
-      return { ...prev, [l.id]: { checked: true, monto: Math.abs(Number(l.disponible)).toFixed(2) } };
-    });
-  }
-
-  // Modo "Suelto"
+  // Suelto (nada tildado)
   const [clubId, setClubId] = useState("");
   const [amount, setAmount] = useState("");
   const [direction, setDirection] = useState<"PAGO" | "COBRO">("PAGO");
 
-  async function onSubmitSuelto(e: React.FormEvent) {
+  useEffect(() => {
+    setLineas(null);
+    setSel({});
+    setCompletadas({});
+    if (!proveedorId) return;
+    api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => setLineas([]));
+  }, [proveedorId]);
+
+  const proveedor = proveedores.find((p) => p.id === proveedorId);
+  const nombreProv = proveedor?.name ?? "el proveedor";
+  const tildadas = Object.keys(sel);
+  const hayLineas = tildadas.length > 0;
+  const lineaDe = (id: string) => (lineas ?? []).find((l) => l.id === id);
+  const dirLinea = (l: any): "PAGO" | "COBRO" => (Number(l.disponible) >= 0 ? "PAGO" : "COBRO");
+
+  // Movimientos que se van a registrar: uno por línea tildada, o uno suelto.
+  const movs: { clubId: string; dir: "PAGO" | "COBRO"; monto: number; lineaId?: string }[] = hayLineas
+    ? tildadas.map((id) => {
+        const l = lineaDe(id);
+        return { clubId: l?.club_id, dir: l ? dirLinea(l) : "PAGO", monto: numPc(sel[id]), lineaId: id };
+      })
+    : clubId
+      ? [{ clubId, dir: direction, monto: numPc(amount) }]
+      : [];
+  const valido = movs.length > 0 && movs.every((m) => Number.isFinite(m.monto) && m.monto > 0);
+  const totalPago = movs.filter((m) => m.dir === "PAGO").reduce((t, m) => t + (m.monto > 0 ? m.monto : 0), 0);
+  const totalCobro = movs.filter((m) => m.dir === "COBRO").reduce((t, m) => t + (m.monto > 0 ? m.monto : 0), 0);
+  const mixto = totalPago > 0 && totalCobro > 0;
+  const neto = Math.round((totalCobro - totalPago) * 100) / 100; // + entra, − sale
+  const totalMostrado = mixto ? Math.abs(neto) : totalPago + totalCobro;
+  const verbo = mixto ? "Registrar" : totalCobro > 0 ? "Cobrar" : "Pagar";
+
+  const saldoClub = (cid: string) => Number((saldos ?? []).find((x) => x.proveedor_id === proveedorId && x.club_id === cid)?.amount ?? 0);
+  const clubesAfectados = [...new Set(movs.map((m) => m.clubId).filter(Boolean))];
+  const nombreClub = (cid: string) => clubes.find((c) => c.id === cid)?.name ?? lineas?.find((l) => l.club_id === cid)?.club_name ?? "club";
+
+  function toggleLinea(id: string, on: boolean) {
+    const l = lineaDe(id);
+    setSel((prev) => {
+      const n = { ...prev };
+      if (on) n[id] = l ? Math.abs(Number(l.disponible)).toFixed(2) : "";
+      else delete n[id];
+      return n;
+    });
+    setCompletadas((prev) => ({ ...prev, [id]: on && !!l }));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!proveedorId || !clubId) return setMsg({ ok: false, text: "Elegí proveedor y club." });
-    if (!(Number(amount) > 0)) return setMsg({ ok: false, text: "El monto tiene que ser mayor a 0." });
+    if (!proveedorId) return setMsg({ ok: false, text: "Elegí el proveedor." });
+    if (!hayLineas && !clubId) return setMsg({ ok: false, text: "Tildá alguna línea de cierre o elegí el club." });
+    if (!valido) return setMsg({ ok: false, text: hayLineas ? "Cada línea tildada necesita un monto mayor a 0." : "El importe tiene que ser mayor a 0." });
     if (medio === "EFECTIVO" && !custodio.trim()) return setMsg({ ok: false, text: "Un pago/cobro en efectivo requiere custodio (BIT-051/052)." });
     setLoading(true);
+    // Uno por línea, uno atrás del otro. Si alguno falla, los ya registrados se sacan de la selección para no repetirlos.
+    const hechos: string[] = [];
     try {
-      await api.registrarPagoProveedor({
-        proveedorId,
-        clubId,
-        amount: Number(amount),
-        medio,
-        direction,
-        notes: notes.trim() || undefined,
-        custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
-        paymentLink: paymentLink.trim() || null,
-      });
+      for (const m of movs) {
+        await api.registrarPagoProveedor({
+          proveedorId,
+          clubId: m.clubId,
+          amount: m.monto,
+          medio,
+          direction: m.dir,
+          notes: notes.trim() || undefined,
+          cierreLineaId: m.lineaId,
+          custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
+          paymentLink: paymentLink.trim() || null,
+        });
+        if (m.lineaId) hechos.push(m.lineaId);
+      }
       onDone();
     } catch (err: any) {
-      setMsg({ ok: false, text: err.message || "No se pudo registrar el pago." });
+      if (hechos.length > 0) {
+        setSel((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !hechos.includes(id))));
+        api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => {});
+        setMsg({ ok: false, text: `Se registraron ${hechos.length} de ${movs.length}; falló el siguiente: ${err.message || "error desconocido"}. Los ya registrados se sacaron de la lista.` });
+      } else {
+        setMsg({ ok: false, text: err.message || "No se pudo registrar el pago." });
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  async function onSubmitLineas(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    const elegidas = Object.entries(seleccion).filter(([, v]) => v.checked);
-    if (elegidas.length === 0) return setMsg({ ok: false, text: "Tildá al menos una línea." });
-    for (const [, v] of elegidas) {
-      if (!(Number(v.monto) > 0)) return setMsg({ ok: false, text: "Todos los montos tildados tienen que ser mayores a 0." });
-    }
-    if (medio === "EFECTIVO" && !custodio.trim()) return setMsg({ ok: false, text: "Un pago/cobro en efectivo requiere custodio (BIT-051/052)." });
-    setLoading(true);
-    let exitos = 0;
-    let ultimoError = "";
-    for (const [lineaId, v] of elegidas) {
-      const l = (lineas ?? []).find((x) => x.id === lineaId);
-      if (!l) continue;
-      try {
-        await api.registrarPagoProveedor({
-          proveedorId,
-          clubId: l.club_id,
-          amount: Number(v.monto),
-          medio,
-          direction: Number(l.disponible) >= 0 ? "PAGO" : "COBRO",
-          notes: notes.trim() || undefined,
-          cierreLineaId: l.id,
-          custodian: medio === "EFECTIVO" ? custodio.trim() : undefined,
-          paymentLink: paymentLink.trim() || null,
-        });
-        exitos++;
-      } catch (err: any) {
-        ultimoError = err.message || "Error desconocido.";
-      }
-    }
-    setLoading(false);
-    if (exitos === elegidas.length) {
-      onDone();
-    } else if (exitos > 0) {
-      setMsg({ ok: false, text: `Se aplicaron ${exitos} de ${elegidas.length} -- el resto falló (${ultimoError}). Revisá y reintentá las que falten.` });
-      api.lineasPendientesProveedor(proveedorId).then(setLineas).catch(() => {});
-    } else {
-      setMsg({ ok: false, text: ultimoError || "No se pudo registrar ningún pago." });
-    }
-  }
+  const LIMITE = 4;
+  const lineasVisibles = (lineas ?? []).filter((l, i) => verTodas || i < LIMITE || l.id in sel);
+  const ocultas = (lineas?.length ?? 0) - lineasVisibles.length;
+  const saldoSuelto = clubId ? saldoClub(clubId) : 0;
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button type="button" className={`btn small ${modo === "lineas" ? "" : "secondary"}`} onClick={() => setModo("lineas")}>
-          Por línea de cierre
-        </button>
-        <button type="button" className={`btn small ${modo === "suelto" ? "" : "secondary"}`} onClick={() => setModo("suelto")}>
-          Pago suelto (sin atar a una línea)
-        </button>
-      </div>
+    <form onSubmit={onSubmit}>
+      {!proveedorInicial && (
+        <div className="field">
+          <label>Proveedor</label>
+          <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+            <option value="">Elegir...</option>
+            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
 
-      <div className="field">
-        <label>Proveedor</label>
-        <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
-          <option value="">Elegir...</option>
-          {proveedores.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
+      {proveedorId && (
+        <>
+          <div className="saldo-sub" style={{ marginBottom: 12 }}>
+            Tildá las líneas de cierre que se pagan o cobran; si no tildás ninguna, va como pago suelto contra un club.
+          </div>
 
-      {modo === "lineas" ? (
-        <form onSubmit={onSubmitLineas}>
-          {proveedorId && (
-            !lineas ? (
+          {hayLineas ? (
+            <PcTotal
+              label={mixto ? "Total" : totalCobro > 0 ? "Total a cobrar" : "Total a pagar"}
+              monto={totalMostrado}
+              sub={mixto ? `cobrás ${fmtPc(totalCobro)} · pagás ${fmtPc(totalPago)}` : `${tildadas.length} línea${tildadas.length === 1 ? "" : "s"} tildada${tildadas.length === 1 ? "" : "s"}`}
+            />
+          ) : (
+            <>
+              <div className="field">
+                <label>Tipo</label>
+                <PcSeg
+                  opciones={[{ value: "PAGO", label: "Le pagamos" }, { value: "COBRO", label: "Nos paga" }]}
+                  value={direction}
+                  onChange={setDirection}
+                />
+              </div>
+              <PcImporte
+                label="Importe"
+                value={amount}
+                onChange={setAmount}
+                chips={[
+                  ...(clubId && ((direction === "COBRO" && saldoSuelto < -0.004) || (direction === "PAGO" && saldoSuelto > 0.004))
+                    ? [{ label: `Todo (${fmtPc(Math.abs(saldoSuelto))})`, value: Math.abs(saldoSuelto).toFixed(2) }]
+                    : []),
+                  { label: "500", value: "500" },
+                  { label: "1.000", value: "1000" },
+                ]}
+              />
+            </>
+          )}
+
+          <div className="field">
+            <label>
+              Líneas de cierre pendientes
+              {!hayLineas && <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}> (opcional)</span>}
+            </label>
+            {!lineas ? (
               <div className="muted">Cargando líneas pendientes...</div>
             ) : lineas.length === 0 ? (
-              <div className="muted" style={{ marginBottom: 10 }}>
-                Este proveedor no tiene líneas de cierre con saldo pendiente (o son cierres viejos, de antes de este
-                cambio, que nunca trackearon esto -- usá "Pago suelto" para esos).
-              </div>
+              <div className="muted">No tiene líneas de cierre con saldo pendiente: va como pago suelto.</div>
             ) : (
-              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 8, marginBottom: 10 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th></th><th>Semana</th><th>Club</th><th>Línea</th><th className="num">Disponible</th><th className="num">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineas.map((l) => {
-                      const sel = seleccion[l.id];
-                      return (
-                        <tr key={l.id}>
-                          <td><input type="checkbox" checked={!!sel?.checked} onChange={() => toggleLinea(l)} /></td>
-                          <td className="muted" style={{ fontSize: 12 }}>{dateShort(l.week_start)} - {dateShort(l.week_end)}</td>
-                          <td>{l.club_name}</td>
-                          <td className="muted" style={{ fontSize: 12 }}>{l.tipo === "AGENTE" ? (l.agent_name ?? "Agente") : l.tipo === "AJUSTE" ? "Ajuste manual" : "Total club"}</td>
-                          <td className={`num ${Number(l.disponible) >= 0 ? "pos" : "neg"}`}>{usd(Number(l.disponible))}</td>
-                          <td className="num">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              disabled={!sel?.checked}
-                              value={sel?.monto ?? ""}
-                              onChange={(e) => setSeleccion((prev) => ({ ...prev, [l.id]: { checked: true, monto: e.target.value } }))}
-                              style={{ width: 100, textAlign: "right" }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-          <div className="form-grid">
-            <div className="field">
-              <label>Medio (aplica a todas las líneas tildadas)</label>
-              <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-                <option value="USDT">USDT</option>
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="ZELLE">Zelle</option>
-                <option value="OTRO">Otro</option>
-              </select>
-            </div>
-            {medio === "EFECTIVO" && (
-              <div className="field">
-                <label>Custodio</label>
-                <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
-              </div>
+              <>
+                <PcLista
+                  filas={lineasVisibles.map((l) => {
+                    const d = Number(l.disponible);
+                    return {
+                      id: l.id,
+                      titulo: `${l.club_name} · ${l.tipo === "AGENTE" ? (l.agent_name ?? "Agente") : l.tipo === "AJUSTE" ? "Ajuste manual" : "Total club"}`,
+                      detalle: (
+                        <>
+                          {dateShort(l.week_start)} – {dateShort(l.week_end)} · {d >= 0 ? "le debemos" : "nos debe"}{" "}
+                          <b className={d >= 0 ? "pos" : "neg"}>{fmtPc(Math.abs(d))}</b>
+                        </>
+                      ),
+                    };
+                  })}
+                  sel={sel}
+                  completadas={completadas}
+                  onToggle={toggleLinea}
+                  onMonto={(id, v) => {
+                    setSel((prev) => ({ ...prev, [id]: v }));
+                    setCompletadas((prev) => ({ ...prev, [id]: false }));
+                  }}
+                />
+                {ocultas > 0 && (
+                  <button type="button" className="pc-mas" onClick={() => setVerTodas(true)}>
+                    Ver {ocultas} línea{ocultas === 1 ? "" : "s"} más ▾
+                  </button>
+                )}
+              </>
             )}
           </div>
-          <div className="field">
-            <label>Notas (opcional)</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
-          </div>
-          <div className="field">
-            <label>Link de pago (opcional)</label>
-            <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
-          </div>
-          {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-          <button className="btn" disabled={loading || !lineas || lineas.length === 0}>{loading ? "Guardando..." : "Registrar"}</button>
-        </form>
-      ) : (
-        <form onSubmit={onSubmitSuelto}>
-          <div className="form-grid">
+
+          {!hayLineas && (
             <div className="field">
               <label>Club</label>
               <select value={clubId} onChange={(e) => setClubId(e.target.value)}>
@@ -1726,46 +1741,62 @@ function PagoForm({ proveedores, clubes, proveedorInicial, onDone }: { proveedor
                 {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div className="field">
-              <label>Tipo</label>
-              <select value={direction} onChange={(e) => setDirection(e.target.value as any)}>
-                <option value="PAGO">Pago (le pagamos)</option>
-                <option value="COBRO">Cobro (nos paga)</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Medio</label>
-              <select value={medio} onChange={(e) => setMedio(e.target.value as any)}>
-                <option value="USDT">USDT</option>
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="ZELLE">Zelle</option>
-                <option value="OTRO">Otro</option>
-              </select>
-            </div>
-            {medio === "EFECTIVO" && (
-              <div className="field">
-                <label>Custodio</label>
-                <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
-              </div>
-            )}
-            <div className="field">
-              <label>Monto (USD)</label>
-              <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" />
-            </div>
-          </div>
+          )}
+
           <div className="field">
-            <label>Notas (opcional)</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash de la transacción, etc." />
+            <label>Medio</label>
+            <PcSeg
+              opciones={[{ value: "USDT", label: "USDT" }, { value: "EFECTIVO", label: "Efectivo" }, { value: "ZELLE", label: "Zelle" }, { value: "OTRO", label: "Otro" }]}
+              value={medio}
+              onChange={setMedio}
+            />
           </div>
+          {medio === "EFECTIVO" && (
+            <div className="field">
+              <label>Custodio</label>
+              <input value={custodio} onChange={(e) => setCustodio(e.target.value)} placeholder="Quién tiene la plata físicamente" />
+            </div>
+          )}
           <div className="field">
             <label>Link de pago (opcional)</label>
             <input value={paymentLink} onChange={(e) => setPaymentLink(e.target.value)} placeholder="usdt.tx/..." />
           </div>
-          {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-          <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar"}</button>
-        </form>
+          <div className="field">
+            <label>Observación</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referencia, hash, etc." />
+          </div>
+
+          {valido && (
+            <PcResumen
+              filas={[
+                ...clubesAfectados.map((cid) => {
+                  const antes = saldoClub(cid);
+                  const delta = movs.filter((m) => m.clubId === cid).reduce((t, m) => t + (m.dir === "PAGO" ? -m.monto : m.monto), 0);
+                  return { label: `Saldo con ${nombreProv} en ${nombreClub(cid)}`, antes, despues: Math.round((antes + delta) * 100) / 100 };
+                }),
+                {
+                  label: medio === "USDT" ? "Wallet Manos" : medio === "EFECTIVO" ? "Caja de efectivo" : "Tesorería",
+                  valor:
+                    medio === "USDT" || medio === "EFECTIVO" ? (
+                      <b className={neto < 0 ? "neg" : "pos"}>{neto < 0 ? "sale " : "entra "}{fmtPc(Math.abs(neto))}</b>
+                    ) : (
+                      <span className="muted">no se mueve</span>
+                    ),
+                },
+              ]}
+            />
+          )}
+        </>
       )}
-    </div>
+
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className="btn" disabled={loading || !valido}>
+          {loading ? "Guardando..." : `${verbo}${valido ? " " + fmtPc(totalMostrado) : ""}`}
+        </button>
+      </div>
+    </form>
   );
 }
 
