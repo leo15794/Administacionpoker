@@ -415,9 +415,9 @@ export interface MovimientoSupervisorInput {
 // asiento de tesorería de abajo, no el pool interno del supervisor). En ningún caso (con o sin
 // usdtReal) una carga/descarga cambia el saldo total fichas+cc por sí sola; eso solo pasa con
 // resultado de mesas o cierres reales. Ajuste: mueve un solo lado a mano, con el signo que se
-// indique (para correcciones puntuales que no son ni una carga ni una descarga real) y NUNCA
-// mueve Wallet Manos, sin importar qué mande el frontend (mismo criterio que ya usa
-// AJUSTE/SIN_TESORERIA en repo/ledger.ts). Nunca toca balances/ledger_movements de ningún agente.
+// indique (para correcciones puntuales que no son ni una carga ni una descarga real); no mueve
+// Wallet Manos salvo que se tilde USDT real (05/11/2026): ahí positivo = ingreso y negativo =
+// egreso por el valor absoluto. Nunca toca balances/ledger_movements de ningún agente.
 export async function registrarMovimientoSupervisor(input: MovimientoSupervisorInput) {
   const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [input.supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
@@ -463,8 +463,9 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   }
 
   // Forzado acá (único punto donde se decide si se abre un asiento de tesorería), no confía en
-  // lo que mande el frontend.
-  const usdtReal = esPagoCobro || (input.type !== "AJUSTE" && input.type !== "DESCUENTO" && !!input.usdtReal);
+  // lo que mande el frontend. Ajuste con USDT real (05/11/2026, pedido de Leo: "poder hacer un ajuste manual y poner
+  // USDT"): solo si se tilda; el signo del ajuste define el lado de Wallet Manos (positivo = entró plata, negativo = salió).
+  const usdtReal = esPagoCobro || (input.type !== "DESCUENTO" && !!input.usdtReal);
 
   const client = await pool.connect();
   try {
@@ -502,12 +503,14 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     // se puede revertir a mano.
     let treasuryAdjustmentId: string | null = null;
     if (usdtReal) {
-      const direction = input.type === "CARGA" || input.type === "COBRO" ? "INGRESO" : "EGRESO";
+      const esAjuste = input.type === "AJUSTE";
+      const direction = input.type === "CARGA" || input.type === "COBRO" || (esAjuste && input.amount > 0) ? "INGRESO" : "EGRESO";
+      const montoWallet = esAjuste ? Math.abs(round2(input.amount)) : amount;
       const { id: adjId } = await registrarAjusteTesoreria({
         ledger: "WALLET_MANOS",
         direction,
-        amount,
-        reason: `Supervisor ${sup.rows[0].name} — ${input.type.toLowerCase()} US$ ${amount.toFixed(2)}`,
+        amount: montoWallet,
+        reason: `Supervisor ${sup.rows[0].name} — ${input.type.toLowerCase()} US$ ${montoWallet.toFixed(2)}`,
         createdBy: input.createdBy ?? null,
       });
       treasuryAdjustmentId = adjId;

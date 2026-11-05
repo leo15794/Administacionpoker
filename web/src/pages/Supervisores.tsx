@@ -1909,18 +1909,17 @@ function MovimientoForm({
           <label>Importe (USD){type === "AJUSTE" ? " -- puede ser negativo" : ""}</label>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={type === "AJUSTE" ? "Ej: -50" : "Ej: 600"} />
         </div>
-        {type !== "AJUSTE" && (
-          <div className="field">
-            <label>
-              <input type="checkbox" checked={usdtReal} onChange={(e) => setUsdtReal(e.target.checked)} style={{ marginRight: 6 }} />
-              Hubo transferencia real de USDT
-            </label>
-            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Esto es solo una reclasificación interna entre fichas y cuenta corriente -- NO toca Wallet Manos salvo
-              que tildes esto (además existió una entrada/salida real de USDT: {type === "CARGA" ? "ingreso" : "egreso"} en Wallet Manos por el mismo importe).
-            </div>
+        <div className="field">
+          <label>
+            <input type="checkbox" checked={usdtReal} onChange={(e) => setUsdtReal(e.target.checked)} style={{ marginRight: 6 }} />
+            Hubo transferencia real de USDT
+          </label>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            {type === "AJUSTE"
+              ? "Sin tildar, el ajuste no toca Wallet Manos. Tildado, además entró o salió USDT de verdad: importe positivo = ingreso en Wallet Manos, negativo = egreso."
+              : `Esto es solo una reclasificación interna entre fichas y cuenta corriente -- NO toca Wallet Manos salvo que tildes esto (además existió una entrada/salida real de USDT: ${type === "CARGA" ? "ingreso" : "egreso"} en Wallet Manos por el mismo importe).`}
           </div>
-        )}
+        </div>
         <div className="field">
           <label>Observación</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -1958,10 +1957,10 @@ function MovimientoForm({
                 <span>{fmtUsd(ccAntes)} → <b>{fmtUsd(ccAntes + dCc)}</b></span>
               </div>
             )}
-            {type !== "AJUSTE" && usdtReal && (
+            {usdtReal && (
               <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
                 <span className="muted">Wallet Manos</span>
-                <span><b>{type === "CARGA" ? "+" : "−"}{fmtUsd(Math.abs(montoNum))}</b></span>
+                <span><b>{type === "CARGA" || (type === "AJUSTE" && montoNum > 0) ? "+" : "−"}{fmtUsd(Math.abs(montoNum))}</b></span>
               </div>
             )}
           </div>
