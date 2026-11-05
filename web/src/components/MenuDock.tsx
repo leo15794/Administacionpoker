@@ -2,22 +2,26 @@ import { useEffect, useState } from "react";
 
 // Menú acoplable (21/10/2026, pedido de Leo): a la izquierda (dock) o arriba (barra). Se elige arrastrando la marca a un borde y es una preferencia del
 // navegador, no de la sesión. Lo comparten el sistema principal (Shell.tsx) y TeamBack Affiliates: la elección vale para las dos secciones.
-export type MenuPos = "left" | "top";
-const CLAVE_POS = "dp_menu_pos";
+// Rediseño (05/11/2026, mockups 75–77): se suma "bottom" (dock de fichas flotante abajo), que pasa a ser el lugar por defecto. Clave nueva para que
+// todos arranquen con el dock abajo; el que lo quiera a la izquierda o arriba lo arrastra una vez.
+export type MenuPos = "left" | "top" | "bottom";
+const CLAVE_POS = "dp_menu_pos2";
 const CLAVE_FIJO = "dp_sidebar_pinned";
 
 export type Arrastre = { zona: MenuPos | null; x: number; y: number } | null;
 
 function posInicial(): MenuPos {
   try {
-    return localStorage.getItem(CLAVE_POS) === "top" ? "top" : "left";
+    const v = localStorage.getItem(CLAVE_POS);
+    return v === "top" || v === "left" ? v : "bottom";
   } catch {
-    return "left";
+    return "bottom";
   }
 }
 
 function zonaDeSoltar(x: number, y: number): MenuPos | null {
   if (y < 110) return "top";
+  if (y > window.innerHeight - 140) return "bottom";
   if (x < 150) return "left";
   return null;
 }
@@ -110,6 +114,7 @@ export function DockOverlay({ arrastrando }: { arrastrando: Arrastre }) {
     <div className="dock-overlay">
       <div className={`dock-zona dock-zona-top ${arrastrando.zona === "top" ? "on" : ""}`}>Arriba</div>
       <div className={`dock-zona dock-zona-left ${arrastrando.zona === "left" ? "on" : ""}`}>Izquierda</div>
+      <div className={`dock-zona dock-zona-bottom ${arrastrando.zona === "bottom" ? "on" : ""}`}>Abajo</div>
       <div className="dock-ghost" style={{ left: arrastrando.x + 14, top: arrastrando.y + 14 }}>Soltá en un borde · Esc cancela</div>
     </div>
   );

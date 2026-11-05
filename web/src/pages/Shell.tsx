@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import GlobalSearch from "../components/GlobalSearch";
@@ -239,6 +239,12 @@ const NAV_ITEMS: { key: string; to: string; end?: boolean; icon: keyof typeof ic
   { key: "resumenFinanciero", to: "/dashboard/resumen-financiero", icon: "resumenFinanciero", label: "Resumen financiero", group: "reportes" },
 ];
 const DEFAULT_NAV_ORDER = NAV_ITEMS.map((i) => i.key);
+// Nombre corto de cada ficha del dock (rediseño 05/11/2026): debajo del ícono entra poco; el nombre completo queda en el tooltip.
+const NOMBRE_CORTO: Record<string, string> = {
+  resumen: "Resumen", agentes: "Admin.", cierres: "Cierres", jugadoresBancados: "Bancados", usuarios: "Usuarios",
+  wallet: "Wallet", garantias: "Garantías", proveedores: "Proveed.", supervisores: "Superv.", cuentasAgentes: "Agentes",
+  cuentasSocios: "Socios", comisionesReferidos: "Referidos", resumenClub: "Por club", rodeo: "Rodeo", resumenFinanciero: "Financiero",
+};
 // Secciones que se pueden poner en cada panel de la vista dividida.
 const SECCIONES_DIVIDIDA = NAV_ITEMS.map((i) => ({ to: i.to, label: i.label }));
 const iconoDividir = (
@@ -469,10 +475,93 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     "Portal de agente";
 
   return (
-    <div className={`app-shell ${pos === "top" ? "menu-top" : ""}`}>
+    <div className={`app-shell menu-${pos}`}>
       <DockOverlay arrastrando={arrastrando} />
+      {/* Dock de fichas (rediseño 05/11/2026, mockups 75–77): en escritorio reemplaza al menú lateral cuando está abajo o a la izquierda.
+          Cada sección es una ficha; se reordenan arrastrándolas dentro de su grupo (mismo orden guardado que el menú de siempre) y el dock entero
+          se mueve arrastrando la marca a un borde. En celular sigue el cajón (ver .dock-fichas en index.css). */}
+      {pos !== "top" && (
+        <nav className="dock-fichas" aria-label="Menú">
+          <div className="df-grip brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">P</div>
+          {role === "ADMIN" ? (
+            NAV_GROUPS.map((grupo, gi) => {
+              const keys = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
+              if (keys.length === 0) return null;
+              return (
+                <Fragment key={grupo.key}>
+                  {gi > 0 && <span className="df-sep" aria-hidden="true" />}
+                  <div className="df-g">
+                    <span className="df-gl">{grupo.label}</span>
+                    {keys.map((key) => {
+                      const item = NAV_ITEMS.find((i) => i.key === key);
+                      if (!item) return null;
+                      return (
+                        <NavLink
+                          key={item.key}
+                          to={item.to}
+                          end={item.end}
+                          title={item.label}
+                          className={({ isActive }) => `df-k ${isActive ? "active" : ""} ${dragOverKey === item.key ? "drag-over" : ""}`}
+                          draggable
+                          onDragStart={() => {
+                            dragKey.current = item.key;
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (dragOverKey !== item.key) setDragOverKey(item.key);
+                          }}
+                          onDragLeave={() => setDragOverKey((k) => (k === item.key ? null : k))}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            moverNav(item.key);
+                          }}
+                          onDragEnd={() => {
+                            dragKey.current = null;
+                            setDragOverKey(null);
+                          }}
+                        >
+                          <i>{icon[item.icon]}</i>
+                          <span>{NOMBRE_CORTO[item.key] ?? item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              );
+            })
+          ) : (
+            <div className="df-g">
+              <NavLink
+                to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"}
+                className={({ isActive }) => `df-k ${isActive ? "active" : ""}`}
+                title={rolLabel}
+              >
+                <i>{icon.cuenta}</i>
+                <span>{role === "SUPERVISOR" ? "Supervisión" : "Mi cuenta"}</span>
+              </NavLink>
+            </div>
+          )}
+          <span className="df-sep df-sep-fin" aria-hidden="true" />
+          <div className="df-g df-util">
+            {role === "ADMIN" && navOrder.join() !== DEFAULT_NAV_ORDER.join() && (
+              <button type="button" className="df-k" onClick={restablecerNavOrder} title="Vuelve las fichas al orden original">
+                <i>⟲</i>
+                <span>Orden</span>
+              </button>
+            )}
+            <button type="button" className="df-k" onClick={toggleTheme} title={theme === "dark" ? "Modo día" : "Modo noche"}>
+              <i>{theme === "dark" ? icon.sun : icon.moon}</i>
+              <span>{theme === "dark" ? "Día" : "Noche"}</span>
+            </button>
+            <button type="button" className="df-k" onClick={logout} title="Cerrar sesión">
+              <i>{icon.logout}</i>
+              <span>Salir</span>
+            </button>
+          </div>
+        </nav>
+      )}
       <header className="topnav">
-        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde izquierdo para mover el menú">
+        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">
           <div className="brand-mark" aria-hidden="true">P</div>
           <b>Poker Gestión</b>
         </div>
@@ -531,7 +620,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       <div className={`sidebar ${pinned ? "" : "rail"} ${mobileOpen ? "mobile-open" : ""}`}>
         {/* Marca y botón de colapsar en la MISMA fila (21/10/2026, pedido de Leo: el botón solo en su propia fila dejaba un espacio muerto arriba). */}
         <div className="brand">
-          <div className="brand-mark brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde de arriba para mover el menú">P</div>
+          <div className="brand-mark brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">P</div>
           <div className="brand-info">
             <h1>Poker Gestión</h1>
             <div className="sub">{rolLabel}</div>

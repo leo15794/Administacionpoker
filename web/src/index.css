@@ -2803,7 +2803,7 @@ button.nav-link {
 /* ---------- Vista dividida (22/10/2026, pedido de Leo): ver components/VistaDividida.tsx ---------- */
 /* Dentro de un panel (iframe) la app va sin menú, barras ni avisos: solo la sección. */
 html.embebido .sidebar, html.embebido .topnav, html.embebido .mobile-topbar, html.embebido .bottom-nav, html.embebido .main-topbar,
-html.embebido .np, html.embebido .dock-overlay, html.embebido .tb-install-banner { display: none !important; }
+html.embebido .np, html.embebido .dock-overlay, html.embebido .dock-fichas, html.embebido .tb-install-banner { display: none !important; }
 html.embebido .app-shell { padding: 0 !important; display: block !important; background: transparent !important; }
 html.embebido .main { margin: 0 !important; max-width: none !important; padding: 14px 16px 40px !important; }
 html.embebido body { background: transparent !important; }
@@ -3179,3 +3179,71 @@ body {
 .btn, .btn.small { border-radius: 999px; }
 .btn.secondary { background: var(--panel-2); border-color: var(--border); }
 .chip { border-radius: 999px; }
+
+/* ---------- Rediseño "vidrio" — etapa 2: dock de fichas (05/11/2026, mockups 75–77) ----------
+   Abajo (por defecto): barra flotante centrada. Izquierda: columna fija con scroll propio si no entra. Arriba: sigue la barra de siempre.
+   Solo en escritorio; en celular sigue el cajón + la barra de abajo de siempre. */
+.dock-fichas { display: none; }
+.dock-zona-bottom { left: 25%; right: 25%; bottom: 8px; height: 96px; }
+@media (min-width: 769px) {
+  .app-shell.menu-left .sidebar, .app-shell.menu-bottom .sidebar { display: none; }
+  .dock-fichas {
+    display: flex; gap: 2px; z-index: 45;
+    background: var(--sidebar-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border-radius: 26px; scrollbar-width: none;
+  }
+  .dock-fichas::-webkit-scrollbar { display: none; }
+  .df-grip {
+    width: 42px; height: 42px; border-radius: 14px; flex-shrink: 0;
+    background: var(--accent-grad); color: var(--accent-ink); font-weight: 800; font-size: 15px;
+    display: grid; place-items: center; box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.35);
+  }
+  .df-g { display: flex; align-items: center; gap: 2px; }
+  .df-gl { font-size: 8.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+  .df-sep { background: var(--border); flex-shrink: 0; }
+  .df-k {
+    display: flex; flex-direction: column; align-items: center; gap: 3px; width: 60px; flex-shrink: 0;
+    font-size: 9.5px; font-weight: 600; color: var(--text-dim); text-decoration: none; text-align: center;
+    background: none; border: 0; padding: 2px 0; cursor: pointer; font-family: inherit; line-height: 1.15;
+  }
+  .df-k span { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .df-k i {
+    width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center; font-style: normal; font-size: 17px;
+    background: var(--panel-2); color: var(--text); position: relative;
+    transition: transform 0.15s ease, width 0.15s ease, height 0.15s ease, background 0.15s ease;
+  }
+  .df-k i svg { width: 18px; height: 18px; }
+  .df-k:hover i { transform: translateY(-2px); background: var(--panel-hover); }
+  .df-k.active { color: var(--text); font-weight: 800; }
+  .df-k.active i { width: 50px; height: 50px; background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 10px 22px rgba(var(--accent-rgb), 0.42); }
+  /* canto de ficha de póker en la activa */
+  .df-k.active i::before { content: ""; position: absolute; inset: 3px; border-radius: 999px; border: 2px dashed rgba(255, 255, 255, 0.55); }
+  .df-k.drag-over i { outline: 2px dashed var(--accent); outline-offset: 2px; }
+
+  /* Abajo */
+  .app-shell.menu-bottom .dock-fichas {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    flex-direction: row; align-items: flex-end; padding: 8px 14px 8px 10px; max-width: calc(100vw - 28px); overflow-x: auto;
+  }
+  .app-shell.menu-bottom .df-grip { align-self: center; margin-right: 8px; }
+  .app-shell.menu-bottom .df-gl { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; margin-right: 2px; }
+  .app-shell.menu-bottom .df-sep { width: 1px; height: 40px; margin: 0 8px 8px; align-self: center; }
+  .app-shell.menu-bottom .df-k.active i { margin-top: -12px; }
+  .app-shell.menu-bottom .main { margin: 0 auto; padding-bottom: 130px; }
+
+  /* Izquierda */
+  .app-shell.menu-left .dock-fichas {
+    position: sticky; top: 14px; height: calc(100vh - 28px); width: 82px; flex-shrink: 0;
+    flex-direction: column; align-items: center; padding: 12px 0; overflow-y: auto;
+  }
+  .app-shell.menu-left .df-grip { margin-bottom: 8px; }
+  .app-shell.menu-left .df-g { flex-direction: column; }
+  .app-shell.menu-left .df-gl { margin: 4px 0 3px; }
+  .app-shell.menu-left .df-sep { width: 40px; height: 1px; margin: 8px 0; }
+  .app-shell.menu-left .df-sep-fin { margin-top: auto; }
+  .app-shell.menu-left .df-k { width: 66px; }
+}
+/* Pantalla completa de la vista dividida: el dock queda, más pegado a los bordes */
+body.vd-completa .app-shell.menu-left .dock-fichas { top: 8px; height: calc(100vh - 16px); }
+body.vd-completa .app-shell.menu-bottom .dock-fichas { bottom: 8px; }
