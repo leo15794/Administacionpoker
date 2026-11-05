@@ -3247,3 +3247,56 @@ body {
 /* Pantalla completa de la vista dividida: el dock queda, más pegado a los bordes */
 body.vd-completa .app-shell.menu-left .dock-fichas { top: 8px; height: calc(100vh - 16px); }
 body.vd-completa .app-shell.menu-bottom .dock-fichas { bottom: 8px; }
+
+/* ---------- Rediseño "vidrio" — etapa 3: celular (05/11/2026, mockup 78) ----------
+   La barra de abajo del admin pasa a ser un dock flotante de 5 fichas (la activa sobresale con el canto punteado) y "Más" abre una hoja
+   con todas las secciones como fichas. */
+.mas-velo, .mas-hoja { display: none; }
+@media (max-width: 768px) {
+  .mobile-topbar { background: var(--sidebar-bg); border-bottom-color: var(--glass-border); backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); }
+  .mobile-topbar .brand-mark { width: 34px; height: 34px; border-radius: 11px; font-size: 13px; }
+  .bottom-nav {
+    left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 28px; padding: 8px 4px 9px; justify-content: space-around;
+    background: var(--sidebar-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);
+  }
+  .bottom-nav-item { font-size: 10px; }
+  .bottom-nav-item span { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bottom-nav-item i {
+    width: 42px; height: 42px; border-radius: 999px; display: grid; place-items: center; font-style: normal;
+    background: var(--panel-2); color: var(--text); position: relative; transition: all 0.15s ease;
+  }
+  .bottom-nav-item i svg { width: 19px; height: 19px; }
+  .bottom-nav-item.active { color: var(--text); font-weight: 800; }
+  .bottom-nav-item.active i {
+    width: 52px; height: 52px; margin-top: -18px;
+    background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 10px 22px rgba(var(--accent-rgb), 0.45);
+  }
+  .bottom-nav-item.active i::before { content: ""; position: absolute; inset: 3px; border-radius: 999px; border: 2px dashed rgba(255, 255, 255, 0.55); }
+  .app-shell:has(.bottom-nav) .main { padding-bottom: 120px; }
+
+  .mas-velo { display: block; position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px); }
+  :root[data-theme="light"] .mas-velo { background: rgba(20, 40, 30, 0.25); }
+  .mas-hoja {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-height: 86vh; overflow-y: auto;
+    border-radius: 28px 28px 0 0; padding: 12px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg); border-top: 1px solid var(--glass-border); box-shadow: 0 -20px 40px rgba(0, 0, 0, 0.25);
+    animation: mas-sube 0.18s ease-out;
+  }
+  @keyframes mas-sube { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .mas-asa { width: 44px; height: 5px; border-radius: 9px; background: var(--border-strong); margin: 0 auto 12px; }
+  .mas-hoja h3 { margin: 0; font-size: 17px; font-weight: 800; }
+  .mas-gr { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); margin: 16px 0 8px; }
+  .mas-fichas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 6px; }
+  .mas-k { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; color: var(--text-dim); text-decoration: none; text-align: center; line-height: 1.2; }
+  .mas-k i { width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center; font-style: normal; background: var(--panel-2); color: var(--text); position: relative; }
+  .mas-k i::before { content: ""; position: absolute; inset: 3px; border-radius: 999px; border: 2px dashed rgba(var(--accent-rgb), 0.35); }
+  .mas-k i svg { width: 21px; height: 21px; }
+  .mas-k.active { color: var(--text); font-weight: 800; }
+  .mas-k.active i { background: var(--accent-grad); color: var(--accent-ink); }
+  .mas-k.active i::before { border-color: rgba(255, 255, 255, 0.55); }
+  .mas-pie { display: flex; gap: 10px; margin-top: 20px; }
+  .mas-pie button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--panel-2); border: 0; border-radius: 14px; padding: 12px 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; }
+  .mas-pie svg { width: 16px; height: 16px; }
+}

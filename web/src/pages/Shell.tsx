@@ -245,6 +245,8 @@ const NOMBRE_CORTO: Record<string, string> = {
   wallet: "Wallet", garantias: "Garantías", proveedores: "Proveed.", supervisores: "Superv.", cuentasAgentes: "Agentes",
   cuentasSocios: "Socios", comisionesReferidos: "Referidos", resumenClub: "Por club", rodeo: "Rodeo", resumenFinanciero: "Financiero",
 };
+// Las 4 fichas fijas del dock en celular (la quinta es "Más").
+const ACCESOS_CELULAR = ["resumen", "cierres", "supervisores", "wallet"];
 // Secciones que se pueden poner en cada panel de la vista dividida.
 const SECCIONES_DIVIDIDA = NAV_ITEMS.map((i) => ({ to: i.to, label: i.label }));
 const iconoDividir = (
@@ -313,6 +315,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
   // colapsar-a-íconos de escritorio, persistido en localStorage): este es un on/off simple,
   // nunca persistido, que arranca siempre cerrado y se cierra solo al navegar.
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [masAbierto, setMasAbierto] = useState(false);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [navOrder, setNavOrder] = useState<string[]>(getInitialNavOrder);
   const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>(getInitialGroupsOpen);
@@ -400,6 +403,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
 
   useEffect(() => {
     setMobileOpen(false);
+    setMasAbierto(false);
   }, [location.pathname]);
 
   function toggleTheme() {
@@ -608,9 +612,13 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
         </div>
       </header>
       <div className="mobile-topbar">
-        <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
-          {icon.menu}
-        </button>
+        {/* El admin navega con el dock de abajo + "Más"; los portales siguen con el cajón. */}
+        {role !== "ADMIN" && (
+          <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
+            {icon.menu}
+          </button>
+        )}
+        {role === "ADMIN" && <div className="brand-mark" aria-hidden="true">P</div>}
         <div className="brand-text">
           <div className="t1">Poker Gestión</div>
           <div className="t2">{rolLabel}</div>
@@ -781,16 +789,59 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       {/* (19/10/2026, pedido de Leo, mockup aprobado) Barra inferior SOLO en celular y SOLO para el
           admin: 4 accesos de uso diario + "Más", que abre el mismo menú lateral de siempre (que
           sigue teniendo los ~18 ítems). Se oculta por CSS arriba de 768px (ver .bottom-nav). */}
+      {/* Rediseño (05/11/2026, mockup 78): en celular la barra pasa a ser un dock de 5 fichas (la activa sobresale) y "Más" abre una hoja
+          con todas las secciones como fichas, más modo día/noche y salir. Reemplaza al cajón lateral para el admin. */}
       {role === "ADMIN" && (
         <nav className="bottom-nav" aria-label="Accesos rápidos">
-          <NavLink to="/dashboard" end className="bottom-nav-item">{icon.resumen}<span>Resumen</span></NavLink>
-          <NavLink to="/dashboard/agentes" className="bottom-nav-item">{icon.agentes}<span>Administración</span></NavLink>
-          <NavLink to="/dashboard/cierres" className="bottom-nav-item">{icon.cierres}<span>Cierres</span></NavLink>
-          <button type="button" className="bottom-nav-item" onClick={() => setMobileOpen(true)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-            <span>Más</span>
+          {ACCESOS_CELULAR.map((key) => {
+            const item = NAV_ITEMS.find((i) => i.key === key)!;
+            return (
+              <NavLink key={key} to={item.to} end={item.end} className="bottom-nav-item">
+                <i>{icon[item.icon]}</i>
+                <span>{NOMBRE_CORTO[key]}</span>
+              </NavLink>
+            );
+          })}
+          <button type="button" className={`bottom-nav-item ${masAbierto || !ACCESOS_CELULAR.includes(activeItem?.key ?? "") ? "active" : ""}`} onClick={() => setMasAbierto(true)}>
+            <i>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></svg>
+            </i>
+            <span>{!masAbierto && activeItem && !ACCESOS_CELULAR.includes(activeItem.key) ? NOMBRE_CORTO[activeItem.key] : "Más"}</span>
           </button>
         </nav>
+      )}
+      {role === "ADMIN" && masAbierto && (
+        <>
+          <div className="mas-velo" onClick={() => setMasAbierto(false)} />
+          <div className="mas-hoja" role="dialog" aria-label="Todas las secciones">
+            <div className="mas-asa" />
+            <h3>Todas las secciones</h3>
+            {NAV_GROUPS.map((grupo) => {
+              const keys = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);
+              if (keys.length === 0) return null;
+              return (
+                <Fragment key={grupo.key}>
+                  <div className="mas-gr">{grupo.label}</div>
+                  <div className="mas-fichas">
+                    {keys.map((key) => {
+                      const item = NAV_ITEMS.find((i) => i.key === key)!;
+                      return (
+                        <NavLink key={key} to={item.to} end={item.end} className="mas-k" onClick={() => setMasAbierto(false)}>
+                          <i>{icon[item.icon]}</i>
+                          <span>{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              );
+            })}
+            <div className="mas-pie">
+              <button type="button" onClick={toggleTheme}>{theme === "dark" ? icon.sun : icon.moon} {theme === "dark" ? "Modo día" : "Modo noche"}</button>
+              <button type="button" onClick={logout}>{icon.logout} Salir</button>
+            </div>
+          </div>
+        </>
       )}
       {role === "ADMIN" && avisosMontado && (
         <aside className={`np ${avisosCompleto ? "full" : "dock"}`} style={{ display: avisosAbierto ? "flex" : "none" }} aria-label="Enviar avisos">
