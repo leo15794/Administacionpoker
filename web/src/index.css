@@ -3103,3 +3103,79 @@ body.vd-completa .vd-barra { margin-bottom: 6px; }
 .sc-more { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: var(--accent); cursor: pointer; }
 .sc-tabla { overflow-x: auto; margin-top: 8px; }
 @media (max-width: 768px) { .sc-b { min-width: 100%; } .sc-op { display: none; } .sc-sem-h { padding: 12px; } }
+
+/* =====================================================================================================================
+   REDISEÑO "VIDRIO" — etapa 1 (05/11/2026, mockups 73–77 aprobados por Leo)
+   Fondo monocromático por modo (noche: azul marino → nuestro azul; día: menta → nuestro esmeralda) y las superficies
+   grandes (paneles, tarjetas, menú, modales) como vidrio translúcido con desenfoque. Inputs, desplegables y popovers
+   siguen sólidos (--panel) para que nada se lea "a través". Verde/rojo solo para plata; el dorado, detalle chico.
+   ===================================================================================================================== */
+:root {
+  --glass: rgba(13, 22, 40, 0.62);
+  --glass-strong: rgba(11, 18, 33, 0.82);
+  --glass-border: rgba(140, 180, 255, 0.12);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --panel: #111a2b;
+  --panel-2: #172238;
+  --panel-hover: #1e2b45;
+  --border: rgba(140, 180, 255, 0.12);
+  --border-strong: rgba(140, 180, 255, 0.22);
+  --sidebar-bg: rgba(8, 16, 32, 0.55);
+}
+:root[data-theme="light"] {
+  --glass: rgba(255, 255, 255, 0.78);
+  --glass-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.95);
+  --glass-shadow: 0 8px 26px rgba(11, 24, 18, 0.08);
+  --panel: #ffffff;
+  --panel-2: #eef6f1;
+  --panel-hover: #e2efe7;
+  --border: rgba(11, 24, 18, 0.09);
+  --border-strong: rgba(11, 24, 18, 0.16);
+  --sidebar-bg: rgba(255, 255, 255, 0.45);
+}
+body {
+  background:
+    radial-gradient(900px 650px at 6% 0%, rgba(68, 147, 248, 0.42) 0%, transparent 62%),
+    radial-gradient(800px 700px at 100% 100%, rgba(47, 125, 224, 0.30) 0%, transparent 60%),
+    radial-gradient(600px 480px at 70% 10%, rgba(90, 162, 255, 0.16) 0%, transparent 65%),
+    linear-gradient(140deg, #0a1a33 0%, #0b1730 45%, #081224 100%);
+  background-attachment: fixed;
+}
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(900px 650px at 6% 0%, rgba(45, 190, 133, 0.45) 0%, transparent 62%),
+    radial-gradient(800px 700px at 100% 100%, rgba(21, 122, 87, 0.36) 0%, transparent 60%),
+    radial-gradient(600px 480px at 70% 10%, rgba(110, 220, 170, 0.30) 0%, transparent 65%),
+    linear-gradient(140deg, #dff4ea 0%, #c6ebd9 50%, #a6dcc2 100%);
+  background-attachment: fixed;
+}
+@media (min-width: 769px) {
+  .app-shell, :root[data-theme="light"] .app-shell { background: transparent; }
+}
+/* Superficies de vidrio */
+.panel, .kpi-card, .wm-card, .saldo-card, .stat-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+.panel, .wm-card { border-radius: var(--radius); }
+.kpi-card { border-radius: 18px; }
+.kpi-card::before { display: none; }
+.stat-card { border-radius: 16px; }
+.saldo-card { border-radius: 16px; }
+.sidebar, .app-shell.menu-top .topnav, .np {
+  background: var(--sidebar-bg);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+.modal-box { background: var(--glass-strong); border-color: var(--glass-border); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 22px; }
+/* Botones y chips en forma de pastilla */
+.btn, .btn.small { border-radius: 999px; }
+.btn.secondary { background: var(--panel-2); border-color: var(--border); }
+.chip { border-radius: 999px; }
