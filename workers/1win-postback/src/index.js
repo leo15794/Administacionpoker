@@ -39,7 +39,8 @@ export default {
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
-      const q = url.searchParams;
+      // 1win manda el texto "null" cuando un macro esta vacio (ej. sub4=null, tx=null): se trata como vacio.
+      const q = { get: (k) => { const v = url.searchParams.get(k); return v === 'null' || v === 'undefined' ? null : v; } };
 
       // Autenticacion simple: el endpoint es publico, sin esto cualquiera puede inyectar eventos.
       if (!env.POSTBACK_SECRET || q.get('key') !== env.POSTBACK_SECRET) {
