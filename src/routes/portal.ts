@@ -16,6 +16,14 @@ import {
 } from "../repo/supervisores.js";
 import { getMiSocio } from "../repo/socios.js";
 import {
+  listarMisAgentes,
+  crearUsuarioAgente,
+  actualizarUsuarioAgente,
+  guardarAcuerdo,
+  cierresConAcuerdo,
+  acuerdosVigentesDelAgente,
+} from "../repo/supervisorAcuerdos.js";
+import {
   listSaldosProveedores,
   listCierresProveedor,
   listPagosProveedor,
@@ -81,12 +89,18 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
   // desglose por club y jugador, movimientos) en vez del saldo viejo -- ver repo/supervisores.ts getMiCuentaAgente.
   const cuentaPropia = (await agenteTieneCuentaPropia(agentId)).tiene ? await getMiCuentaAgente(agentId) : null;
 
+  // Acuerdo con su supervisor (05/11/2026): si el supervisor le cargó sus %, los cierres se le muestran calculados con esos %
+  // (su acuerdo con el supervisor), no con los nuestros. Sin ningún acuerdo cargado, sigue viendo lo de siempre.
+  const acuerdos = agent.rows[0].supervisor ? await acuerdosVigentesDelAgente(agentId) : [];
+  const cierres = acuerdos.length > 0 ? await cierresConAcuerdo(agentId, closings.rows) : closings.rows;
+
   res.json({
     agente: agent.rows[0],
     saldos: balances,
     movimientos,
     garantia: guarantee.rows[0] ?? null,
-    cierres: closings.rows,
+    cierres,
+    acuerdo_supervisor: acuerdos.length > 0 ? { supervisor: agent.rows[0].supervisor, clubes: acuerdos } : null,
     adelantos: adelantos.rows,
     cuenta: cuentaPropia,
   });
@@ -467,6 +481,84 @@ portalRouter.get("/mi-proveedor/cierres/:id/detalle", requireAuth, async (req: A
 // req.user!.agentId!, nunca a un :id de la URL. El lado admin (listar pendientes de todos,
 // marcar como enviada con el link de pago) vive en routes/supervisores.ts.
 // ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// "Mis agentes" del supervisor (05/11/2026, pedido de Leo): crea y maneja el login de sus agentes y les pone sus %
+// (sistema, rakeback y rebate por club). Esos % son un acuerdo entre el supervisor y su agente: no cambian los cierres ni
+// lo que le acreditamos al supervisor -- solo lo que ve el agente en su portal (ver repo/supervisorAcuerdos.ts). Siempre
+// atado al supervisor del login; el agente de la URL se valida contra agents.supervisor.
+// ---------------------------------------------------------------------------------------------
+function soloSupervisor(req: AuthedRequest, res: any): string | null {
+  if (req.user!.role !== "SUPERVISOR" || !req.user!.agentId) {
+    res.status(403).json({ error: "Esta cuenta no es de tipo Supervisor." });
+    return null;
+  }
+  return req.user!.agentId;
+}
+
+portalRouter.get("/mi-supervision/mis-agentes", requireAuth, async (req: AuthedRequest, res) => {
+  const supId = soloSupervisor(req, res);
+  if (!supId) return;
+  res.json(await listarMisAgentes(supId));
+});
+
+const usuarioAgenteSchema = z.object({
+  email: z.string().trim().min(3, "El usuario tiene que tener al menos 3 caracteres."),
+  password: z.string().min(6, "La contraseña tiene que tener al menos 6 caracteres."),
+});
+portalRouter.post("/mi-supervision/mis-agentes/:agentId/usuario", requireAuth, async (req: AuthedRequest, res) => {
+  const supId = soloSupervisor(req, res);
+  if (!supId) return;
+  const parsed = usuarioAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.status(201).json(await crearUsuarioAgente(supId, req.params.agentId, parsed.data.email, parsed.data.password));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const cambioUsuarioAgenteSchema = z.object({
+  password: z.string().min(6, "La contraseña tiene que tener al menos 6 caracteres.").optional(),
+  active: z.boolean().optional(),
+});
+portalRouter.patch("/mi-supervision/mis-agentes/:agentId/usuario", requireAuth, async (req: AuthedRequest, res) => {
+  const supId = soloSupervisor(req, res);
+  if (!supId) return;
+  const parsed = cambioUsuarioAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.json(await actualizarUsuarioAgente(supId, req.params.agentId, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const acuerdoSchema = z.object({
+  clubId: z.string().min(1),
+  system: z.enum(["PREPAGO", "WIN_LOSE"]),
+  rakebackPct: z.number().min(0).max(100),
+  rebatePct: z.number().min(0).max(100),
+});
+portalRouter.put("/mi-supervision/mis-agentes/:agentId/acuerdo", requireAuth, async (req: AuthedRequest, res) => {
+  const supId = soloSupervisor(req, res);
+  if (!supId) return;
+  const parsed = acuerdoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Revisá los %: van entre 0 y 100." });
+  try {
+    // En la pantalla se cargan en % (ej. 30); se guardan como fracción (0,30), igual que nuestros deals.
+    res.json(
+      await guardarAcuerdo(
+        supId,
+        req.params.agentId,
+        { clubId: parsed.data.clubId, system: parsed.data.system, rakebackPct: parsed.data.rakebackPct / 100, rebatePct: parsed.data.rebatePct / 100 },
+        req.user!.email
+      )
+    );
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 const crearSolicitudRetiroSchema = z.object({
   amount: z.number().positive(),
   nota: z.string().nullable().optional(),

@@ -161,6 +161,13 @@ export const api = {
   // Vista del rol Supervisor: agentes a cargo + rakeback centralizado (placeholder mínimo
   // hasta tener las reglas de negocio completas del rol).
   miSupervision: () => request("/portal/mi-supervision"),
+  misAgentesSupervisor: () => request("/portal/mi-supervision/mis-agentes"),
+  crearUsuarioMiAgente: (agentId: string, data: { email: string; password: string }) =>
+    request(`/portal/mi-supervision/mis-agentes/${agentId}/usuario`, { method: "POST", body: JSON.stringify(data) }),
+  cambiarUsuarioMiAgente: (agentId: string, data: { password?: string; active?: boolean }) =>
+    request(`/portal/mi-supervision/mis-agentes/${agentId}/usuario`, { method: "PATCH", body: JSON.stringify(data) }),
+  guardarAcuerdoMiAgente: (agentId: string, data: { clubId: string; system: "PREPAGO" | "WIN_LOSE"; rakebackPct: number; rebatePct: number }) =>
+    request(`/portal/mi-supervision/mis-agentes/${agentId}/acuerdo`, { method: "PUT", body: JSON.stringify(data) }),
   // Cierre semanal consolidado de agentes a cargo, en solo lectura para el propio supervisor
   // (14/10/2026) -- mismos endpoints que usa el admin en Supervisores, pero atados al login.
   // Calculadora de cierre del portal (21/10/2026): simula con la fórmula real, sin guardar nada.

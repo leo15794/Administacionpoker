@@ -43,7 +43,10 @@ export default function MiCuenta() {
   const variosClubes = data.saldos.length > 1;
   const cierres: any[] = data.cierres ?? [];
   const ultimos = cierres.slice(0, 4);
-  const sumaUltimos = ultimos.reduce((s, c) => s + Number(c.final_closing), 0);
+  const sumaUltimos = ultimos.reduce((s, c) => s + Number(c.final_closing ?? 0), 0);
+  // Acuerdo con su supervisor (05/11/2026): con % cargados por el supervisor, los cierres llegan ya calculados con esos %.
+  const acuerdo = data.acuerdo_supervisor as { supervisor: string; clubes: any[] } | null;
+  const pctTxt = (n: number) => `${(Math.round(Number(n) * 10000) / 100).toLocaleString("es-AR")}%`;
   const maxAbs = Math.max(...data.saldos.map((b: any) => Math.abs(saldoNeto(b))), 1);
   const sistema = data.agente.default_system === "PREPAGO" ? "Prepago" : "Win/Lose";
 
@@ -81,9 +84,41 @@ export default function MiCuenta() {
         <div className="muted">Todavía no hay cierres semanales cargados.</div>
       ) : (
         cierres.map((c: any) => (
-          <PortalCard key={c.id} titulo={`${dateShort(c.week_start).slice(0, 5)} al ${dateShort(c.week_end).slice(0, 5)}`} monto={Number(c.final_closing)} izq={c.club_name} der="Cierre final" />
+          <PortalCard
+            key={c.id}
+            titulo={`${dateShort(c.week_start).slice(0, 5)} al ${dateShort(c.week_end).slice(0, 5)}`}
+            monto={Number(c.final_closing ?? 0)}
+            izq={c.club_name}
+            der={
+              acuerdo
+                ? c.sin_acuerdo
+                  ? "Tu supervisor no cargó tus % en este club"
+                  : `Resultado ${usdCents(c.result)} · rakeback ${pctTxt(c.rakeback_pct)} = ${usdCents(c.rakeback)}${Number(c.rebate) ? ` · rebate ${usdCents(c.rebate)}` : ""}`
+                : "Cierre final"
+            }
+          />
         ))
       )}
+    </PortalPane>
+  );
+
+  const acuerdoPane = acuerdo && (
+    <PortalPane activa titulo={`Tu acuerdo con ${acuerdo.supervisor}`}>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Los % que te puso tu supervisor. Con esto se calcula tu cierre de cada semana.</div>
+      {acuerdo.clubes.map((c: any) => (
+        <div key={c.club_id} className="pt-card">
+          <div className="b">
+            <div className="t1">
+              <span className="n">{c.club_name}</span>
+              <span className="pill">{c.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span>
+            </div>
+            <div className="t2">
+              <span>Rakeback {pctTxt(c.rakeback_pct)}</span>
+              <span>Rebate {pctTxt(c.rebate_pct)}</span>
+            </div>
+          </div>
+        </div>
+      ))}
     </PortalPane>
   );
 
@@ -147,7 +182,12 @@ export default function MiCuenta() {
             <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={data.agente.default_system === "PREPAGO" ? "PREPAGO" : "WIN_LOSE"} perspectiva="agente" />
           </>
         }
-        right={movimientosPane}
+        right={
+          <>
+            {acuerdoPane}
+            {movimientosPane}
+          </>
+        }
       />
     </div>
   );
