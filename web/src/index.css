@@ -3300,3 +3300,30 @@ body.vd-completa .app-shell.menu-bottom .dock-fichas { bottom: 8px; }
   .mas-pie button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--panel-2); border: 0; border-radius: 14px; padding: 12px 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; }
   .mas-pie svg { width: 16px; height: 16px; }
 }
+
+/* ---------- Rediseño "vidrio" — etapa 4: TeamBack Afiliados (05/11/2026, mockup 79) ----------
+   Mismo vidrio y mismo dock, con su propia marca: de noche en verdes (no azul) y el dorado para lo que está por cobrar. De día, el verde de siempre. */
+:root[data-marca="tb"]:not([data-theme="light"]) {
+  --accent: #2dbe85;
+  --accent-rgb: 45, 190, 133;
+  --accent-grad: linear-gradient(135deg, #34d399 0%, #16946a 100%);
+  --accent-ink: #04150e;
+  --bg: #07170f;
+  --glass: rgba(10, 30, 22, 0.62);
+  --glass-strong: rgba(8, 24, 17, 0.84);
+  --glass-border: rgba(140, 255, 200, 0.11);
+  --panel: #0d1f17;
+  --panel-2: #12291f;
+  --panel-hover: #183528;
+  --border: rgba(140, 255, 200, 0.11);
+  --border-strong: rgba(140, 255, 200, 0.2);
+  --sidebar-bg: rgba(6, 20, 14, 0.55);
+}
+:root[data-marca="tb"]:not([data-theme="light"]) body {
+  background:
+    radial-gradient(900px 650px at 6% 0%, rgba(45, 190, 133, 0.36) 0%, transparent 62%),
+    radial-gradient(800px 700px at 100% 100%, rgba(22, 148, 106, 0.30) 0%, transparent 60%),
+    radial-gradient(600px 480px at 70% 10%, rgba(198, 166, 107, 0.10) 0%, transparent 65%),
+    linear-gradient(140deg, #06140e 0%, #071a12 50%, #04100b 100%);
+  background-attachment: fixed;
+}
