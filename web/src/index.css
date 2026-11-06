@@ -3376,3 +3376,114 @@ body.vd-completa .app-shell.menu-bottom .dock-fichas { bottom: 8px; }
     linear-gradient(140deg, #06140e 0%, #071a12 50%, #04100b 100%);
   background-attachment: fixed;
 }
+
+/* =====================================================================================================================
+   IDENTIDAD (06/11/2026, mockup 83 aprobado por Leo, "para todos los lugares"): que el panel deje de verse como una plantilla.
+   Lo global (pega en todas las pantallas): cifras tabulares, paño sutil de fondo, títulos más firmes, el "US$" chico al lado de los montos
+   grandes, avatares como fichas de póker, filas sin rayas que se levantan al pasar el mouse y botones de fila que aparecen al pasar.
+   Lo de cada pantalla usa las piezas de components/Identidad.tsx: chips de contexto, "Para hacer", barra de saldo y portada.
+   ===================================================================================================================== */
+body { font-variant-numeric: tabular-nums; }
+/* paño: ruido muy suave encima del degradé, para que el fondo no sea plástico */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.06; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+:root[data-theme="light"] body::before { opacity: 0.08; mix-blend-mode: multiply; }
+
+/* títulos de pantalla */
+.topbar { align-items: flex-end; margin-bottom: 20px; }
+.topbar h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0; }
+
+/* chips de contexto debajo del título */
+.ctx-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+.ctx-chip {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-dim); background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid transparent; border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 6px; line-height: 1.2;
+}
+.ctx-chip svg { width: 13px; height: 13px; }
+.ctx-chip.fuerte { color: var(--text); background: var(--panel); border-color: var(--border); }
+.ctx-chip.alerta { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.ctx-chip.click { cursor: pointer; } .ctx-chip.click:hover { border-color: var(--accent); }
+.ctx-pd { width: 7px; height: 7px; border-radius: 9px; background: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); }
+.palo { color: var(--accent); font-size: 0.85em; margin-right: 2px; } .palo.r { color: var(--red); }
+
+/* monto protagonista: más grande y apretado, con la moneda chica arriba */
+.cifra .cur { display: inline-block; height: 1.15em; line-height: 1.15em; margin-right: 0.22em; }
+.wm-big { font-size: 56px; letter-spacing: -0.045em; line-height: 1; margin: 8px 0 8px; }
+.wm-big .cur, .kpi-card .value .cur, .saldo-big .cur { font-size: 0.42em; letter-spacing: -0.01em; opacity: 0.8; margin-right: 0.35em; line-height: 1.6; }
+.wm-saldo > div:first-child > .wm-lbl::before { content: "♠"; color: var(--accent); margin-right: 6px; letter-spacing: 0; }
+.wm-saldo { position: relative; overflow: hidden; }
+/* conteos al costado del protagonista: separados por líneas finas en vez de flotar sueltos */
+.wm-saldo .ag-resumen > div + div { border-left: 1px solid var(--border); padding-left: 22px; }
+
+/* avatares como fichas: canto punteado; el tono va rotando entre filas (familia del acento + dorado) */
+.sp-fila .av, .ag-fila .av, .wm-av, .ma-av {
+  position: relative; color: #fff !important; font-size: 11.5px !important; letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #5aa2ff, #2f7de0) !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+.sp-fila .av::before, .ag-fila .av::before, .wm-av::before, .ma-av::before {
+  content: ""; position: absolute; inset: 3px; border-radius: 999px; border: 2px dashed rgba(255, 255, 255, 0.5); pointer-events: none;
+}
+:nth-child(4n+2) > .who .av, :nth-child(4n+2) .wm-av { background: linear-gradient(135deg, #7dc4ff, #3f8fd8) !important; }
+:nth-child(4n+3) > .who .av, :nth-child(4n+3) .wm-av { background: linear-gradient(135deg, #3b6fb8, #22487e) !important; }
+:nth-child(4n) > .who .av, :nth-child(4n) .wm-av { background: linear-gradient(135deg, #d6b77a, #a8864a) !important; color: #1a1307 !important; }
+:root[data-theme="light"] .sp-fila .av, :root[data-theme="light"] .ag-fila .av, :root[data-theme="light"] .wm-av, :root[data-theme="light"] .ma-av { background: linear-gradient(135deg, #1e9a6e, #146b4c) !important; }
+:root[data-theme="light"] :nth-child(4n+2) > .who .av, :root[data-theme="light"] :nth-child(4n+2) .wm-av { background: linear-gradient(135deg, #4fc497, #23946a) !important; }
+:root[data-theme="light"] :nth-child(4n+3) > .who .av, :root[data-theme="light"] :nth-child(4n+3) .wm-av { background: linear-gradient(135deg, #0e5a40, #073826) !important; }
+:root[data-theme="light"] :nth-child(4n) > .who .av, :root[data-theme="light"] :nth-child(4n) .wm-av { background: linear-gradient(135deg, #d6b77a, #a8864a) !important; }
+/* en rojo (debe / saldo negativo) la ficha es roja, en cualquier fila */
+.sp-fila .who .av.n, .ag-fila .who .av.n, .wm-av.n, :root[data-theme="light"] .sp-fila .who .av.n, :root[data-theme="light"] .ag-fila .who .av.n, :root[data-theme="light"] .wm-av.n,
+:nth-child(n) > .who .av.n, :nth-child(n) .wm-av.n { background: linear-gradient(135deg, #f0656b, #b8323a) !important; color: #fff !important; }
+
+/* filas de lista: sin rayas, redondeadas y se levantan al pasar el mouse */
+.sp-fila, .ag-fila, .wm-fila { border-top: 0; border-radius: 14px; transition: background 0.12s ease, box-shadow 0.12s ease; }
+.sp-fila + .sp-fila, .ag-fila + .ag-fila, .wm-fila + .wm-fila { margin-top: 2px; }
+.sp-fila:hover, .ag-fila:hover, .wm-fila:hover { background: var(--panel); box-shadow: 0 0 0 1px var(--border), 0 6px 18px rgba(0, 0, 0, 0.12); }
+.sp-th, .ag-th, .wm-th { color: var(--text-faint); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+/* el botón de cada fila ("Ver cuenta") aparece al pasar el mouse; en pantallas táctiles queda siempre */
+@media (hover: hover) {
+  .sp-fila > .btn.secondary { opacity: 0; transform: translateX(4px); transition: opacity 0.12s ease, transform 0.12s ease; }
+  .sp-fila:hover > .btn.secondary { opacity: 1; transform: none; }
+}
+/* tablas comunes: rayas más suaves */
+td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
+
+/* barra de saldo detrás del monto */
+.barra-saldo { position: relative; display: inline-flex; justify-content: flex-end; align-items: center; width: 100%; padding: 6px 10px; }
+.barra-saldo .bs-bg { position: absolute; right: 0; top: 4px; bottom: 4px; border-radius: 10px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text-dim) 14%, transparent)); }
+.barra-saldo .bs-bg.pos { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--green) 22%, transparent)); }
+.barra-saldo .bs-bg.neg { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--red) 20%, transparent)); }
+.barra-saldo .bs-v { position: relative; }
+
+/* portada: protagonista + "Para hacer" */
+.portada { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); gap: 14px; align-items: stretch; margin-bottom: 14px; }
+.portada > .portada-main > .wm-card, .portada > .wm-card { margin-bottom: 0; height: 100%; }
+.portada-main .wm-saldo { flex-direction: column; align-items: flex-start; justify-content: space-between; }
+.portada-main .wm-saldo .ag-resumen { width: 100%; justify-content: flex-start; border-top: 1px solid var(--border); padding-top: 12px; }
+@media (max-width: 900px) { .portada { grid-template-columns: 1fr; } }
+
+.ph-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 16px 10px; }
+.ph-t { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 800; padding: 0 4px 6px; }
+.ph-cnt { font-size: 11px; font-weight: 800; background: var(--gold); color: #1a1307; border-radius: 999px; padding: 1px 8px; }
+.ph-it { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 14px; }
+.ph-it + .ph-it { border-top: 1px solid var(--border); border-radius: 0 0 14px 14px; }
+.ph-it.hot { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 38%, transparent); }
+.ph-it.hot + .ph-it { border-top: 0; }
+.ph-tx { min-width: 0; } .ph-tx b { display: block; font-size: 13px; } .ph-tx small { display: block; font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-ic { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 13px; }
+.ph-ic.urgente { background: var(--amber); color: #1a1307; }
+.ph-ic.deuda { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.ph-ic.info { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ph-m { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.ph-m .neg { color: var(--red); }
+.ph-go { font: inherit; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 5px 11px; cursor: pointer; border: 0; background: var(--accent-grad); color: var(--accent-ink); }
+.ph-go.s { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+.ph-vacio { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-dim); padding: 10px; }
+.ph-ok { width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center; background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); font-weight: 800; }
+@media (max-width: 768px) {
+  .wm-big { font-size: 44px; }
+  .wm-saldo .ag-resumen > div + div { border-left: 0; padding-left: 0; }
+  .topbar h2 { font-size: 26px; }
+}

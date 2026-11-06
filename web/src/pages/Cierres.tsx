@@ -8,6 +8,7 @@ import ActionsMenu from "../components/ActionsMenu";
 import Modal from "../components/Modal";
 import Ayuda from "../components/Ayuda";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
+import { Contexto, IconoSemana } from "../components/Identidad";
 
 // Monto en USD con color segun signo (verde positivo, rojo negativo) y sin salto de linea
 // entre el "-" y el numero (Intl mete un espacio despues del simbolo de moneda que, en una
@@ -270,6 +271,14 @@ export default function Cierres() {
       <div className="topbar">
         <div>
           <h2>Cierres semanales <Ayuda>Clave idempotente (agente + club + semana) — un cierre nunca se aplica dos veces (BIT-001).</Ayuda></h2>
+          <Contexto
+            chips={[
+              grupoActivo && { texto: `Semana ${dateShort(grupoActivo.weekStart)} – ${dateShort(grupoActivo.weekEnd)}`, tono: "fuerte", icono: IconoSemana },
+              filasSemana.length > 0 && { texto: `${filasSemana.length} cierres · ${clubesDeLaSemana.length} club${clubesDeLaSemana.length === 1 ? "" : "es"}` },
+              gruposPorSemana.length > 0 && { texto: `${gruposPorSemana.length} semanas cargadas` },
+              filasRaras.length > 0 && { texto: `${filasRaras.length} con fechas raras`, tono: "alerta", onClick: () => setSemanaSel(RAROS) },
+            ]}
+          />
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn secondary" onClick={() => setShowImport((v) => !v)}>{showImport ? "Cerrar importador" : "Importar archivo"}</button>

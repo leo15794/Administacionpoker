@@ -6,6 +6,7 @@ import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
 import Ayuda, { Leyenda } from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
@@ -226,9 +227,18 @@ export default function Proveedores() {
         <div>
           <h2>Proveedores <Ayuda>Cuentas separadas de Agentes: alguien nos entrega un % del rake TOTAL de un club (no de sus propios
             jugadores), ej. Manzur en Fénix GG.</Ayuda></h2>
+          <Contexto
+            chips={[
+              proveedores && { texto: `${proveedores.length} proveedor${proveedores.length === 1 ? "" : "es"}` },
+              solicitudes && solicitudes.length > 0 && {
+                texto: `${solicitudes.length} retiro${solicitudes.length === 1 ? "" : "s"} pendiente${solicitudes.length === 1 ? "" : "s"}`,
+                tono: "alerta",
+              },
+              solicitudes && solicitudes.length === 0 && { texto: "Sin retiros pendientes" },
+            ]}
+          />
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
           {!sel && (
             <>
               <button className="btn secondary" onClick={() => setShowPago(true)} disabled={proveedores.length === 0}>+ Pago / cobro</button>

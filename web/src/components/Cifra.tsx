@@ -31,10 +31,15 @@ function Digito({ v, idx, retraso }: { v: number; idx: number; retraso: number }
 }
 
 export default function Cifra({ texto, retraso = 0 }: { texto: string; retraso?: number }) {
-  const chars = [...String(texto)];
+  // (06/11/2026, mockup 83) la moneda va aparte ("US$" chico al lado del número grande); el signo queda pegado al número
+  const m = /^([−-]?)(US\$|\$|ARS|USDT)\s?/.exec(String(texto));
+  const cur = m ? m[2] : "";
+  const resto = m ? m[1] + String(texto).slice(m[0].length) : String(texto);
+  const chars = [...resto];
   const n = chars.length;
   return (
     <span className="cifra" role="img" aria-label={texto}>
+      {cur && <span className="cur" aria-hidden="true">{cur}</span>}
       {chars.map((ch, i) =>
         /\d/.test(ch) ? (
           // la clave cuenta desde la derecha: si aparece un dígito más a la izquierda (999 -> 1.000) los demás conservan su columna

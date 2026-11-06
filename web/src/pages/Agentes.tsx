@@ -5,6 +5,7 @@ import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
+import { Contexto, ParaHacer, BarraSaldo, Portada, type ItemParaHacer } from "../components/Identidad";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
@@ -217,6 +218,9 @@ export default function Agentes() {
     });
   const saldoNetoTotal = activos.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
   const saldoFiltrado = agentesFiltrados.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0);
+  // (06/11/2026, mockup 83) lo pendiente de Administración y el tope para la barra de saldo
+  const enRojo = activos.filter((a) => Number(a.saldo_total ?? 0) < -0.004);
+  const maxSaldoAg = Math.max(0, ...activos.map((a) => Math.abs(Number(a.saldo_total ?? 0))));
   const resumen = {
     conSaldo: activos.filter(tieneSaldo).length,
     enCero: activos.filter((a) => !tieneSaldo(a)).length,
@@ -266,12 +270,38 @@ export default function Agentes() {
       : [{ label: "Dar de baja", onClick: () => darDeBajaAgente(a) }]),
   ];
 
+  const paraHacerAg: ItemParaHacer[] = [
+    ...(enRojo.length > 0
+      ? [{
+          clave: "rojo",
+          tipo: "deuda" as const,
+          titulo: `${enRojo.length} agente${enRojo.length === 1 ? "" : "s"} en rojo`,
+          sub: [...enRojo].sort((x, y) => Number(x.saldo_total) - Number(y.saldo_total)).slice(0, 3).map((a) => a.name).join(", ") + (enRojo.length > 3 ? "…" : ""),
+          monto: usd(Math.abs(enRojo.reduce((acc, a) => acc + Number(a.saldo_total ?? 0), 0))),
+          montoNeg: true,
+          accion: { texto: "Ver", onClick: () => { setTab("lista"); setVista("conSaldo"); } },
+        }]
+      : []),
+    ...(resumen.sinDeal > 0
+      ? [{ clave: "sindeal", tipo: "urgente" as const, icono: "%", titulo: `${resumen.sinDeal} sin deal`, sub: "no se les puede calcular el cierre", accion: { texto: "Cargar", onClick: () => { setTab("lista"); setVista("sinDeal"); } } }]
+      : []),
+    ...(resumen.sinId > 0
+      ? [{ clave: "sinid", tipo: "info" as const, icono: "#", titulo: `${resumen.sinId} sin ID de plataforma`, sub: "no se cruzan al importar", accion: { texto: "Ver", onClick: () => { setTab("lista"); setVista("sinId"); } } }]
+      : []),
+  ];
+
   return (
     <div>
       <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
           <h2>Administración</h2>
-          <div className="muted" title="Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050).">Agentes, clubes, deals y reglas.</div>
+          <Contexto
+            chips={[
+              { texto: `${activos.length} agentes activos · ${clubes.length} clubes`, title: "Catálogo abierto: cualquier agente puede operar en cualquier club activo (BIT-050)." },
+              resumen.sinDeal > 0 && { texto: `${resumen.sinDeal} sin deal`, tono: "alerta", onClick: () => { setTab("lista"); setVista("sinDeal"); } },
+              resumen.sinId > 0 && { texto: `${resumen.sinId} sin ID de plataforma`, onClick: () => { setTab("lista"); setVista("sinId"); } },
+            ]}
+          />
         </div>
         {/* "+ Nuevo club" / "+ Nuevo agente" separadas de las pestañas (05/10/2026). En celular el club va
             dentro de un menú ⋯ para que el encabezado no ocupe media pantalla. */}
@@ -317,6 +347,7 @@ export default function Agentes() {
               cajón lateral (hoja inferior en celular) y tarjetas por agente en celular. Mismas acciones,
               mismos datos. */}
           <div className="wm">
+            <Portada lado={<ParaHacer items={paraHacerAg} />}>
             <WmSaldoCard etiqueta="SALDO NETO TOTAL" monto={usd(saldoNetoTotal)} signo={saldoNetoTotal > 0.004 ? "pos" : saldoNetoTotal < -0.004 ? "neg" : ""} sub={`${activos.length} agentes activos`}>
               <WmConteos items={[
                 { etiqueta: "CON SALDO", valor: resumen.conSaldo },
@@ -325,6 +356,7 @@ export default function Agentes() {
                 { etiqueta: "SIN ID DE PLATAFORMA", valor: resumen.sinId },
               ]} />
             </WmSaldoCard>
+            </Portada>
 
             <div className="wm-card">
               <div className="wm-cab">
@@ -415,7 +447,7 @@ export default function Agentes() {
                           {a.garantia_monto != null ? `${usd(a.garantia_consumida)} / ${usd(a.garantia_monto)}` : "—"}
                         </span>
                       )}
-                      <span className={`sl ${saldo > 0 ? "p" : saldo < 0 ? "n" : ""}`}>{usd(a.saldo_total)}</span>
+                      <span className={`sl ${saldo > 0 ? "p" : saldo < 0 ? "n" : ""}`}><BarraSaldo valor={saldo} max={maxSaldoAg}>{usd(a.saldo_total)}</BarraSaldo></span>
                       <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                         <ActionsMenu items={itemsAgente(a)} />
                       </div>

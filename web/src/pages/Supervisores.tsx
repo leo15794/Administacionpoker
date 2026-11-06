@@ -9,6 +9,7 @@ import Ayuda from "../components/Ayuda";
 import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
+import { Contexto, ParaHacer, BarraSaldo, Portada, type ItemParaHacer } from "../components/Identidad";
 import { PcImporte, PcTotal, PcLista, PcResumen, fmtPc } from "../components/PagoPiezas";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
@@ -301,6 +302,32 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   // En la sección Agentes no hay agentes a cargo: se muestra el sistema de la cuenta.
   const subTxt = (x: any) => (agentesModo ? (esWinLose(x) ? "Win/Lose" : "Prepago") : cantAgentesTxt(x.n_sub));
   const quien = agentesModo ? "Agente" : "Supervisor";
+  // (06/11/2026, mockup 83) barra de saldo: tamaño de cada saldo frente al mayor de la lista que se ve
+  const maxSaldoLista = Math.max(0, ...listaVisible.map((x) => Math.abs(esWinLose(x) ? Number(x.cuenta_corriente) : saldoTotalSup(x))));
+  const irASolicitudes = () => document.getElementById("solicitudes-retiro")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const saldoDe = (x: any) => (esWinLose(x) ? Number(x.cuenta_corriente) : saldoTotalSup(x));
+  const nosDeben = supervisoresOrdenados.filter((x) => saldoDe(x) < -0.004);
+  const paraHacer: ItemParaHacer[] = [
+    ...(!agentesModo ? (solicitudes ?? []) : []).map((sol: any): ItemParaHacer => ({
+      clave: `ret-${sol.id}`,
+      tipo: "urgente",
+      titulo: `Retiro de ${sol.supervisor_name}`,
+      sub: `pedido ${dateShort(sol.requested_at)}${sol.nota ? ` · ${sol.nota}` : ""}`,
+      monto: usd(Number(sol.amount)),
+      accion: { texto: "Revisar", onClick: irASolicitudes },
+    })),
+    ...(nosDeben.length > 0
+      ? [{
+          clave: "nos-deben",
+          tipo: "deuda" as const,
+          titulo: `${nosDeben.length} cuenta${nosDeben.length === 1 ? "" : "s"} nos deben`,
+          sub: nosDeben.slice(0, 4).map((x) => x.name).join(", ") + (nosDeben.length > 4 ? "…" : ""),
+          monto: usd(Math.abs(nosDeben.reduce((acc, x) => acc + saldoDe(x), 0))),
+          montoNeg: true,
+          accion: { texto: "Ver", onClick: () => setTipoLista(nosDeben.some((x) => !esWinLose(x)) ? "prepago" : "winlose") },
+        }]
+      : []),
+  ];
   const movsVisibles = (movimientos ?? []).filter((m) => verRevertidos || m.status !== "REVERTIDO");
   const detalleClubesAgente = (s: any) => (
     <>
@@ -347,6 +374,17 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
           <h2>{agentesModo ? "Agentes" : "Supervisores"} <Ayuda>{agentesModo
               ? "Cuenta de cada agente individual: el cierre completo de cada semana, los descuentos del cierre, y los pagos y cobros en USDT. Reemplaza a Liquidaciones para los agentes que se activan acá."
               : "Cuenta consolidada: un supervisor con cuenta consolidada activada (ver Administración → editar agente) junta en un único saldo todo lo de los agentes que le reportan -- esos agentes dejan de acumular saldo propio."}</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${supervisoresOrdenados.length} cuenta${supervisoresOrdenados.length === 1 ? "" : "s"} · ${supervisoresPrepago.length} prepago · ${supervisoresWinLose.length} win/lose` },
+              !agentesModo && solicitudes && solicitudes.length > 0 && {
+                texto: `${solicitudes.length} retiro${solicitudes.length === 1 ? "" : "s"} pendiente${solicitudes.length === 1 ? "" : "s"}`,
+                tono: "alerta",
+                onClick: irASolicitudes,
+              },
+              !agentesModo && solicitudes && solicitudes.length === 0 && { texto: "Sin retiros pendientes" },
+            ]}
+          />
         </div>
         {agentesModo && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -354,35 +392,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
             <button className="btn" onClick={() => setShowActivar(true)}>+ Activar cuenta de un agente</button>
           </div>
         )}
-        {!agentesModo && solicitudes && solicitudes.length === 0 && <span className="pill">Sin solicitudes de retiro</span>}
       </div>
-
-      {solicitudes && solicitudes.length > 0 && (
-        <div className="panel" style={{ borderColor: "var(--gold)" }}>
-          <h3>Solicitudes de retiro pendientes <Ayuda>Lo que piden los supervisores desde "Mi Supervisión". Al marcarla como enviada se
-            registra la Descarga de siempre en su historial (misma mecánica que + Carga / Descarga /
-            Ajuste) con el link de pago asentado, para que puedan ver el trackeo reflejado en su
-            propio historial.</Ayuda></h3>
-          <div style={{ overflowX: "auto" }}>
-            <table>
-              <thead><tr><th>Supervisor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
-              <tbody>
-                {solicitudes.map((s) => (
-                  <SolicitudRetiroRow
-                    key={s.id}
-                    solicitud={s}
-                    clubes={clubes}
-                    onDone={() => {
-                      refreshSolicitudes();
-                      refrescarSeleccionado();
-                    }}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {supervisores.length === 0 ? (
         <div className="panel">
@@ -394,6 +404,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
         </div>
       ) : (
         <div className="wm">
+          <Portada lado={<ParaHacer items={paraHacer} />}>
           <WmSaldoCard
             etiqueta={tipoListaActual === "prepago" ? `SALDO TOTAL · ${agentesModo ? "AGENTES" : "SUPERVISORES"} PREPAGO` : `CUENTA CORRIENTE · ${agentesModo ? "AGENTES" : "SUPERVISORES"} WIN/LOSE`}
             monto={montoSignoSup(tipoListaActual === "prepago" ? supervisoresPrepago.reduce((acc, x) => acc + saldoTotalSup(x), 0) : supervisoresWinLose.reduce((acc, x) => acc + Number(x.cuenta_corriente), 0))}
@@ -415,6 +426,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               }
             />
           </WmSaldoCard>
+          </Portada>
 
           <div className="wm-card">
             <div className="wm-cab">
@@ -480,14 +492,14 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                     </div>
                     {win ? (
                       <>
-                        <span className={`t ${cc > 0.004 ? "p" : cc < -0.004 ? "r" : ""}`}>{montoSignoSup(cc)}</span>
+                        <span className={`t ${cc > 0.004 ? "p" : cc < -0.004 ? "r" : ""}`}><BarraSaldo valor={cc} max={maxSaldoLista}>{montoSignoSup(cc)}</BarraSaldo></span>
                         <span className="muted" style={{ fontSize: 12.5 }}>{estadoWinLose(cc)}</span>
                       </>
                     ) : (
                       <>
                         <span className="n">{montoSignoSup(Number(x.fichas_reales))}</span>
                         <span className={`n ${cc < -0.004 ? "r" : ""}`}>{montoSignoSup(cc)}</span>
-                        <span className={`t ${total > 0.004 ? "p" : total < -0.004 ? "r" : ""}`}>{montoSignoSup(total)}</span>
+                        <span className={`t ${total > 0.004 ? "p" : total < -0.004 ? "r" : ""}`}><BarraSaldo valor={total} max={maxSaldoLista}>{montoSignoSup(total)}</BarraSaldo></span>
                       </>
                     )}
                     <button className={`btn small ${seleccionado?.id === x.id ? "" : "secondary"}`} onClick={(e) => { e.stopPropagation(); abrirSupervisor(x); }}>
@@ -541,6 +553,33 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
           </div>
         </div>
       )}
+      {solicitudes && solicitudes.length > 0 && (
+        <div className="panel" id="solicitudes-retiro" style={{ borderColor: "var(--gold)" }}>
+          <h3>Solicitudes de retiro pendientes <Ayuda>Lo que piden los supervisores desde "Mi Supervisión". Al marcarla como enviada se
+            registra la Descarga de siempre en su historial (misma mecánica que + Carga / Descarga /
+            Ajuste) con el link de pago asentado, para que puedan ver el trackeo reflejado en su
+            propio historial.</Ayuda></h3>
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead><tr><th>Supervisor</th><th>Monto solicitado</th><th>Nota</th><th>Fecha</th><th></th></tr></thead>
+              <tbody>
+                {solicitudes.map((s) => (
+                  <SolicitudRetiroRow
+                    key={s.id}
+                    solicitud={s}
+                    clubes={clubes}
+                    onDone={() => {
+                      refreshSolicitudes();
+                      refrescarSeleccionado();
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
 
       {seleccionado && (
         <div id="cuenta-supervisor">
