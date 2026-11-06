@@ -503,9 +503,16 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               );
             })
           ) : (
-            <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} className="tn-item tn-solo">
-              {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : role === "SOCIO" ? "Mi cuenta de socio" : "Mi cuenta"}
-            </NavLink>
+            <>
+              <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} end className="tn-item tn-solo">
+                {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : role === "SOCIO" ? "Mi cuenta de socio" : "Mi cuenta"}
+              </NavLink>
+              {role === "SUPERVISOR" && (
+                <NavLink to="/mi-supervision/agentes" className="tn-item tn-solo">
+                  {icon.agentes} Mis agentes
+                </NavLink>
+              )}
+            </>
           )}
         </nav>
         <div className="tn-right">
@@ -612,7 +619,11 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               </button>
             </>
           ) : role === "SUPERVISOR" ? (
-            <NavLink to="/mi-supervision" className="nav-link" title="Mi supervisión">{icon.cuenta} Mi supervisión</NavLink>
+            <>
+              <NavLink to="/mi-supervision" end className="nav-link" title="Mi supervisión">{icon.cuenta} Mi supervisión</NavLink>
+              {/* Panel propio para manejar a sus agentes (06/11/2026, mockup 80): usuarios y % por club. */}
+              <NavLink to="/mi-supervision/agentes" className="nav-link" title="Mis agentes">{icon.agentes} Mis agentes</NavLink>
+            </>
           ) : role === "PROVEEDOR" ? (
             <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} Mi proveedor</NavLink>
           ) : role === "SOCIO" ? (

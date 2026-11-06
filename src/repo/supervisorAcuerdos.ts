@@ -84,6 +84,20 @@ export async function listarMisAgentes(supervisorAgentId: string) {
      WHERE valid_to IS NULL AND supervisor_agent_id = $1 AND agent_id = ANY($2::text[])`,
     [supervisorAgentId, ids]
   );
+  // Última semana de cada agente en cada club, calculada con el acuerdo (para "así ve su última semana" del panel del supervisor).
+  const ultimos = await pool.query(
+    `SELECT DISTINCT ON (wc.agent_id, wc.club_id) wc.*, c.name AS club_name
+     FROM weekly_closings wc JOIN clubs c ON c.id = wc.club_id
+     WHERE wc.status <> 'REVERTIDO' AND wc.agent_id = ANY($1::text[])
+     ORDER BY wc.agent_id, wc.club_id, wc.week_start DESC`,
+    [ids]
+  );
+  const vistaUltima = new Map<string, any>();
+  for (const id of ids) {
+    const filas = ultimos.rows.filter((r) => r.agent_id === id);
+    if (filas.length === 0) continue;
+    for (const v of await cierresConAcuerdo(id, filas)) vistaUltima.set(`${id}|${v.club_id}`, v);
+  }
   return agentes.rows.map((a) => {
     const u = usuarios.rows.find((x) => x.agent_id === a.id);
     return {
@@ -99,6 +113,7 @@ export async function listarMisAgentes(supervisorAgentId: string) {
             club_id: c.club_id,
             club_name: c.club_name,
             acuerdo: ac ? { system: ac.system, rakeback_pct: Number(ac.rakeback_pct), rebate_pct: Number(ac.rebate_pct), desde: ac.valid_from } : null,
+            ultima_semana: vistaUltima.get(`${a.id}|${c.club_id}`) ?? null,
           };
         }),
     };

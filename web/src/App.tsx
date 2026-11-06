@@ -28,6 +28,7 @@ import ResumenAgentes from "./pages/ResumenAgentes";
 import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
+import MisAgentes from "./pages/MisAgentes";
 import Notificaciones from "./pages/Notificaciones";
 import MiProveedor from "./pages/MiProveedor";
 import MiSocio from "./pages/MiSocio";
@@ -115,6 +116,7 @@ export default function App() {
           }
         >
           <Route index element={<MiSupervision />} />
+          <Route path="agentes" element={<MisAgentes />} />
         </Route>
 
         <Route

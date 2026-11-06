@@ -6,7 +6,6 @@ import Loading from "../components/Loading";
 import Modal from "../components/Modal";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, PortalEmpty, MovRow, SolicitudesRetiro, colorSigno, montoSigno, tipoVisual } from "../components/PortalUI";
 import Cifra from "../components/Cifra";
-import MisAgentesSupervisor from "../components/MisAgentesSupervisor";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   PREPAGO: "Prepago",
@@ -17,7 +16,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   UNION: "Unión",
 };
 
-type Tab = "agentes" | "usuarios" | "cierre" | "movimientos" | "referidos" | "solicitudes" | "calculadora";
+type Tab = "agentes" | "cierre" | "movimientos" | "referidos" | "solicitudes" | "calculadora";
 
 // Vista del rol Supervisor — mismo dato que la pestaña "Supervisores" que ya ve el admin en
 // Administración, pero filtrado a un solo supervisor (el del login). Solo muestra, salvo pedir
@@ -103,7 +102,6 @@ export default function MiSupervision() {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "agentes", label: "Agentes", count: data.agentes.length },
-    { key: "usuarios", label: "Usuarios y %" },
     ...(consolidada ? [{ key: "cierre" as Tab, label: "Cierre semanal" }] : []),
     { key: "movimientos", label: "Movimientos", count: movimientos.length + movimientosCuenta.length },
     ...(hayReferidos ? [{ key: "referidos" as Tab, label: "Referidos" }] : []),
@@ -464,7 +462,6 @@ export default function MiSupervision() {
         left={
           <>
             {agentesPane}
-            <MisAgentesSupervisor activa={tabActual === "usuarios"} />
             {cierrePane}
             {solicitudesPane}
             <CalculadoraCierre activa={tabActual === "calculadora"} sistemaInicial={sup.default_system === "WIN_LOSE" ? "WIN_LOSE" : "PREPAGO"} perspectiva="supervisor" permitirTraer={consolidada} />

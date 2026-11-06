@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mismos colores que web/src/index.css: noche (fondo #0d1117, acento azul #4493f8) y día (fondo #f4f7f5, acento esmeralda #157a57),
+     con el tratamiento de vidrio del video: paneles translúcidos con blur sobre un fondo con brillos del color de acento. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --green-soft: rgba(63,185,80,.16); --red: #f85149; --red-soft: rgba(248,81,73,.16); --amber: #e3a83b; --amber-soft: rgba(227,168,59,.16); --gold: #c6a66b;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16); --glow3: rgba(198,166,107,.12);
+    --side: rgba(22,27,34,.55); --side-text: #e6edf3; --side-border: rgba(255,255,255,.08);
+    --page: rgba(22,27,34,.50); --page-border: rgba(255,255,255,.09);
+    --card: rgba(29,36,48,.62); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --ic: rgba(255,255,255,.08); --line: rgba(255,255,255,.07);
+    --primary: #e6edf3; --primary-ink: #0d1117; --secondary: rgba(255,255,255,.08); --secondary-border: rgba(255,255,255,.12);
+    --bar: rgba(68,147,248,.32); --track: rgba(255,255,255,.08);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --red-soft: rgba(194,55,68,.12); --amber: #9c6a17; --amber-soft: rgba(156,106,23,.14); --gold: #8a6a32;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14); --glow3: rgba(30,154,110,.18);
+    --side: rgba(255,255,255,.55); --side-text: #14201a; --side-border: rgba(255,255,255,.8);
+    --page: rgba(255,255,255,.42); --page-border: rgba(255,255,255,.85);
+    --card: rgba(255,255,255,.72); --card-border: rgba(255,255,255,.95); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --ic: #fff; --line: rgba(11,24,18,.07);
+    --primary: #14201a; --primary-ink: #fff; --secondary: rgba(255,255,255,.75); --secondary-border: rgba(11,24,18,.08);
+    --bar: rgba(21,122,87,.22); --track: rgba(11,24,18,.07);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1440px; height: 900px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%),
+      radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%),
+      radial-gradient(620px 460px at 70% 8%, var(--glow3), transparent 65%),
+      var(--bg);
+    padding: 20px; display: grid; grid-template-columns: 236px 1fr; gap: 18px;
+  }
+  .glass { background: var(--side); border: 1px solid var(--side-border); backdrop-filter: blur(22px) saturate(140%); box-shadow: var(--card-shadow); }
+  .side { border-radius: 22px; padding: 16px 12px; display: flex; flex-direction: column; color: var(--side-text); }
+  .brand { display: flex; gap: 10px; align-items: center; padding: 4px 6px 14px; }
+  .logo { width: 36px; height: 36px; border-radius: 11px; background: var(--accent-grad); display: grid; place-items: center; font-weight: 800; color: var(--accent-ink); font-size: 14px; }
+  .brand b { font-size: 14.5px; display: block; } .brand small { font-size: 11px; color: var(--dim); }
+  .grp { font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--faint); margin: 14px 8px 6px; }
+  .it { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 11px; font-size: 13px; font-weight: 500; color: var(--dim); }
+  .it svg { width: 16px; height: 16px; }
+  .it .n { margin-left: auto; background: var(--chip); color: var(--text); border-radius: 99px; font-size: 10.5px; padding: 1px 7px; font-weight: 700; }
+  .it.on { background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 6px 18px rgba(var(--accent-rgb),.35); }
+  .plan { margin-top: auto; background: var(--chip); border-radius: 13px; padding: 10px 12px; font-size: 11.5px; }
+  .plan .bar { height: 5px; background: var(--track); border-radius: 9px; margin-top: 7px; } .plan .bar i { display: block; height: 100%; width: 72%; background: var(--accent); border-radius: 9px; }
+  .main { display: grid; grid-template-rows: 54px 1fr; gap: 16px; min-width: 0; }
+  .top { border-radius: 18px; display: flex; align-items: center; padding: 0 10px 0 16px; gap: 12px; color: var(--text); }
+  .search { flex: 1; max-width: 430px; display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--dim); }
+  .kbd { margin-left: auto; font-size: 10.5px; background: var(--chip); border-radius: 6px; padding: 2px 6px; }
+  .sp { flex: 1; }
+  .chipw { font-size: 12px; font-weight: 600; background: var(--chip); border-radius: 99px; padding: 7px 13px; display: flex; gap: 7px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 9px; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .ib { width: 36px; height: 36px; border-radius: 99px; background: var(--chip); display: grid; place-items: center; color: var(--text); }
+  .ib.w { background: var(--primary); color: var(--primary-ink); position: relative; } .ib.w::after { content: ""; position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 9px; background: var(--gold); }
+  .av { display: flex; align-items: center; gap: 9px; font-size: 13px; } .av i { width: 36px; height: 36px; border-radius: 99px; background: var(--accent-grad); display: grid; place-items: center; font-style: normal; font-weight: 700; color: var(--accent-ink); } .av small { display: block; font-size: 11px; color: var(--dim); }
+  .page { border-radius: 26px; padding: 26px 30px; background: var(--page); border: 1px solid var(--page-border); backdrop-filter: blur(24px); overflow: hidden; }
+  .ph { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; } .ph p { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .acts { display: flex; gap: 10px; }
+  .btn { border-radius: 99px; padding: 10px 18px; font-size: 13px; font-weight: 600; display: flex; gap: 7px; align-items: center; }
+  .btn.s { background: var(--secondary); border: 1px solid var(--secondary-border); }
+  .btn.p { background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 8px 20px rgba(var(--accent-rgb),.3); }
+  .seg { display: inline-flex; background: var(--chip); border-radius: 99px; padding: 3px; font-size: 12px; font-weight: 600; color: var(--dim); }
+  .seg span { padding: 6px 13px; border-radius: 99px; } .seg .on { background: var(--primary); color: var(--primary-ink); }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; box-shadow: var(--card-shadow); backdrop-filter: blur(16px); }
+  .row1 { display: grid; grid-template-columns: 1.65fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .ch { padding: 18px 20px; }
+  .cht { display: flex; justify-content: space-between; align-items: center; }
+  .cht b { font-size: 15px; } .cht small { display: block; font-size: 12px; color: var(--dim); font-weight: 500; margin-top: 3px; }
+  .bars { display: flex; align-items: flex-end; gap: 22px; height: 160px; margin: 18px 6px 0; border-bottom: 1px dashed var(--line); padding-bottom: 2px; }
+  .bars div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; text-align: center; }
+  .bars i { display: block; border-radius: 9px 9px 4px 4px; background: var(--bar); }
+  .bars .last i { background: var(--accent-grad); box-shadow: 0 8px 18px rgba(var(--accent-rgb),.35); }
+  .bars em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent); display: block; margin-bottom: 4px; }
+  .xl { display: flex; gap: 22px; margin: 6px 6px 0; } .xl span { flex: 1; text-align: center; font-size: 11px; color: var(--dim); }
+  .donut { display: flex; justify-content: center; margin: 16px 0 12px; }
+  .donut .t1 { fill: var(--text); } .donut .t2 { fill: var(--dim); } .donut .tr { stroke: var(--track); }
+  .leg { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 16px; font-size: 12px; }
+  .leg div { display: flex; align-items: center; gap: 7px; } .leg b { margin-left: auto; } .leg i { width: 8px; height: 8px; border-radius: 9px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kpi { padding: 16px 18px; position: relative; }
+  .ic { width: 32px; height: 32px; border-radius: 99px; background: var(--ic); display: grid; place-items: center; color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  .ic svg { width: 16px; height: 16px; }
+  .kpi .v { font-size: 28px; font-weight: 800; letter-spacing: -.02em; margin-top: 12px; }
+  .kpi .l { font-size: 13px; font-weight: 700; margin-top: 2px; } .kpi .c { font-size: 11.5px; color: var(--dim); margin-top: 3px; }
+  .pill { position: absolute; top: 16px; right: 16px; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 3px 8px; }
+  .up { background: var(--green-soft); color: var(--green); } .dn { background: var(--red-soft); color: var(--red); } .am { background: var(--amber-soft); color: var(--amber); }
+  .neg { color: var(--red); } .pos { color: var(--green); }
+  .row3 { margin-top: 16px; padding: 16px 20px 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--dim); text-transform: uppercase; padding: 0 8px 8px; }
+  td { padding: 9px 8px; border-top: 1px solid var(--line); }
+  td.n, th.n { text-align: right; } td b { font-weight: 700; }
+  .mini { display: inline-flex; align-items: center; gap: 8px; } .mini i { width: 26px; height: 26px; border-radius: 99px; background: rgba(var(--accent-rgb),.18); color: var(--accent); display: grid; place-items: center; font-style: normal; font-size: 10.5px; font-weight: 700; }
+  .tag { font-size: 11px; font-weight: 700; border-radius: 99px; padding: 3px 9px; }
+  .rb { background: var(--accent-grad); color: var(--accent-ink); border-radius: 99px; padding: 6px 13px; font-size: 12px; font-weight: 600; }
+  .rs { background: var(--secondary); border: 1px solid var(--secondary-border); border-radius: 99px; padding: 6px 13px; font-size: 12px; font-weight: 600; }
+
+  /* Versión monocromática (mockup 73): un solo tono por modo en el fondo, como el video. Noche = azul marino → nuestro azul;
+     día = menta → nuestro esmeralda. Sin violeta ni dorado en el fondo; tarjetas neutras; verde/rojo solo para plata. */
+  :root {
+    --side: rgba(8,16,32,.42); --side-border: rgba(140,180,255,.14);
+    --page: rgba(8,16,32,.34); --page-border: rgba(140,180,255,.16);
+    --card: rgba(13,22,40,.62); --card-border: rgba(140,180,255,.12);
+    --chip: rgba(140,180,255,.10); --bar: rgba(68,147,248,.28); --line: rgba(140,180,255,.10);
+  }
+  :root[data-theme="light"] {
+    --side: rgba(255,255,255,.40); --side-text: #0e3b2b; --side-border: rgba(255,255,255,.7);
+    --page: rgba(255,255,255,.30); --page-border: rgba(255,255,255,.75);
+    --card: rgba(255,255,255,.80); --card-border: rgba(255,255,255,1);
+    --chip: rgba(21,122,87,.08); --bar: rgba(21,122,87,.20); --dim: #4a6458;
+  }
+  body {
+    background:
+      radial-gradient(900px 650px at 6% 0%, rgba(68,147,248,.55) 0%, transparent 62%),
+      radial-gradient(800px 700px at 100% 100%, rgba(47,125,224,.38) 0%, transparent 60%),
+      radial-gradient(600px 480px at 70% 10%, rgba(90,162,255,.22) 0%, transparent 65%),
+      linear-gradient(140deg, #0a1a33 0%, #0b1730 45%, #081224 100%);
+  }
+  :root[data-theme="light"] body {
+    background:
+      radial-gradient(900px 650px at 6% 0%, rgba(45,190,133,.55) 0%, transparent 62%),
+      radial-gradient(800px 700px at 100% 100%, rgba(21,122,87,.45) 0%, transparent 60%),
+      radial-gradient(600px 480px at 70% 10%, rgba(110,220,170,.35) 0%, transparent 65%),
+      linear-gradient(140deg, #d7f2e5 0%, #b9e6d0 50%, #8fd3b3 100%);
+  }
+  /* Donut y leyenda en la familia de cada modo (tonos del acento + dorado como detalle) */
+  .donut circle:nth-of-type(2) { stroke: var(--accent); }
+  .donut circle:nth-of-type(3) { stroke: var(--d2); }
+  .donut circle:nth-of-type(4) { stroke: var(--d3); }
+  .donut circle:nth-of-type(5) { stroke: var(--gold); }
+  .leg div:nth-child(1) i { background: var(--accent) !important; }
+  .leg div:nth-child(2) i { background: var(--d2) !important; }
+  .leg div:nth-child(3) i { background: var(--d3) !important; }
+  .leg div:nth-child(4) i { background: var(--gold) !important; }
+  :root { --d2: #79b8ff; --d3: #2f5f9e; }
+  :root[data-theme="light"] { --d2: #4fc497; --d3: #0e5a40; }
+  :root[data-theme="light"] .side .it.on { box-shadow: 0 6px 18px rgba(21,122,87,.35); }
+
+  body { grid-template-columns: 1fr; padding-bottom: 104px; }
+  .main { grid-template-rows: 54px 1fr; height: 756px; }
+  .c3 { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); border-radius: 26px; padding: 10px 14px; display: flex; align-items: flex-end; gap: 6px; z-index: 5; }
+  .c3 .g { display: flex; gap: 6px; align-items: flex-end; }
+  .c3 .sep { width: 1px; height: 40px; background: var(--line); margin: 0 8px 6px; align-self: center; }
+  .c3 .k { width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--dim); }
+  .c3 .k i { width: 46px; height: 46px; border-radius: 99px; display: grid; place-items: center; background: var(--chip); color: var(--text); font-style: normal; position: relative; }
+  /* ficha de póker: borde punteado como el canto de una ficha */
+  .c3 .k i::before { content: ""; position: absolute; inset: 3px; border-radius: 99px; border: 2px dashed rgba(var(--accent-rgb), .0); }
+  .c3 .k i svg { width: 20px; height: 20px; }
+  .c3 .k.on { color: var(--text); font-weight: 800; }
+  .c3 .k.on i { width: 58px; height: 58px; background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 10px 24px rgba(var(--accent-rgb),.45); margin-top: -12px; }
+  .c3 .k.on i::before { border-color: rgba(255,255,255,.55); }
+  .c3 .k .bd { position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px; border-radius: 99px; background: var(--gold); color: #1a1307; font-size: 10px; font-weight: 800; display: grid; place-items: center; padding: 0 5px; }
+  .c3 .gl { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--faint); writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; margin-right: 2px; }
+  .top .brand { padding: 0; } .top .logo { width: 32px; height: 32px; font-size: 12px; }
+
+  .page { padding: 22px 28px; }
+  .ph { margin-bottom: 14px; }
+  .kpis.k3 { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+  .kpi.sm { padding: 12px 16px; } .kpi.sm .v { font-size: 22px; margin-top: 6px; }
+  .split { display: grid; grid-template-columns: 330px 1fr; gap: 14px; }
+  .lst { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .lst .q { display: flex; align-items: center; gap: 8px; background: var(--chip); border-radius: 12px; padding: 8px 12px; font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .fila { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 14px; }
+  .fila .av3 { width: 34px; height: 34px; border-radius: 99px; background: rgba(var(--accent-rgb),.16); color: var(--accent); display: grid; place-items: center; font-weight: 800; font-size: 12px; }
+  .fila b { font-size: 13px; display: block; } .fila small { font-size: 11px; color: var(--dim); }
+  .fila .m { font-size: 13px; font-weight: 800; text-align: right; }
+  .fila.on { background: var(--card); border: 1px solid var(--card-border); box-shadow: var(--card-shadow); }
+  .fila.on .av3 { background: var(--accent-grad); color: var(--accent-ink); }
+  .det { padding: 18px 22px; }
+  .det .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--dim); }
+  .det h2 { font-size: 24px; font-weight: 800; letter-spacing: -.01em; margin-top: 3px; }
+  .det .sb { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .saldos { display: flex; gap: 34px; margin: 16px 0 14px; }
+  .saldos small { display: block; font-size: 11px; color: var(--dim); font-weight: 600; }
+  .saldos b { font-size: 26px; font-weight: 800; letter-spacing: -.02em; } .saldos b.s { font-size: 18px; }
+  .tbs { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .pv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .pv .card { padding: 12px 14px; display: flex; gap: 10px; align-items: center; }
+  .pv .card b { font-size: 13.5px; display: block; } .pv .card small { font-size: 11px; color: var(--dim); }
+  .pv .card .m { margin-left: auto; font-weight: 800; font-size: 14px; }
+  .pv .card.on { outline: 2px solid var(--accent); }
+  .two { display: grid; grid-template-columns: 1fr 1.25fr; gap: 14px; }
+  .bigsaldo { padding: 18px 22px; }
+  .bigsaldo .v2 { font-size: 40px; font-weight: 800; letter-spacing: -.03em; margin: 6px 0 2px; }
+  .clubrow { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .clubrow small { display: block; font-size: 11px; color: var(--dim); }
+  .bar2 { height: 6px; border-radius: 9px; background: var(--track); margin-top: 5px; width: 160px; } .bar2 i { display: block; height: 100%; border-radius: 9px; background: var(--red); }
+  table.d td, table.d th { padding-top: 7px; padding-bottom: 7px; } table.d { font-size: 12.5px; }
+  .sys { font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 2px 6px; background: var(--chip); color: var(--dim); }
+  .ok { background: var(--green-soft); color: var(--green); }
+
+  .c3 .k { width: 74px; }
+  .page { padding: 22px 28px; }
+  .kpis.k3 { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+  .kpi.sm { padding: 12px 16px; } .kpi.sm .v { font-size: 22px; margin-top: 6px; }
+  .split2 { display: grid; grid-template-columns: 360px 1fr; gap: 14px; }
+  .lst { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .lst .q { display: flex; align-items: center; gap: 8px; background: var(--chip); border-radius: 12px; padding: 8px 12px; font-size: 12.5px; color: var(--dim); margin-bottom: 4px; }
+  .fila { display: grid; grid-template-columns: 38px 1fr; gap: 10px; align-items: center; padding: 10px; border-radius: 14px; }
+  .fila .av3 { width: 38px; height: 38px; border-radius: 99px; background: rgba(var(--accent-rgb),.16); color: var(--accent); display: grid; place-items: center; font-weight: 800; font-size: 12px; }
+  .fila b { font-size: 13.5px; display: block; } .fila small { font-size: 11px; color: var(--dim); display: block; margin-top: 3px; }
+  .fila .pills { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+  .fila.on { background: var(--card); border: 1px solid var(--card-border); box-shadow: var(--card-shadow); }
+  .fila.on .av3 { background: var(--accent-grad); color: var(--accent-ink); }
+  .det { padding: 18px 22px; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--dim); }
+  .det h2 { font-size: 24px; font-weight: 800; letter-spacing: -.01em; margin-top: 3px; }
+  .sb { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .blk { margin-top: 16px; padding: 14px 16px; border-radius: 16px; background: var(--chip); }
+  .blk h4 { font-size: 13px; font-weight: 800; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .blk h4 small { font-size: 11px; color: var(--dim); font-weight: 600; }
+  .urow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .inp { border: 1px solid var(--card-border); background: var(--card); border-radius: 10px; padding: 8px 10px; font-size: 13px; min-width: 70px; text-align: right; font-weight: 700; }
+  .inp.l { text-align: left; font-weight: 500; min-width: 160px; color: var(--dim); }
+  .pt { display: grid; grid-template-columns: 1.3fr 1.4fr 1fr 1fr 90px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .pt.h { border-top: 0; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--dim); text-transform: uppercase; padding-top: 0; }
+  .pt .segm { display: inline-flex; background: var(--card); border-radius: 99px; padding: 3px; font-size: 11.5px; font-weight: 700; color: var(--dim); }
+  .pt .segm span { padding: 5px 10px; border-radius: 99px; } .pt .segm .on { background: var(--primary); color: var(--primary-ink); }
+  .pct { display: flex; align-items: center; gap: 4px; } .pct .inp { min-width: 0; width: 70px; }
+  .ok2 { font-size: 11px; color: var(--green); font-weight: 700; }
+  .prev { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .prev div { background: var(--card); border-radius: 12px; padding: 10px 12px; }
+  .prev small { display: block; font-size: 10.5px; color: var(--dim); font-weight: 600; }
+  .prev b { font-size: 16px; }
+  .ok { background: var(--green-soft); color: var(--green); }
+</style></head>
+<body>
+  <aside class="c3 glass">
+  <div class="g"><span class="gl">PORTAL</span>
+    <div class="k"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M8 13l3 3 5-6"/></svg></i>Mi supervisión</div>
+    <div class="k on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 11a3 3 0 100-6M21 20c0-2-1.5-4-4-4.6"/></svg><span class="bd">2</span></i>Mis agentes</div>
+  </div><div class="sep"></div>
+  <div class="g"><div class="k"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></i>Día</div><div class="k"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></i>Salir</div></div>
+</aside>
+
+  <div class="main">
+    <div class="top glass"><div class="brand"><div class="logo">PA</div><div><b>Poker Adm</b></div></div>
+      <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Buscar...<span class="kbd">Ctrl K</span></div>
+      <div class="sp"></div>
+      <div class="chipw"><span class="dot"></span>Cuenta corriente US$ 1.059,94</div>
+      <div class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2"/></svg></div>
+      <div class="ib w"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></div>
+      <div class="av"><i>AG</i><div><b>Agustin</b><small>Supervisor</small></div></div>
+    </div>
+
+    <div class="page">
+  <div class="ph"><div><h1>Mis agentes</h1><p>Creales el usuario para que entren a ver su cuenta y poneles sus % por club. Es tu acuerdo con cada uno: no cambia lo que nosotros te acreditamos.</p></div></div>
+  <div class="kpis k3">
+    <div class="card kpi sm"><div class="v">3</div><div class="l">Agentes a cargo</div><div class="c">activos</div></div>
+    <div class="card kpi sm"><div class="v pos">1</div><div class="l">Con usuario</div><div class="c">pueden entrar</div></div>
+    <div class="card kpi sm"><span class="pill am">2</span><div class="v" style="color:var(--amber)">2</div><div class="l">Sin usuario</div><div class="c">todavía no entran</div></div>
+    <div class="card kpi sm"><div class="v">3 de 5</div><div class="l">Clubes con % cargados</div><div class="c">faltan 2</div></div>
+  </div>
+  <div class="split2">
+    <div class="card lst">
+      <div class="q">⌕ Buscar agente...</div>
+      <div class="fila on"><div class="av3">AG</div><div><b>Agus</b><small>TeamBack Suprema</small><div class="pills"><span class="tag ok">Con usuario</span><span class="tag ok">% cargados</span></div></div></div>
+      <div class="fila "><div class="av3">EC</div><div><b>El caiman</b><small>OTRO · TeamBack GG · Tiny GG</small><div class="pills"><span class="tag am">Sin usuario</span><span class="tag am">Faltan % en 2 clubes</span></div></div></div>
+      <div class="fila "><div class="av3">EY</div><div><b>El_Caymannn</b><small>TeamBack Suprema</small><div class="pills"><span class="tag am">Sin usuario</span><span class="tag ok">% cargados</span></div></div></div>
+    </div>
+    <div class="card det">
+      <div class="eyebrow">AGENTE A CARGO</div><h2>Agus</h2><div class="sb">Opera en TeamBack Suprema</div>
+
+      <div class="blk"><h4>Usuario para entrar <span class="tag ok">Activo</span></h4>
+        <div class="urow">Entra con <b>agus.tb</b><span style="flex:1"></span><span class="inp l">Nueva contraseña</span><span class="rs">Cambiar contraseña</span><span class="rs" style="color:var(--red)">Desactivar</span></div>
+      </div>
+
+      <div class="blk"><h4>Sus % por club <small>valen desde que los guardás; las semanas anteriores quedan con los de antes</small></h4>
+        <div class="pt h"><span>Club</span><span>Sistema</span><span>Rakeback</span><span>Rebate</span><span></span></div>
+        <div class="pt"><b>TeamBack Suprema</b><span class="segm"><span class="on">Win/Lose</span><span>Prepago</span></span><span class="pct"><span class="inp">30</span>%</span><span class="pct"><span class="inp">0</span>%</span><span class="ok2">✓ Guardado</span></div>
+      </div>
+
+      <div class="blk"><h4>Así ve su última semana <small>19/10 al 25/10 · TeamBack Suprema · con tus %</small></h4>
+        <div class="prev">
+          <div><small>Resultado</small><b class="neg">−US$ 512,30</b></div>
+          <div><small>Rake</small><b>US$ 236,20</b></div>
+          <div><small>Rakeback 30%</small><b class="pos">US$ 70,86</b></div>
+          <div><small>Su cierre</small><b class="neg">−US$ 441,04</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  </div>
+</body></html>
