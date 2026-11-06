@@ -3270,11 +3270,14 @@ body {
   /* (06/11/2026, Leo: "choca con lo del fondo") el dock de abajo flota sobre tablas: casi opaco para que no se lean letras a través,
      y un fundido en el borde inferior de la pantalla para que el contenido se desvanezca antes de llegar al dock. */
   .app-shell.menu-bottom .dock-fichas {
-    background: linear-gradient(var(--sidebar-bg), var(--sidebar-bg)), color-mix(in srgb, var(--panel) 92%, transparent);
+    background: linear-gradient(var(--sidebar-bg), var(--sidebar-bg)), var(--panel);
   }
+  /* franja inferior: el contenido se desenfoca y se apaga de a poco, y detrás del dock queda tapado del todo */
   .app-shell.menu-bottom::after {
-    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 120px; z-index: 44; pointer-events: none;
-    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--panel) 88%, transparent) 75%);
+    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 170px; z-index: 44; pointer-events: none;
+    background: linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--panel) 75%, transparent) 45%, var(--panel) 70%);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 45%); mask-image: linear-gradient(to bottom, transparent 0%, #000 45%);
   }
   html.embebido .app-shell.menu-bottom::after { display: none; }
 
