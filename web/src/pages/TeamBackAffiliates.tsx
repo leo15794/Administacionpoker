@@ -128,6 +128,9 @@ export default function TeamBackAffiliates() {
 
   useEffect(() => {
     aplicarTema(leerTemaInicial());
+    // Rediseño (05/11/2026, mockup 79): TeamBack usa el mismo vidrio pero su propia marca en verdes (noche) -- solo mientras está abierta esta sección.
+    document.documentElement.setAttribute("data-marca", "tb");
+    return () => document.documentElement.removeAttribute("data-marca");
   }, []);
 
   // Número del ícono (23/10/2026): TeamBack cuenta los avisos recibidos desde la última vez que se abrió; al abrir la app (o volver a ella) se borra.
@@ -337,6 +340,18 @@ const tbIcon = {
 
 // Con el menú arriba: lo de uso diario va suelto y el resto en "Más".
 const TB_TOP_PRINCIPALES: Tab[] = ["resumen", "cuentas", "jugadores", "import", "pagos"];
+// Dock de fichas (rediseño 05/11/2026, mockup 79): mismos ítems, agrupados como en el mockup, con nombre corto debajo del ícono.
+const TB_GRUPOS: { label: string; keys: Tab[] }[] = [
+  { label: "Semana", keys: ["resumen", "import", "ganancia"] },
+  { label: "Jugadores", keys: ["cuentas", "jugadores", "avisos", "pagos"] },
+  { label: "Ajustes", keys: ["wallet", "config", "usuarios", "prueba"] },
+];
+const TB_CORTO: Record<Tab, string> = {
+  resumen: "Liquidac.", import: "Importar", ganancia: "Ganancia", cuentas: "Cuentas", jugadores: "Árbol", avisos: "Avisos",
+  pagos: "Pagos", wallet: "Wallet", config: "Config.", usuarios: "Usuarios", prueba: "Prueba",
+};
+// Las 4 fichas fijas del dock en celular (la quinta es "Más").
+const TB_CELULAR: Tab[] = ["resumen", "cuentas", "jugadores", "avisos"];
 
 // Íconos de póker del menú (opción "Mesa"); los que no tienen equivalente (configuración, avisos) siguen con el de siempre.
 const TB_ICONO_POKER: Partial<Record<Tab, React.ReactNode>> = {
@@ -376,6 +391,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
   const { fijo, alternarFijo } = useMenuFijo();
   const { pos, arrastrando, empezarArrastre } = useMenuPos(() => setMasAbierto(false));
   const [masAbierto, setMasAbierto] = useState(false);
+  const [hojaAbierta, setHojaAbierta] = useState(false);
   useEffect(() => {
     if (!masAbierto) return;
     const fuera = (ev: MouseEvent) => {
@@ -410,10 +426,43 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
   }
 
   return (
-    <div className={`app-shell ${pos === "top" ? "menu-top" : ""}`}>
+    <div className={`app-shell menu-${pos}`}>
       <DockOverlay arrastrando={arrastrando} />
+      {pos !== "top" && (
+        <nav className="dock-fichas" aria-label="Menú">
+          <div className="df-grip brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">T</div>
+          {TB_GRUPOS.map((g, gi) => (
+            <Fragment key={g.label}>
+              {gi > 0 && <span className="df-sep" aria-hidden="true" />}
+              <div className="df-g">
+                <span className="df-gl">{g.label}</span>
+                {g.keys.map((key) => {
+                  const item = TB_NAV.find((i) => i.key === key)!;
+                  return (
+                    <button key={key} type="button" className={`df-k ${tab === key ? "active" : ""}`} onClick={() => setTab(key)} title={item.label}>
+                      <i>{TB_ICONO_POKER[key] ?? tbIcon[item.icon]}</i>
+                      <span>{TB_CORTO[key]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Fragment>
+          ))}
+          <span className="df-sep df-sep-fin" aria-hidden="true" />
+          <div className="df-g df-util">
+            <button type="button" className="df-k" onClick={toggleTheme} title={theme === "dark" ? "Modo día" : "Modo noche"}>
+              <i>{theme === "dark" ? tbIcon.sun : tbIcon.moon}</i>
+              <span>{theme === "dark" ? "Día" : "Noche"}</span>
+            </button>
+            <button type="button" className="df-k" onClick={onLogout} title={`Cerrar sesión (${session.name})`}>
+              <i>{tbIcon.logout}</i>
+              <span>Salir</span>
+            </button>
+          </div>
+        </nav>
+      )}
       <header className="topnav">
-        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá hasta el borde izquierdo para mover el menú">
+        <div className="tn-brand" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">
           <div className="brand-mark" aria-hidden="true">T</div>
           <b>TeamBack Affiliates</b>
         </div>
@@ -447,9 +496,7 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
         </div>
       </header>
       <div className="mobile-topbar">
-        <button className="mobile-nav-toggle" onClick={() => setMobileOpen(true)} title="Abrir menú" aria-label="Abrir menú">
-          {tbIcon.menu}
-        </button>
+        <div className="brand-mark" aria-hidden="true">T</div>
         <div className="brand-text">
           <div className="t1">TeamBack Affiliates</div>
           <div className="t2">Panel administrativo</div>
@@ -513,6 +560,53 @@ function TeamBackAdmin({ session, onLogout }: { session: TbSession; onLogout: ()
           </button>
         </div>
       </div>
+
+      <nav className="bottom-nav" aria-label="Accesos rápidos">
+        {TB_CELULAR.map((key) => {
+          const item = TB_NAV.find((i) => i.key === key)!;
+          return (
+            <button key={key} type="button" className={`bottom-nav-item ${tab === key && !hojaAbierta ? "active" : ""}`} onClick={() => setTab(key)}>
+              <i>{TB_ICONO_POKER[key] ?? tbIcon[item.icon]}</i>
+              <span>{TB_CORTO[key]}</span>
+            </button>
+          );
+        })}
+        <button type="button" className={`bottom-nav-item ${hojaAbierta || !TB_CELULAR.includes(tab) ? "active" : ""}`} onClick={() => setHojaAbierta(true)}>
+          <i>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></svg>
+          </i>
+          <span>{!hojaAbierta && !TB_CELULAR.includes(tab) ? TB_CORTO[tab] : "Más"}</span>
+        </button>
+      </nav>
+      {hojaAbierta && (
+        <>
+          <div className="mas-velo" onClick={() => setHojaAbierta(false)} />
+          <div className="mas-hoja" role="dialog" aria-label="Todas las secciones">
+            <div className="mas-asa" />
+            <h3>TeamBack Afiliados</h3>
+            {TB_GRUPOS.map((g) => (
+              <Fragment key={g.label}>
+                <div className="mas-gr">{g.label}</div>
+                <div className="mas-fichas">
+                  {g.keys.map((key) => {
+                    const item = TB_NAV.find((i) => i.key === key)!;
+                    return (
+                      <button key={key} type="button" className={`mas-k ${tab === key ? "active" : ""}`} style={{ background: "none", border: 0, fontFamily: "inherit", cursor: "pointer", padding: 0 }} onClick={() => { setTab(key); setHojaAbierta(false); }}>
+                        <i>{TB_ICONO_POKER[key] ?? tbIcon[item.icon]}</i>
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Fragment>
+            ))}
+            <div className="mas-pie">
+              <button type="button" onClick={toggleTheme}>{theme === "dark" ? tbIcon.sun : tbIcon.moon} {theme === "dark" ? "Modo día" : "Modo noche"}</button>
+              <button type="button" onClick={onLogout}>{tbIcon.logout} Salir</button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="main">
         <div className="topbar tb-topbar">
