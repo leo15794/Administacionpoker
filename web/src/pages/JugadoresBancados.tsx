@@ -5,6 +5,7 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 import BancadoContratosEmbed from "./BancadoContratos";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 /**
@@ -197,6 +198,7 @@ export default function JugadoresBancados() {
         <div>
           <h2>Jugadores bancados <Ayuda>Un jugador marcado acá se omite del cierre agregado de su agente en la próxima importación — su plata se liquida
             aparte, con su propio capital y makeup (desplegá su fila para configurar la banca y cerrar semanas).</Ayuda></h2>
+          <Contexto chips={[!cargando && { texto: `${bancados.length} jugador${bancados.length === 1 ? "" : "es"} bancado${bancados.length === 1 ? "" : "s"}` }]} />
         </div>
       </div>
 

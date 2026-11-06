@@ -3393,7 +3393,7 @@ body::before {
 
 /* títulos de pantalla */
 .topbar { align-items: flex-end; margin-bottom: 20px; }
-.topbar h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0; }
+.topbar h2, .dash-header h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0; }
 
 /* chips de contexto debajo del título */
 .ctx-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }

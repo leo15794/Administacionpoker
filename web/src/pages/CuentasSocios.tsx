@@ -5,6 +5,7 @@ import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import ActionsMenu from "../components/ActionsMenu";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
@@ -148,6 +149,14 @@ export default function CuentasSocios() {
         <div>
           <h2>Cuentas de socios <Ayuda>Plata de los socios (compensaciones, comisiones por referido, retiros, gastos) — separado del saldo de agentes y de Wallet.
             Acá se puede editar y eliminar todo directamente, sin pasar por revertir/corregir.</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${cuentas.length} cuenta${cuentas.length === 1 ? "" : "s"} · ${personales.length} personal${personales.length === 1 ? "" : "es"}` },
+              personales.some((c) => Number(c.saldo) > 0.004)
+                ? { texto: `${personales.filter((c) => Number(c.saldo) > 0.004).map((c) => c.name).join(", ")} con deuda`, tono: "alerta" }
+                : { texto: "Nadie debe a la empresa" },
+            ]}
+          />
         </div>
         <button className="btn" onClick={() => setShowNuevaCuenta(true)}>+ Nueva cuenta</button>
       </div>

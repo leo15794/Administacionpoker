@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import { usePaginado, WmPaginacion, WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 const TIPO_LABEL: Record<string, string> = {
@@ -55,6 +56,16 @@ export default function Garantias() {
       <div className="topbar">
         <div>
           <h2>Garantías <Ayuda>Separadas del saldo operativo (BIT-034). Cada alta, aumento, reducción, consumo o baja queda registrado en el historial.</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${garantias.length} garantía${garantias.length === 1 ? "" : "s"} activa${garantias.length === 1 ? "" : "s"}` },
+              totalGarantizado > 0 && { texto: `${Math.round((totalConsumido / totalGarantizado) * 100)}% consumido` },
+              garantias.some((g) => Number(g.consumed) >= Number(g.amount) - 0.004 && Number(g.amount) > 0) && {
+                texto: `${garantias.filter((g) => Number(g.consumed) >= Number(g.amount) - 0.004 && Number(g.amount) > 0).length} agotada(s)`,
+                tono: "alerta",
+              },
+            ]}
+          />
         </div>
         <button className="btn" onClick={() => setShowAjuste({})}>+ Nueva / ajustar garantía</button>
       </div>

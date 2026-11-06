@@ -3,6 +3,7 @@ import { exportCsv } from "../csv";
 import ActionsMenu from "./ActionsMenu";
 import Cifra from "./Cifra";
 import { usePaginado, WmPaginacion, WmTabs } from "./ListaWm";
+import { Contexto } from "./Identidad";
 
 // Saldo y movimientos de la Wallet (22/10/2026, pedido de Leo, inspirado en una referencia que trajo): saldo con los botones de ingreso y egreso,
 // y abajo la lista de movimientos con pestañas, buscador, período, persona y más filtros, totales de lo filtrado y paginación (10 / 25 / 50 / 100 / todos).
@@ -133,7 +134,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
   return (
     <div className="wm">
       <div className="topbar">
-        <div>{titulo}<div className="muted" style={{ fontSize: 13 }}>Control de movimientos · USDT</div></div>
+        <div>{titulo}<Contexto chips={[{ texto: "USDT" }, { texto: `${totalMovimientos} movimientos` }, saldo < -0.004 && { texto: "Saldo negativo", tono: "alerta" }, !!(busca || persona || tipo || minimo || maximo) && { texto: `Filtrando: ${visibles.length}`, tono: "fuerte" }]} /></div>
         <button className="btn secondary" onClick={exportar} disabled={visibles.length === 0} title="Exporta lo que estás viendo con los filtros aplicados">⬇ Exportar CSV</button>
       </div>
 

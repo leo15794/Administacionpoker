@@ -8,6 +8,7 @@ import { useConfirmDialog } from "../components/ConfirmProvider";
 import { ClubPicker } from "../components/ClubPicker";
 import Ayuda from "../components/Ayuda";
 import Cifra from "../components/Cifra";
+import { Contexto, IconoSemana } from "../components/Identidad";
 
 /**
  * "Resumen por club" — reproduce el bloque "RESUMEN DEL CLUB" de la planilla "automatizacion
@@ -372,7 +373,10 @@ export default function ResumenClub() {
   return (
     <div>
       <div className="topbar" style={{ marginBottom: 12, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0 }}>Resumen por club</h2>
+        <div>
+          <h2 style={{ margin: 0 }}>Resumen por club</h2>
+          <Contexto chips={[resumen && { texto: `${resumen.clubName} · ${dateShort(resumen.weekStart)} – ${dateShort(resumen.weekEnd ?? resumen.weekStart)}`, tono: "fuerte", icono: IconoSemana }, { texto: `${clubes.length} clubes` }]} />
+        </div>
         {resumen && (
           <ActionsMenu
             title="Más acciones"

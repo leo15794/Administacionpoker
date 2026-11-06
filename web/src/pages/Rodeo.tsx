@@ -3,6 +3,7 @@ import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import Cifra from "../components/Cifra";
 
 // "Resumen de Rodeo" (23/09/2026, pedido de Leo): una fila por agente+club con la memoria
@@ -113,6 +114,13 @@ export default function Rodeo() {
             que la memoria se esté comportando como corresponde. Cuando el agente viene ganando en mesas, esa pérdida
             se acumula acá como memoria pendiente y se descuenta de lo que genere en semanas futuras antes de repartir
             nada.</Ayuda></h2>
+          <Contexto
+            chips={[
+              rows && { texto: `${ordenadas.length} agente${ordenadas.length === 1 ? "" : "s"} con Rodeo` },
+              conMemoria.length > 0 && { texto: `${conMemoria.length} con memoria pendiente · ${usdCents(totMemoria)}`, tono: "alerta" },
+              rows && conMemoria.length === 0 && { texto: "Sin memoria pendiente" },
+            ]}
+          />
         </div>
       </div>
 

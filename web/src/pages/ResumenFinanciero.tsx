@@ -7,6 +7,7 @@ import GananciasPorPeriodo from "./GananciasPorPeriodo";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
 import Ayuda from "../components/Ayuda";
+import { Contexto, IconoSemana } from "../components/Identidad";
 import Cifra from "../components/Cifra";
 
 // Resumen financiero (18/09/2026, pedido explícito de Leo): "un resumen de todas las
@@ -150,6 +151,13 @@ export default function ResumenFinanciero() {
         <div>
           <h2>Resumen financiero <Ayuda>Todas las ganancias generadas y todos los ingresos/egresos que se contabilizan en el sistema — Wallet/Caja,
             cierres semanales de agentes, jugadores bancados y comisiones por referido — filtrable por día, semana o mes.</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${desde.split("-").reverse().slice(0, 2).join("/")} – ${hasta.split("-").reverse().slice(0, 2).join("/")}`, tono: "fuerte", icono: IconoSemana },
+              { texto: `Por ${granularidad === "dia" ? "día" : granularidad}` },
+              data && { texto: `${data.eventos.length} movimientos` },
+            ]}
+          />
         </div>
         {tab === "resumen" && (
           <ActionsMenu

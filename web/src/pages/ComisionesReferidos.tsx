@@ -4,6 +4,7 @@ import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import { WmSaldoCard, WmConteos } from "../components/ListaWm";
 
 // Pantalla dedicada para no tener que entrar a Usuarios y permisos → editar cada supervisor
@@ -119,6 +120,15 @@ export default function ComisionesReferidos() {
         <div>
           <h2>Comisiones por referido <Ayuda>Todos los supervisores con % de comisión por referido configurado, con su saldo acumulado y el historial de cada uno.
             Para asignar o cambiar un %, o dar de baja un referido, se hace desde Usuarios y permisos.</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${data.length} supervisor${data.length === 1 ? "" : "es"} · ${data.reduce((a: number, x: any) => a + (x.referidos?.length ?? 0), 0)} referidos` },
+              data.some((x: any) => Number(x.saldoTotal) > 0.004) && {
+                texto: `${data.filter((x: any) => Number(x.saldoTotal) > 0.004).length} con saldo para pagar`,
+                tono: "alerta",
+              },
+            ]}
+          />
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import MovimientosHistorial from "../components/MovimientosHistorial";
 import Loading from "../components/Loading";
 import Ayuda, { Leyenda } from "../components/Ayuda";
 import Cifra from "../components/Cifra";
+import { Contexto, IconoSemana } from "../components/Identidad";
 
 // ================================================================================================
 // Resumen ejecutivo -- rediseño visual/UX (25/09/2026, pedido de Leo: "mejorar visualmente y a
@@ -255,7 +256,20 @@ export default function Resumen() {
       <div className="dash-header">
         <div>
           <h2 style={{ marginBottom: 4 }}>Resumen</h2>
-          <div className="muted">Estado financiero y operativo de Poker Gestión.</div>
+          <Contexto
+            chips={[
+              historico.length > 0 && {
+                texto: `Semana ${dateShort(historico[historico.length - 1].week_start)} – ${dateShort(historico[historico.length - 1].week_end)}`,
+                tono: "fuerte",
+                icono: IconoSemana,
+              },
+              variacionGanancia != null && {
+                texto: `Ganancia ${variacionGanancia >= 0 ? "▲" : "▼"} ${(Math.abs(variacionGanancia) * 100).toFixed(1)}% vs. la anterior`,
+                tono: variacionGanancia < 0 ? "alerta" : "",
+              },
+              porCobrar > 0.004 && { texto: `Por cobrar ${usd(porCobrar)}` },
+            ]}
+          />
         </div>
         <div className="dash-header-right">
           {actualizadoEn && (

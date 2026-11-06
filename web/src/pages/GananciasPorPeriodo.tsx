@@ -5,6 +5,7 @@ import Modal from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
 import Cifra from "../components/Cifra";
+import { Contexto } from "../components/Identidad";
 
 // Recreación de las pestañas GANANCIAS_POR_PERIODO + AJUSTES EXTRAORDINARIOS de la planilla
 // (15/09/2026). Un período agrupa semanas ya cerradas bajo un nombre ("Agosto 2026") y, al
@@ -95,7 +96,16 @@ export default function GananciasPorPeriodo() {
     <div style={{ marginTop: 16 }}>
       <div className="topbar">
         <div>
-          <div className="muted">
+          <Contexto
+            chips={[
+              { texto: `${periodos.length} período${periodos.length === 1 ? "" : "s"} · ${periodos.filter((p) => p.status === "CERRADO").length} cerrado${periodos.filter((p) => p.status === "CERRADO").length === 1 ? "" : "s"}` },
+              periodos.some((p) => p.status === "ABIERTO") && {
+                texto: `Abierto: ${periodos.filter((p) => p.status === "ABIERTO").map((p) => p.name).join(", ")}`,
+                tono: "alerta",
+              },
+            ]}
+          />
+          <div className="muted" style={{ marginTop: 10, maxWidth: 820 }}>
             Agrupá semanas ya cerradas bajo un nombre (ej. "Agosto 2026") para ver la ganancia neta de ese tramo --
             descontando retiros, gastos y las cuotas de ajustes extraordinarios pendientes. "Ganancia operativa" acá
             es exactamente la misma cuenta (cierres + bancados) que ya ves en la pestaña "Resumen" de arriba, para

@@ -5,6 +5,7 @@ import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
 import { usd } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Ayuda, { Aviso } from "../components/Ayuda";
+import { Contexto } from "../components/Identidad";
 import { usePaginado, WmPaginacion, WmTabs, type WmTab } from "../components/ListaWm";
 
 // Selector de agentes/clubes como checklist con buscador — mismo patrón que ya usa Liquidaciones
@@ -441,6 +442,16 @@ export default function Usuarios() {
         <div>
           <h2>Usuarios y permisos <Ayuda>ADMIN ve y administra todo. SUPERVISOR ve el resumen de su grupo de agentes a cargo. AGENTE ve "Mi cuenta" de sus agentes/clubes asociados, nunca la de otro.
             PROVEEDOR ve su propia ficha en Proveedores (saldo, cierres y pagos), nunca la de otro proveedor.</Ayuda></h2>
+          <Contexto
+            chips={[
+              { texto: `${usuarios.length} usuarios` },
+              ...(["ADMIN", "SUPERVISOR", "AGENT", "PROVEEDOR", "SOCIO"] as const)
+                .map((r) => ({ r, n: usuarios.filter((u) => u.role === r).length }))
+                .filter((x) => x.n > 0)
+                .map((x) => ({ texto: `${x.n} ${({ ADMIN: "admin", SUPERVISOR: "supervisor", AGENT: "agente", PROVEEDOR: "proveedor", SOCIO: "socio" } as const)[x.r]}${x.n === 1 ? "" : x.r === "PROVEEDOR" || x.r === "SUPERVISOR" ? "es" : "s"}` })),
+              usuarios.some((u) => u.active === false) && { texto: `${usuarios.filter((u) => u.active === false).length} desactivados`, tono: "alerta" },
+            ]}
+          />
         </div>
         <button
           className="btn"
