@@ -14,6 +14,11 @@
 
 const DEFAULT_DEST = 'https://one-vv1796.com/?p=qinc';
 const CHUNK = 100;
+// Destinos por ruta: "/" = Peru (DEST_URL), "/br" y "/br-bonus" = Brasil. Ruta desconocida = 404 (no se redirige a otro pais).
+const ROUTES = {
+  br: 'https://r1wclcs.com/?open=register&p=vnxp',
+  'br-bonus': 'https://r1wclcs.com/?open=register&p=9cal',
+};
 
 export default {
   async fetch(request, env) {
@@ -26,9 +31,11 @@ export default {
     let sub1 = fbclid ? String(ms) : 'noclid_' + ms;
     if (adName) sub1 = adName + '_' + sub1;
 
+    const route = url.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    if (route && !ROUTES[route]) return new Response('Not found', { status: 404 });
     let dest;
     try {
-      dest = new URL(env.DEST_URL || DEFAULT_DEST);
+      dest = new URL(route ? ROUTES[route] : env.DEST_URL || DEFAULT_DEST);
     } catch (_) {
       return new Response('DEST_URL invalida', { status: 500 });
     }

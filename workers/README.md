@@ -9,6 +9,7 @@ Ambos deben mantenerse sincronizados: si cambia el formato de `afp` en el bridge
 se actualiza la extraccion de `fbc` en el postback.
 
 - `1win-postback`: postback global de 1win -> Meta CAPI (v2: moneda configurable con `CURRENCY`).
+- `1win-bridge` rutas: `/` = Peru (DEST_URL), `/br` = Brasil (p=vnxp), `/br-bonus` = Brasil con bono (p=9cal); otra ruta = 404. Todas arman sub1..sub4 igual y usan el mismo postback.
 
 ### 1win-postback: puesta en marcha
 
