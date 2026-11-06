@@ -103,6 +103,9 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     acuerdo_supervisor: acuerdos.length > 0 ? { supervisor: agent.rows[0].supervisor, clubes: acuerdos } : null,
     adelantos: adelantos.rows,
     cuenta: cuentaPropia,
+    // Agentes de un supervisor (06/11/2026, pedido de Leo): en su portal solo ven sus cierres semanales -- el saldo,
+    // los movimientos, el acuerdo y la calculadora son cosas nuestras/del supervisor que no necesitan ver.
+    solo_cierres: !!agent.rows[0].supervisor,
   });
 });
 

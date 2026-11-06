@@ -37,7 +37,7 @@ export default function MiCuenta() {
 
   if (!data) return <Loading />;
   // Agente con cuenta propia en la sección Agentes: "Mi cuenta" muestra esa cuenta (20/10/2026).
-  if (data.cuenta) return <MiCuentaAgente data={data} misAgentes={misAgentes} agentId={agentId} setAgentId={setAgentId} />;
+  if (data.cuenta && !data.solo_cierres) return <MiCuentaAgente data={data} misAgentes={misAgentes} agentId={agentId} setAgentId={setAgentId} />;
 
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
   const variosClubes = data.saldos.length > 1;
@@ -135,6 +135,20 @@ export default function MiCuenta() {
       )}
     </PortalPane>
   );
+
+  // Agente de un supervisor (06/11/2026): solo sus cierres semanales, nada más.
+  if (data.solo_cierres)
+    return (
+      <div>
+        <div className="topbar" style={{ marginBottom: 14 }}>
+          <div>
+            <h2>Hola, {data.agente.name}</h2>
+            {data.agente.supervisor && <div className="muted">Supervisor: {data.agente.supervisor}</div>}
+          </div>
+        </div>
+        {cierresPane}
+      </div>
+    );
 
   return (
     <div>
