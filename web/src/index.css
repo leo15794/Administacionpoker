@@ -3267,6 +3267,16 @@ body {
   .app-shell.menu-bottom .df-sep { width: 1px; height: 40px; margin: 0 8px 8px; align-self: center; }
   .app-shell.menu-bottom .df-k.active i { margin-top: -12px; }
   .app-shell.menu-bottom .main { margin: 0 auto; padding-bottom: 130px; }
+  /* (06/11/2026, Leo: "choca con lo del fondo") el dock de abajo flota sobre tablas: casi opaco para que no se lean letras a través,
+     y un fundido en el borde inferior de la pantalla para que el contenido se desvanezca antes de llegar al dock. */
+  .app-shell.menu-bottom .dock-fichas {
+    background: linear-gradient(var(--sidebar-bg), var(--sidebar-bg)), color-mix(in srgb, var(--panel) 92%, transparent);
+  }
+  .app-shell.menu-bottom::after {
+    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 120px; z-index: 44; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--panel) 88%, transparent) 75%);
+  }
+  html.embebido .app-shell.menu-bottom::after { display: none; }
 
   /* Izquierda */
   .app-shell.menu-left .dock-fichas {
