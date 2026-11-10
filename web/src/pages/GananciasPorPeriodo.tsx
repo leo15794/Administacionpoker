@@ -681,7 +681,7 @@ function SueldoManos({ sueldo, previa, gananciaNetaFinal, onChanged }: { sueldo:
         <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
           {sueldo.fecha_pago && <>Pago del {dateShort(sueldo.fecha_pago)}</>}
           {sueldo.pesos_pagados != null && <> · ARS {Number(sueldo.pesos_pagados).toLocaleString("es-AR")} a {Number(sueldo.cotizacion_ars_usdt)} = {usd(sueldo.equivalente_usdt)}</>}
-          {sueldo.estado === "PAGADO" && <> · bajó la deuda de Juan, no movió Wallet Manos</>}
+          {sueldo.estado === "PAGADO" && <> · {textoMedioPagado(sueldo)}</>}
         </div>
       )}
 
@@ -746,8 +746,10 @@ function SueldoManos({ sueldo, previa, gananciaNetaFinal, onChanged }: { sueldo:
         <Modal title={`Pago del sueldo de Manos · ${sueldo.period_name}`} onClose={() => setPagando(false)}>
           <PagoSueldoForm
             esperado={Number(sueldo.sueldo_usdt)}
+            periodo={sueldo.period_name}
+            conMedios
             onSubmit={async (d) => {
-              const r = await api.pagarSueldoManos(sueldo.id, d);
+              const r = await api.pagarSueldoManos(sueldo.id, d as any);
               setPagando(false);
               onChanged();
               if (r.sueldo?.estado === "REVISAR_DIFERENCIA") {
@@ -762,7 +764,7 @@ function SueldoManos({ sueldo, previa, gananciaNetaFinal, onChanged }: { sueldo:
         <Modal title={`Complemento del sueldo de Manos · ${sueldo.period_name}`} onClose={() => setComplemento(false)}>
           <PagoSueldoForm
             esperado={Math.round((Number(sueldo.revision_sueldo_usdt) - Number(sueldo.sueldo_usdt)) * 100) / 100}
-            onSubmit={async (d) => {
+            onSubmit={async (d: any) => {
               await api.revisionSueldoManos(sueldo.id, { accion: "AJUSTAR", fechaPago: d.fechaPago, pesos: d.pesos, cotizacion: d.cotizacion });
               setComplemento(false);
               onChanged();
@@ -774,28 +776,83 @@ function SueldoManos({ sueldo, previa, gananciaNetaFinal, onChanged }: { sueldo:
   );
 }
 
-function PagoSueldoForm({ esperado, onSubmit }: { esperado: number; onSubmit: (d: { fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }) => Promise<void> }) {
+// Cómo quedó pagado un sueldo (para la línea debajo de los KPIs).
+function textoMedioPagado(s: any): string {
+  const wallet = s.wallet_adjustment_id ? "salió de Wallet Manos" : "no movió Wallet Manos";
+  switch (s.medio_pago) {
+    case "USDT":
+      return `pagado en USDT · ${wallet}`;
+    case "CUENTA_MANOS":
+      return `descontado de la cuenta socio de Manos · ${wallet}`;
+    case "CUENTA_JUAN":
+      return `descontado de la cuenta socio de Juan · ${wallet}`;
+    default:
+      return "bajó la deuda de Juan, no movió Wallet Manos";
+  }
+}
+
+// Medios de pago del sueldo (10/11/2026, pedido de Leo, mockup 84): además de los pesos de Juan, USDT (con el tilde de
+// Wallet como en el resto del panel) o descontado de la cuenta socio de Manos o de Juan. Ver repo/sueldoManos.ts.
+type MedioPago = "PESOS" | "USDT" | "CUENTA_MANOS" | "CUENTA_JUAN";
+const MEDIOS_PAGO: { key: MedioPago; ic: string; titulo: string; sub: string }[] = [
+  { key: "PESOS", ic: "$", titulo: "Pesos", sub: "Juan paga en ARS" },
+  { key: "USDT", ic: "₮", titulo: "USDT", sub: "Sale de Wallet" },
+  { key: "CUENTA_MANOS", ic: "M", titulo: "Cuenta Manos", sub: "Se descuenta ahí" },
+  { key: "CUENTA_JUAN", ic: "J", titulo: "Cuenta Juan", sub: "Se descuenta ahí" },
+];
+
+function PagoSueldoForm({
+  esperado,
+  periodo,
+  conMedios,
+  onSubmit,
+}: {
+  esperado: number;
+  periodo?: string;
+  conMedios?: boolean;
+  onSubmit: (d: any) => Promise<void>;
+}) {
+  const [medio, setMedio] = useState<MedioPago>("PESOS");
   const [fechaPago, setFechaPago] = useState(new Date().toISOString().slice(0, 10));
   const [pesos, setPesos] = useState("");
   const [cotizacion, setCotizacion] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const [moverWallet, setMoverWallet] = useState(false);
+  const [cuentas, setCuentas] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (conMedios) api.cuentasSocios().then(setCuentas).catch(() => {});
+  }, [conMedios]);
+
+  function elegir(m: MedioPago) {
+    setMedio(m);
+    setMsg("");
+    // USDT: por defecto sale de la Wallet (es el caso normal); en las cuentas socio, solo si se tilda.
+    setMoverWallet(m === "USDT");
+  }
 
   const p = Number(pesos);
   const c = Number(cotizacion);
   const equivalente = p > 0 && c > 0 ? Math.round((p / c) * 100) / 100 : null;
   const diferencia = equivalente != null ? Math.round((equivalente - esperado) * 100) / 100 : null;
+  const nombreCuenta = medio === "CUENTA_MANOS" ? "manos" : medio === "CUENTA_JUAN" ? "juan" : null;
+  const cuenta = nombreCuenta ? cuentas.find((x) => x.id === nombreCuenta || String(x.name).trim().toLowerCase() === nombreCuenta) : null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setMsg("");
     if (!fechaPago) return setMsg("La fecha de pago es obligatoria.");
-    if (!(p > 0)) return setMsg("Los pesos pagados tienen que ser mayores a 0.");
-    if (!(c > 0)) return setMsg("La cotización tiene que ser mayor a 0.");
+    const obs = observaciones.trim() || null;
+    if (medio === "PESOS") {
+      if (!(p > 0)) return setMsg("Los pesos pagados tienen que ser mayores a 0.");
+      if (!(c > 0)) return setMsg("La cotización tiene que ser mayor a 0.");
+    }
     setLoading(true);
     try {
-      await onSubmit({ fechaPago, pesos: p, cotizacion: c, observaciones: observaciones.trim() || null });
+      if (medio === "PESOS") await onSubmit({ ...(conMedios ? { medio } : {}), fechaPago, pesos: p, cotizacion: c, observaciones: obs });
+      else await onSubmit({ medio, fechaPago, moverWallet, observaciones: obs });
     } catch (err: any) {
       setMsg(err.message || "No se pudo registrar el pago.");
     } finally {
@@ -803,31 +860,95 @@ function PagoSueldoForm({ esperado, onSubmit }: { esperado: number; onSubmit: (d
     }
   }
 
+  const fechaField = (
+    <div className="field">
+      <label>Fecha de pago</label>
+      <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
+    </div>
+  );
+
   return (
     <form onSubmit={submit}>
-      <div className="muted" style={{ marginBottom: 10 }}>
-        Juan lo paga en pesos: al quedar pagado se le baja la deuda por {usd(esperado)}. No mueve Wallet Manos ni la cuenta de Manos.
-      </div>
-      <div className="form-grid">
-        <div className="field">
-          <label>Fecha de pago</label>
-          <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Pesos pagados (ARS)</label>
-          <input type="number" step="0.01" min="0" value={pesos} onChange={(e) => setPesos(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Cotización ARS/USDT</label>
-          <input type="number" step="0.0001" min="0" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} />
-        </div>
-      </div>
-      {equivalente != null && (
-        <div className={Math.abs(diferencia!) <= 0.01 ? "success" : "error"} style={{ marginBottom: 10 }}>
-          Equivalente {usd(equivalente)} · esperado {usd(esperado)}
-          {Math.abs(diferencia!) > 0.01 && <> · diferencia {usd(diferencia!)} (quedaría en "Revisar diferencia")</>}
-        </div>
+      {conMedios && (
+        <>
+          <label className="mp-lbl">¿Cómo se paga?</label>
+          <div className="medios-pago">
+            {MEDIOS_PAGO.map((m) => (
+              <button type="button" key={m.key} className={`mp${medio === m.key ? " on" : ""}`} onClick={() => elegir(m.key)}>
+                <span className="mp-ic">{m.ic}</span>
+                <b>{m.titulo}</b>
+                <small>{m.sub}</small>
+              </button>
+            ))}
+          </div>
+        </>
       )}
+
+      {medio === "PESOS" ? (
+        <>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Juan lo paga en pesos: al quedar pagado se le baja la deuda por {usd(esperado)}. No mueve Wallet Manos{conMedios ? " ni las cuentas socio" : " ni la cuenta de Manos"}.
+          </div>
+          <div className="form-grid">
+            {fechaField}
+            <div className="field">
+              <label>Pesos pagados (ARS)</label>
+              <input type="number" step="0.01" min="0" value={pesos} onChange={(e) => setPesos(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Cotización ARS/USDT</label>
+              <input type="number" step="0.0001" min="0" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} />
+            </div>
+          </div>
+          {equivalente != null && (
+            <div className={Math.abs(diferencia!) <= 0.01 ? "success" : "error"} style={{ marginBottom: 10 }}>
+              Equivalente {usd(equivalente)} · esperado {usd(esperado)}
+              {Math.abs(diferencia!) > 0.01 && <> · diferencia {usd(diferencia!)} (quedaría en "Revisar diferencia")</>}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            {medio === "USDT" ? (
+              <>Se le paga a Manos en USDT. Con el tilde de abajo queda registrado el <b>egreso real</b> en Wallet, como en el resto del panel.</>
+            ) : (
+              <>
+                Se descuenta de la <b>cuenta socio de {medio === "CUENTA_MANOS" ? "Manos" : "Juan"}</b> como movimiento “Sueldo Manos{periodo ? ` · ${periodo}` : ""}”.
+              </>
+            )}
+          </div>
+          <div className="form-grid">
+            {fechaField}
+            <div className="field">
+              <label>Monto (USDT)</label>
+              <input value={usd(esperado)} readOnly disabled />
+            </div>
+          </div>
+          {cuenta && (
+            <div className="mp-saldo">
+              <span className="muted">Saldo cuenta {cuenta.name}</span>
+              <b>{usd(Number(cuenta.saldo))}</b>
+              <span className="muted">→</span>
+              <b>{usd(Math.round((Number(cuenta.saldo) - esperado) * 100) / 100)}</b>
+            </div>
+          )}
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
+              <input type="checkbox" checked={moverWallet} onChange={(e) => setMoverWallet(e.target.checked)} style={{ width: "auto" }} />
+              Esto también mueve la Wallet (USDT real)
+            </label>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              {moverWallet ? (
+                <>Al guardar se va a registrar en Wallet un <strong>EGRESO</strong> real de {usd(esperado)}.</>
+              ) : (
+                "Tildalo solo si esta plata de verdad salió de la Wallet."
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="field">
         <label>Observaciones (opcional)</label>
         <input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />

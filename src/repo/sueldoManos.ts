@@ -12,6 +12,7 @@
 // la base, y el movimiento de Juan usa su propia clave idempotente.
 import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
+import { fechaSinCorrimiento } from "./partnerAccounts.js";
 
 export const SUELDO_MANOS_PORCENTAJE = 0.1;
 export const SUELDO_MANOS_MINIMO = 400;
@@ -54,7 +55,11 @@ export function asegurarTablaSueldosManos(): Promise<void> {
         observaciones              TEXT,
         created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
-      )`
+      );
+      -- Medio de pago (10/11/2026): además de los pesos de Juan, USDT (con o sin egreso en Wallet) o descontado de la
+      -- cuenta socio de Manos o de Juan. wallet_adjustment_id = el egreso real en Wallet, si se tildó.
+      ALTER TABLE manos_sueldos ADD COLUMN IF NOT EXISTS medio_pago TEXT;
+      ALTER TABLE manos_sueldos ADD COLUMN IF NOT EXISTS wallet_adjustment_id TEXT;`
     )
     .then(() => undefined)
     .catch((err) => {
@@ -170,6 +175,14 @@ export async function periodoDeMovimientoDeSueldo(entryId: string): Promise<stri
   return r.rows[0]?.period_name ?? null;
 }
 
+async function cuentaDeManos(client: PoolClient): Promise<string> {
+  const r = await client.query(
+    `SELECT id FROM partner_accounts WHERE active = true AND (id = 'manos' OR lower(trim(name)) = 'manos') ORDER BY (id = 'manos') DESC LIMIT 1`
+  );
+  if (!r.rows[0]) throw new Error("No se encontró la cuenta de Manos en Cuentas de socios.");
+  return r.rows[0].id;
+}
+
 async function cuentaDeJuan(client: PoolClient): Promise<string> {
   const r = await client.query(
     `SELECT id FROM partner_accounts WHERE id = 'juan' OR lower(name) = 'juan' ORDER BY (id = 'juan') DESC LIMIT 1`
@@ -266,7 +279,7 @@ export async function registrarPagoSueldo(id: string, input: { fechaPago: string
     });
     await client.query(
       `UPDATE manos_sueldos SET estado = 'PAGADO', fecha_pago = $2, pesos_pagados = $3, cotizacion_ars_usdt = $4, equivalente_usdt = $5,
-         cuenta_pagadora = $6, movimiento_cuenta_juan_id = $7, observaciones = $8, updated_at = now()
+         cuenta_pagadora = $6, movimiento_cuenta_juan_id = $7, observaciones = $8, medio_pago = 'PESOS', updated_at = now()
        WHERE id = $1`,
       [id, input.fechaPago, input.pesos, input.cotizacion, equivalente, cuentaId, movId, obs]
     );
@@ -370,5 +383,67 @@ export async function resolverRevisionSueldo(
       ]
     );
     return leerSueldo(client, id);
+  });
+}
+
+// ---------- Otros medios de pago (10/11/2026, pedido de Leo) ----------
+// Además de "Juan lo paga en pesos", el sueldo se puede pagar:
+//   USDT          -> se le paga a Manos en USDT; con moverWallet queda el EGRESO real en Wallet Manos. No toca cuentas socio.
+//   CUENTA_MANOS  -> se descuenta de la cuenta socio de Manos (movimiento PAGO por -sueldo).
+//   CUENTA_JUAN   -> se descuenta de la cuenta socio de Juan (movimiento PAGO por -sueldo), sin pesos ni cotización.
+// En los de cuenta socio también se puede tildar que salió de la Wallet: el egreso queda vinculado al movimiento, igual que
+// "Esto también mueve la Wallet" en Cuentas de socios. El importe es siempre el sueldo completo.
+export type MedioPagoSueldo = "PESOS" | "USDT" | "CUENTA_MANOS" | "CUENTA_JUAN";
+const NOMBRE_MEDIO: Record<Exclude<MedioPagoSueldo, "PESOS">, string> = {
+  USDT: "Pagado en USDT",
+  CUENTA_MANOS: "Descontado de la cuenta socio de Manos",
+  CUENTA_JUAN: "Descontado de la cuenta socio de Juan",
+};
+
+export async function registrarPagoSueldoOtroMedio(
+  id: string,
+  input: { medio: Exclude<MedioPagoSueldo, "PESOS">; fechaPago: string; moverWallet?: boolean; observaciones?: string | null },
+  usuario?: string | null
+) {
+  return conSueldo(id, async (client, s) => {
+    if (s.period_status !== "CERRADO") throw new Error("El período está abierto: cerralo antes de registrar el pago del sueldo.");
+    if (s.estado !== "PENDIENTE" && s.estado !== "REVISAR_DIFERENCIA") throw new Error("Este sueldo ya está pagado.");
+    if (!input.fechaPago) throw new Error("La fecha de pago es obligatoria.");
+    const sueldo = Number(s.sueldo_usdt);
+    const concepto = `Sueldo Manos · ${s.period_name}`;
+
+    let walletId: string | null = null;
+    if (input.moverWallet) {
+      walletId = newId("tad");
+      await client.query(
+        `INSERT INTO treasury_adjustments (id, ledger, direction, amount, reason, occurred_at, created_by, idempotency_key)
+         VALUES ($1,'WALLET_MANOS','EGRESO',$2,$3,$4,$5,$6)`,
+        [walletId, sueldo, concepto, fechaSinCorrimiento(input.fechaPago), usuario ?? null, `SUELDO_MANOS_WALLET-${s.period_id}`]
+      );
+    }
+
+    let cuentaId: string | null = null;
+    let movId: string | null = null;
+    if (input.medio !== "USDT") {
+      cuentaId = input.medio === "CUENTA_MANOS" ? await cuentaDeManos(client) : await cuentaDeJuan(client);
+      movId = newId("pentry");
+      const notas = `${NOMBRE_MEDIO[input.medio]}. Período: ${s.period_name} (${s.period_id}) · sueldo ${s.id}.${walletId ? " También salió de Wallet Manos." : ""}`;
+      await client.query(
+        `INSERT INTO partner_account_entries (id, account_id, category, concept, amount, entry_date, notes, idempotency_key, treasury_adjustment_id)
+         VALUES ($1,$2,'PAGO',$3,$4,$5,$6,$7,$8)`,
+        [movId, cuentaId, concepto, -sueldo, input.fechaPago, notas, `SUELDO_MANOS_PAGO-${s.period_id}`, walletId]
+      );
+    }
+
+    const nota = `${NOMBRE_MEDIO[input.medio]}${walletId ? " · egreso en Wallet Manos" : ""}${usuario ? ` (${usuario})` : ""}.`;
+    let obs = agregarObservacion(s.observaciones, `${input.fechaPago}: ${nota}`);
+    if (input.observaciones?.trim()) obs = agregarObservacion(obs, input.observaciones.trim());
+    await client.query(
+      `UPDATE manos_sueldos SET estado = 'PAGADO', medio_pago = $2, fecha_pago = $3, pesos_pagados = NULL, cotizacion_ars_usdt = NULL,
+         equivalente_usdt = $4, cuenta_pagadora = $5, movimiento_cuenta_juan_id = $6, wallet_adjustment_id = $7, observaciones = $8, updated_at = now()
+       WHERE id = $1`,
+      [id, input.medio, input.fechaPago, sueldo, cuentaId, movId, walletId, obs]
+    );
+    return { sueldo: await leerSueldo(client, id), esperado: sueldo, equivalente: sueldo, diferencia: 0 };
   });
 }

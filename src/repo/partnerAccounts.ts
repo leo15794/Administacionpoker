@@ -21,7 +21,7 @@ export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') TH
 // el mismo día se distinguen por hora de verdad en el historial de Wallet, pedido de Leo
 // 02/10/2026: "se mezclan los movimientos"). Si es una fecha pasada/futura (carga con fecha
 // distinta a hoy), usa el mediodía de ese día -- no hay una hora real que inventar ahí.
-function fechaSinCorrimiento(fecha: string | Date): Date {
+export function fechaSinCorrimiento(fecha: string | Date): Date {
   let y: number, m: number, d: number;
   if (typeof fecha === "string") {
     [y, m, d] = fecha.slice(0, 10).split("-").map(Number);

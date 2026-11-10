@@ -17,7 +17,7 @@ import {
   revisionCierrePeriodo,
   eliminarPeriodo,
 } from "../repo/profitPeriods.js";
-import { registrarPagoSueldo, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
+import { registrarPagoSueldo, registrarPagoSueldoOtroMedio, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
 
 export const profitPeriodsRouter = Router();
 
@@ -176,8 +176,24 @@ const pagoSueldoSchema = z.object({
   cotizacion: z.number().positive("La cotización tiene que ser mayor a 0."),
   observaciones: z.string().nullable().optional(),
 });
+// Otros medios (10/11/2026): USDT o descontado de la cuenta socio de Manos o de Juan; sin pesos ni cotización.
+const pagoSueldoOtroMedioSchema = z.object({
+  medio: z.enum(["USDT", "CUENTA_MANOS", "CUENTA_JUAN"]),
+  fechaPago: z.string().min(1, "La fecha de pago es obligatoria."),
+  moverWallet: z.boolean().optional(),
+  observaciones: z.string().nullable().optional(),
+});
 
 profitPeriodsRouter.post("/sueldos-manos/:id/pagar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  if (req.body?.medio && req.body.medio !== "PESOS") {
+    const otro = pagoSueldoOtroMedioSchema.safeParse(req.body);
+    if (!otro.success) return res.status(400).json({ error: otro.error.flatten() });
+    try {
+      return res.json(await registrarPagoSueldoOtroMedio(req.params.id, otro.data, req.user?.email ?? null));
+    } catch (err: any) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
   const parsed = pagoSueldoSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {

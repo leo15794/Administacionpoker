@@ -707,7 +707,12 @@ export const api = {
   cerrarPeriodo: (id: string) => request(`/profit-periods/${id}/cerrar`, { method: "POST" }),
   reabrirPeriodo: (id: string) => request(`/profit-periods/${id}/reabrir`, { method: "POST" }),
   eliminarPeriodo: (id: string) => request(`/profit-periods/${id}`, { method: "DELETE" }),
-  pagarSueldoManos: (id: string, data: { fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }) =>
+  pagarSueldoManos: (
+    id: string,
+    data:
+      | { medio?: "PESOS"; fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }
+      | { medio: "USDT" | "CUENTA_MANOS" | "CUENTA_JUAN"; fechaPago: string; moverWallet?: boolean; observaciones?: string | null }
+  ) =>
     request(`/profit-periods/sueldos-manos/${id}/pagar`, { method: "POST", body: JSON.stringify(data) }),
   aceptarDiferenciaSueldoManos: (id: string) => request(`/profit-periods/sueldos-manos/${id}/aceptar-diferencia`, { method: "POST" }),
   revisionSueldoManos: (id: string, data: { accion: "MANTENER" | "AJUSTAR"; fechaPago?: string; pesos?: number; cotizacion?: number }) =>
