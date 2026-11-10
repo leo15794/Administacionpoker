@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { pool, newId } from "../db/pool.js";
 import { signToken, requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { pedirClave } from "../repo/pedidosClave.js";
 import { estadoAcceso, MENSAJE_ACCESO, asegurarSchemaSesiones, registrarHistorial, problemaContrasena } from "../lib/sesiones.js";
 
 export const authRouter = Router();
@@ -122,4 +123,24 @@ authRouter.post("/cambiar-clave", requireAuth, async (req: AuthedRequest, res) =
     console.error("Error en /auth/cambiar-clave:", err);
     res.status(500).json({ error: "No se pudo cambiar la contraseña." });
   }
+});
+
+// "Olvidé mi contraseña" (10/11/2026, mockup 89): avisa a quien puede resetearla (ver repo/pedidosClave.ts). Siempre responde lo mismo, exista
+// o no el usuario, y tiene su propio límite de pedidos.
+const olvideLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiados pedidos. Esperá unos minutos y volvé a intentar." },
+});
+authRouter.post("/olvide-clave", olvideLimiter, async (req, res) => {
+  const usuario = typeof req.body?.usuario === "string" ? req.body.usuario.trim() : "";
+  if (usuario.length < 2) return res.status(400).json({ error: "Escribí tu usuario." });
+  try {
+    await pedirClave(usuario);
+  } catch (err) {
+    console.error("Error en /auth/olvide-clave:", err);
+  }
+  res.json({ ok: true });
 });

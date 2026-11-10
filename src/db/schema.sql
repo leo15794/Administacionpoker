@@ -2590,3 +2590,14 @@ CREATE TABLE IF NOT EXISTS usuarios_historial (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_usuarios_historial ON usuarios_historial(user_id, created_at);
+
+-- "Olvidé mi contraseña" (10/11/2026, mockup 89): pedidos que le llegan a quien puede resetear esa contraseña. Ver repo/pedidosClave.ts.
+CREATE TABLE IF NOT EXISTS pedidos_clave (
+  id             TEXT PRIMARY KEY,
+  user_id        TEXT NOT NULL,
+  estado         TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','RESUELTO','IGNORADO')),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resuelto_por   TEXT,
+  resuelto_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_pedidos_clave_estado ON pedidos_clave(estado, created_at);

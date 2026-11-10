@@ -15,6 +15,7 @@ import {
   getMiCuentaAgente,
 } from "../repo/supervisores.js";
 import { getMiSocio } from "../repo/socios.js";
+import { pedidosPendientes, resolverPedido, ignorarPedido } from "../repo/pedidosClave.js";
 import {
   listarMisSubagentes,
   contarMisSubagentes,
@@ -724,6 +725,32 @@ portalRouter.get("/mi-subagente", requireAuth, async (req: AuthedRequest, res) =
   } catch (err: any) {
     console.error("Error en /portal/mi-subagente:", err);
     res.status(500).json({ error: "No se pudieron cargar tus cierres." });
+  }
+});
+
+// Pedidos de "Olvidé mi contraseña" (10/11/2026, mockup 89): el admin ve todos; el supervisor, los de sus agentes; el agente, los de sus
+// subagentes. Siempre filtrado por el login (ver repo/pedidosClave.ts).
+const quien = (req: AuthedRequest) => ({ userId: req.user!.userId, role: req.user!.role, agentId: req.user!.agentId });
+portalRouter.get("/pedidos-clave", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await pedidosPendientes(quien(req)));
+  } catch (err) {
+    console.error("Error en /portal/pedidos-clave:", err);
+    res.json([]);
+  }
+});
+portalRouter.post("/pedidos-clave/:id/generar", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await resolverPedido(quien(req), req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+portalRouter.post("/pedidos-clave/:id/ignorar", requireAuth, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await ignorarPedido(quien(req), req.params.id));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

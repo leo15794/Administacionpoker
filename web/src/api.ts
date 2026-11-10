@@ -159,6 +159,11 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }) as Promise<{ token: string; role: string; agentName?: string; cambiarClave?: boolean }>,
   cambiarClave: (nueva: string) => request("/auth/cambiar-clave", { method: "POST", body: JSON.stringify({ nueva }) }) as Promise<{ token: string; role: string }>,
   historialUsuario: (id: string) => request(`/users/${id}/historial`),
+  // "Olvidé mi contraseña" (10/11/2026, mockup 89).
+  olvideClave: (usuario: string) => request("/auth/olvide-clave", { method: "POST", body: JSON.stringify({ usuario }) }),
+  pedidosClave: () => request("/portal/pedidos-clave") as Promise<any[]>,
+  generarClavePedido: (id: string) => request(`/portal/pedidos-clave/${id}/generar`, { method: "POST" }) as Promise<{ usuario: string; clave: string }>,
+  ignorarPedidoClave: (id: string) => request(`/portal/pedidos-clave/${id}/ignorar`, { method: "POST" }),
   resumen: () => request("/dashboard/resumen"),
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
   agentes: (includeInactive?: boolean) => request(`/dashboard/agentes${includeInactive ? "?includeInactive=true" : ""}`),

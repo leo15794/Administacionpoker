@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import Modal from "../components/Modal";
+import PedidosClave from "../components/PedidosClave";
 import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
 import { usd, dateTime } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
@@ -467,6 +468,8 @@ export default function Usuarios() {
           {showForm ? "Cerrar formulario" : "+ Nuevo usuario"}
         </button>
       </div>
+
+      <PedidosClave onResuelto={refresh} />
 
       {showForm && (
         <NuevoUsuario

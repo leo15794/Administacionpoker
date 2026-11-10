@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import PedidosClave from "../components/PedidosClave";
 
 // "Mis subagentes" del agente (10/11/2026, pedido de Leo, mockup 87): los subagentes salen solos del archivo semanal del club (Suprema y
 // TeamBack GG). El agente les crea el usuario y les pone sus % por club; ve cómo ve su última semana el subagente y cuánto le queda a él.
@@ -78,6 +79,8 @@ export default function MisSubagentes() {
           {msgNuevo && <span className="neg" style={{ fontSize: 12 }}>{msgNuevo}</span>}
         </div>
       )}
+
+      <PedidosClave onResuelto={() => cargar()} />
 
       <div className="kpi-grid">
         <div className="kpi-card"><div className="label">Subagentes</div><div className="value">{subs.length}</div></div>

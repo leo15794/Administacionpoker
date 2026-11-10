@@ -17,7 +17,24 @@ export default function Login() {
     }
   });
   const [loading, setLoading] = useState(false);
+  // "Olvidé mi contraseña" (10/11/2026, mockup 89).
+  const [olvide, setOlvide] = useState(false);
+  const [pedidoEnviado, setPedidoEnviado] = useState(false);
   const nav = useNavigate();
+
+  async function pedirNueva(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await api.olvideClave(email.trim());
+      setPedidoEnviado(true);
+    } catch (err: any) {
+      setError(err.message || "No se pudo enviar el pedido.");
+    } finally {
+      setLoading(false);
+    }
+  }
   // Si la sesión venció dentro de un panel de la vista dividida, el login se abre a pantalla completa y no adentro del panel.
   useEffect(() => {
     if (window.self !== window.top) window.top!.location.href = "/login";
@@ -76,6 +93,33 @@ export default function Login() {
         </div>
         <div className="login-form-panel">
           <LoginSwitch actual="poker" />
+          {olvide ? (
+            <>
+              <h2>¿Olvidaste tu contraseña?</h2>
+              <div className="sub">Escribí tu usuario. Le avisamos a quien te dio el acceso para que te pase una contraseña temporal.</div>
+              <form onSubmit={pedirNueva}>
+                <div className="field">
+                  <label>Usuario</label>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" autoComplete="username" autoFocus />
+                </div>
+                {error && <div className="error">{error}</div>}
+                {pedidoEnviado ? (
+                  <div className="success">
+                    <b>✓ Listo, pedido enviado.</b> Si el usuario existe, ya le avisamos a quien te lo creó. Cuando te pase la contraseña temporal,
+                    entrá y elegí una propia.
+                  </div>
+                ) : (
+                  <button className="btn" style={{ width: "100%" }} disabled={loading || email.trim().length < 2}>
+                    {loading ? "Enviando..." : "Pedir contraseña nueva"}
+                  </button>
+                )}
+              </form>
+              <button type="button" className="login-olvide" onClick={() => { setOlvide(false); setPedidoEnviado(false); setError(""); }}>
+                ‹ Volver a ingresar
+              </button>
+            </>
+          ) : (
+          <>
           <h2 className="login-reveal" style={{ animationDelay: ".2s" }}>Ingresar</h2>
           <div className="sub login-reveal" style={{ animationDelay: ".28s" }}>Accedé con tu usuario y contraseña</div>
           <form onSubmit={onSubmit}>
@@ -92,6 +136,11 @@ export default function Login() {
               {loading ? "Ingresando..." : "Ingresar"}
             </button>
           </form>
+          <button type="button" className="login-olvide login-reveal" style={{ animationDelay: ".56s" }} onClick={() => { setOlvide(true); setError(""); }}>
+            ¿Olvidaste tu contraseña?
+          </button>
+          </>
+          )}
           <div className="footnote login-reveal" style={{ animationDelay: ".6s" }}>Acceso exclusivo — club privado</div>
         </div>
       </div>

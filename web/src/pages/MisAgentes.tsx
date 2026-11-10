@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import PedidosClave from "../components/PedidosClave";
 
 // "Mis agentes" del supervisor (06/11/2026, pedido de Leo, mockup 80 aprobado): panel propio, aparte de "Mi supervisión".
 // A la izquierda sus agentes a cargo con su estado; a la derecha el agente elegido: su usuario para entrar, sus % por club
@@ -47,6 +48,8 @@ export default function MisAgentes() {
           </div>
         </div>
       </div>
+
+      <PedidosClave onResuelto={cargar} />
 
       <div className="kpi-grid">
         <div className="kpi-card"><div className="label">Agentes a cargo</div><div className="value">{agentes.length}</div></div>
