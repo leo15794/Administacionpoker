@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import Modal from "../components/Modal";
 import { FilaAgenteConJugadores, ACCOUNT_TYPE_LABELS } from "./Agentes";
-import { usd } from "../fmt";
+import { usd, dateTime } from "../fmt";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Ayuda, { Aviso } from "../components/Ayuda";
 import { Contexto } from "../components/Identidad";
@@ -368,7 +368,8 @@ export default function Usuarios() {
   const [editando, setEditando] = useState<any | null>(null);
   const [preseleccionarAgente, setPreseleccionarAgente] = useState<{ id: string; name: string } | null>(null);
   // Estilo de la Wallet (23/10/2026, pedido de Leo): pestañas por rol, buscador y paginación en la lista de usuarios.
-  const [rolTab, setRolTab] = useState<"todos" | "ADMIN" | "SUPERVISOR" | "AGENT" | "PROVEEDOR" | "inactivos">("todos");
+  const [rolTab, setRolTab] = useState<"todos" | "ADMIN" | "SUPERVISOR" | "AGENT" | "SUBAGENTE" | "PROVEEDOR" | "inactivos">("todos");
+  const [historialDe, setHistorialDe] = useState<any | null>(null);
   const [buscaU, setBuscaU] = useState("");
   const qU = buscaU.trim().toLowerCase();
   const baseU = usuarios.filter(
@@ -450,6 +451,9 @@ export default function Usuarios() {
                 .filter((x) => x.n > 0)
                 .map((x) => ({ texto: `${x.n} ${({ ADMIN: "admin", SUPERVISOR: "supervisor", AGENT: "agente", PROVEEDOR: "proveedor", SOCIO: "socio" } as const)[x.r]}${x.n === 1 ? "" : x.r === "PROVEEDOR" || x.r === "SUPERVISOR" ? "es" : "s"}` })),
               usuarios.some((u) => u.active === false) && { texto: `${usuarios.filter((u) => u.active === false).length} desactivados`, tono: "alerta" },
+              usuarios.some((u) => u.creador_role === "SUPERVISOR") && { texto: `${usuarios.filter((u) => u.creador_role === "SUPERVISOR").length} creados por supervisores` },
+              usuarios.some((u) => u.creador_role === "AGENT") && { texto: `${usuarios.filter((u) => u.creador_role === "AGENT").length} creados por agentes` },
+              usuarios.some((u) => u.must_change_password) && { texto: `${usuarios.filter((u) => u.must_change_password).length} con contraseña temporal`, tono: "alerta" },
             ]}
           />
         </div>
@@ -602,6 +606,7 @@ export default function Usuarios() {
               { k: "ADMIN", t: "Admins", n: baseU.filter((u) => u.role === "ADMIN").length },
               { k: "SUPERVISOR", t: "Supervisores", n: baseU.filter((u) => u.role === "SUPERVISOR").length },
               { k: "AGENT", t: "Agentes", n: baseU.filter((u) => u.role === "AGENT").length },
+              { k: "SUBAGENTE", t: "Subagentes", n: baseU.filter((u) => u.role === "SUBAGENTE").length },
               { k: "PROVEEDOR", t: "Proveedores", n: baseU.filter((u) => u.role === "PROVEEDOR").length },
               { k: "inactivos", t: "Desactivados", n: baseU.filter((u) => !u.active).length },
             ] as WmTab<typeof rolTab>[]
@@ -609,20 +614,25 @@ export default function Usuarios() {
         />
         <table>
           <thead>
-            <tr><th>Usuario</th><th>Agentes/clubes/proveedor</th><th>Rol</th><th>Estado</th><th></th></tr>
+            <tr><th>Usuario</th><th>Agentes/clubes/proveedor</th><th>Rol</th><th>Creado por</th><th>Último acceso</th><th>Estado</th><th></th></tr>
           </thead>
           <tbody>
             {pgU.recorte.map((u) => (
               <tr key={u.id}>
-                <td>{u.email}</td>
+                <td>
+                  {u.email}
+                  {u.must_change_password && <span className="badge warn" style={{ marginLeft: 6, fontSize: 10.5 }}>Contraseña temporal</span>}
+                </td>
                 <td className="muted">
-                  {u.role === "SOCIO" ? (u.socio_name ?? "—") : u.role === "PROVEEDOR" ? (u.proveedor_name ?? "—") : (u.agentes ?? []).map((a: any) => a.name).join(", ")}
+                  {u.role === "SUBAGENTE" ? (u.subagente_name ?? "—") : u.role === "SOCIO" ? (u.socio_name ?? "—") : u.role === "PROVEEDOR" ? (u.proveedor_name ?? "—") : (u.agentes ?? []).map((a: any) => a.name).join(", ")}
                 </td>
                 <td>
                   {/* El switch rápido solo cubre Agente/Supervisor/Admin a propósito (16/10/2026)
                       -- pasar a/desde Proveedor necesita elegir CUÁL proveedor, eso se hace
                       siempre desde "Editar" para no dejar un usuario a medio configurar. */}
-                  {u.role === "SOCIO" ? (
+                  {u.role === "SUBAGENTE" ? (
+                    <span className="badge neutral">Subagente</span>
+                  ) : u.role === "SOCIO" ? (
                     <span className="badge neutral">Socio</span>
                   ) : u.role === "PROVEEDOR" ? (
                     <span className="badge neutral">Proveedor</span>
@@ -634,8 +644,21 @@ export default function Usuarios() {
                     </select>
                   )}
                 </td>
+                <td>
+                  {u.creador_nombre ? (
+                    <span className="us-by">
+                      <i className={`r-${u.creador_role}`}>{String(u.creador_nombre).slice(0, 2).toUpperCase()}</i>
+                      {u.creador_nombre}
+                      <small>{({ ADMIN: "admin", SUPERVISOR: "supervisor", AGENT: "agente" } as Record<string, string>)[u.creador_role] ?? ""}</small>
+                    </span>
+                  ) : (
+                    <span className="muted" style={{ fontSize: 12 }}>—</span>
+                  )}
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>{u.last_login_at ? dateTime(u.last_login_at) : <span className="muted">Nunca entró</span>}</td>
                 <td><span className={`badge ${u.active ? "pos" : "neg"}`}>{u.active ? "Activo" : "Desactivado"}</span></td>
                 <td className="row-actions">
+                  <button className="btn secondary small" onClick={() => setHistorialDe(u)}>Historial</button>
                   <button className="btn secondary small" onClick={() => setEditando(u)}>Editar</button>
                   <button className="btn secondary small" onClick={() => toggleActive(u)}>
                     {u.active ? "Desactivar" : "Activar"}
@@ -645,12 +668,18 @@ export default function Usuarios() {
               </tr>
             ))}
             {visiblesU.length === 0 && (
-              <tr><td colSpan={5} className="muted">{usuarios.length === 0 ? "Todavía no hay usuarios." : "Ningún usuario coincide con estos filtros."}</td></tr>
+              <tr><td colSpan={7} className="muted">{usuarios.length === 0 ? "Todavía no hay usuarios." : "Ningún usuario coincide con estos filtros."}</td></tr>
             )}
           </tbody>
         </table>
         <WmPaginacion p={pgU} unidad="usuarios" />
       </div>
+
+      {historialDe && (
+        <Modal title={`Historial de ${historialDe.email}`} onClose={() => setHistorialDe(null)}>
+          <HistorialUsuario usuario={historialDe} />
+        </Modal>
+      )}
 
       {editando && (
         <Modal title={`Editar usuario — ${editando.email}`} onClose={() => setEditando(null)} wide>
@@ -923,5 +952,55 @@ function EditarUsuario({
         <PanelSupervisor usuario={usuario} agentes={agentes} supervisoresData={supervisoresData} />
       )}
     </form>
+  );
+}
+
+// Historial de un usuario (10/11/2026, seguridad punto 3, mockup 88): quién lo creó, reseteos de contraseña, activaciones y cuándo
+// eligió su contraseña. Lo anterior al 10/11 no quedó registrado.
+const TEXTO_ACCION: Record<string, string> = {
+  CREADO: "Creado con contraseña temporal",
+  CLAVE_RESETEADA: "Contraseña reseteada",
+  CLAVE_ELEGIDA: "Eligió su contraseña",
+  ACTIVADO: "Activado",
+  DESACTIVADO: "Desactivado",
+  ROL_CAMBIADO: "Rol cambiado",
+};
+function HistorialUsuario({ usuario }: { usuario: any }) {
+  const [eventos, setEventos] = useState<any[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.historialUsuario(usuario.id).then(setEventos).catch((e) => setError(e.message));
+  }, [usuario.id]);
+  if (error) return <div className="error">{error}</div>;
+  if (!eventos) return <div className="muted">Cargando...</div>;
+  const rol = (r: string) => ({ ADMIN: "admin", SUPERVISOR: "supervisor", AGENT: "agente", SUBAGENTE: "subagente" } as Record<string, string>)[r] ?? "";
+  return (
+    <div className="us-hist">
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+        {usuario.creador_nombre ? `Lo creó ${usuario.creador_nombre} (${rol(usuario.creador_role)}). Si se desactiva ${usuario.creador_nombre}, este usuario tampoco puede entrar.` : "No hay dato de quién lo creó (usuario anterior al 10/11/2026)."}
+      </div>
+      {eventos.length === 0 && <div className="muted">Todavía no hay movimientos registrados (se anotan desde el 10/11/2026).</div>}
+      {eventos.map((e) => (
+        <div key={e.id} className={`us-ev a-${e.accion}`}>
+          <span className="d" />
+          <span className="t">{dateTime(e.created_at)}</span>
+          <span>
+            {TEXTO_ACCION[e.accion] ?? e.accion}
+            {e.accion === "ROL_CAMBIADO" && e.detalle ? ` a ${e.detalle}` : ""}
+            {e.hecho_por_nombre && e.accion !== "CLAVE_ELEGIDA" && (
+              <>
+                {" "}por <b>{e.hecho_por_nombre}</b> <small className="muted">({rol(e.hecho_por_role)})</small>
+              </>
+            )}
+            {e.accion === "CLAVE_RESETEADA" && " · se cerraron sus sesiones abiertas"}
+          </span>
+        </div>
+      ))}
+      <div className="us-ev">
+        <span className="d" />
+        <span className="t">{usuario.last_login_at ? dateTime(usuario.last_login_at) : "—"}</span>
+        <span>{usuario.last_login_at ? "Último acceso" : "Nunca entró"}</span>
+      </div>
+    </div>
   );
 }

@@ -2576,3 +2576,17 @@ BEGIN
 END $f$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_agent_users_sesion_desde ON agent_users;
 CREATE TRIGGER trg_agent_users_sesion_desde BEFORE UPDATE ON agent_users FOR EACH ROW EXECUTE FUNCTION agent_users_sesion_desde();
+
+-- Contraseña temporal, último acceso e historial de usuarios (10/11/2026, seguridad puntos 2 y 3). Ver src/lib/sesiones.ts.
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE agent_users ALTER COLUMN must_change_password SET DEFAULT true;
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS usuarios_historial (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL,
+  accion            TEXT NOT NULL,
+  hecho_por_user_id TEXT,
+  detalle           TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_usuarios_historial ON usuarios_historial(user_id, created_at);

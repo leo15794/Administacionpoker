@@ -197,6 +197,9 @@ function UsuarioAgente({ agente, onCambio }: { agente: any; onCambio: () => void
           </button>
         </div>
       )}
+      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+        La contraseña que pongas es temporal: la primera vez que entre (o después de que se la cambies) va a tener que elegir una propia.
+      </div>
       {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 10 }}>{msg.text}</div>}
     </div>
   );

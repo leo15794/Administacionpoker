@@ -10,7 +10,7 @@
 //    subagente no entra si la cuenta del agente dueño está desactivada.
 //
 // Se consulta la base con un caché corto por proceso (15 s) para no sumar una consulta por cada pedido.
-import { pool } from "../db/pool.js";
+import { pool, newId } from "../db/pool.js";
 import { asegurarSchemaSubagentes } from "../repo/subagentes.js";
 
 let schemaListo: Promise<void> | null = null;
@@ -20,6 +20,20 @@ export function asegurarSchemaSesiones(): Promise<void> {
     await pool.query(`
       ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS sesion_desde TIMESTAMPTZ;
       ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+      -- Contraseña temporal (punto 2): los usuarios que ya existían quedan en false; los nuevos nacen en true (la eligió otro).
+      ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE agent_users ALTER COLUMN must_change_password SET DEFAULT true;
+      ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+      -- Historial de cada usuario (punto 3): quién lo creó, le reseteó la contraseña, lo activó/desactivó o le cambió el rol.
+      CREATE TABLE IF NOT EXISTS usuarios_historial (
+        id                TEXT PRIMARY KEY,
+        user_id           TEXT NOT NULL,
+        accion            TEXT NOT NULL,
+        hecho_por_user_id TEXT,
+        detalle           TEXT,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_usuarios_historial ON usuarios_historial(user_id, created_at);
       CREATE OR REPLACE FUNCTION agent_users_sesion_desde() RETURNS trigger AS $f$
       BEGIN
         IF NEW.password_hash IS DISTINCT FROM OLD.password_hash OR NEW.active IS DISTINCT FROM OLD.active OR NEW.role IS DISTINCT FROM OLD.role THEN
@@ -94,4 +108,35 @@ export async function estadoAccesoCacheado(userId: string): Promise<EstadoAcceso
   cache.set(userId, { estado, hasta: ahora + TTL_MS });
   if (cache.size > 5000) cache.clear();
   return estado;
+}
+
+export type AccionHistorial = "CREADO" | "CLAVE_RESETEADA" | "CLAVE_ELEGIDA" | "ACTIVADO" | "DESACTIVADO" | "ROL_CAMBIADO";
+
+/** Anota un evento en el historial del usuario. Nunca rompe la operación principal si falla. */
+export async function registrarHistorial(
+  db: { query: (q: string, v?: any[]) => Promise<any> },
+  userId: string,
+  accion: AccionHistorial,
+  hechoPorUserId?: string | null,
+  detalle?: string | null
+) {
+  try {
+    await asegurarSchemaSesiones();
+    await db.query(`INSERT INTO usuarios_historial (id, user_id, accion, hecho_por_user_id, detalle) VALUES ($1,$2,$3,$4,$5)`, [
+      newId("uhist"),
+      userId,
+      accion,
+      hechoPorUserId ?? null,
+      detalle ?? null,
+    ]);
+  } catch (err) {
+    console.error("No se pudo anotar el historial del usuario:", err);
+  }
+}
+
+/** Reglas de la contraseña que elige el usuario (la temporal sigue pidiendo 6, la pone otro). */
+export function problemaContrasena(nueva: string, usuario: string): string | null {
+  if (nueva.length < 8) return "La contraseña tiene que tener al menos 8 caracteres.";
+  if (nueva.trim().toLowerCase() === usuario.trim().toLowerCase()) return "La contraseña no puede ser igual a tu usuario.";
+  return null;
 }

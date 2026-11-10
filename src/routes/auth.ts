@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { pool, newId } from "../db/pool.js";
 import { signToken, requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
-import { estadoAcceso, MENSAJE_ACCESO } from "../lib/sesiones.js";
+import { estadoAcceso, MENSAJE_ACCESO, asegurarSchemaSesiones, registrarHistorial, problemaContrasena } from "../lib/sesiones.js";
 
 export const authRouter = Router();
 
@@ -37,6 +37,7 @@ authRouter.post("/bootstrap-user", requireAuth, requireAdmin, async (req, res) =
       `INSERT INTO agent_users (id, agent_id, email, password_hash, role, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6)`,
       [id, agent.rows[0].id, email, passwordHash, role === "ADMIN" ? "ADMIN" : "AGENT", (req as AuthedRequest).user?.userId ?? null]
     );
+    await registrarHistorial(pool, id, "CREADO", (req as AuthedRequest).user?.userId ?? null);
     res.json({ id, email });
   } catch (err: any) {
     if (err.code === "23505") return res.status(409).json({ error: "Ese email ya tiene un usuario" });
@@ -48,6 +49,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: "email y contraseña son requeridos" });
+    await asegurarSchemaSesiones();
 
     // LEFT JOIN a los dos (16/10/2026, rol PROVEEDOR): un login puede colgar de un agente O de
     // un proveedor, nunca los dos -- con INNER JOIN de antes, un login de proveedor (agent_id
@@ -79,7 +81,9 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
       proveedorId: user.proveedor_id,
       partnerAccountId: user.partner_account_id ?? null,
       subagenteId: user.subagente_id ?? null,
+      cambiarClave: user.must_change_password === true,
     });
+    await pool.query(`UPDATE agent_users SET last_login_at = now() WHERE id = $1`, [user.id]);
     let nombreSocio: string | null = null;
     if (user.role === "SOCIO" && user.partner_account_id) {
       nombreSocio = (await pool.query(`SELECT name FROM partner_accounts WHERE id = $1`, [user.partner_account_id])).rows[0]?.name ?? null;
@@ -88,7 +92,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     if (user.role === "SUBAGENTE" && user.subagente_id) {
       nombreSubagente = (await pool.query(`SELECT name FROM agente_subagentes WHERE id = $1`, [user.subagente_id])).rows[0]?.name ?? null;
     }
-    res.json({ token, agentName: user.agent_name ?? user.proveedor_name ?? nombreSocio ?? nombreSubagente, role: user.role });
+    res.json({ token, agentName: user.agent_name ?? user.proveedor_name ?? nombreSocio ?? nombreSubagente, role: user.role, cambiarClave: user.must_change_password === true });
   } catch (err: any) {
     // (24/09/2026, encontrado en análisis de seguridad) -- antes esto devolvía el mensaje crudo
     // del error (podía ser un error de Postgres con nombres de tabla/columna) al cliente. El
@@ -96,5 +100,26 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     // saber POR QUÉ falló técnicamente, y no corresponde exponerlo.
     console.error("Error en /auth/login:", err);
     res.status(500).json({ error: "Error interno en login" });
+  }
+});
+
+// Elegir la contraseña propia (10/11/2026, punto 2): obligatorio al entrar con una temporal; sirve también para cambiarla cuando quiera.
+// Devuelve un token nuevo, porque el cambio de contraseña corta las sesiones anteriores (ver lib/sesiones.ts).
+authRouter.post("/cambiar-clave", requireAuth, async (req: AuthedRequest, res) => {
+  const nueva = typeof req.body?.nueva === "string" ? req.body.nueva : "";
+  try {
+    const r = await pool.query(`SELECT id, email, password_hash FROM agent_users WHERE id = $1`, [req.user!.userId]);
+    const u = r.rows[0];
+    if (!u) return res.status(404).json({ error: "Usuario no encontrado." });
+    const problema = problemaContrasena(nueva, u.email);
+    if (problema) return res.status(400).json({ error: problema });
+    if (await bcrypt.compare(nueva, u.password_hash)) return res.status(400).json({ error: "Elegí una contraseña distinta a la que tenías." });
+    await pool.query(`UPDATE agent_users SET password_hash = $1, must_change_password = false WHERE id = $2`, [await bcrypt.hash(nueva, 10), u.id]);
+    await registrarHistorial(pool, u.id, "CLAVE_ELEGIDA", u.id);
+    const { iat: _iat, exp: _exp, ...resto } = req.user as any;
+    res.json({ token: signToken({ ...resto, cambiarClave: false }), role: req.user!.role });
+  } catch (err) {
+    console.error("Error en /auth/cambiar-clave:", err);
+    res.status(500).json({ error: "No se pudo cambiar la contraseña." });
   }
 });

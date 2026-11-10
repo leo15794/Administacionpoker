@@ -5,6 +5,7 @@ import { pool, newId } from "../db/pool.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { eliminarMovimientoReferido } from "../repo/supervisorReferidos.js";
 import { asegurarSchemaSocios } from "../repo/socios.js";
+import { asegurarSchemaSesiones, registrarHistorial } from "../lib/sesiones.js";
 
 export const usersRouter = Router();
 
@@ -19,12 +20,16 @@ async function colSocioExiste() {
 // para que la tabla muestre "TeamBack Suprema, Fénix GG" en vez de un solo nombre.
 usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
   await asegurarSchemaSocios();
+  await asegurarSchemaSesiones();
   // LEFT JOIN a los dos (16/10/2026, rol PROVEEDOR): un login ahora puede colgar de un agente
   // O de un proveedor -- con INNER JOIN de antes, un usuario PROVEEDOR (agent_id NULL) hubiera
   // desaparecido entero de este listado.
   const r = await pool.query(
     `SELECT u.id, u.email, u.role, u.active, u.created_at, u.agent_id, u.proveedor_id, u.partner_account_id,
             p.name as proveedor_name, pa.name as socio_name,
+            u.last_login_at, u.must_change_password, u.created_by_user_id,
+            cu.role AS creador_role, COALESCE(ca.name, cu.email) AS creador_nombre,
+            sub.name AS subagente_name,
             COALESCE(
               (SELECT json_agg(json_build_object('id', a2.id, 'name', a2.name) ORDER BY a2.name)
                FROM agent_user_agents uax JOIN agents a2 ON a2.id = uax.agent_id
@@ -35,7 +40,25 @@ usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
      LEFT JOIN agents a ON a.id = u.agent_id
      LEFT JOIN proveedores p ON p.id = u.proveedor_id
      LEFT JOIN partner_accounts pa ON pa.id = u.partner_account_id
+     LEFT JOIN agent_users cu ON cu.id = u.created_by_user_id
+     LEFT JOIN agents ca ON ca.id = cu.agent_id AND cu.role <> 'ADMIN'
+     LEFT JOIN agente_subagentes sub ON sub.id = u.subagente_id
      ORDER BY u.created_at DESC`
+  );
+  res.json(r.rows);
+});
+
+// Historial de un usuario (10/11/2026, punto 3): quién lo creó, reseteos, activaciones y cuándo eligió su contraseña.
+usersRouter.get("/:id/historial", requireAuth, requireAdmin, async (req, res) => {
+  await asegurarSchemaSesiones();
+  const r = await pool.query(
+    `SELECT h.id, h.accion, h.detalle, h.created_at, h.hecho_por_user_id, hp.role AS hecho_por_role,
+            COALESCE(ha.name, hp.email) AS hecho_por_nombre
+     FROM usuarios_historial h
+     LEFT JOIN agent_users hp ON hp.id = h.hecho_por_user_id
+     LEFT JOIN agents ha ON ha.id = hp.agent_id AND hp.role <> 'ADMIN'
+     WHERE h.user_id = $1 ORDER BY h.created_at`,
+    [req.params.id]
   );
   res.json(r.rows);
 });
@@ -114,6 +137,7 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req: AuthedRequest, res)
         );
       }
     }
+    await registrarHistorial(client, id, "CREADO", req.user?.userId ?? null);
     await client.query("COMMIT");
     res.status(201).json({ id, email, role });
   } catch (err: any) {
@@ -175,8 +199,10 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
     values.push(active);
   }
   if (password !== undefined) {
-    sets.push(`password_hash = $${i++}`);
+    sets.push(`password_hash = ${i++}`);
     values.push(await bcrypt.hash(password, 10));
+    // (10/11/2026) Si la pone otro, es temporal: al entrar la tiene que cambiar.
+    if (req.params.id !== req.user?.userId) sets.push(`must_change_password = true`);
   }
   if (defaultAgentId !== undefined) {
     sets.push(`agent_id = $${i++}`);
@@ -232,6 +258,9 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req: AuthedRequest, 
         );
       }
     }
+    if (password !== undefined) await registrarHistorial(client, req.params.id, "CLAVE_RESETEADA", req.user?.userId ?? null);
+    if (active !== undefined) await registrarHistorial(client, req.params.id, active ? "ACTIVADO" : "DESACTIVADO", req.user?.userId ?? null);
+    if (role !== undefined) await registrarHistorial(client, req.params.id, "ROL_CAMBIADO", req.user?.userId ?? null, role);
     await client.query("COMMIT");
     res.json(row);
   } catch (err: any) {

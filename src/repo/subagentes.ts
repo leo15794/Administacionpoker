@@ -17,6 +17,7 @@
 import bcrypt from "bcryptjs";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre } from "../engine/cierre.js";
+import { registrarHistorial } from "../lib/sesiones.js";
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -357,6 +358,7 @@ export async function crearUsuarioSubagente(agentId: string, subagenteId: string
       subagenteId,
       creadoPorUserId ?? null,
     ]);
+    await registrarHistorial(pool, id, "CREADO", creadoPorUserId);
     return { id, email: email.trim() };
   } catch (err: any) {
     if (err.code === "23505") throw new Error("Ese usuario ya existe: elegí otro.");
@@ -364,14 +366,15 @@ export async function crearUsuarioSubagente(agentId: string, subagenteId: string
   }
 }
 
-export async function actualizarUsuarioSubagente(agentId: string, subagenteId: string, cambios: { password?: string; active?: boolean }) {
+export async function actualizarUsuarioSubagente(agentId: string, subagenteId: string, cambios: { password?: string; active?: boolean }, hechoPorUserId?: string | null) {
   await asegurarSchemaSubagentes();
   await subagenteDelAgente(agentId, subagenteId);
   const sets: string[] = [];
   const vals: any[] = [];
   if (cambios.password !== undefined) {
     vals.push(await bcrypt.hash(cambios.password, 10));
-    sets.push(`password_hash = $${vals.length}`);
+    sets.push(`password_hash = ${vals.length}`);
+    sets.push(`must_change_password = true`);
   }
   if (cambios.active !== undefined) {
     vals.push(cambios.active);
@@ -384,6 +387,8 @@ export async function actualizarUsuarioSubagente(agentId: string, subagenteId: s
     vals
   );
   if (!r.rows[0]) throw new Error("Este subagente todavía no tiene usuario.");
+  if (cambios.password !== undefined) await registrarHistorial(pool, r.rows[0].id, "CLAVE_RESETEADA", hechoPorUserId);
+  if (cambios.active !== undefined) await registrarHistorial(pool, r.rows[0].id, cambios.active ? "ACTIVADO" : "DESACTIVADO", hechoPorUserId);
   return r.rows[0];
 }
 

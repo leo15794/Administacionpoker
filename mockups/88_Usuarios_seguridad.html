@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 88 (10/11/2026): seguridad de usuarios, puntos 2 y 3. Izquierda: Usuarios y permisos con "Creado por", último acceso,
+     contraseña temporal y el historial de un usuario. Derecha: lo que ve alguien la primera vez que entra con una contraseña temporal. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --green-soft: rgba(63,185,80,.14); --red: #f85149; --red-soft: rgba(248,81,73,.14); --amber: #e3a83b; --amber-soft: rgba(227,168,59,.14); --gold: #c6a66b;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16); --glow3: rgba(198,166,107,.12);
+    --page: rgba(22,27,34,.50); --page-border: rgba(255,255,255,.09);
+    --card: rgba(29,36,48,.62); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --line: rgba(255,255,255,.07); --phone: #0d1117; --input: rgba(0,0,0,.25);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --red-soft: rgba(194,55,68,.10); --amber: #9c6a17; --amber-soft: rgba(156,106,23,.12); --gold: #8a6a32;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14); --glow3: rgba(30,154,110,.18);
+    --page: rgba(255,255,255,.42); --page-border: rgba(255,255,255,.85);
+    --card: rgba(255,255,255,.75); --card-border: rgba(11,24,18,.06); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --line: rgba(11,24,18,.07); --phone: #f4f7f5; --input: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%),
+      radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%),
+      radial-gradient(620px 460px at 70% 8%, var(--glow3), transparent 65%),
+      var(--bg);
+    padding: 20px; display: grid; grid-template-columns: 1fr 360px; gap: 22px;
+  }
+  .page { border-radius: 26px; padding: 24px 28px; background: var(--page); border: 1px solid var(--page-border); backdrop-filter: blur(24px); overflow: hidden; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  h1 { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .chips { display: flex; gap: 8px; margin: 16px 0 14px; flex-wrap: wrap; }
+  .chip { font-size: 12px; font-weight: 600; background: var(--chip); border-radius: 99px; padding: 6px 12px; color: var(--dim); }
+  .chip b { color: var(--text); } .chip.a { background: var(--amber-soft); color: var(--amber); } .chip.a b { color: var(--amber); }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; box-shadow: var(--card-shadow); backdrop-filter: blur(16px); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 600; color: var(--dim); padding: 12px 14px 9px; text-transform: uppercase; letter-spacing: .06em; }
+  td { padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: middle; }
+  td b { font-weight: 700; } td small { display: block; color: var(--faint); font-size: 11.5px; margin-top: 1px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 3px 9px; background: var(--chip); color: var(--dim); white-space: nowrap; }
+  .pill.g { background: var(--green-soft); color: var(--green); } .pill.r { background: var(--red-soft); color: var(--red); } .pill.a { background: var(--amber-soft); color: var(--amber); }
+  .by { display: flex; align-items: center; gap: 7px; }
+  .by i { width: 22px; height: 22px; border-radius: 7px; font-style: normal; font-size: 10px; font-weight: 800; display: grid; place-items: center; background: var(--accent-grad); color: var(--accent-ink); }
+  .by i.s { background: linear-gradient(135deg,#d9bd84,#a8864a); color: #1b1408; } .by i.ag { background: linear-gradient(135deg,#a98af0,#7c5bd6); color: #fff; }
+  tr.sel td { background: rgba(var(--accent-rgb),.07); }
+  .lnk { color: var(--accent); font-weight: 700; font-size: 12px; }
+  .hist { margin-top: 14px; padding: 16px 18px; display: grid; grid-template-columns: 220px 1fr; gap: 20px; }
+  .hist h3 { font-size: 16px; } .hist p { font-size: 12.5px; color: var(--dim); margin-top: 4px; line-height: 1.45; }
+  .ev { display: flex; gap: 12px; padding: 7px 0; font-size: 13px; position: relative; }
+  .ev .d { width: 10px; height: 10px; border-radius: 99px; margin-top: 4px; flex: none; background: var(--accent); }
+  .ev .d.a { background: var(--amber); } .ev .d.g { background: var(--green); } .ev .d.r { background: var(--red); }
+  .ev .t { color: var(--faint); font-size: 12px; width: 108px; flex: none; }
+  .ev b { font-weight: 700; }
+
+  .phone { border-radius: 44px; background: var(--phone); border: 9px solid #22272e; box-shadow: var(--card-shadow); overflow: hidden; height: 900px; padding: 18px 16px; position: relative;
+    background-image: radial-gradient(420px 320px at 0% 0%, var(--glow1), transparent 62%); }
+  .notch { width: 110px; height: 24px; background: #22272e; border-radius: 0 0 14px 14px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+  .logo { width: 52px; height: 52px; border-radius: 16px; background: var(--accent-grad); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 20px; margin: 60px auto 18px; }
+  .phone h2 { text-align: center; font-size: 22px; font-weight: 800; }
+  .phone .sub { text-align: center; font-size: 13px; line-height: 1.45; margin: 8px 6px 20px; }
+  .pc { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; padding: 18px 16px; }
+  .lb { font-size: 11.5px; font-weight: 700; color: var(--dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  .in { background: var(--input); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px 13px; font-size: 15px; margin-bottom: 14px; display: flex; justify-content: space-between; letter-spacing: .2em; }
+  .in span { letter-spacing: 0; font-size: 12px; color: var(--faint); }
+  .in.ok { border-color: var(--green); }
+  .req { font-size: 12.5px; padding: 3px 0; color: var(--dim); display: flex; gap: 8px; }
+  .req.ok { color: var(--green); }
+  .btn { margin-top: 16px; border-radius: 14px; padding: 13px; text-align: center; font-weight: 700; font-size: 15px; background: var(--accent-grad); color: var(--accent-ink); box-shadow: 0 8px 20px rgba(var(--accent-rgb),.3); }
+  .cap { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--faint); padding: 0 18px; }
+</style></head>
+<body>
+  <div class="page">
+    <span class="tag">Administración · Usuarios y permisos</span>
+    <h1>Usuarios y permisos</h1>
+    <div class="sub">Quién creó cada usuario, cuándo entró por última vez y si todavía tiene la contraseña temporal.</div>
+    <div class="chips">
+      <span class="chip">Usuarios <b>48</b></span>
+      <span class="chip">Creados por supervisores <b>9</b></span>
+      <span class="chip">Creados por agentes <b>2</b></span>
+      <span class="chip a">Con contraseña temporal <b>4</b></span>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Creado por</th><th>Último acceso</th><th>Contraseña</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+          <tr class="sel"><td><b>oreste</b><small>Oreste</small></td><td>Agente</td><td><span class="by"><i class="s">UR</i>Uriel <small style="display:inline;margin-left:4px">supervisor</small></span></td><td>Hoy 13:42</td><td><span class="pill g">Propia</span></td><td><span class="pill g">Activo</span></td><td><span class="lnk">Historial ›</span></td></tr>
+          <tr><td><b>Salomon</b><small>SalomonRondonG0</small></td><td>Agente</td><td><span class="by"><i class="s">UR</i>Uriel <small style="display:inline;margin-left:4px">supervisor</small></span></td><td>Nunca entró</td><td><span class="pill a">Temporal</span></td><td><span class="pill g">Activo</span></td><td><span class="lnk">Historial ›</span></td></tr>
+          <tr><td><b>Cachito1976</b><small>Cachito1976</small></td><td>Agente</td><td><span class="by"><i>LE</i>Leo <small style="display:inline;margin-left:4px">admin</small></span></td><td>Ayer 21:10</td><td><span class="pill g">Propia</span></td><td><span class="pill g">Activo</span></td><td><span class="lnk">Historial ›</span></td></tr>
+          <tr><td><b>juan.cachito</b><small>Subagente · Juan</small></td><td>Subagente</td><td><span class="by"><i class="ag">CA</i>Cachito1976 <small style="display:inline;margin-left:4px">agente</small></span></td><td>Nunca entró</td><td><span class="pill a">Temporal</span></td><td><span class="pill g">Activo</span></td><td><span class="lnk">Historial ›</span></td></tr>
+          <tr><td><b>CarlosZam</b><small>Carlos Zambrano</small></td><td>Agente</td><td><span class="by"><i class="s">UR</i>Uriel <small style="display:inline;margin-left:4px">supervisor</small></span></td><td>08/11 18:05</td><td><span class="pill g">Propia</span></td><td><span class="pill r">Desactivado</span></td><td><span class="lnk">Historial ›</span></td></tr>
+          <tr><td><b>TINCHO</b><small>TINCHO</small></td><td>Agente</td><td><span class="by" style="color:var(--faint)">— sin dato (antes del 10/11)</span></td><td>07/11 09:31</td><td><span class="pill">—</span></td><td><span class="pill g">Activo</span></td><td><span class="lnk">Historial ›</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card hist">
+      <div>
+        <h3>Historial de oreste</h3>
+        <p>Todo lo que pasó con este usuario y quién lo hizo. Si se desactiva Uriel, oreste tampoco puede entrar.</p>
+      </div>
+      <div>
+        <div class="ev"><span class="d"></span><span class="t">06/11 14:20</span><span>Creado por <b>Uriel</b> (supervisor) con contraseña temporal</span></div>
+        <div class="ev"><span class="d g"></span><span class="t">06/11 15:02</span><span><b>oreste</b> entró y eligió su contraseña</span></div>
+        <div class="ev"><span class="d a"></span><span class="t">08/11 10:15</span><span>Contraseña reseteada por <b>Uriel</b> · se cerraron sus sesiones abiertas</span></div>
+        <div class="ev"><span class="d g"></span><span class="t">08/11 10:31</span><span><b>oreste</b> entró y eligió una nueva contraseña</span></div>
+        <div class="ev"><span class="d"></span><span class="t">Hoy 13:42</span><span>Último acceso</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="logo">P</div>
+    <h2>Elegí tu contraseña</h2>
+    <div class="sub">Hola, Salomon. Entraste con una contraseña temporal: elegí una propia para seguir. Nadie más la va a conocer.</div>
+    <div class="pc">
+      <div class="lb">Nueva contraseña</div>
+      <div class="in ok">••••••••••<span>👁</span></div>
+      <div class="lb">Repetila</div>
+      <div class="in ok">••••••••••<span>👁</span></div>
+      <div class="req ok">✓ Al menos 8 caracteres</div>
+      <div class="req ok">✓ Distinta a tu usuario</div>
+      <div class="req ok">✓ Distinta a la temporal</div>
+      <div class="req ok">✓ Las dos coinciden</div>
+      <div class="btn">Guardar y entrar</div>
+    </div>
+    <div class="cap">Aparece la primera vez que entra y cada vez que su supervisor, su agente o un admin le resetea la contraseña. No puede usar el sistema hasta cambiarla.</div>
+  </div>
+</body></html>

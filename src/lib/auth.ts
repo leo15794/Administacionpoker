@@ -36,6 +36,8 @@ export interface JwtPayload {
   // Solo seteado cuando role === "SUBAGENTE" (10/11/2026): el subagente (agente_subagentes) que ve este login. agentId queda NULL,
   // así el subagente nunca puede ver la cuenta del agente. Ver repo/subagentes.ts y GET /portal/mi-subagente.
   subagenteId?: string | null;
+  // (10/11/2026, punto 2) Entró con una contraseña temporal: hasta elegir la suya solo puede llamar a /auth/cambiar-clave.
+  cambiarClave?: boolean;
 }
 
 // (07/10/2026, pedido de Leo: "no quede abierto eterno") -- antes duraba 7 dias. Lo
@@ -71,6 +73,9 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
       if (!estado.ok) return res.status(401).json({ error: MENSAJE_ACCESO[estado.motivo], code: "SESION_CORTADA" });
       if (estado.sesionDesdeSeg !== null && (payload.iat ?? 0) < estado.sesionDesdeSeg) {
         return res.status(401).json({ error: MENSAJE_ACCESO.SESION_VIEJA, code: "SESION_CORTADA" });
+      }
+      if (payload.cambiarClave && !req.originalUrl.includes("/auth/cambiar-clave")) {
+        return res.status(403).json({ error: "Antes de seguir tenés que elegir tu contraseña.", code: "CAMBIAR_CLAVE" });
       }
       req.user = payload;
       next();

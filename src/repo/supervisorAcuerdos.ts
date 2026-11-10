@@ -11,6 +11,7 @@
 import bcrypt from "bcryptjs";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre } from "../engine/cierre.js";
+import { registrarHistorial } from "../lib/sesiones.js";
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -136,6 +137,7 @@ export async function crearUsuarioAgente(supervisorAgentId: string, agentId: str
       creadoPorUserId ?? null,
     ]);
     await client.query(`INSERT INTO agent_user_agents (user_id, agent_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, agentId]);
+    await registrarHistorial(client, id, "CREADO", creadoPorUserId);
     await client.query("COMMIT");
     return { id, email: email.trim() };
   } catch (err: any) {
@@ -148,13 +150,14 @@ export async function crearUsuarioAgente(supervisorAgentId: string, agentId: str
 }
 
 /** Solo el login AGENT de ese agente: nunca toca un usuario de otro rol (admin, supervisor, proveedor...). */
-export async function actualizarUsuarioAgente(supervisorAgentId: string, agentId: string, cambios: { password?: string; active?: boolean }) {
+export async function actualizarUsuarioAgente(supervisorAgentId: string, agentId: string, cambios: { password?: string; active?: boolean }, hechoPorUserId?: string | null) {
   await agenteDelSupervisor(supervisorAgentId, agentId);
   const sets: string[] = [];
   const vals: any[] = [];
   if (cambios.password !== undefined) {
     vals.push(await bcrypt.hash(cambios.password, 10));
-    sets.push(`password_hash = $${vals.length}`);
+    sets.push(`password_hash = ${vals.length}`);
+    sets.push(`must_change_password = true`);
   }
   if (cambios.active !== undefined) {
     vals.push(cambios.active);
@@ -164,6 +167,8 @@ export async function actualizarUsuarioAgente(supervisorAgentId: string, agentId
   vals.push(agentId);
   const r = await pool.query(`UPDATE agent_users SET ${sets.join(", ")} WHERE agent_id = $${vals.length} AND role = 'AGENT' RETURNING id, email, active`, vals);
   if (!r.rows[0]) throw new Error("Este agente todavía no tiene usuario.");
+  if (cambios.password !== undefined) await registrarHistorial(pool, r.rows[0].id, "CLAVE_RESETEADA", hechoPorUserId);
+  if (cambios.active !== undefined) await registrarHistorial(pool, r.rows[0].id, cambios.active ? "ACTIVADO" : "DESACTIVADO", hechoPorUserId);
   return r.rows[0];
 }
 

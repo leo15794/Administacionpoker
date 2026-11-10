@@ -28,8 +28,9 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const { token, role } = await api.login(email, password);
+      const { token, role, cambiarClave } = await api.login(email, password);
       api.setToken(token);
+      if (cambiarClave) return nav("/cambiar-clave");
       nav(
         role === "ADMIN" ? "/dashboard" :
         role === "SUPERVISOR" ? "/mi-supervision" :

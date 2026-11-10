@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
+import CambiarClave from "./pages/CambiarClave";
 import Shell from "./pages/Shell";
 import Resumen from "./pages/Resumen";
 import Agentes from "./pages/Agentes";
@@ -62,6 +63,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/cambiar-clave" element={<CambiarClave />} />
         <Route path="/inicio" element={<Inicio />} />
 
         <Route

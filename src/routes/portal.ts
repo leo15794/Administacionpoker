@@ -581,7 +581,7 @@ portalRouter.patch("/mi-supervision/mis-agentes/:agentId/usuario", requireAuth, 
   const parsed = cambioUsuarioAgenteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
   try {
-    res.json(await actualizarUsuarioAgente(supId, req.params.agentId, parsed.data));
+    res.json(await actualizarUsuarioAgente(supId, req.params.agentId, parsed.data, req.user!.userId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -691,7 +691,7 @@ portalRouter.patch("/mis-subagentes/:subId/usuario", requireAuth, async (req: Au
   const parsed = cambioUsuarioAgenteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
   try {
-    res.json(await actualizarUsuarioSubagente(agId, req.params.subId, parsed.data));
+    res.json(await actualizarUsuarioSubagente(agId, req.params.subId, parsed.data, req.user!.userId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

@@ -68,6 +68,10 @@ async function request(path: string, opts: RequestInit = {}) {
       } catch {}
       window.location.href = "/login";
     }
+    // Contraseña temporal (10/11/2026): hasta elegir la propia, el servidor solo deja cambiarla.
+    if (res.status === 403 && body.code === "CAMBIAR_CLAVE" && !window.location.pathname.startsWith("/cambiar-clave")) {
+      window.location.href = "/cambiar-clave";
+    }
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
   return res.json();
@@ -152,7 +156,9 @@ function armarQueryFiltroBancados(filtro?: { weekStart?: string; weekEnd?: strin
 
 export const api = {
   login: (email: string, password: string) =>
-    request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+    request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }) as Promise<{ token: string; role: string; agentName?: string; cambiarClave?: boolean }>,
+  cambiarClave: (nueva: string) => request("/auth/cambiar-clave", { method: "POST", body: JSON.stringify({ nueva }) }) as Promise<{ token: string; role: string }>,
+  historialUsuario: (id: string) => request(`/users/${id}/historial`),
   resumen: () => request("/dashboard/resumen"),
   cierres: (week?: string) => request(`/dashboard/cierres${week ? `?week=${week}` : ""}`),
   agentes: (includeInactive?: boolean) => request(`/dashboard/agentes${includeInactive ? "?includeInactive=true" : ""}`),
