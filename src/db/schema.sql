@@ -2549,6 +2549,15 @@ CREATE TABLE IF NOT EXISTS subagente_acuerdos (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_subagente_acuerdos ON subagente_acuerdos(subagente_id, club_id, valid_from);
+-- Jugadores elegidos a mano por el agente para cada subagente (vale para todas las semanas y manda sobre el archivo).
+CREATE TABLE IF NOT EXISTS subagente_jugadores (
+  subagente_id       TEXT NOT NULL REFERENCES agente_subagentes(id),
+  club_id            TEXT NOT NULL REFERENCES clubs(id),
+  player_external_id TEXT NOT NULL,
+  player_name        TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (subagente_id, club_id, player_external_id)
+);
 ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS subagente_id TEXT REFERENCES agente_subagentes(id);
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
 ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR','SOCIO','SUBAGENTE'));

@@ -164,6 +164,9 @@ export const api = {
   misAgentesSupervisor: () => request("/portal/mi-supervision/mis-agentes"),
   // Subagentes del agente (10/11/2026, mockup 87) y portal del subagente.
   misSubagentes: () => request("/portal/mis-subagentes"),
+  crearSubagente: (nombre: string) => request("/portal/mis-subagentes", { method: "POST", body: JSON.stringify({ nombre }) }) as Promise<{ id: string; name: string }>,
+  asignarJugadoresSubagente: (subId: string, jugadores: { clubId: string; playerExternalId: string }[]) =>
+    request(`/portal/mis-subagentes/${subId}/jugadores`, { method: "PUT", body: JSON.stringify({ jugadores }) }),
   cuantosSubagentes: () => request("/portal/mis-subagentes/cuantos") as Promise<{ n: number }>,
   crearUsuarioSubagente: (subId: string, data: { email: string; password: string }) =>
     request(`/portal/mis-subagentes/${subId}/usuario`, { method: "POST", body: JSON.stringify(data) }),

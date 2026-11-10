@@ -292,11 +292,6 @@ function getInitialNavOrder(): string[] {
 
 export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO" | "SUBAGENTE" }) {
   const nav = useNavigate();
-  // Subagentes del agente (10/11/2026, mockup 87): la sección aparece solo si el agente tiene alguno.
-  const [nSubagentes, setNSubagentes] = useState(0);
-  useEffect(() => {
-    if (role === "AGENT") api.cuantosSubagentes().then((r) => setNSubagentes(r.n)).catch(() => {});
-  }, [role]);
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
   const [desplegado, setDesplegado] = useState<string | null>(null);
@@ -556,7 +551,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
                   <span>Mis agentes</span>
                 </NavLink>
               )}
-              {role === "AGENT" && nSubagentes > 0 && (
+              {role === "AGENT" && (
                 <NavLink to="/mi-cuenta/subagentes" className={({ isActive }) => `df-k ${isActive ? "active" : ""}`} title="Mis subagentes">
                   <i>{icon.agentes}</i>
                   <span>Subagentes</span>
@@ -624,7 +619,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
                   {icon.agentes} Mis agentes
                 </NavLink>
               )}
-              {role === "AGENT" && nSubagentes > 0 && (
+              {role === "AGENT" && (
                 <NavLink to="/mi-cuenta/subagentes" className="tn-item tn-solo">
                   {icon.agentes} Mis subagentes
                 </NavLink>
@@ -754,7 +749,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           ) : (
             <>
               <NavLink to="/mi-cuenta" end className="nav-link" title="Mi cuenta">{icon.cuenta} Mi cuenta</NavLink>
-              {nSubagentes > 0 && <NavLink to="/mi-cuenta/subagentes" className="nav-link" title="Mis subagentes">{icon.agentes} Mis subagentes</NavLink>}
+              {<NavLink to="/mi-cuenta/subagentes" className="nav-link" title="Mis subagentes">{icon.agentes} Mis subagentes</NavLink>}
             </>
           )}
         </nav>

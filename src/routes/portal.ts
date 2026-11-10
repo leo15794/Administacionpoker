@@ -22,6 +22,8 @@ import {
   actualizarUsuarioSubagente,
   guardarAcuerdoSubagente,
   getMiSubagente,
+  crearSubagente,
+  asignarJugadoresSubagente,
 } from "../repo/subagentes.js";
 import {
   listarMisAgentes,
@@ -640,6 +642,34 @@ portalRouter.get("/mis-subagentes/cuantos", requireAuth, async (req: AuthedReque
     res.json({ n: await contarMisSubagentes(req.user!.agentId) });
   } catch {
     res.json({ n: 0 });
+  }
+});
+
+const nuevoSubagenteSchema = z.object({ nombre: z.string().trim().min(2, "Poné un nombre de al menos 2 letras.") });
+portalRouter.post("/mis-subagentes", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  const parsed = nuevoSubagenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.status(201).json(await crearSubagente(agId, parsed.data.nombre));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const jugadoresSubagenteSchema = z.object({
+  jugadores: z.array(z.object({ clubId: z.string().min(1), playerExternalId: z.string().min(1) })).max(500),
+});
+portalRouter.put("/mis-subagentes/:subId/jugadores", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  const parsed = jugadoresSubagenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Lista de jugadores inválida." });
+  try {
+    res.json(await asignarJugadoresSubagente(agId, req.params.subId, parsed.data.jugadores));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

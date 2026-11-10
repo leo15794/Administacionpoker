@@ -10,6 +10,10 @@
 // pone su acuerdo por club (sistema, rakeback %, rebate %, versionado por vigencia igual que supervisor_acuerdos_agente) y le crea el
 // usuario (rol SUBAGENTE, agent_users.subagente_id, agent_id NULL: el login del subagente nunca ve la cuenta del agente).
 // Nada de esto toca los cierres ni lo que DigiPlayers le acredita al agente: es un acuerdo entre el agente y su subagente.
+//
+// Carga a mano (10/11/2026, pedido de Leo: "necesito poder hacerlo ahora", caso Cachito1976): el agente también puede crear un subagente
+// con un nombre y elegir cuáles de sus jugadores le pertenecen (subagente_jugadores). Ese reparto vale para todas las semanas, también las
+// ya cargadas, y manda sobre lo que diga el archivo para ese jugador.
 import bcrypt from "bcryptjs";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre } from "../engine/cierre.js";
@@ -43,6 +47,14 @@ export function asegurarSchemaSubagentes(): Promise<void> {
         valid_to      TIMESTAMPTZ,
         created_by    TEXT,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS subagente_jugadores (
+        subagente_id       TEXT NOT NULL REFERENCES agente_subagentes(id),
+        club_id            TEXT NOT NULL REFERENCES clubs(id),
+        player_external_id TEXT NOT NULL,
+        player_name        TEXT,
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (subagente_id, club_id, player_external_id)
       );
       CREATE INDEX IF NOT EXISTS idx_subagente_acuerdos ON subagente_acuerdos(subagente_id, club_id, valid_from);
       ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS subagente_id TEXT REFERENCES agente_subagentes(id);`);
@@ -151,9 +163,14 @@ async function cierresDelSubagente(sub: { id: string; agent_id: string; name_key
      FROM weekly_closing_player_details d
      JOIN weekly_closings wc ON wc.id = d.closing_id
      JOIN clubs c ON c.id = wc.club_id
-     WHERE wc.agent_id = $1 AND wc.status <> 'REVERTIDO' AND lower(trim(d.club_subagente_name)) = $2
+     WHERE wc.agent_id = $1 AND wc.status <> 'REVERTIDO' AND (
+       EXISTS (SELECT 1 FROM subagente_jugadores sj WHERE sj.subagente_id = $3 AND sj.club_id = wc.club_id AND sj.player_external_id = d.player_external_id)
+       OR (lower(trim(d.club_subagente_name)) = $2 AND NOT EXISTS (
+         SELECT 1 FROM subagente_jugadores sj JOIN agente_subagentes s2 ON s2.id = sj.subagente_id
+         WHERE s2.agent_id = $1 AND sj.club_id = wc.club_id AND sj.player_external_id = d.player_external_id))
+     )
      ORDER BY wc.week_start DESC, c.name, d.rake DESC, d.player_name`,
-    [sub.agent_id, sub.name_key]
+    [sub.agent_id, sub.name_key, sub.id]
   );
   const acuerdos = (await pool.query(`SELECT * FROM subagente_acuerdos WHERE subagente_id = $1`, [sub.id])).rows;
   const porCierre = new Map<string, any>();
@@ -210,7 +227,7 @@ export async function listarMisSubagentes(agentId: string) {
   await asegurarSchemaSubagentes();
   await sincronizarSubagentes(agentId);
   const subs = (await pool.query(`SELECT id, agent_id, name, name_key FROM agente_subagentes WHERE agent_id = $1 ORDER BY name`, [agentId])).rows;
-  if (subs.length === 0) return [];
+  if (subs.length === 0) return { subagentes: [], jugadores: await jugadoresDelAgente(agentId) };
   const ids = subs.map((s) => s.id);
   const usuarios = await pool.query(
     `SELECT DISTINCT ON (subagente_id) subagente_id, id, email, active FROM agent_users
@@ -221,21 +238,10 @@ export async function listarMisSubagentes(agentId: string) {
     `SELECT subagente_id, club_id, system, rakeback_pct, rebate_pct, valid_from FROM subagente_acuerdos WHERE valid_to IS NULL AND subagente_id = ANY($1::text[])`,
     [ids]
   );
-  // Jugadores y clubes de cada subagente: los que hoy figuran en players + los que tuvo en algún cierre.
-  const jug = await pool.query(
-    `SELECT DISTINCT x.name_key, x.club_id, c.name AS club_name, x.external_id, x.nombre FROM (
-       SELECT lower(trim(p.club_subagente_name)) AS name_key, p.club_id, p.external_id, p.display_name AS nombre
-       FROM players p WHERE p.agent_id = $1 AND p.club_subagente_name IS NOT NULL
-       UNION
-       SELECT lower(trim(d.club_subagente_name)), wc.club_id, d.player_external_id, d.player_name
-       FROM weekly_closing_player_details d JOIN weekly_closings wc ON wc.id = d.closing_id
-       WHERE wc.agent_id = $1 AND wc.status <> 'REVERTIDO' AND d.club_subagente_name IS NOT NULL
-     ) x JOIN clubs c ON c.id = x.club_id ORDER BY c.name, x.nombre`,
-    [agentId]
-  );
+  const jug = await jugadoresDelAgente(agentId);
   const out = [];
   for (const s of subs) {
-    const mios = jug.rows.filter((j) => j.name_key === s.name_key);
+    const mios = jug.filter((j) => j.subagente_id === s.id);
     const clubes = [...new Map(mios.map((j) => [j.club_id, { club_id: j.club_id, club_name: j.club_name }])).values()];
     const cierres = await cierresDelSubagente(s, 12);
     const u = usuarios.rows.find((x) => x.subagente_id === s.id);
@@ -243,7 +249,7 @@ export async function listarMisSubagentes(agentId: string) {
       id: s.id,
       name: s.name,
       usuario: u ? { id: u.id, email: u.email, active: u.active } : null,
-      jugadores: [...new Map(mios.map((j) => [`${j.club_id}|${j.external_id}`, { id: j.external_id, nombre: j.nombre, club_name: j.club_name }])).values()],
+      jugadores: mios.map((j) => ({ id: j.external_id, nombre: j.nombre, club_id: j.club_id, club_name: j.club_name, manual: j.manual })),
       clubes: clubes.map((c) => {
         const ac = acuerdos.rows.find((a) => a.subagente_id === s.id && a.club_id === c.club_id);
         return {
@@ -254,7 +260,79 @@ export async function listarMisSubagentes(agentId: string) {
       }),
     });
   }
-  return out;
+  return { subagentes: out, jugadores: jug };
+}
+
+/** Jugadores del agente (los que hoy tiene en players) y a qué subagente pertenece cada uno: a mano, o si no, lo que dice el archivo. */
+async function jugadoresDelAgente(agentId: string) {
+  const r = await pool.query(
+    `SELECT p.club_id, c.name AS club_name, p.external_id, p.display_name AS nombre,
+            COALESCE(m.subagente_id, si.id) AS subagente_id, (m.subagente_id IS NOT NULL) AS manual
+     FROM players p
+     JOIN clubs c ON c.id = p.club_id
+     LEFT JOIN (
+       SELECT sj.subagente_id, sj.club_id, sj.player_external_id FROM subagente_jugadores sj
+       JOIN agente_subagentes s ON s.id = sj.subagente_id WHERE s.agent_id = $1
+     ) m ON m.club_id = p.club_id AND m.player_external_id = p.external_id
+     LEFT JOIN agente_subagentes si ON si.agent_id = $1 AND si.name_key = lower(trim(p.club_subagente_name))
+     WHERE p.agent_id = $1
+     ORDER BY c.name, lower(p.display_name)`,
+    [agentId]
+  );
+  return r.rows as { club_id: string; club_name: string; external_id: string; nombre: string; subagente_id: string | null; manual: boolean }[];
+}
+
+/** Crea un subagente a mano (sin esperar al archivo del club). */
+export async function crearSubagente(agentId: string, nombre: string) {
+  await asegurarSchemaSubagentes();
+  const name = nombre.trim();
+  if (name.length < 2) throw new Error("Poné un nombre de al menos 2 letras.");
+  try {
+    const id = newId("subag");
+    await pool.query(`INSERT INTO agente_subagentes (id, agent_id, name, name_key) VALUES ($1,$2,$3,$4)`, [id, agentId, name, clave(name)]);
+    return { id, name };
+  } catch (err: any) {
+    if (err.code === "23505") throw new Error("Ya tenés un subagente con ese nombre.");
+    throw err;
+  }
+}
+
+/**
+ * Jugadores elegidos a mano para un subagente: reemplaza la lista de ese subagente. Si un jugador estaba elegido para otro subagente del
+ * mismo agente, pasa a este. Solo se aceptan jugadores del propio agente.
+ */
+export async function asignarJugadoresSubagente(agentId: string, subagenteId: string, jugadores: { clubId: string; playerExternalId: string }[]) {
+  await asegurarSchemaSubagentes();
+  await subagenteDelAgente(agentId, subagenteId);
+  const propios = await jugadoresDelAgente(agentId);
+  const elegidos = jugadores.map((j) => {
+    const p = propios.find((x) => x.club_id === j.clubId && x.external_id === j.playerExternalId);
+    if (!p) throw new Error("Uno de los jugadores elegidos no es tuyo.");
+    return p;
+  });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM subagente_jugadores WHERE subagente_id = $1`, [subagenteId]);
+    for (const p of elegidos) {
+      await client.query(
+        `DELETE FROM subagente_jugadores sj USING agente_subagentes s
+         WHERE s.id = sj.subagente_id AND s.agent_id = $1 AND sj.club_id = $2 AND sj.player_external_id = $3`,
+        [agentId, p.club_id, p.external_id]
+      );
+      await client.query(
+        `INSERT INTO subagente_jugadores (subagente_id, club_id, player_external_id, player_name) VALUES ($1,$2,$3,$4)`,
+        [subagenteId, p.club_id, p.external_id, p.nombre]
+      );
+    }
+    await client.query("COMMIT");
+    return { ok: true, jugadores: elegidos.length };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /** Cuántos subagentes tiene el agente (para mostrar o no la sección en el menú). */

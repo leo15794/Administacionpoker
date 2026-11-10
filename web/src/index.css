@@ -3563,3 +3563,14 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .sa-jug span { font-size: 12.5px; background: var(--panel-2); border-radius: 8px; padding: 5px 9px; }
 .sa-jug span i { font-style: normal; color: var(--text-faint); font-size: 11px; margin-left: 5px; }
 .ma-prev .sa-queda b { color: var(--gold, #c6a66b); }
+.sa-nuevo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.sa-nuevo input { width: 220px; }
+.sa-elegir { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; max-height: 360px; overflow: auto; }
+.sa-elegir > div { display: contents; }
+.sa-club { grid-column: 1 / -1; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint); margin: 6px 0 2px; }
+.sa-op { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; font-size: 13px; text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0; }
+.sa-op.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.sa-op input { width: auto; margin: 0; }
+.sa-op span b { display: block; font-size: 13px; }
+.sa-op span i { font-style: normal; font-size: 11px; color: var(--text-faint); }
+.sa-op small { margin-left: auto; font-size: 11px; color: var(--amber); white-space: nowrap; }
