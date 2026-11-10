@@ -40,7 +40,7 @@ function CierreAgenteCard({ c, abiertoInicial }: { c: any; abiertoInicial: boole
       {abierto && (
         <div className="ca-body">
           {c.sin_acuerdo ? (
-            <div className="ca-aviso">Tu supervisor no cargó tus % en este club: el cierre todavía no tiene monto.</div>
+            <div className="ca-aviso">Este cierre todavía no tiene monto: faltan cargar tus % en este club.</div>
           ) : (
             <>
               <div className="ca-lbl">Desglose del cierre</div>
@@ -185,7 +185,7 @@ export default function MiCuenta() {
             der={
               acuerdo
                 ? c.sin_acuerdo
-                  ? "Tu supervisor no cargó tus % en este club"
+                  ? "Faltan cargar tus % en este club"
                   : `Resultado ${usdCents(c.result)} · rakeback ${pctTxt(c.rakeback_pct)} = ${usdCents(c.rakeback)}${Number(c.rebate) ? ` · rebate ${usdCents(c.rebate)}` : ""}`
                 : "Cierre final"
             }
@@ -196,8 +196,8 @@ export default function MiCuenta() {
   );
 
   const acuerdoPane = acuerdo && (
-    <PortalPane activa titulo={`Tu acuerdo con ${acuerdo.supervisor}`}>
-      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Los % que te puso tu supervisor. Con esto se calcula tu cierre de cada semana.</div>
+    <PortalPane activa titulo="Tu acuerdo">
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Tus % por club. Con esto se calcula tu cierre de cada semana.</div>
       {acuerdo.clubes.map((c: any) => (
         <div key={c.club_id} className="pt-card">
           <div className="b">
@@ -237,7 +237,7 @@ export default function MiCuenta() {
           <div>
             <h2>Hola, {data.agente.name}</h2>
             <div className="muted">
-              {data.agente.supervisor ? `Supervisor: ${data.agente.supervisor} · ` : ""}Tocá un cierre para ver el desglose y tus jugadores
+              Tocá un cierre para ver el desglose y tus jugadores
             </div>
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function MiCuenta() {
       <div className="topbar" style={{ marginBottom: 14 }}>
         <div>
           <h2>Hola, {data.agente.name}</h2>
-          <div className="muted">Sistema: {sistema}{data.agente.supervisor ? ` · Supervisor: ${data.agente.supervisor}` : ""}</div>
+          <div className="muted">Sistema: {sistema}</div>
         </div>
         {misAgentes.length > 1 && (
           <div className="field" style={{ margin: 0 }}>
