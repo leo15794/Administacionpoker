@@ -3488,16 +3488,32 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
   .topbar h2 { font-size: 26px; }
 }
 
-/* Medios de pago del sueldo de Manos (mockup 84): fichas para elegir cómo se paga. */
+/* Pago del sueldo de Manos en una o varias partes (mockups 84 y 85). */
 .mp-lbl { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 7px; }
-.medios-pago { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-.medios-pago .mp { text-align: left; border: 1px solid var(--border); background: var(--panel-2); border-radius: 13px; padding: 10px 10px 9px; color: var(--text); cursor: pointer; font: inherit; }
-.medios-pago .mp:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
-.medios-pago .mp-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 800; background: var(--panel); color: var(--text-dim); margin-bottom: 7px; }
-.medios-pago .mp b { display: block; font-size: 12.5px; }
-.medios-pago .mp small { display: block; color: var(--text-faint); font-size: 11px; margin-top: 2px; line-height: 1.3; }
-.medios-pago .mp.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
-.medios-pago .mp.on .mp-ic { background: var(--accent-grad); color: var(--accent-ink); }
-.mp-saldo { display: flex; align-items: center; gap: 12px; border-radius: 12px; padding: 11px 14px; background: var(--panel-2); margin-bottom: 12px; font-size: 13px; }
-.mp-saldo b { font-size: 15px; }
-@media (max-width: 600px) { .medios-pago { grid-template-columns: 1fr 1fr; } }
+.pp-esp { display: flex; flex-direction: column; justify-content: center; border-radius: 11px; background: var(--panel-2); padding: 8px 14px; align-self: end; min-height: 42px; margin-bottom: 12px; }
+.pp-esp small { color: var(--text-dim); font-size: 11.5px; }
+.pp-esp b { font-size: 20px; letter-spacing: -.02em; }
+.pp-parte { border: 1px solid var(--border); border-radius: 14px; padding: 12px 12px 10px; margin-bottom: 10px; }
+.pp-parte .form-grid { margin-bottom: 0; }
+.pp-parte .field { margin-bottom: 6px; }
+.pp-h { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.pp-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #fff; flex: none; }
+.pp-h b { font-size: 13.5px; }
+.pp-m { margin-left: auto; font-weight: 800; font-size: 15px; }
+.pp-x { background: none; border: 0; color: var(--text-faint); font-size: 15px; cursor: pointer; padding: 2px 4px; }
+.pp-x:hover { color: var(--red); }
+.pp-hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.pp-wallet { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); margin-top: 4px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.pp-wallet input { width: auto; margin: 0; }
+.pp-agregar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.pp-agregar button { height: 40px; border-radius: 11px; border: 1px dashed var(--border); background: var(--panel-2); color: var(--text); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+.pp-agregar button:hover { border-color: var(--accent); color: var(--accent); }
+.pp-tot { border-radius: 13px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel-2); }
+.pp-tot.ok { background: color-mix(in srgb, var(--green) 14%, transparent); }
+.pp-tot.ok .pp-row b { color: var(--green); }
+.pp-tot.falta { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.pp-tot.falta .pp-row b { color: var(--amber); }
+.pp-bar { height: 7px; border-radius: 9px; background: color-mix(in srgb, var(--text) 8%, transparent); display: flex; overflow: hidden; margin-bottom: 10px; }
+.pp-bar i { display: block; height: 100%; }
+.pp-row { display: flex; justify-content: space-between; font-size: 13px; gap: 10px; }
+@media (max-width: 600px) { .pp-agregar { grid-template-columns: 1fr 1fr; } }

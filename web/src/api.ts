@@ -709,9 +709,11 @@ export const api = {
   eliminarPeriodo: (id: string) => request(`/profit-periods/${id}`, { method: "DELETE" }),
   pagarSueldoManos: (
     id: string,
-    data:
-      | { medio?: "PESOS"; fechaPago: string; pesos: number; cotizacion: number; observaciones?: string | null }
-      | { medio: "USDT" | "CUENTA_MANOS" | "CUENTA_JUAN"; fechaPago: string; moverWallet?: boolean; observaciones?: string | null }
+    data: {
+      fechaPago: string;
+      observaciones?: string | null;
+      partes: { medio: "PESOS" | "USDT" | "CUENTA_MANOS" | "CUENTA_JUAN"; monto?: number; pesos?: number; cotizacion?: number; moverWallet?: boolean }[];
+    }
   ) =>
     request(`/profit-periods/sueldos-manos/${id}/pagar`, { method: "POST", body: JSON.stringify(data) }),
   aceptarDiferenciaSueldoManos: (id: string) => request(`/profit-periods/sueldos-manos/${id}/aceptar-diferencia`, { method: "POST" }),

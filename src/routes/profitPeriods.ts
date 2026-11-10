@@ -17,7 +17,7 @@ import {
   revisionCierrePeriodo,
   eliminarPeriodo,
 } from "../repo/profitPeriods.js";
-import { registrarPagoSueldo, registrarPagoSueldoOtroMedio, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
+import { registrarPagoSueldo, registrarPagoSueldoPartes, aceptarDiferenciaSueldo, resolverRevisionSueldo } from "../repo/sueldoManos.js";
 
 export const profitPeriodsRouter = Router();
 
@@ -176,20 +176,34 @@ const pagoSueldoSchema = z.object({
   cotizacion: z.number().positive("La cotización tiene que ser mayor a 0."),
   observaciones: z.string().nullable().optional(),
 });
-// Otros medios (10/11/2026): USDT o descontado de la cuenta socio de Manos o de Juan; sin pesos ni cotización.
-const pagoSueldoOtroMedioSchema = z.object({
-  medio: z.enum(["USDT", "CUENTA_MANOS", "CUENTA_JUAN"]),
+// Pago en una o varias partes (10/11/2026): pesos de Juan, USDT o descontado de la cuenta socio de Manos o de Juan.
+const pagoSueldoPartesSchema = z.object({
   fechaPago: z.string().min(1, "La fecha de pago es obligatoria."),
-  moverWallet: z.boolean().optional(),
+  partes: z
+    .array(
+      z.object({
+        medio: z.enum(["PESOS", "USDT", "CUENTA_MANOS", "CUENTA_JUAN"]),
+        monto: z.number().optional(),
+        pesos: z.number().optional(),
+        cotizacion: z.number().optional(),
+        moverWallet: z.boolean().optional(),
+      })
+    )
+    .min(1, "Agregá al menos una parte."),
   observaciones: z.string().nullable().optional(),
 });
 
 profitPeriodsRouter.post("/sueldos-manos/:id/pagar", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
-  if (req.body?.medio && req.body.medio !== "PESOS") {
-    const otro = pagoSueldoOtroMedioSchema.safeParse(req.body);
-    if (!otro.success) return res.status(400).json({ error: otro.error.flatten() });
+  if (Array.isArray(req.body?.partes)) {
+    const pp = pagoSueldoPartesSchema.safeParse(req.body);
+    if (!pp.success) return res.status(400).json({ error: pp.error.flatten() });
+    const { partes, fechaPago, observaciones } = pp.data;
     try {
-      return res.json(await registrarPagoSueldoOtroMedio(req.params.id, otro.data, req.user?.email ?? null));
+      // Una sola parte en pesos: el pago de siempre (con "Revisar diferencia" si no coincide).
+      if (partes.length === 1 && partes[0].medio === "PESOS") {
+        return res.json(await registrarPagoSueldo(req.params.id, { fechaPago, pesos: partes[0].pesos ?? 0, cotizacion: partes[0].cotizacion ?? 0, observaciones }));
+      }
+      return res.json(await registrarPagoSueldoPartes(req.params.id, pp.data, req.user?.email ?? null));
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
     }

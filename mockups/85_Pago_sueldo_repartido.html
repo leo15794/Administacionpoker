@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  :root { --bg:#0d1117; --text:#e6edf3; --dim:#9da7b3; --faint:#808a96; --accent:#4493f8; --accent-rgb:68,147,248; --accent-grad:linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink:#06101f;
+    --green:#3fb950; --green-soft:rgba(63,185,80,.14); --amber:#e3a83b; --amber-soft:rgba(227,168,59,.14); --red:#f85149;
+    --glow1:rgba(68,147,248,.28); --glow2:rgba(63,185,80,.14); --modal:#121a26; --border:rgba(255,255,255,.10); --input:#0d131c; --chip:rgba(255,255,255,.06); --sel:rgba(68,147,248,.14); --track:rgba(255,255,255,.08); }
+  :root[data-theme="light"] { --bg:#f4f7f5; --text:#14201a; --dim:#55655c; --faint:#7c887f; --accent:#157a57; --accent-rgb:21,122,87; --accent-grad:linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink:#fff;
+    --green:#157a57; --green-soft:rgba(21,122,87,.10); --amber:#9c6a17; --amber-soft:rgba(156,106,23,.12); --red:#c23744;
+    --glow1:rgba(45,190,133,.28); --glow2:rgba(138,106,50,.12); --modal:#ffffff; --border:rgba(11,24,18,.10); --input:#f7faf8; --chip:rgba(11,24,18,.05); --sel:rgba(21,122,87,.10); --track:rgba(11,24,18,.07); }
+  * { box-sizing:border-box; margin:0; }
+  body { width:1500px; min-height:1000px; font-family:Inter,system-ui,sans-serif; color:var(--text); font-variant-numeric:tabular-nums;
+    background: radial-gradient(800px 560px at 10% 0%,var(--glow1),transparent 62%), radial-gradient(760px 620px at 95% 100%,var(--glow2),transparent 60%), var(--bg); padding:28px; }
+  h1 { font-size:22px; font-weight:800; letter-spacing:-.02em; } .sub { color:var(--dim); font-size:13.5px; margin:4px 0 22px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+  .cap { font-size:11px; font-weight:700; letter-spacing:.1em; color:var(--faint); margin:0 0 8px 4px; text-transform:uppercase; }
+  .modal { background:var(--modal); border:1px solid var(--border); border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.30); }
+  .mh { display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--border); font-weight:700; font-size:16px; }
+  .mh span { color:var(--dim); font-weight:400; font-size:18px; }
+  .mb { padding:18px 22px 22px; }
+  .lbl { font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; }
+  .top { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .in { height:40px; border:1px solid var(--border); background:var(--input); border-radius:11px; padding:0 12px; display:flex; align-items:center; font-size:14px; }
+  .in .u { margin-left:auto; color:var(--faint); font-size:11.5px; font-weight:600; }
+  .in.sel::after { content:"▾"; margin-left:auto; color:var(--faint); font-size:12px; }
+  .esp { display:flex; flex-direction:column; justify-content:center; border-radius:11px; background:var(--chip); padding:0 14px; }
+  .esp small { color:var(--dim); font-size:11.5px; } .esp b { font-size:20px; letter-spacing:-.02em; }
+  .parte { border:1px solid var(--border); border-radius:14px; padding:12px 12px 10px; margin-bottom:10px; position:relative; }
+  .ph { display:flex; align-items:center; gap:9px; margin-bottom:10px; }
+  .ic { width:26px; height:26px; border-radius:8px; display:grid; place-items:center; font-size:13px; font-weight:800; background:var(--accent-grad); color:var(--accent-ink); }
+  .ph b { font-size:13.5px; } .ph .x { margin-left:auto; color:var(--faint); font-size:15px; }
+  .ph .m { margin-left:auto; font-weight:800; font-size:15px; } .ph .m + .x { margin-left:12px; }
+  .cols { display:grid; gap:10px; } .c2 { grid-template-columns:1.2fr 1fr; } .c3 { grid-template-columns:1.2fr 1fr 1fr; }
+  .hint { font-size:12px; color:var(--dim); margin-top:8px; display:flex; align-items:center; gap:8px; }
+  .box { width:16px; height:16px; border-radius:4px; border:1.5px solid var(--faint); display:grid; place-items:center; font-size:11px; font-weight:800; flex:none; }
+  .box.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .add { border:1.5px dashed var(--border); border-radius:13px; padding:11px; text-align:center; color:var(--accent); font-weight:700; font-size:13px; margin-bottom:14px; }
+  .tot { border-radius:13px; padding:12px 14px; margin-bottom:14px; }
+  .tot .bar { height:7px; border-radius:9px; background:var(--track); display:flex; overflow:hidden; margin-bottom:10px; }
+  .tot .bar i { display:block; height:100%; } .tot .row { display:flex; justify-content:space-between; font-size:13px; }
+  .tot.ok { background:var(--green-soft); } .tot.ok .row b { color:var(--green); }
+  .tot.falta { background:var(--amber-soft); } .tot.falta .row b { color:var(--amber); }
+  .ley { display:flex; gap:14px; font-size:11.5px; color:var(--dim); margin-bottom:8px; } .ley span::before { content:""; display:inline-block; width:8px; height:8px; border-radius:3px; margin-right:5px; background:var(--c); }
+  .btn { display:inline-flex; height:42px; align-items:center; padding:0 20px; border-radius:12px; background:var(--accent-grad); color:var(--accent-ink); font-weight:700; font-size:14px; box-shadow:0 8px 20px rgba(var(--accent-rgb),.3); }
+  .btn.off { opacity:.45; box-shadow:none; }
+  .resumen { margin-top:12px; font-size:12px; color:var(--dim); line-height:1.6; }
+</style></head><body>
+<h1>Pago del sueldo de Manos · repartido en varios lugares</h1>
+<div class="sub">Se agregan las partes que hagan falta (pesos, USDT, cuenta Manos, cuenta Juan) y tienen que sumar el sueldo. Saldos y cotización de ejemplo.</div>
+<div class="grid">
+  <div>
+    <div class="cap">Repartido y completo · se puede registrar</div>
+    <div class="modal"><div class="mh">Pago del sueldo de Manos · Octubre 2026<span>✕</span></div><div class="mb">
+      <div class="top"><div><div class="lbl">Fecha de pago</div><div class="in">10/11/2026</div></div><div class="esp"><small>Sueldo a pagar</small><b>US$ 452</b></div></div>
+
+      <div class="parte">
+        <div class="ph"><div class="ic">$</div><b>Pesos · Juan paga en ARS</b><span class="m">US$ 200</span><span class="x">✕</span></div>
+        <div class="cols c2"><div><div class="lbl">Pesos pagados</div><div class="in">288.400<span class="u">ARS</span></div></div><div><div class="lbl">Cotización</div><div class="in">1.442</div></div></div>
+        <div class="hint">Le baja la deuda a Juan por US$ 200.</div>
+      </div>
+      <div class="parte">
+        <div class="ph"><div class="ic">₮</div><b>USDT</b><span class="m">US$ 152</span><span class="x">✕</span></div>
+        <div class="cols c2"><div><div class="lbl">Monto</div><div class="in">152,00<span class="u">USDT</span></div></div><div></div></div>
+        <div class="hint"><span class="box on">✓</span>Mueve la Wallet: egreso real de US$ 152</div>
+      </div>
+      <div class="parte">
+        <div class="ph"><div class="ic">M</div><b>Cuenta socio Manos</b><span class="m">US$ 100</span><span class="x">✕</span></div>
+        <div class="cols c2"><div><div class="lbl">Monto</div><div class="in">100,00<span class="u">USDT</span></div></div><div><div class="lbl">Saldo</div><div class="in" style="background:var(--chip)">953 → 853</div></div></div>
+        <div class="hint"><span class="box"></span>Mueve la Wallet</div>
+      </div>
+      <div class="add">+ Agregar otra parte</div>
+
+      <div class="tot ok">
+        <div class="ley"><span style="--c:#4493f8">Pesos 200</span><span style="--c:#3fb950">USDT 152</span><span style="--c:#c6a66b">Manos 100</span></div>
+        <div class="bar"><i style="width:44.2%;background:#4493f8"></i><i style="width:33.6%;background:#3fb950"></i><i style="width:22.2%;background:#c6a66b"></i></div>
+        <div class="row"><span>Total US$ 452 de US$ 452</span><b>Completo ✓</b></div>
+      </div>
+      <div class="lbl">Observaciones (opcional)</div><div class="in" style="margin-bottom:14px"></div>
+      <div class="btn">Registrar pago</div>
+    </div></div>
+  </div>
+
+  <div>
+    <div class="cap">Falta plata · no deja registrar hasta completar</div>
+    <div class="modal"><div class="mh">Pago del sueldo de Manos · Octubre 2026<span>✕</span></div><div class="mb">
+      <div class="top"><div><div class="lbl">Fecha de pago</div><div class="in">10/11/2026</div></div><div class="esp"><small>Sueldo a pagar</small><b>US$ 452</b></div></div>
+
+      <div class="parte">
+        <div class="ph"><div class="ic">₮</div><b>USDT</b><span class="m">US$ 300</span><span class="x">✕</span></div>
+        <div class="cols c2"><div><div class="lbl">Monto</div><div class="in">300,00<span class="u">USDT</span></div></div><div></div></div>
+        <div class="hint"><span class="box on">✓</span>Mueve la Wallet: egreso real de US$ 300</div>
+      </div>
+      <div class="parte">
+        <div class="ph"><div class="ic">J</div><b>Cuenta socio Juan</b><span class="m">US$ 100</span><span class="x">✕</span></div>
+        <div class="cols c2"><div><div class="lbl">Monto</div><div class="in">100,00<span class="u">USDT</span></div></div><div><div class="lbl">Saldo</div><div class="in" style="background:var(--chip)">23.484 → 23.384</div></div></div>
+        <div class="hint"><span class="box"></span>Mueve la Wallet</div>
+      </div>
+
+      <div class="lbl" style="margin-top:4px">Agregar parte</div>
+      <div class="cols" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+        <div class="in" style="justify-content:center;font-weight:700;font-size:13px">$ Pesos</div>
+        <div class="in" style="justify-content:center;font-weight:700;font-size:13px">₮ USDT</div>
+        <div class="in" style="justify-content:center;font-weight:700;font-size:13px">M Cuenta Manos</div>
+        <div class="in" style="justify-content:center;font-weight:700;font-size:13px">J Cuenta Juan</div>
+      </div>
+
+      <div class="tot falta">
+        <div class="bar"><i style="width:66.4%;background:#3fb950"></i><i style="width:22.1%;background:#4493f8"></i></div>
+        <div class="row"><span>Total US$ 400 de US$ 452</span><b>Faltan US$ 52</b></div>
+      </div>
+      <div class="lbl">Observaciones (opcional)</div><div class="in" style="margin-bottom:14px"></div>
+      <div class="btn off">Registrar pago</div>
+      <div class="resumen">Al registrar, cada parte se guarda por separado (deuda de Juan, Wallet, cuenta socio) y el sueldo queda Pagado. En el detalle del período se ve el reparto.</div>
+    </div></div>
+  </div>
+</div>
+</body></html>
