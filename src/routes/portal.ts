@@ -92,7 +92,48 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
   // Acuerdo con su supervisor (05/11/2026): si el supervisor le cargó sus %, los cierres se le muestran calculados con esos %
   // (su acuerdo con el supervisor), no con los nuestros. Sin ningún acuerdo cargado, sigue viendo lo de siempre.
   const acuerdos = agent.rows[0].supervisor ? await acuerdosVigentesDelAgente(agentId) : [];
-  const cierres = acuerdos.length > 0 ? await cierresConAcuerdo(agentId, closings.rows) : closings.rows;
+  let cierres = acuerdos.length > 0 ? await cierresConAcuerdo(agentId, closings.rows) : closings.rows;
+
+  // Agente de un supervisor (10/11/2026, pedido de Leo, mockup 86): cada cierre trae su desglose y sus jugadores.
+  // Con acuerdo del supervisor, los números de cada jugador se recalculan con esos % (igual que el cierre);
+  // sin acuerdo para ese club, solo resultado y rake. Nada interno (subagentes) sale de acá.
+  if (agent.rows[0].supervisor) {
+    cierres = cierres.filter((c: any) => c.status !== "REVERTIDO");
+    const ids = cierres.map((c: any) => c.id);
+    const det = ids.length
+      ? (
+          await pool.query(
+            `SELECT closing_id, player_external_id, player_name, resultado, rake, rebate, rakeback, cierre_jugador
+             FROM weekly_closing_player_details WHERE closing_id = ANY($1::text[]) ORDER BY rake DESC, player_name`,
+            [ids]
+          )
+        ).rows
+      : [];
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    cierres = cierres.map((c: any) => {
+      const jugadores = det
+        .filter((j) => j.closing_id === c.id)
+        .map((j) => {
+          const base = { id: j.player_external_id, nombre: j.player_name, resultado: Number(j.resultado), rake: Number(j.rake) };
+          if (acuerdos.length === 0) return { ...base, rakeback: Number(j.rakeback), rebate: Number(j.rebate), cierre: Number(j.cierre_jugador) };
+          if (c.sin_acuerdo) return { ...base, rakeback: null, rebate: null, cierre: null };
+          const calc = calcularCierre({
+            agentId,
+            clubId: c.club_id,
+            system: c.system,
+            result: base.resultado,
+            rakeTotal: base.rake,
+            rakebackPct: Number(c.rakeback_pct),
+            rebatePct: Number(c.rebate_pct),
+            rodeo: 0,
+            ajusteManual: 0,
+            rateSnapshot: 1,
+          });
+          return { ...base, rakeback: r2(calc.rakeback), rebate: r2(calc.rebate), cierre: r2(calc.finalClosing) };
+        });
+      return { ...c, jugadores_detalle: jugadores };
+    });
+  }
 
   res.json({
     agente: agent.rows[0],

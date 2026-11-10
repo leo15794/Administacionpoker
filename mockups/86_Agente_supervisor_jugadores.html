@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 86 (10/11/2026): portal del agente de un supervisor -- sus cierres con el desglose y sus jugadores.
+     Datos reales de QueDificil (Uriel), TeamBack GG, semana 19/10 al 25/10. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --green-soft: rgba(63,185,80,.16); --red: #f85149; --red-soft: rgba(248,81,73,.16); --amber: #e3a83b; --amber-soft: rgba(227,168,59,.16); --gold: #c6a66b;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16); --glow3: rgba(198,166,107,.12);
+    --side: rgba(22,27,34,.55); --side-border: rgba(255,255,255,.08);
+    --page: rgba(22,27,34,.50); --page-border: rgba(255,255,255,.09);
+    --card: rgba(29,36,48,.62); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --line: rgba(255,255,255,.07); --phone: #0d1117;
+    --primary: #e6edf3; --primary-ink: #0d1117;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --red-soft: rgba(194,55,68,.12); --amber: #9c6a17; --amber-soft: rgba(156,106,23,.14); --gold: #8a6a32;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14); --glow3: rgba(30,154,110,.18);
+    --side: rgba(255,255,255,.55); --side-border: rgba(255,255,255,.8);
+    --page: rgba(255,255,255,.42); --page-border: rgba(255,255,255,.85);
+    --card: rgba(255,255,255,.72); --card-border: rgba(255,255,255,.95); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --line: rgba(11,24,18,.07); --phone: #f4f7f5;
+    --primary: #14201a; --primary-ink: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%),
+      radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%),
+      radial-gradient(620px 460px at 70% 8%, var(--glow3), transparent 65%),
+      var(--bg);
+    padding: 20px; display: grid; grid-template-columns: 1fr 360px; gap: 22px;
+  }
+  .page { border-radius: 26px; padding: 26px 30px; background: var(--page); border: 1px solid var(--page-border); backdrop-filter: blur(24px); overflow: hidden; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .chips { display: flex; gap: 8px; margin: 16px 0 18px; flex-wrap: wrap; }
+  .chip { font-size: 12px; font-weight: 600; background: var(--chip); border-radius: 99px; padding: 6px 12px; color: var(--dim); }
+  .chip b { color: var(--text); }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; box-shadow: var(--card-shadow); backdrop-filter: blur(16px); margin-bottom: 12px; }
+  .ch { display: flex; align-items: center; gap: 14px; padding: 15px 18px; }
+  .ch .w { font-weight: 700; font-size: 15px; }
+  .ch .c { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .pill { font-size: 11px; font-weight: 700; border-radius: 99px; padding: 3px 9px; background: var(--chip); color: var(--dim); }
+  .pill.j { background: rgba(var(--accent-rgb),.14); color: var(--accent); }
+  .ch .m { margin-left: auto; font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+  .neg { color: var(--red); } .pos { color: var(--green); }
+  .car { color: var(--faint); font-size: 13px; width: 16px; text-align: center; }
+  .open { border-color: rgba(var(--accent-rgb),.45); }
+  .body { border-top: 1px solid var(--line); padding: 14px 18px 16px; }
+  .des { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+  .des div { background: var(--chip); border-radius: 12px; padding: 9px 12px; }
+  .des small { display: block; font-size: 11px; color: var(--dim); margin-bottom: 3px; }
+  .des b { font-size: 15px; }
+  .des .tot { background: rgba(var(--accent-rgb),.12); }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; font-size: 11px; font-weight: 600; color: var(--dim); padding: 0 8px 8px; }
+  th:first-child, td:first-child { text-align: left; }
+  td { text-align: right; padding: 9px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td .id { display: block; font-size: 11px; color: var(--faint); }
+  td b { font-weight: 700; }
+  tfoot td { font-weight: 800; border-top: 2px solid var(--line); }
+  .aviso { display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: var(--amber); background: var(--amber-soft); border-radius: 12px; padding: 10px 12px; }
+
+  /* Celular */
+  .phone { border-radius: 44px; background: var(--phone); border: 9px solid #22272e; box-shadow: var(--card-shadow); overflow: hidden; height: 900px; padding: 18px 14px; position: relative;
+    background-image: radial-gradient(400px 300px at 0% 0%, var(--glow1), transparent 62%); }
+  .notch { width: 110px; height: 24px; background: #22272e; border-radius: 0 0 14px 14px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+  .phone h2 { font-size: 20px; font-weight: 800; margin-top: 22px; }
+  .phone .sub { font-size: 12px; }
+  .phone .card { border-radius: 16px; margin-bottom: 10px; }
+  .phone .ch { padding: 12px 13px; gap: 10px; }
+  .phone .ch .w { font-size: 14px; } .phone .ch .m { font-size: 16px; }
+  .phone .body { padding: 12px 13px; }
+  .pd { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 12px; }
+  .pd div { background: var(--chip); border-radius: 10px; padding: 7px 10px; }
+  .pd small { display: block; font-size: 10.5px; color: var(--dim); } .pd b { font-size: 13.5px; }
+  .pd .tot { grid-column: span 2; background: rgba(var(--accent-rgb),.12); display: flex; justify-content: space-between; align-items: center; }
+  .pj { border-top: 1px solid var(--line); padding: 9px 0; }
+  .pj .r1 { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700; }
+  .pj .r2 { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--dim); margin-top: 3px; }
+  .cap { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--faint); }
+</style></head>
+<body>
+  <div class="page">
+    <span class="tag">Portal del agente · agente de un supervisor</span>
+    <h1>Hola, QueDificil</h1>
+    <div class="sub">Supervisor: Uriel · Tocá un cierre para ver el desglose y tus jugadores</div>
+    <div class="chips">
+      <span class="chip">Mis cierres semanales · <b>4</b></span>
+      <span class="chip">Jugadores esta semana · <b>2</b></span>
+    </div>
+
+    <div class="card">
+      <div class="ch">
+        <span class="car">▸</span>
+        <div><div class="w">26/10 al 01/11</div><div class="c">TeamBack GG</div></div>
+        <span class="pill j">2 jugadores</span>
+        <span class="m neg">−US$ 202,37</span>
+      </div>
+    </div>
+
+    <div class="card open">
+      <div class="ch">
+        <span class="car">▾</span>
+        <div><div class="w">19/10 al 25/10</div><div class="c">TeamBack GG · Prepago</div></div>
+        <span class="pill j">3 jugadores</span>
+        <span class="m neg">−US$ 626,31</span>
+      </div>
+      <div class="body">
+        <div class="lbl">Desglose del cierre</div>
+        <div class="des">
+          <div><small>Resultado</small><b class="neg">−1.421,85</b></div>
+          <div><small>Rake</small><b>1.088,92</b></div>
+          <div><small>Rakeback 70%</small><b class="pos">+762,24</b></div>
+          <div><small>Rebate</small><b class="pos">+33,29</b></div>
+          <div class="tot"><small>Cierre</small><b class="neg">−626,31</b></div>
+        </div>
+        <div class="lbl">Mis jugadores</div>
+        <table>
+          <thead><tr><th>Jugador</th><th>Resultado</th><th>Rake</th><th>Rakeback</th><th>Rebate</th><th>Cierre</th></tr></thead>
+          <tbody>
+            <tr><td><b>JereStack</b><span class="id">6913-5591</span></td><td class="neg">−1.212,60</td><td>986,70</td><td class="pos">+690,69</td><td class="pos">+22,59</td><td class="neg"><b>−499,32</b></td></tr>
+            <tr><td><b>NeneBluff</b><span class="id">3254-4090</span></td><td class="neg">−203,23</td><td>12,02</td><td class="pos">+8,41</td><td class="pos">+19,12</td><td class="neg"><b>−175,70</b></td></tr>
+            <tr><td><b>NextKlaro</b><span class="id">9904-6986</span></td><td class="neg">−6,02</td><td>90,20</td><td class="pos">+63,14</td><td class="neg">−8,42</td><td class="pos"><b>+48,70</b></td></tr>
+          </tbody>
+          <tfoot><tr><td>Total · 3 jugadores</td><td class="neg">−1.421,85</td><td>1.088,92</td><td class="pos">+762,24</td><td class="pos">+33,29</td><td class="neg">−626,31</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card open">
+      <div class="ch">
+        <span class="car">▾</span>
+        <div><div class="w">19/10 al 25/10</div><div class="c">Fénix GG · Prepago · ejemplo de un club sin jugadores</div></div>
+        <span class="m neg">−US$ 325,67</span>
+      </div>
+      <div class="body">
+        <div class="des" style="margin-bottom:12px">
+          <div><small>Resultado</small><b class="neg">−354,97</b></div>
+          <div><small>Rake</small><b>58,60</b></div>
+          <div><small>Rakeback 50%</small><b class="pos">+29,30</b></div>
+          <div><small>Rebate</small><b>0,00</b></div>
+          <div class="tot"><small>Cierre</small><b class="neg">−325,67</b></div>
+        </div>
+        <div class="aviso">⚠ Fénix GG no informa el detalle por jugador: de este club solo se ve el total del cierre.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <h2>Hola, QueDificil</h2>
+    <div class="sub">Supervisor: Uriel</div>
+    <div style="height:14px"></div>
+    <div class="card">
+      <div class="ch"><span class="car">▸</span><div><div class="w">26/10 al 01/11</div><div class="c">TeamBack GG · 2 jug.</div></div><span class="m neg">−202,37</span></div>
+    </div>
+    <div class="card open">
+      <div class="ch"><span class="car">▾</span><div><div class="w">19/10 al 25/10</div><div class="c">TeamBack GG · 3 jug.</div></div><span class="m neg">−626,31</span></div>
+      <div class="body">
+        <div class="pd">
+          <div><small>Resultado</small><b class="neg">−1.421,85</b></div>
+          <div><small>Rake</small><b>1.088,92</b></div>
+          <div><small>Rakeback 70%</small><b class="pos">+762,24</b></div>
+          <div><small>Rebate</small><b class="pos">+33,29</b></div>
+          <div class="tot"><small>Cierre</small><b class="neg">−US$ 626,31</b></div>
+        </div>
+        <div class="lbl">Mis jugadores</div>
+        <div class="pj"><div class="r1"><span>JereStack</span><span class="neg">−499,32</span></div><div class="r2"><span>Res −1.212,60 · Rake 986,70</span><span>RB +690,69</span></div></div>
+        <div class="pj"><div class="r1"><span>NeneBluff</span><span class="neg">−175,70</span></div><div class="r2"><span>Res −203,23 · Rake 12,02</span><span>RB +8,41</span></div></div>
+        <div class="pj"><div class="r1"><span>NextKlaro</span><span class="pos">+48,70</span></div><div class="r2"><span>Res −6,02 · Rake 90,20</span><span>RB +63,14</span></div></div>
+      </div>
+    </div>
+    <div class="cap">En el celular, lo mismo en tarjetas</div>
+  </div>
+</body></html>
