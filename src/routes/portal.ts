@@ -565,7 +565,7 @@ portalRouter.post("/mi-supervision/mis-agentes/:agentId/usuario", requireAuth, a
   const parsed = usuarioAgenteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
   try {
-    res.status(201).json(await crearUsuarioAgente(supId, req.params.agentId, parsed.data.email, parsed.data.password));
+    res.status(201).json(await crearUsuarioAgente(supId, req.params.agentId, parsed.data.email, parsed.data.password, req.user!.userId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -679,7 +679,7 @@ portalRouter.post("/mis-subagentes/:subId/usuario", requireAuth, async (req: Aut
   const parsed = usuarioAgenteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
   try {
-    res.status(201).json(await crearUsuarioSubagente(agId, req.params.subId, parsed.data.email, parsed.data.password));
+    res.status(201).json(await crearUsuarioSubagente(agId, req.params.subId, parsed.data.email, parsed.data.password, req.user!.userId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

@@ -60,6 +60,14 @@ async function request(path: string, opts: RequestInit = {}) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    // Sesión cortada desde el servidor (10/11/2026): usuario desactivado, contraseña cambiada, etc. Se sale y se avisa en el login.
+    if (res.status === 401 && body.code === "SESION_CORTADA" && token) {
+      localStorage.removeItem("dp_token");
+      try {
+        sessionStorage.setItem("dp_motivo_salida", body.error);
+      } catch {}
+      window.location.href = "/login";
+    }
     throw new Error(body.error ? (typeof body.error === "string" ? body.error : JSON.stringify(body.error)) : `Error ${res.status}`);
   }
   return res.json();

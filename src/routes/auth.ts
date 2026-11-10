@@ -2,7 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { pool, newId } from "../db/pool.js";
-import { signToken, requireAuth, requireAdmin } from "../lib/auth.js";
+import { signToken, requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { estadoAcceso, MENSAJE_ACCESO } from "../lib/sesiones.js";
 
 export const authRouter = Router();
 
@@ -33,8 +34,8 @@ authRouter.post("/bootstrap-user", requireAuth, requireAdmin, async (req, res) =
   const id = newId("user");
   try {
     await pool.query(
-      `INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
-      [id, agent.rows[0].id, email, passwordHash, role === "ADMIN" ? "ADMIN" : "AGENT"]
+      `INSERT INTO agent_users (id, agent_id, email, password_hash, role, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, agent.rows[0].id, email, passwordHash, role === "ADMIN" ? "ADMIN" : "AGENT", (req as AuthedRequest).user?.userId ?? null]
     );
     res.json({ id, email });
   } catch (err: any) {
@@ -67,6 +68,8 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     if (!ok) return res.status(401).json({ error: "Email o contraseña incorrectos." });
 
     if (user.active === false) return res.status(403).json({ error: "Este usuario está desactivado." });
+    const acceso = await estadoAcceso(user.id);
+    if (!acceso.ok) return res.status(403).json({ error: MENSAJE_ACCESO[acceso.motivo] });
 
     const token = signToken({
       userId: user.id,

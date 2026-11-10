@@ -2561,3 +2561,18 @@ CREATE TABLE IF NOT EXISTS subagente_jugadores (
 ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS subagente_id TEXT REFERENCES agente_subagentes(id);
 ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
 ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR','SOCIO','SUBAGENTE'));
+
+-- Sesiones y usuarios creados por otros (10/11/2026, seguridad puntos 1 y 4). sesion_desde: los tokens emitidos antes no valen (lo pone
+-- el trigger al cambiar contraseña, estado o rol). created_by_user_id: quién creó el usuario; si está desactivado (y no es admin), el
+-- usuario no entra. Ver src/lib/sesiones.ts (que también lo crea si falta).
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS sesion_desde TIMESTAMPTZ;
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+CREATE OR REPLACE FUNCTION agent_users_sesion_desde() RETURNS trigger AS $f$
+BEGIN
+  IF NEW.password_hash IS DISTINCT FROM OLD.password_hash OR NEW.active IS DISTINCT FROM OLD.active OR NEW.role IS DISTINCT FROM OLD.role THEN
+    NEW.sesion_desde := now();
+  END IF;
+  RETURN NEW;
+END $f$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_agent_users_sesion_desde ON agent_users;
+CREATE TRIGGER trg_agent_users_sesion_desde BEFORE UPDATE ON agent_users FOR EACH ROW EXECUTE FUNCTION agent_users_sesion_desde();

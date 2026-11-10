@@ -343,18 +343,19 @@ export async function contarMisSubagentes(agentId: string) {
   return r.rows[0].n as number;
 }
 
-export async function crearUsuarioSubagente(agentId: string, subagenteId: string, email: string, password: string) {
+export async function crearUsuarioSubagente(agentId: string, subagenteId: string, email: string, password: string, creadoPorUserId?: string | null) {
   await asegurarSchemaSubagentes();
   await subagenteDelAgente(agentId, subagenteId);
   const ya = await pool.query(`SELECT 1 FROM agent_users WHERE subagente_id = $1 AND role = 'SUBAGENTE' LIMIT 1`, [subagenteId]);
   if (ya.rows[0]) throw new Error("Este subagente ya tiene usuario: cambiale la contraseña en vez de crear otro.");
   try {
     const id = newId("user");
-    await pool.query(`INSERT INTO agent_users (id, agent_id, email, password_hash, role, subagente_id) VALUES ($1, NULL, $2, $3, 'SUBAGENTE', $4)`, [
+    await pool.query(`INSERT INTO agent_users (id, agent_id, email, password_hash, role, subagente_id, created_by_user_id) VALUES ($1, NULL, $2, $3, 'SUBAGENTE', $4, $5)`, [
       id,
       email.trim(),
       await bcrypt.hash(password, 10),
       subagenteId,
+      creadoPorUserId ?? null,
     ]);
     return { id, email: email.trim() };
   } catch (err: any) {

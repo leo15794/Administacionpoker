@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
+import { estadoAccesoCacheado, MENSAJE_ACCESO } from "./sesiones.js";
 
 // (24/09/2026, encontrado en análisis de seguridad) -- ANTES esto caía a un secreto hardcodeado
 // ("dev-secret") si faltaba la variable de entorno JWT_SECRET. Eso es gravísimo en producción:
@@ -51,18 +52,33 @@ export function verifyToken(token: string): JwtPayload {
 }
 
 export interface AuthedRequest extends Request {
-  user?: JwtPayload;
+  user?: JwtPayload & { iat?: number };
 }
 
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "No autenticado" });
+  let payload: JwtPayload & { iat?: number };
   try {
-    req.user = verifyToken(header.slice(7));
-    next();
+    payload = verifyToken(header.slice(7)) as JwtPayload & { iat?: number };
   } catch {
-    return res.status(401).json({ error: "Token inválido o vencido" });
+    return res.status(401).json({ error: "Token inválido o vencido", code: "SESION_VENCIDA" });
   }
+  // (10/11/2026) El token solo no alcanza: si al usuario lo desactivaron, le cambiaron la contraseña o el rol, o se desactivó quien
+  // lo creó, la sesión se corta en el próximo pedido (ver lib/sesiones.ts).
+  estadoAccesoCacheado(payload.userId)
+    .then((estado) => {
+      if (!estado.ok) return res.status(401).json({ error: MENSAJE_ACCESO[estado.motivo], code: "SESION_CORTADA" });
+      if (estado.sesionDesdeSeg !== null && (payload.iat ?? 0) < estado.sesionDesdeSeg) {
+        return res.status(401).json({ error: MENSAJE_ACCESO.SESION_VIEJA, code: "SESION_CORTADA" });
+      }
+      req.user = payload;
+      next();
+    })
+    .catch((err) => {
+      console.error("Error validando la sesión:", err);
+      res.status(503).json({ error: "No se pudo validar tu sesión. Probá de nuevo en un momento." });
+    });
 }
 
 export function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction) {

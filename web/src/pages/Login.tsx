@@ -6,7 +6,16 @@ import { api } from "../api";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  // Si la sesión se cortó desde el servidor (ver api.ts), se muestra el motivo una vez.
+  const [error, setError] = useState(() => {
+    try {
+      const m = sessionStorage.getItem("dp_motivo_salida") ?? "";
+      sessionStorage.removeItem("dp_motivo_salida");
+      return m;
+    } catch {
+      return "";
+    }
+  });
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
   // Si la sesión venció dentro de un panel de la vista dividida, el login se abre a pantalla completa y no adentro del panel.

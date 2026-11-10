@@ -79,7 +79,7 @@ const createSchema = z
       }
     }
   });
-usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
+usersRouter.post("/", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { role, agentIds, defaultAgentId, proveedorId, partnerAccountId, email, password } = parsed.data;
@@ -94,18 +94,18 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
     const id = newId("user");
     if (role === "SOCIO") {
       await client.query(
-        `INSERT INTO agent_users (id, agent_id, partner_account_id, email, password_hash, role) VALUES ($1,NULL,$2,$3,$4,$5)`,
-        [id, partnerAccountId, email, hash, role]
+        `INSERT INTO agent_users (id, agent_id, partner_account_id, email, password_hash, role, created_by_user_id) VALUES ($1,NULL,$2,$3,$4,$5,$6)`,
+        [id, partnerAccountId, email, hash, role, req.user?.userId ?? null]
       );
     } else if (role === "PROVEEDOR") {
       await client.query(
-        `INSERT INTO agent_users (id, agent_id, proveedor_id, email, password_hash, role) VALUES ($1,NULL,$2,$3,$4,$5)`,
-        [id, proveedorId, email, hash, role]
+        `INSERT INTO agent_users (id, agent_id, proveedor_id, email, password_hash, role, created_by_user_id) VALUES ($1,NULL,$2,$3,$4,$5,$6)`,
+        [id, proveedorId, email, hash, role, req.user?.userId ?? null]
       );
     } else {
       await client.query(
-        `INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
-        [id, defaultAgentId, email, hash, role]
+        `INSERT INTO agent_users (id, agent_id, email, password_hash, role, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, defaultAgentId, email, hash, role, req.user?.userId ?? null]
       );
       for (const agentId of agentIds!) {
         await client.query(

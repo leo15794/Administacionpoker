@@ -120,7 +120,7 @@ export async function listarMisAgentes(supervisorAgentId: string) {
   });
 }
 
-export async function crearUsuarioAgente(supervisorAgentId: string, agentId: string, email: string, password: string) {
+export async function crearUsuarioAgente(supervisorAgentId: string, agentId: string, email: string, password: string, creadoPorUserId?: string | null) {
   await agenteDelSupervisor(supervisorAgentId, agentId);
   const ya = await pool.query(`SELECT 1 FROM agent_users WHERE agent_id = $1 AND role = 'AGENT' LIMIT 1`, [agentId]);
   if (ya.rows[0]) throw new Error("Este agente ya tiene usuario: cambiale la contraseña en vez de crear otro.");
@@ -128,11 +128,12 @@ export async function crearUsuarioAgente(supervisorAgentId: string, agentId: str
   try {
     await client.query("BEGIN");
     const id = newId("user");
-    await client.query(`INSERT INTO agent_users (id, agent_id, email, password_hash, role) VALUES ($1,$2,$3,$4,'AGENT')`, [
+    await client.query(`INSERT INTO agent_users (id, agent_id, email, password_hash, role, created_by_user_id) VALUES ($1,$2,$3,$4,'AGENT',$5)`, [
       id,
       agentId,
       email.trim(),
       await bcrypt.hash(password, 10),
+      creadoPorUserId ?? null,
     ]);
     await client.query(`INSERT INTO agent_user_agents (user_id, agent_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, agentId]);
     await client.query("COMMIT");
