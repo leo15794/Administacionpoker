@@ -29,6 +29,8 @@ import Wallet from "./pages/Wallet";
 import MiCuenta from "./pages/MiCuenta";
 import MiSupervision from "./pages/MiSupervision";
 import MisAgentes from "./pages/MisAgentes";
+import MisSubagentes from "./pages/MisSubagentes";
+import MiSubagente from "./pages/MiSubagente";
 import Notificaciones from "./pages/Notificaciones";
 import MiProveedor from "./pages/MiProveedor";
 import MiSocio from "./pages/MiSocio";
@@ -46,7 +48,7 @@ function Inicio() {
   } catch {
     return <Navigate to="/login" replace />;
   }
-  return <Navigate to={role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} replace />;
+  return <Navigate to={role === "ADMIN" ? "/dashboard" : role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : role === "SUBAGENTE" ? "/mi-subagente" : "/mi-cuenta"} replace />;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -105,6 +107,18 @@ export default function App() {
           }
         >
           <Route index element={<MiCuenta />} />
+          <Route path="subagentes" element={<MisSubagentes />} />
+        </Route>
+
+        <Route
+          path="/mi-subagente"
+          element={
+            <RequireAuth>
+              <Shell role="SUBAGENTE" />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MiSubagente />} />
         </Route>
 
         <Route

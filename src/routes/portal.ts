@@ -16,6 +16,14 @@ import {
 } from "../repo/supervisores.js";
 import { getMiSocio } from "../repo/socios.js";
 import {
+  listarMisSubagentes,
+  contarMisSubagentes,
+  crearUsuarioSubagente,
+  actualizarUsuarioSubagente,
+  guardarAcuerdoSubagente,
+  getMiSubagente,
+} from "../repo/subagentes.js";
+import {
   listarMisAgentes,
   crearUsuarioAgente,
   actualizarUsuarioAgente,
@@ -600,6 +608,92 @@ portalRouter.put("/mi-supervision/mis-agentes/:agentId/acuerdo", requireAuth, as
     );
   } catch (err: any) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// "Mis subagentes" del agente (10/11/2026, pedido de Leo, mockup 87): los subagentes salen del import (ver repo/subagentes.ts); el
+// agente les crea el usuario y les pone su % por club. Siempre atado al agente del login; el subagente de la URL se valida contra él.
+// ---------------------------------------------------------------------------------------------
+function soloAgente(req: AuthedRequest, res: any): string | null {
+  if (req.user!.role !== "AGENT" || !req.user!.agentId) {
+    res.status(403).json({ error: "Esta sección es solo para agentes." });
+    return null;
+  }
+  return req.user!.agentId;
+}
+
+portalRouter.get("/mis-subagentes", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  try {
+    res.json(await listarMisSubagentes(agId));
+  } catch (err: any) {
+    console.error("Error en /portal/mis-subagentes:", err);
+    res.status(500).json({ error: "No se pudieron cargar tus subagentes." });
+  }
+});
+
+portalRouter.get("/mis-subagentes/cuantos", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "AGENT" || !req.user!.agentId) return res.json({ n: 0 });
+  try {
+    res.json({ n: await contarMisSubagentes(req.user!.agentId) });
+  } catch {
+    res.json({ n: 0 });
+  }
+});
+
+portalRouter.post("/mis-subagentes/:subId/usuario", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  const parsed = usuarioAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.status(201).json(await crearUsuarioSubagente(agId, req.params.subId, parsed.data.email, parsed.data.password));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+portalRouter.patch("/mis-subagentes/:subId/usuario", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  const parsed = cambioUsuarioAgenteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." });
+  try {
+    res.json(await actualizarUsuarioSubagente(agId, req.params.subId, parsed.data));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+portalRouter.put("/mis-subagentes/:subId/acuerdo", requireAuth, async (req: AuthedRequest, res) => {
+  const agId = soloAgente(req, res);
+  if (!agId) return;
+  const parsed = acuerdoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Revisá los %: van entre 0 y 100." });
+  try {
+    res.json(
+      await guardarAcuerdoSubagente(
+        agId,
+        req.params.subId,
+        { clubId: parsed.data.clubId, system: parsed.data.system, rakebackPct: parsed.data.rakebackPct / 100, rebatePct: parsed.data.rebatePct / 100 },
+        req.user!.email
+      )
+    );
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Portal del subagente: SOLO confía en subagenteId del token.
+portalRouter.get("/mi-subagente", requireAuth, async (req: AuthedRequest, res) => {
+  if (req.user!.role !== "SUBAGENTE" || !req.user!.subagenteId) return res.status(403).json({ error: "Esta cuenta no es de un subagente." });
+  try {
+    res.json(await getMiSubagente(req.user!.subagenteId));
+  } catch (err: any) {
+    console.error("Error en /portal/mi-subagente:", err);
+    res.status(500).json({ error: "No se pudieron cargar tus cierres." });
   }
 });
 

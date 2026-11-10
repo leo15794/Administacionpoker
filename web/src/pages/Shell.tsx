@@ -290,8 +290,13 @@ function getInitialNavOrder(): string[] {
   }
 }
 
-export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO" }) {
+export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO" | "SUBAGENTE" }) {
   const nav = useNavigate();
+  // Subagentes del agente (10/11/2026, mockup 87): la sección aparece solo si el agente tiene alguno.
+  const [nSubagentes, setNSubagentes] = useState(0);
+  useEffect(() => {
+    if (role === "AGENT") api.cuantosSubagentes().then((r) => setNSubagentes(r.n)).catch(() => {});
+  }, [role]);
   const location = useLocation();
   const [pinned, setPinned] = useState(getInitialPinned);
   const [desplegado, setDesplegado] = useState<string | null>(null);
@@ -476,6 +481,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
     role === "SUPERVISOR" ? "Portal de supervisor" :
     role === "PROVEEDOR" ? "Portal de proveedor" :
     role === "SOCIO" ? "Portal de socio" :
+    role === "SUBAGENTE" ? "Portal de subagente" :
     "Portal de agente";
 
   return (
@@ -536,7 +542,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           ) : (
             <div className="df-g">
               <NavLink
-                to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"}
+                to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : role === "SUBAGENTE" ? "/mi-subagente" : "/mi-cuenta"}
                 end
                 className={({ isActive }) => `df-k ${isActive ? "active" : ""}`}
                 title={rolLabel}
@@ -548,6 +554,12 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
                 <NavLink to="/mi-supervision/agentes" className={({ isActive }) => `df-k ${isActive ? "active" : ""}`} title="Mis agentes">
                   <i>{icon.agentes}</i>
                   <span>Mis agentes</span>
+                </NavLink>
+              )}
+              {role === "AGENT" && nSubagentes > 0 && (
+                <NavLink to="/mi-cuenta/subagentes" className={({ isActive }) => `df-k ${isActive ? "active" : ""}`} title="Mis subagentes">
+                  <i>{icon.agentes}</i>
+                  <span>Subagentes</span>
                 </NavLink>
               )}
             </div>
@@ -604,12 +616,17 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             })
           ) : (
             <>
-              <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : "/mi-cuenta"} end className="tn-item tn-solo">
+              <NavLink to={role === "SUPERVISOR" ? "/mi-supervision" : role === "PROVEEDOR" ? "/mi-proveedor" : role === "SOCIO" ? "/mi-socio" : role === "SUBAGENTE" ? "/mi-subagente" : "/mi-cuenta"} end className="tn-item tn-solo">
                 {icon.cuenta} {role === "SUPERVISOR" ? "Mi supervisión" : role === "PROVEEDOR" ? "Mi proveedor" : role === "SOCIO" ? "Mi cuenta de socio" : "Mi cuenta"}
               </NavLink>
               {role === "SUPERVISOR" && (
                 <NavLink to="/mi-supervision/agentes" className="tn-item tn-solo">
                   {icon.agentes} Mis agentes
+                </NavLink>
+              )}
+              {role === "AGENT" && nSubagentes > 0 && (
+                <NavLink to="/mi-cuenta/subagentes" className="tn-item tn-solo">
+                  {icon.agentes} Mis subagentes
                 </NavLink>
               )}
             </>
@@ -732,8 +749,13 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
             <NavLink to="/mi-proveedor" className="nav-link" title="Mi proveedor">{icon.cuenta} Mi proveedor</NavLink>
           ) : role === "SOCIO" ? (
             <NavLink to="/mi-socio" className="nav-link" title="Mi cuenta de socio">{icon.cuenta} Mi cuenta de socio</NavLink>
+          ) : role === "SUBAGENTE" ? (
+            <NavLink to="/mi-subagente" className="nav-link" title="Mis cierres">{icon.cuenta} Mis cierres</NavLink>
           ) : (
-            <NavLink to="/mi-cuenta" className="nav-link" title="Mi cuenta">{icon.cuenta} Mi cuenta</NavLink>
+            <>
+              <NavLink to="/mi-cuenta" end className="nav-link" title="Mi cuenta">{icon.cuenta} Mi cuenta</NavLink>
+              {nSubagentes > 0 && <NavLink to="/mi-cuenta/subagentes" className="nav-link" title="Mis subagentes">{icon.agentes} Mis subagentes</NavLink>}
+            </>
           )}
         </nav>
 
@@ -748,8 +770,8 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
       </div>
       <div className={`main ${avisosAbierto && !avisosCompleto ? "main-con-avisos" : ""} ${vd.visible ? "main-dividido" : ""}`}>
         <InstallAppBanner variante={role === "ADMIN" ? "admin" : "portal"} />
-        {role !== "ADMIN" && <BandejaAvisos />}
-        {role !== "ADMIN" && <PortalNotificacionesBanner />}
+        {role !== "ADMIN" && role !== "SUBAGENTE" && <BandejaAvisos />}
+        {role !== "ADMIN" && role !== "SUBAGENTE" && <PortalNotificacionesBanner />}
         {role === "ADMIN" && (
           <div className="main-topbar">
             <GlobalSearch />

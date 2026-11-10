@@ -162,6 +162,16 @@ export const api = {
   // hasta tener las reglas de negocio completas del rol).
   miSupervision: () => request("/portal/mi-supervision"),
   misAgentesSupervisor: () => request("/portal/mi-supervision/mis-agentes"),
+  // Subagentes del agente (10/11/2026, mockup 87) y portal del subagente.
+  misSubagentes: () => request("/portal/mis-subagentes"),
+  cuantosSubagentes: () => request("/portal/mis-subagentes/cuantos") as Promise<{ n: number }>,
+  crearUsuarioSubagente: (subId: string, data: { email: string; password: string }) =>
+    request(`/portal/mis-subagentes/${subId}/usuario`, { method: "POST", body: JSON.stringify(data) }),
+  cambiarUsuarioSubagente: (subId: string, data: { password?: string; active?: boolean }) =>
+    request(`/portal/mis-subagentes/${subId}/usuario`, { method: "PATCH", body: JSON.stringify(data) }),
+  guardarAcuerdoSubagente: (subId: string, data: { clubId: string; system: "PREPAGO" | "WIN_LOSE"; rakebackPct: number; rebatePct: number }) =>
+    request(`/portal/mis-subagentes/${subId}/acuerdo`, { method: "PUT", body: JSON.stringify(data) }),
+  miSubagente: () => request("/portal/mi-subagente"),
   crearUsuarioMiAgente: (agentId: string, data: { email: string; password: string }) =>
     request(`/portal/mi-supervision/mis-agentes/${agentId}/usuario`, { method: "POST", body: JSON.stringify(data) }),
   cambiarUsuarioMiAgente: (agentId: string, data: { password?: string; active?: boolean }) =>

@@ -3557,3 +3557,9 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
   .ca-m { font-size: 15.5px; }
   .ca-body { padding: 12px 13px; }
 }
+
+/* Mis subagentes del agente (mockup 87). */
+.sa-jug { display: flex; flex-wrap: wrap; gap: 6px; }
+.sa-jug span { font-size: 12.5px; background: var(--panel-2); border-radius: 8px; padding: 5px 9px; }
+.sa-jug span i { font-style: normal; color: var(--text-faint); font-size: 11px; margin-left: 5px; }
+.ma-prev .sa-queda b { color: var(--gold, #c6a66b); }

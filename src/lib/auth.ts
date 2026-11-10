@@ -24,7 +24,7 @@ export interface JwtPayload {
   // Nullable (16/10/2026, rol PROVEEDOR): un login de proveedor no cuelga de ningún agente --
   // ver proveedorId abajo. Para cualquier otro role sigue viniendo siempre seteado.
   agentId: string | null;
-  role: "AGENT" | "ADMIN" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO";
+  role: "AGENT" | "ADMIN" | "SUPERVISOR" | "PROVEEDOR" | "SOCIO" | "SUBAGENTE";
   email: string;
   // Solo seteado cuando role === "PROVEEDOR" (16/10/2026) -- ver src/routes/auth.ts (login) y
   // src/routes/portal.ts (GET /mi-proveedor, que SOLO confía en este campo del token, nunca en
@@ -32,6 +32,9 @@ export interface JwtPayload {
   proveedorId?: string | null;
   // Solo seteado cuando role === "SOCIO" (27/10/2026): la cuenta de socio (partner_accounts) que ve este login. Mismo criterio que proveedorId: el portal solo confía en el token.
   partnerAccountId?: string | null;
+  // Solo seteado cuando role === "SUBAGENTE" (10/11/2026): el subagente (agente_subagentes) que ve este login. agentId queda NULL,
+  // así el subagente nunca puede ver la cuenta del agente. Ver repo/subagentes.ts y GET /portal/mi-subagente.
+  subagenteId?: string | null;
 }
 
 // (07/10/2026, pedido de Leo: "no quede abierto eterno") -- antes duraba 7 dias. Lo

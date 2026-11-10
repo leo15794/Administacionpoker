@@ -2521,3 +2521,34 @@ CREATE TABLE IF NOT EXISTS manos_sueldos (
   created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Subagentes de un agente (10/11/2026, pedido de Leo, mockup 87). El subagente de cada jugador sale del archivo semanal (Suprema y
+-- TeamBack GG); el agente les pone su % por club y les crea el usuario (rol SUBAGENTE). Ver repo/subagentes.ts (que también lo crea si falta).
+ALTER TABLE players ADD COLUMN IF NOT EXISTS club_subagente_id TEXT;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS club_subagente_name TEXT;
+ALTER TABLE weekly_closing_player_details ADD COLUMN IF NOT EXISTS club_subagente_id TEXT;
+ALTER TABLE weekly_closing_player_details ADD COLUMN IF NOT EXISTS club_subagente_name TEXT;
+CREATE TABLE IF NOT EXISTS agente_subagentes (
+  id         TEXT PRIMARY KEY,
+  agent_id   TEXT NOT NULL REFERENCES agents(id),
+  name       TEXT NOT NULL,
+  name_key   TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (agent_id, name_key)
+);
+CREATE TABLE IF NOT EXISTS subagente_acuerdos (
+  id            TEXT PRIMARY KEY,
+  subagente_id  TEXT NOT NULL REFERENCES agente_subagentes(id),
+  club_id       TEXT NOT NULL REFERENCES clubs(id),
+  system        TEXT NOT NULL CHECK (system IN ('PREPAGO','WIN_LOSE')),
+  rakeback_pct  NUMERIC(6,4) NOT NULL DEFAULT 0 CHECK (rakeback_pct >= 0 AND rakeback_pct <= 1),
+  rebate_pct    NUMERIC(6,4) NOT NULL DEFAULT 0 CHECK (rebate_pct >= 0 AND rebate_pct <= 1),
+  valid_from    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  valid_to      TIMESTAMPTZ,
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_subagente_acuerdos ON subagente_acuerdos(subagente_id, club_id, valid_from);
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS subagente_id TEXT REFERENCES agente_subagentes(id);
+ALTER TABLE agent_users DROP CONSTRAINT IF EXISTS agent_users_role_check;
+ALTER TABLE agent_users ADD CONSTRAINT agent_users_role_check CHECK (role IN ('AGENT','ADMIN','SUPERVISOR','PROVEEDOR','SOCIO','SUBAGENTE'));

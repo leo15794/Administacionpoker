@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
 import { calcularCierre, calcularCierreBancado, type SpecialRule } from "../engine/cierre.js";
 import { revertirMovimiento } from "./ledger.js";
+import { asegurarSchemaSubagentes } from "./subagentes.js";
 import { procesarRodeoAgenteTx, restaurarMemoriaRodeoTx, type RodeoJugadorEntrada } from "./rodeo.js";
 
 // Traduce una fila de rule_versions al SpecialRule que entiende el motor de cierre genérico.
@@ -91,6 +92,7 @@ export interface AplicarCierreInput {
  * (100% suyo) y "rebatePct" el % de la mesa (si fue positiva) que le corresponde a él.
  */
 export async function aplicarCierreSemanal(input: AplicarCierreInput) {
+  if (input.jugadoresDetalle?.length) await asegurarSchemaSubagentes();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -310,7 +312,7 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
     if (input.jugadoresDetalle?.length) {
       for (const j of input.jugadoresDetalle) {
         const pRes = await client.query(
-          `SELECT id, subagente_name, subagente_rakeback_pct FROM players WHERE club_id = $1 AND external_id = $2`,
+          `SELECT id, subagente_name, subagente_rakeback_pct, club_subagente_id, club_subagente_name FROM players WHERE club_id = $1 AND external_id = $2`,
           [input.clubId, j.playerExternalId]
         );
         const p = pRes.rows[0];
@@ -333,8 +335,9 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
           `INSERT INTO weekly_closing_player_details
             (id, closing_id, player_id, player_external_id, player_name, resultado, rake,
              rebate_pct, rebate, resultado_ajustado, rakeback_pct, rakeback, cierre_jugador,
-             subagente_name, subagente_rakeback_pct, subagente_rakeback, subagente_cierre)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+             subagente_name, subagente_rakeback_pct, subagente_rakeback, subagente_cierre,
+             club_subagente_id, club_subagente_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             newId("wcpd"),
             id,
@@ -353,6 +356,8 @@ export async function aplicarCierreSemanal(input: AplicarCierreInput) {
             subagentePct,
             subagenteRakeback,
             subagenteCierre,
+            p?.club_subagente_id ?? null,
+            p?.club_subagente_name ?? null,
           ]
         );
       }

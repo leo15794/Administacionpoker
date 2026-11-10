@@ -5,6 +5,7 @@
 import { pool, newId } from "../db/pool.js";
 import { parseSupremaWorkbook, type SupremaPlayerRow } from "../engine/importSuprema.js";
 import { resolverConfigVigente, upsertAgent, updateAgent } from "./catalog.js";
+import { asegurarSchemaSubagentes, subagenteDeFila } from "./subagentes.js";
 
 /** Type= "manual" | "auto" - el motivo por el que se creó, para que el frontend pueda avisar
  * cuáles fueron auto-creados esta corrida (a diferencia de los que ya existían de antes). */
@@ -265,12 +266,16 @@ export async function upsertPlayer(
   row: SupremaPlayerRow,
   agentId: string | null
 ): Promise<{ id: string; bancado: boolean; subagenteName: string | null; subagenteRakebackPct: number | null }> {
+  // Subagente del club (10/11/2026, ver repo/subagentes.ts): a quién pertenece el jugador según el archivo, se pisa en cada import.
+  await asegurarSchemaSubagentes();
+  const sub = subagenteDeFila(row);
   const r = await pool.query(
-    `INSERT INTO players (id, external_id, display_name, club_id, agent_id)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id
+    `INSERT INTO players (id, external_id, display_name, club_id, agent_id, club_subagente_id, club_subagente_name)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (club_id, external_id) DO UPDATE SET display_name = EXCLUDED.display_name, agent_id = EXCLUDED.agent_id,
+       club_subagente_id = EXCLUDED.club_subagente_id, club_subagente_name = EXCLUDED.club_subagente_name
      RETURNING id, bancado, subagente_name, subagente_rakeback_pct`,
-    [newId("player"), row.playerId, row.playerName, clubId, agentId]
+    [newId("player"), row.playerId, row.playerName, clubId, agentId, sub?.id ?? null, sub?.name ?? null]
   );
   return {
     id: r.rows[0].id,
