@@ -157,7 +157,9 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
   let comisionPlataformaTotal = 0;
   let rebateTotal = 0;
   let rodeoPagadoAgentes = 0;
-  let rodeoUnionProveedor = 0;
+  // Rodeo neto del club (11/11/2026, ver abajo): suma de los rodeos de todos los agentes, positivos y negativos.
+  let rodeoNetoClub = 0;
+  let rodeoManualProveedor = 0;
   let gananciaRodeoClub = 0;
   let gananciaPorRake = 0;
   let cierreTotalAgentes = 0;
@@ -206,14 +208,15 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     comisionPlataformaTotal += comisionPlataformaFila;
     rebateTotal += Number(r.rebate);
     rodeoPagadoAgentes += Number(r.rodeo);
-    // Proveedores toma el 35% (Unión) del rodeo a repartir, ya neto de memoria (27/10/2026, pedido de Leo). Un cierre con rodeo
-    // cargado a mano no guarda el total a repartir: ahí se mantiene el monto cargado.
+    // Proveedores toma el 35% (Unión) del rodeo NETO DEL CLUB (11/11/2026, pedido de Leo: Suprema compensa los rodeos de todos los
+    // agentes entre sí -- semana del 02/11 en Fénix Suprema: +221,26 de Mar Bruno, -175,20 de M CHOCO y -1,02 de E Franky = 45,04 x 35%
+    // = 15,76). Antes (27/10) se sumaba agente por agente solo lo positivo y neto de su memoria, y daba 77,44. La memoria de cada agente
+    // sigue valiendo para su propio cierre; acá no se usa. Un cierre con rodeo cargado a mano no guarda el detalle: se suma el monto cargado.
     const detRodeo = r.rodeo_detalle;
     if (detRodeo) {
-      const bruto = (detRodeo.jugadores ?? []).reduce((t: number, j: any) => t + Number(j.baseRodeo), 0);
-      rodeoUnionProveedor += Math.max(0, bruto - Number(detRodeo.memoriaAnterior ?? 0)) * 0.35;
+      rodeoNetoClub += (detRodeo.jugadores ?? []).reduce((t: number, j: any) => t + Number(j.baseRodeo), 0);
     } else {
-      rodeoUnionProveedor += Number(r.rodeo);
+      rodeoManualProveedor += Number(r.rodeo);
     }
     gananciaRodeoClub += Number(r.rodeo_club_share);
     gananciaPorRake += gananciaFila;
@@ -267,7 +270,7 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     comisionPlataformaTotal,
     rebateTotal,
     rodeoPagadoAgentes,
-    rodeoUnionProveedor,
+    rodeoUnionProveedor: Math.max(0, rodeoNetoClub) * 0.35 + rodeoManualProveedor,
     gananciaRodeoClub,
     gananciaPorRake,
     ingresoPorVentas,
