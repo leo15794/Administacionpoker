@@ -3615,3 +3615,36 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .pc-clave code { flex: 1; min-width: 200px; font-size: 20px; font-weight: 700; letter-spacing: .05em; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 11px; padding: 10px 14px; }
 .pc-clave a.btn { text-decoration: none; }
 .pc-msg { margin-top: 10px; font-size: 12.5px; color: var(--text-dim); background: var(--panel-2); border-radius: 11px; padding: 9px 12px; }
+
+/* Movimientos de la cuenta del agente (mockup 90). */
+.mva-tabs { display: inline-flex; background: var(--panel-2); border-radius: 99px; padding: 3px; margin-bottom: 14px; }
+.mva-tabs button { border: 0; background: none; color: var(--text-dim); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 99px; cursor: pointer; }
+.mva-tabs button.on { background: var(--accent); color: #fff; }
+.mva-tabs button i { font-style: normal; opacity: .75; margin-left: 4px; }
+.mva-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.mva-kpis > div { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px; }
+.mva-kpis small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.mva-kpis b { display: block; font-size: 19px; margin-top: 3px; }
+.mva-kpis span { font-size: 11.5px; color: var(--text-dim); }
+.mva-mov .pos { color: var(--green); } .mva-mov .neg { color: var(--red); } .mva-mov .amb { color: var(--amber); }
+.mva-filtros { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.mva-filtros button { border: 0; font: inherit; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 5px 12px; background: var(--panel-2); color: var(--text-dim); cursor: pointer; }
+.mva-filtros button.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.mva-lista { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.mva-sem { padding: 7px 14px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-faint); background: var(--panel-2); }
+.mva-mv { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--border); }
+.mva-sem + .mva-mv { border-top: 0; }
+.mva-ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
+.mva-ic.c { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.mva-ic.d { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.mva-ic.p { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.mva-ic.r { background: color-mix(in srgb, #a371f7 16%, transparent); color: #a371f7; }
+.mva-ic.a { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.mva-t b { display: block; font-size: 13.5px; }
+.mva-t small { font-size: 12px; color: var(--text-dim); }
+.mva-m { margin-left: auto; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mva-vacio { padding: 16px; color: var(--text-dim); font-size: 13px; }
+@media (max-width: 700px) {
+  .mva-kpis { grid-template-columns: 1fr 1fr; }
+  .mva-mv { padding: 9px 11px; gap: 10px; }
+}

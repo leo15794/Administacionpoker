@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 90 (11/11/2026): portal del agente de un supervisor con la pestaña Movimientos (cargas y descargas de fichas, pagos,
+     adelantos). Datos reales de yAtt0r0 (Fénix GG): los nuevos salen de la cuenta de su supervisor, los anteriores al 14/10 del sistema. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --green-soft: rgba(63,185,80,.14); --red: #f85149; --red-soft: rgba(248,81,73,.14); --amber: #e3a83b; --amber-soft: rgba(227,168,59,.14); --gold: #c6a66b; --violet: #a371f7;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16); --glow3: rgba(198,166,107,.12);
+    --page: rgba(22,27,34,.50); --page-border: rgba(255,255,255,.09);
+    --card: rgba(29,36,48,.62); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --line: rgba(255,255,255,.07); --phone: #0d1117;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --red-soft: rgba(194,55,68,.10); --amber: #9c6a17; --amber-soft: rgba(156,106,23,.12); --gold: #8a6a32; --violet: #7c5bd6;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14); --glow3: rgba(30,154,110,.18);
+    --page: rgba(255,255,255,.42); --page-border: rgba(255,255,255,.85);
+    --card: rgba(255,255,255,.78); --card-border: rgba(11,24,18,.06); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --line: rgba(11,24,18,.07); --phone: #f4f7f5;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%),
+      radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%),
+      radial-gradient(620px 460px at 70% 8%, var(--glow3), transparent 65%),
+      var(--bg);
+    padding: 20px; display: grid; grid-template-columns: 1fr 360px; gap: 22px;
+  }
+  .page { border-radius: 26px; padding: 24px 28px; background: var(--page); border: 1px solid var(--page-border); backdrop-filter: blur(24px); overflow: hidden; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .tabs { display: inline-flex; background: var(--chip); border-radius: 99px; padding: 3px; font-size: 13px; font-weight: 600; color: var(--dim); margin: 16px 0 14px; }
+  .tabs span { padding: 7px 16px; border-radius: 99px; } .tabs .on { background: var(--accent-grad); color: var(--accent-ink); }
+  .tabs i { font-style: normal; opacity: .7; margin-left: 4px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .kpi { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 12px 14px; }
+  .kpi small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .kpi b { display: block; font-size: 20px; margin-top: 4px; } .kpi span { font-size: 11.5px; color: var(--dim); }
+  .filtros { display: flex; gap: 6px; margin-bottom: 10px; }
+  .f { font-size: 12px; font-weight: 600; border-radius: 99px; padding: 5px 11px; background: var(--chip); color: var(--dim); }
+  .f.on { background: rgba(var(--accent-rgb),.16); color: var(--accent); }
+  .lista { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden; }
+  .sem { padding: 8px 16px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); background: var(--chip); }
+  .mv { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .sem + .mv { border-top: 0; }
+  .ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 14px; flex: none; }
+  .ic.c { background: var(--green-soft); color: var(--green); } .ic.d { background: var(--red-soft); color: var(--red); }
+  .ic.p { background: rgba(var(--accent-rgb),.14); color: var(--accent); } .ic.a { background: var(--amber-soft); color: var(--amber); }
+  .ic.r { background: rgba(163,113,247,.16); color: var(--violet); }
+  .mv .t b { display: block; font-size: 13.5px; } .mv .t small { font-size: 12px; color: var(--dim); }
+  .mv .m { margin-left: auto; text-align: right; font-weight: 800; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+  .mv .m small { display: block; font-size: 11px; font-weight: 500; color: var(--faint); }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+
+  .phone { border-radius: 44px; background: var(--phone); border: 9px solid #22272e; box-shadow: var(--card-shadow); overflow: hidden; height: 920px; padding: 18px 13px; position: relative;
+    background-image: radial-gradient(400px 300px at 0% 0%, var(--glow1), transparent 62%); }
+  .notch { width: 110px; height: 24px; background: #22272e; border-radius: 0 0 14px 14px; position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+  .phone h2 { font-size: 20px; font-weight: 800; margin-top: 22px; }
+  .phone .tabs { margin: 12px 0 10px; font-size: 12.5px; } .phone .tabs span { padding: 6px 13px; }
+  .ad { background: var(--amber-soft); border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; }
+  .ad b { color: var(--amber); font-size: 15px; }
+  .phone .mv { padding: 9px 11px; gap: 10px; } .phone .ic { width: 28px; height: 28px; font-size: 12px; }
+  .phone .mv .t b { font-size: 13px; } .phone .mv .m { font-size: 13.5px; }
+  .cap { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--faint); padding: 0 18px; }
+</style></head>
+<body>
+  <div class="page">
+    <span class="tag">Portal del agente · nueva pestaña</span>
+    <h1>Hola, yAtt0r0</h1>
+    <div class="sub">Tus cierres y los movimientos de tu cuenta: cargas y descargas de fichas, pagos y adelantos.</div>
+    <div class="tabs"><span>Cierres</span><span class="on">Movimientos <i>33</i></span></div>
+
+    <div class="kpis">
+      <div class="kpi"><small>Cargas de fichas</small><b class="pos">US$ 400,00</b><span>en noviembre · 1 carga</span></div>
+      <div class="kpi"><small>Descargas de fichas</small><b class="neg">US$ 2.954,55</b><span>en noviembre · 4 descargas</span></div>
+      <div class="kpi"><small>Pagos recibidos</small><b>US$ 513,27</b><span>en noviembre · 1 pago</span></div>
+      <div class="kpi"><small>Adelantos de rakeback</small><b style="color:var(--amber)">US$ 2.000,00</b><span>4 adelantos vigentes</span></div>
+    </div>
+
+    <div class="filtros"><span class="f on">Todos</span><span class="f">Cargas</span><span class="f">Descargas</span><span class="f">Pagos</span><span class="f">Adelantos</span></div>
+
+    <div class="lista">
+      <div class="sem">Semana del 09/11 al 15/11</div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>11/11 · Fénix GG</small></span><span class="m neg">−1.584,55</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>10/11 · Fénix GG · “saldo positivo para esta semana”</small></span><span class="m neg">−400,00</span></div>
+      <div class="sem">Semana del 02/11 al 08/11</div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>08/11 · Fénix GG</small></span><span class="m neg">−570,00</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>05/11 · Fénix GG</small></span><span class="m neg">−400,00</span></div>
+      <div class="mv"><span class="ic p">$</span><span class="t"><b>Pago</b><small>04/11</small></span><span class="m">513,27</span></div>
+      <div class="sem">Semana del 26/10 al 01/11</div>
+      <div class="mv"><span class="ic c">↑</span><span class="t"><b>Carga de fichas</b><small>01/11 · Fénix GG</small></span><span class="m pos">+400,00</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>31/10 · Fénix GG</small></span><span class="m neg">−700,00</span></div>
+      <div class="mv"><span class="ic c">↑</span><span class="t"><b>Carga de fichas</b><small>29/10 · Fénix GG</small></span><span class="m pos">+700,00</span></div>
+      <div class="sem">Semana del 12/10 al 18/10</div>
+      <div class="mv"><span class="ic r">%</span><span class="t"><b>Pago de rakeback</b><small>13/10 · Fénix GG · cierre del 05/10</small></span><span class="m">1.023,71</span></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <h2>Hola, yAtt0r0</h2>
+    <div class="tabs"><span>Cierres</span><span class="on">Movimientos</span></div>
+    <div class="ad"><span>Adelantos de rakeback vigentes<br><small style="color:var(--dim)">4 adelantos · el último el 01/10</small></span><b>US$ 2.000</b></div>
+    <div class="lista">
+      <div class="sem">09/11 al 15/11</div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>11/11 · Fénix GG</small></span><span class="m neg">−1.584,55</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>10/11 · Fénix GG</small></span><span class="m neg">−400,00</span></div>
+      <div class="sem">02/11 al 08/11</div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>08/11 · Fénix GG</small></span><span class="m neg">−570,00</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>05/11 · Fénix GG</small></span><span class="m neg">−400,00</span></div>
+      <div class="mv"><span class="ic p">$</span><span class="t"><b>Pago</b><small>04/11</small></span><span class="m">513,27</span></div>
+      <div class="sem">26/10 al 01/11</div>
+      <div class="mv"><span class="ic c">↑</span><span class="t"><b>Carga de fichas</b><small>01/11 · Fénix GG</small></span><span class="m pos">+400,00</span></div>
+      <div class="mv"><span class="ic d">↓</span><span class="t"><b>Descarga de fichas</b><small>31/10 · Fénix GG</small></span><span class="m neg">−700,00</span></div>
+    </div>
+    <div class="cap">Sin saldo ni nombre del supervisor: solo los movimientos de su cuenta. Las notas que nombran al supervisor no se muestran.</div>
+  </div>
+</body></html>

@@ -5,6 +5,7 @@ import Loading from "../components/Loading";
 import MiCuentaAgente from "./MiCuentaAgente";
 import CalculadoraCierre from "../components/CalculadoraCierre";
 import CierreAgenteCard from "../components/CierreAgenteCard";
+import MovimientosAgente from "../components/MovimientosAgente";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, colorSigno, montoSigno } from "../components/PortalUI";
 
 // Saldo neto por club (01/10/2026): para PREPAGO, balances.amount solo no alcanza -- hay que
@@ -145,11 +146,20 @@ export default function MiCuenta() {
           <div>
             <h2>Hola, {data.agente.name}</h2>
             <div className="muted">
-              Tocá un cierre para ver el desglose y tus jugadores
+              {tab === "movimientos" ? "Cargas y descargas de fichas, pagos y adelantos de tu cuenta" : "Tocá un cierre para ver el desglose y tus jugadores"}
             </div>
           </div>
         </div>
-        {cierres.length === 0 ? (
+        {/* Movimientos de la cuenta (11/11/2026, mockup 90). */}
+        <div className="mva-tabs">
+          <button type="button" className={tab !== "movimientos" ? "on" : ""} onClick={() => setTab("cierres")}>Cierres</button>
+          <button type="button" className={tab === "movimientos" ? "on" : ""} onClick={() => setTab("movimientos")}>
+            Movimientos <i>{(data.movimientos_cuenta ?? []).length}</i>
+          </button>
+        </div>
+        {tab === "movimientos" ? (
+          <MovimientosAgente movimientos={data.movimientos_cuenta ?? []} adelantos={data.adelantos ?? []} />
+        ) : cierres.length === 0 ? (
           <div className="muted">Todavía no hay cierres semanales cargados.</div>
         ) : (
           cierres.map((c: any, i: number) => <CierreAgenteCard key={c.id} c={c} abiertoInicial={i === 0} />)

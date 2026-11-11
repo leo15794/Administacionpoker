@@ -66,6 +66,57 @@ portalRouter.get("/mis-agentes", requireAuth, async (req: AuthedRequest, res) =>
 // ?agentId=... deja elegir CUÁL de sus cuentas mirar, cuando el login tiene más de una asociada
 // (ver /mis-agentes) — sin eso, usa la cuenta principal del token. Siempre valida que el agentId
 // pedido esté entre los que ese login puede ver — nunca confía en el query param a ciegas.
+// Movimientos de la cuenta del agente de un supervisor (11/11/2026, pedido de Leo, mockup 90): cargas y descargas de fichas, pagos, pagos
+// de rakeback y ajustes. Junta los del sistema (ledger_movements, lo de antes de la cuenta consolidada) con los que carga su supervisor
+// (supervisor_movimientos). Nunca el saldo ni nada que nombre al supervisor: las notas que lo mencionan no se mandan.
+async function movimientosCuentaAgente(agentId: string, supervisor: string) {
+  const nombreSup = supervisor.trim().toLowerCase();
+  const limpiarNota = (tipo: string, nota: string | null): string | null => {
+    // Los ajustes son correcciones internas (pueden mostrar saldos): sin nota.
+    if (!nota || tipo === "AJUSTE" || nota.includes("→")) return null;
+    if (tipo === "PAGO_RAKEBACK") {
+      const m = nota.match(/cierre (\d{4})-(\d{2})-(\d{2})/);
+      return m ? `cierre del ${m[3]}/${m[2]}` : null;
+    }
+    const t = nota.toLowerCase();
+    if (nombreSup && t.includes(nombreSup)) return null;
+    if (t.includes("supervisor") || t.includes("liquidaci")) return null;
+    return nota.trim().slice(0, 140) || null;
+  };
+  const ledger = await pool.query(
+    `SELECT m.id, m.type, m.amount, m.occurred_at, m.observation, c.name AS club_name
+     FROM ledger_movements m LEFT JOIN clubs c ON c.id = m.club_id
+     WHERE m.agent_id = $1 AND m.status = 'APLICADO' AND m.type <> 'CIERRE_SEMANAL' AND m.amount <> 0
+     ORDER BY m.occurred_at DESC LIMIT 300`,
+    [agentId]
+  );
+  const sup = await pool.query(
+    `SELECT m.id, m.type, m.amount, m.fichas_reales_delta, m.occurred_at, m.notes, m.concepto, c.name AS club_name
+     FROM supervisor_movimientos m LEFT JOIN clubs c ON c.id = m.club_id
+     WHERE m.agent_id = $1 AND m.status = 'APLICADO'
+     ORDER BY m.occurred_at DESC LIMIT 300`,
+    [agentId]
+  );
+  const lista = [
+    ...ledger.rows.map((m) => ({
+      id: m.id,
+      tipo: m.type as string,
+      fecha: m.occurred_at,
+      club: m.club_name ?? null,
+      monto: Number(m.amount),
+      nota: limpiarNota(m.type, m.observation),
+    })),
+    ...sup.rows.map((m) => {
+      const fichas = Number(m.fichas_reales_delta ?? 0);
+      // Carga suma fichas, descarga las resta; un pago o un ajuste sin fichas va con su monto.
+      const monto = m.type === "DESCARGA" ? -Math.abs(Number(m.amount)) : m.type === "CARGA" ? Math.abs(Number(m.amount)) : fichas !== 0 ? fichas : Number(m.amount);
+      return { id: m.id, tipo: m.type as string, fecha: m.occurred_at, club: m.club_name ?? null, monto, nota: limpiarNota(m.type, m.notes ?? m.concepto) };
+    }),
+  ];
+  lista.sort((a, b) => +new Date(b.fecha) - +new Date(a.fecha));
+  return lista;
+}
+
 portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
   const agentIdPedido = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
   let agentId = req.user!.agentId!;
@@ -158,6 +209,7 @@ portalRouter.get("/mi-cuenta", requireAuth, async (req: AuthedRequest, res) => {
     // Agentes de un supervisor (06/11/2026, pedido de Leo): en su portal solo ven sus cierres semanales -- el saldo,
     // los movimientos, el acuerdo y la calculadora son cosas nuestras/del supervisor que no necesitan ver.
     solo_cierres: !!agent.rows[0].supervisor,
+    movimientos_cuenta: agent.rows[0].supervisor ? await movimientosCuentaAgente(agentId, agent.rows[0].supervisor) : undefined,
   });
 });
 
