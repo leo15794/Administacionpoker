@@ -686,10 +686,13 @@ function RetiroSocioForm({ cuenta, cuentaRetiros, retirosActuales, onDone }: { c
   const [concept, setConcept] = useState("Retiro");
   const [notes, setNotes] = useState("");
   const [moveWallet, setMoveWallet] = useState(false);
+  const [compensa, setCompensa] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const monto = Math.abs(Number(amount) || 0);
+  const deuda = Number(cuenta.saldo);
+  const fmtDeuda = (n: number) => (n < -0.004 ? `${usd(Math.abs(n))} a favor` : usd(n));
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -710,6 +713,24 @@ function RetiroSocioForm({ cuenta, cuentaRetiros, retirosActuales, onDone }: { c
         notes: notes.trim() || undefined,
         moveWallet,
       });
+      // "Compensación" (12/11/2026, pedido de Leo): además del retiro, el mismo monto se le descuenta de la deuda al socio con un
+      // movimiento Compensación en su cuenta. Wallet se mueve una sola vez (en el retiro).
+      if (compensa) {
+        try {
+          await api.crearMovimientoCuentaSocio({
+            accountId: cuenta.id,
+            category: "COMPENSACION",
+            concept: `Compensación por retiro socio — ${concept.trim()}`,
+            amount: -monto,
+            entryDate,
+            notes: notes.trim() || undefined,
+            moveWallet: false,
+          });
+        } catch (err: any) {
+          setMsg({ ok: false, text: `El retiro quedó registrado, pero no se pudo descontar de la deuda: ${err.message || "error"}. Cargá la compensación a mano.` });
+          return;
+        }
+      }
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo registrar el retiro." });
@@ -752,9 +773,23 @@ function RetiroSocioForm({ cuenta, cuentaRetiros, retirosActuales, onDone }: { c
             : "Tildalo solo si esta plata de verdad salió de la Wallet."}
         </div>
       </div>
+      <div className="field">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
+          <input type="checkbox" checked={compensa} onChange={(e) => setCompensa(e.target.checked)} style={{ width: "auto" }} />
+          Compensación: descontarlo también de lo que {cuenta.name} le debe a la empresa
+        </label>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {compensa
+            ? <>Se carga además una <strong>Compensación</strong> de {monto ? usd(monto) : "este monto"} en negativo en la cuenta de {cuenta.name}.</>
+            : "Sin tildar, el retiro no cambia la deuda del socio."}
+        </div>
+      </div>
       <div className="cs-efecto">
         <h4>Qué va a pasar</h4>
-        <div><span>Lo que {cuenta.name} le debe a la empresa</span><span><b>no cambia</b></span></div>
+        <div>
+          <span>Lo que {cuenta.name} le debe a la empresa</span>
+          <span>{compensa ? <><b>{fmtDeuda(deuda)}</b> → <b>{fmtDeuda(deuda - monto)}</b></> : <b>no cambia</b>}</span>
+        </div>
         {retirosActuales != null && (
           <div><span>Retiros de socios</span><span><b>{usd(retirosActuales)}</b> → <b>{usd(retirosActuales + monto)}</b></span></div>
         )}
