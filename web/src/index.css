@@ -3660,3 +3660,16 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 :root[data-theme="light"] .cs-efecto h4 { color: #7c5bd6; }
 .cs-efecto > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; color: var(--text-dim); }
 .cs-efecto b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Historial de Retiros de socios desde el KPI (12/11/2026). */
+.cs-ret-link { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 4px; }
+.cs-ret-link span { font-size: .7em; margin-left: 2px; }
+.cs-ret-g { border-top: 1px solid var(--border); }
+.cs-ret-h { display: flex; align-items: center; gap: 10px; padding: 10px 8px; background: var(--panel-2); }
+.cs-ret-h b { font-size: 14px; } .cs-ret-h small { font-size: 12px; color: var(--text-dim); }
+.cs-ret-tot { margin-left: auto; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.cs-ret-r { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 52px; border-top: 1px solid var(--border); font-size: 13px; }
+.cs-ret-r .f { color: var(--text-faint); width: 78px; font-variant-numeric: tabular-nums; flex: none; }
+.cs-ret-r .c { color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-ret-r .m { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 700px) { .cs-ret-r { padding-left: 10px; flex-wrap: wrap; } .cs-ret-r .f { width: auto; } }

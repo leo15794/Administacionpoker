@@ -69,6 +69,7 @@ export default function CuentasSocios() {
   const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
   const [retiroSocioDe, setRetiroSocioDe] = useState<any | null>(null);
+  const [verRetiros, setVerRetiros] = useState(false);
   // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador, orden y paginación.
   const [tipoCuenta, setTipoCuenta] = useState<"todas" | "personal" | "operativa">("todas");
   const [buscaCuenta, setBuscaCuenta] = useState("");
@@ -183,7 +184,14 @@ export default function CuentasSocios() {
             <WmConteos
               items={[
                 { etiqueta: "GANANCIA OPERATIVA HISTÓRICA", valor: usd(agregados.gananciaOperativaHistorica) },
-                { etiqueta: "RETIROS DE SOCIOS", valor: usd(agregados.retirosSocios) },
+                {
+                  etiqueta: "RETIROS DE SOCIOS",
+                  valor: (
+                    <button type="button" className="cs-ret-link" onClick={() => setVerRetiros((v) => !v)} title="Ver el historial de retiros">
+                      {usd(agregados.retirosSocios)} <span>{verRetiros ? "▴" : "▾"}</span>
+                    </button>
+                  ),
+                },
                 { etiqueta: "GASTOS OPERATIVOS", valor: usd(agregados.gastosOperativos) },
                 { etiqueta: "INGRESOS / AJUSTES", valor: usd(agregados.ingresosAjustes) },
                 { etiqueta: "GANANCIA NETA HISTÓRICA (ANTES DE SUELDO)", valor: usd(agregados.gananciaNetaHistorica) },
@@ -194,6 +202,38 @@ export default function CuentasSocios() {
             />
           )}
         </WmSaldoCard>
+
+        {verRetiros && agregados && (
+          <div className="wm-card cs-ret">
+            <div className="wm-cab">
+              <div className="wm-h">Historial de retiros <span className="wm-n">{usd(agregados.retirosSocios)}</span></div>
+              <span className="muted" style={{ fontSize: 12 }}>Todos los movimientos con categoría Retiro, agrupados por cuenta</span>
+            </div>
+            {(agregados.retirosPorSocio ?? []).length === 0 ? (
+              <div className="muted" style={{ padding: "8px 0" }}>Todavía no hay retiros cargados.</div>
+            ) : (
+              (agregados.retirosPorSocio ?? []).map((g: any) => (
+                <div key={g.accountId} className="cs-ret-g">
+                  <div className="cs-ret-h">
+                    <span className="wm-av">{String(g.nombre).trim().slice(0, 2).toUpperCase()}</span>
+                    <b>{g.nombre}</b>
+                    <small>{g.retiros.length} retiro{g.retiros.length === 1 ? "" : "s"}{g.operativa ? " · cuenta operativa" : ""}</small>
+                    <span className="cs-ret-tot">{usd(g.total)}</span>
+                  </div>
+                  {g.retiros.map((r: any) => (
+                    <div key={r.id} className="cs-ret-r" title={r.notas || undefined}>
+                      <span className="f">{dateShort(r.fecha)}</span>
+                      <span className={`badge ${r.retiroSocio ? "cs-badge-retiro" : "neutral"}`}>{r.retiroSocio ? "Retiro socio" : "Retiro"}</span>
+                      <span className="c">{r.concepto}</span>
+                      {r.wallet && <span className="badge neutral">Wallet</span>}
+                      <span className="m">{usd(r.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         <div className="wm-card">
           <div className="wm-cab">

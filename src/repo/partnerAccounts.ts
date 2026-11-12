@@ -331,6 +331,27 @@ export async function getAgregadosSocios() {
   const totales: Record<string, number> = { RETIRO: 0, GASTO: 0, AJUSTE: 0 };
   for (const row of porCategoria.rows) totales[row.category] = Number(row.total);
 
+  // Historial de Retiros de socios agrupado por cuenta (12/11/2026, pedido de Leo, mismo panel del mockup 91). Un Retiro en negativo es un
+  // "Retiro socio" (baja la deuda); en positivo, un retiro común. Para el total cuentan los dos en valor absoluto (MONTO_CATEGORIA_SQL).
+  const retirosR = await pool.query(
+    `SELECT e.id, e.account_id, pa.name AS account_name, pa.kind, e.concept, e.amount, e.entry_date, e.notes, e.treasury_adjustment_id
+     FROM partner_account_entries e JOIN partner_accounts pa ON pa.id = e.account_id
+     WHERE e.category = 'RETIRO'
+     ORDER BY e.entry_date DESC, e.created_at DESC`
+  );
+  const porCuenta = new Map<string, { accountId: string; nombre: string; operativa: boolean; total: number; retiros: any[] }>();
+  for (const r of retirosR.rows) {
+    let g = porCuenta.get(r.account_id);
+    if (!g) {
+      g = { accountId: r.account_id, nombre: r.account_name, operativa: r.kind === "OPERATIVA", total: 0, retiros: [] };
+      porCuenta.set(r.account_id, g);
+    }
+    const monto = Number(r.amount);
+    g.total = round2(g.total + Math.abs(monto));
+    g.retiros.push({ id: r.id, concepto: r.concept, monto: Math.abs(monto), retiroSocio: monto < 0, fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null });
+  }
+  const retirosPorSocio = Array.from(porCuenta.values()).sort((a, b) => Number(a.operativa) - Number(b.operativa) || b.total - a.total);
+
   const gananciaNeta = round2(gananciaOperativa - totales.GASTO + totales.AJUSTE);
   // Sueldo de Manos: se descuenta una sola vez, el de cada período cerrado (no cuando se paga).
   const sueldosManos = round2(await totalSueldosPeriodosCerrados());
@@ -340,6 +361,7 @@ export async function getAgregadosSocios() {
   return {
     gananciaOperativaHistorica: gananciaOperativa,
     retirosSocios: totales.RETIRO,
+    retirosPorSocio,
     gastosOperativos: totales.GASTO,
     ingresosAjustes: totales.AJUSTE,
     gananciaNetaHistorica: gananciaNeta,
