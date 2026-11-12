@@ -20,10 +20,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 const CATEGORIES = Object.keys(CATEGORY_LABEL) as (keyof typeof CATEGORY_LABEL)[];
 
-// "Retiro socio" (12/11/2026, pedido de Leo, mockup 92): un Retiro cargado en NEGATIVO en la cuenta de un socio. Baja su deuda y, como
-// todo Retiro, suma a Retiros de socios y baja el Saldo después de retiros (ver MONTO_CATEGORIA_SQL en repo/partnerAccounts.ts). No es
-// una categoría nueva: se reconoce por la combinación Retiro + monto negativo.
-const esRetiroSocio = (m: { category?: string; amount?: any }) => m.category === "RETIRO" && Number(m.amount) < 0;
+// "Retiro socio" (12/11/2026, pedido de Leo, mockup 92; ajustado el mismo día): un Retiro en positivo en la cuenta operativa de
+// retiros, con el socio en el concepto ("Retiro socio · Fede — ..."). Suma a Retiros de socios y baja el Saldo después de retiros, sin
+// tocar lo que el socio le debe a la empresa; puede mover Wallet (egreso). Un Retiro en negativo también se muestra como Retiro socio.
+const esRetiroSocio = (m: { category?: string; amount?: any; concept?: string }) =>
+  m.category === "RETIRO" && (Number(m.amount) < 0 || String(m.concept ?? "").startsWith("Retiro socio · "));
 const etiquetaCategoria = (m: any) => (esRetiroSocio(m) ? "Retiro socio" : CATEGORY_LABEL[m.category] ?? m.category);
 function hoyLocal() {
   const d = new Date();
@@ -154,6 +155,8 @@ export default function CuentasSocios() {
 
   const cuentaMovimientos = showMovimientosDe ? cuentas.find((c) => c.id === showMovimientosDe) ?? null : null;
   const personales = cuentas.filter((c) => c.kind !== "OPERATIVA");
+  // Adónde van los "Retiro socio": la cuenta operativa de retiros (así no tocan la deuda del socio).
+  const cuentaRetiros = cuentas.find((c) => c.kind === "OPERATIVA" && /retiro/i.test(String(c.name))) ?? null;
 
   return (
     <div>
@@ -381,12 +384,12 @@ export default function CuentasSocios() {
         <Modal title={`Retiro socio — ${retiroSocioDe.name}`} onClose={() => setRetiroSocioDe(null)}>
           <RetiroSocioForm
             cuenta={retiroSocioDe}
+            cuentaRetiros={cuentaRetiros}
             retirosActuales={agregados ? Number(agregados.retirosSocios) : null}
             onDone={() => {
-              const accountId = retiroSocioDe.id;
               setRetiroSocioDe(null);
               refresh();
-              if (movimientos[accountId]) cargarMovimientos(accountId);
+              if (cuentaRetiros && movimientos[cuentaRetiros.id]) cargarMovimientos(cuentaRetiros.id);
             }}
           />
         </Modal>
@@ -677,33 +680,35 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
   );
 }
 
-function RetiroSocioForm({ cuenta, retirosActuales, onDone }: { cuenta: any; retirosActuales: number | null; onDone: () => void }) {
+function RetiroSocioForm({ cuenta, cuentaRetiros, retirosActuales, onDone }: { cuenta: any; cuentaRetiros: any | null; retirosActuales: number | null; onDone: () => void }) {
   const [amount, setAmount] = useState("");
   const [entryDate, setEntryDate] = useState(hoyLocal());
-  const [concept, setConcept] = useState("Retiro socio");
+  const [concept, setConcept] = useState("Retiro");
   const [notes, setNotes] = useState("");
+  const [moveWallet, setMoveWallet] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const monto = Math.abs(Number(amount) || 0);
-  const deuda = Number(cuenta.saldo);
-  const fmtDeuda = (n: number) => (n < -0.004 ? `${usd(Math.abs(n))} a favor` : usd(n));
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (!cuentaRetiros) return setMsg({ ok: false, text: 'Falta la cuenta operativa "Retiros de socios": creala desde "+ Nueva cuenta" (tipo Operativa).' });
     if (!monto) return setMsg({ ok: false, text: "Poné el monto del retiro." });
     if (!concept.trim()) return setMsg({ ok: false, text: "El concepto es obligatorio." });
     setLoading(true);
     try {
+      // Va a la cuenta operativa de retiros, en positivo: suma a Retiros de socios (baja el Saldo después de retiros) sin tocar la deuda
+      // del socio. El nombre del socio queda en el concepto para el historial de retiros.
       await api.crearMovimientoCuentaSocio({
-        accountId: cuenta.id,
+        accountId: cuentaRetiros.id,
         category: "RETIRO",
-        concept: concept.trim(),
-        amount: -monto,
+        concept: `Retiro socio · ${cuenta.name} — ${concept.trim()}`,
+        amount: monto,
         entryDate,
         notes: notes.trim() || undefined,
-        moveWallet: false,
+        moveWallet,
       });
       onDone();
     } catch (err: any) {
@@ -716,7 +721,7 @@ function RetiroSocioForm({ cuenta, retirosActuales, onDone }: { cuenta: any; ret
   return (
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
-        Lo que el socio se lleva de su parte. Se descuenta de lo que debe y cuenta como retiro.
+        Lo que el socio se lleva de la ganancia. Cuenta como retiro y baja el Saldo después de retiros; no cambia lo que le debe a la empresa.
       </div>
       <div className="field">
         <label>Monto (USD)</label>
@@ -736,14 +741,25 @@ function RetiroSocioForm({ cuenta, retirosActuales, onDone }: { cuenta: any; ret
         <label>Notas (opcional)</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
+      <div className="field">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
+          <input type="checkbox" checked={moveWallet} onChange={(e) => setMoveWallet(e.target.checked)} style={{ width: "auto" }} />
+          Esto también mueve la Wallet (USDT real)
+        </label>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {moveWallet
+            ? <>Al guardar se va a registrar en Wallet un <strong>EGRESO</strong> real{monto ? <> de {usd(monto)}</> : null}.</>
+            : "Tildalo solo si esta plata de verdad salió de la Wallet."}
+        </div>
+      </div>
       <div className="cs-efecto">
         <h4>Qué va a pasar</h4>
-        <div><span>Deuda de {cuenta.name}</span><span><b>{fmtDeuda(deuda)}</b> → <b>{fmtDeuda(deuda - monto)}</b></span></div>
+        <div><span>Lo que {cuenta.name} le debe a la empresa</span><span><b>no cambia</b></span></div>
         {retirosActuales != null && (
           <div><span>Retiros de socios</span><span><b>{usd(retirosActuales)}</b> → <b>{usd(retirosActuales + monto)}</b></span></div>
         )}
         <div><span>Saldo después de retiros</span><span><b>baja {usd(monto)}</b></span></div>
-        <div><span>Wallet</span><span><b>no se mueve</b></span></div>
+        <div><span>Wallet</span><span><b>{moveWallet ? `sale ${usd(monto)}` : "no se mueve"}</b></span></div>
       </div>
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar retiro"}</button>

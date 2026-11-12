@@ -339,16 +339,35 @@ export async function getAgregadosSocios() {
      WHERE e.category = 'RETIRO'
      ORDER BY e.entry_date DESC, e.created_at DESC`
   );
+  // Un retiro cargado en una cuenta operativa (la de "Retiros de socios") se agrupa con el socio que nombra: el botón Retiro socio guarda
+  // "Retiro socio · <socio> — <concepto>"; los viejos (ej. "Fede migracion") empiezan con el nombre del socio.
+  const personalesR = await pool.query(`SELECT id, name FROM partner_accounts WHERE active = true AND kind <> 'OPERATIVA'`);
+  const personales = personalesR.rows.map((p) => ({ id: p.id as string, name: String(p.name), key: String(p.name).trim().toLowerCase() }));
   const porCuenta = new Map<string, { accountId: string; nombre: string; operativa: boolean; total: number; retiros: any[] }>();
   for (const r of retirosR.rows) {
-    let g = porCuenta.get(r.account_id);
-    if (!g) {
-      g = { accountId: r.account_id, nombre: r.account_name, operativa: r.kind === "OPERATIVA", total: 0, retiros: [] };
-      porCuenta.set(r.account_id, g);
-    }
     const monto = Number(r.amount);
+    let concepto = String(r.concept);
+    let retiroSocio = monto < 0;
+    let grupoId = r.account_id as string;
+    let grupoNombre = r.account_name as string;
+    let operativa = r.kind === "OPERATIVA";
+    if (operativa) {
+      const m = concepto.match(/^Retiro socio · (.+?) — (.*)$/);
+      const nombre = m ? m[1].trim().toLowerCase() : null;
+      const socio = nombre
+        ? personales.find((p) => p.key === nombre)
+        : personales.find((p) => concepto.trim().toLowerCase().startsWith(p.key + " ") || concepto.trim().toLowerCase() === p.key);
+      if (m) { concepto = m[2] || "Retiro socio"; retiroSocio = true; }
+      if (socio) { grupoId = socio.id; grupoNombre = socio.name; operativa = false; }
+      else if (m) { grupoId = "socio:" + nombre; grupoNombre = m[1].trim(); operativa = false; }
+    }
+    let g = porCuenta.get(grupoId);
+    if (!g) {
+      g = { accountId: grupoId, nombre: grupoNombre, operativa, total: 0, retiros: [] };
+      porCuenta.set(grupoId, g);
+    }
     g.total = round2(g.total + Math.abs(monto));
-    g.retiros.push({ id: r.id, concepto: r.concept, monto: Math.abs(monto), retiroSocio: monto < 0, fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null });
+    g.retiros.push({ id: r.id, concepto, monto: Math.abs(monto), retiroSocio, fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null });
   }
   const retirosPorSocio = Array.from(porCuenta.values()).sort((a, b) => Number(a.operativa) - Number(b.operativa) || b.total - a.total);
 
