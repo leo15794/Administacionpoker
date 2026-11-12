@@ -350,7 +350,8 @@ export async function revisionCierrePeriodo(id: string) {
   {
     const items: string[] = [];
     for (const m of movimientos) {
-      if (m.category !== "AJUSTE" && m.amount < 0) {
+      // Un Retiro en negativo es un "Retiro socio" (botón de Cuentas de socios, 12/11/2026): va en negativo a propósito.
+      if (m.category === "GASTO" && m.amount < 0) {
         items.push(`${dm(m.fecha)} "${m.concept}" (${m.cuenta}) está como ${m.category.toLowerCase()} en negativo (${fmt(m.amount)}): cuenta igual como salida de ${fmt(Math.abs(m.amount))}.`);
       }
       if (/sueldo/i.test(m.concept)) {

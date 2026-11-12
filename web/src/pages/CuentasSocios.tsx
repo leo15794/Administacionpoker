@@ -20,6 +20,16 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 const CATEGORIES = Object.keys(CATEGORY_LABEL) as (keyof typeof CATEGORY_LABEL)[];
 
+// "Retiro socio" (12/11/2026, pedido de Leo, mockup 92): un Retiro cargado en NEGATIVO en la cuenta de un socio. Baja su deuda y, como
+// todo Retiro, suma a Retiros de socios y baja el Saldo después de retiros (ver MONTO_CATEGORIA_SQL en repo/partnerAccounts.ts). No es
+// una categoría nueva: se reconoce por la combinación Retiro + monto negativo.
+const esRetiroSocio = (m: { category?: string; amount?: any }) => m.category === "RETIRO" && Number(m.amount) < 0;
+const etiquetaCategoria = (m: any) => (esRetiroSocio(m) ? "Retiro socio" : CATEGORY_LABEL[m.category] ?? m.category);
+function hoyLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // Convención de signo de esta pantalla (partner_account_entries.amount, ver
 // aplicarCierreCompensacionPersonaTx en repo/closings.ts): POSITIVO = el socio le debe a la
 // empresa, NEGATIVO = a favor del socio (la empresa le debe a él). Es la convención INVERSA a
@@ -58,6 +68,7 @@ export default function CuentasSocios() {
   const [showNuevoAjusteHistorico, setShowNuevoAjusteHistorico] = useState(false);
   const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
+  const [retiroSocioDe, setRetiroSocioDe] = useState<any | null>(null);
   // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador, orden y paginación.
   const [tipoCuenta, setTipoCuenta] = useState<"todas" | "personal" | "operativa">("todas");
   const [buscaCuenta, setBuscaCuenta] = useState("");
@@ -234,6 +245,9 @@ export default function CuentasSocios() {
                       <small>{operativa ? "total acumulado" : labelDebeFavor(c.saldo)}</small>
                     </span>
                     <div className="acc">
+                      {!operativa && (
+                        <button className="btn secondary small cs-btn-retiro" onClick={() => setRetiroSocioDe(c)}>Retiro socio</button>
+                      )}
                       <button className="btn secondary small" onClick={() => abrirMovimientos(c.id)}>Ver movimientos</button>
                       <ActionsMenu
                         items={[
@@ -323,6 +337,21 @@ export default function CuentasSocios() {
         </Modal>
       )}
 
+      {retiroSocioDe && (
+        <Modal title={`Retiro socio — ${retiroSocioDe.name}`} onClose={() => setRetiroSocioDe(null)}>
+          <RetiroSocioForm
+            cuenta={retiroSocioDe}
+            retirosActuales={agregados ? Number(agregados.retirosSocios) : null}
+            onDone={() => {
+              const accountId = retiroSocioDe.id;
+              setRetiroSocioDe(null);
+              refresh();
+              if (movimientos[accountId]) cargarMovimientos(accountId);
+            }}
+          />
+        </Modal>
+      )}
+
       {showNuevoMov && (
         <Modal title="Nuevo movimiento" onClose={() => setShowNuevoMov(null)}>
           <MovimientoForm
@@ -365,7 +394,7 @@ export default function CuentasSocios() {
                 <div className="movimiento-row" key={m.id}>
                   <div className="movimiento-row-main">
                     <div className="movimiento-row-top">
-                      <span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span>
+                      <span className={`badge ${esRetiroSocio(m) ? "cs-badge-retiro" : "neutral"}`}>{etiquetaCategoria(m)}</span>
                       {m.idempotency_key && (
                         <span
                           className="badge neutral"
@@ -604,6 +633,80 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : movimiento ? "Guardar" : "Agregar movimiento"}</button>
+    </form>
+  );
+}
+
+function RetiroSocioForm({ cuenta, retirosActuales, onDone }: { cuenta: any; retirosActuales: number | null; onDone: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [entryDate, setEntryDate] = useState(hoyLocal());
+  const [concept, setConcept] = useState("Retiro socio");
+  const [notes, setNotes] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const monto = Math.abs(Number(amount) || 0);
+  const deuda = Number(cuenta.saldo);
+  const fmtDeuda = (n: number) => (n < -0.004 ? `${usd(Math.abs(n))} a favor` : usd(n));
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!monto) return setMsg({ ok: false, text: "Poné el monto del retiro." });
+    if (!concept.trim()) return setMsg({ ok: false, text: "El concepto es obligatorio." });
+    setLoading(true);
+    try {
+      await api.crearMovimientoCuentaSocio({
+        accountId: cuenta.id,
+        category: "RETIRO",
+        concept: concept.trim(),
+        amount: -monto,
+        entryDate,
+        notes: notes.trim() || undefined,
+        moveWallet: false,
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg({ ok: false, text: err.message || "No se pudo registrar el retiro." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="muted" style={{ marginBottom: 14 }}>
+        Lo que el socio se lleva de su parte. Se descuenta de lo que debe y cuenta como retiro.
+      </div>
+      <div className="field">
+        <label>Monto (USD)</label>
+        <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" min="0" autoFocus style={{ fontSize: 20, fontWeight: 800 }} />
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Fecha</label>
+          <input value={entryDate} onChange={(e) => setEntryDate(e.target.value)} type="date" />
+        </div>
+        <div className="field">
+          <label>Concepto</label>
+          <input value={concept} onChange={(e) => setConcept(e.target.value)} />
+        </div>
+      </div>
+      <div className="field">
+        <label>Notas (opcional)</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <div className="cs-efecto">
+        <h4>Qué va a pasar</h4>
+        <div><span>Deuda de {cuenta.name}</span><span><b>{fmtDeuda(deuda)}</b> → <b>{fmtDeuda(deuda - monto)}</b></span></div>
+        {retirosActuales != null && (
+          <div><span>Retiros de socios</span><span><b>{usd(retirosActuales)}</b> → <b>{usd(retirosActuales + monto)}</b></span></div>
+        )}
+        <div><span>Saldo después de retiros</span><span><b>baja {usd(monto)}</b></span></div>
+        <div><span>Wallet</span><span><b>no se mueve</b></span></div>
+      </div>
+      {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
+      <button className="btn" disabled={loading}>{loading ? "Guardando..." : "Registrar retiro"}</button>
     </form>
   );
 }

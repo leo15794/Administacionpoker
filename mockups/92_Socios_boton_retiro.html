@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 92 (12/11/2026): botón "Retiro socio" en Cuentas de socios. Carga un Retiro que baja la deuda del socio y cuenta en
+     Retiros de socios (resta del Saldo después de retiros). Datos reales de Fede. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --red: #f85149; --violet: #a371f7; --violet-soft: rgba(163,113,247,.16);
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16);
+    --page: rgba(22,27,34,.50); --page-border: rgba(255,255,255,.09);
+    --card: rgba(29,36,48,.72); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --line: rgba(255,255,255,.07); --input: rgba(255,255,255,.05);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --red: #c23744; --violet: #7c5bd6; --violet-soft: rgba(124,91,214,.12);
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14);
+    --page: rgba(255,255,255,.42); --page-border: rgba(255,255,255,.85);
+    --card: rgba(255,255,255,.85); --card-border: rgba(11,24,18,.06); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --line: rgba(11,24,18,.07); --input: rgba(11,24,18,.03);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 20px; display: grid; grid-template-columns: 1fr 470px; gap: 22px; }
+  .page, .side { border-radius: 26px; padding: 24px 28px; background: var(--page); border: 1px solid var(--page-border); backdrop-filter: blur(24px); overflow: hidden; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+  h2 { font-size: 20px; font-weight: 800; }
+  .sub { font-size: 13px; color: var(--dim); margin-top: 4px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; box-shadow: var(--card-shadow); }
+  .th, .fila { display: grid; grid-template-columns: 1.4fr 1fr 170px 330px; gap: 12px; align-items: center; padding: 12px 18px; }
+  .th { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--dim); }
+  .fila { border-top: 1px solid var(--line); }
+  .who { display: flex; align-items: center; gap: 10px; } .who b { font-size: 14px; display: block; } .who small { font-size: 12px; color: var(--faint); }
+  .av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 12px; background: rgba(248,81,73,.16); color: var(--red); }
+  .av.o { background: var(--chip); color: var(--dim); }
+  .ds { font-size: 12.5px; color: var(--dim); }
+  .t { text-align: right; font-weight: 750; font-size: 16px; } .t small { display: block; font-size: 11.5px; font-weight: 500; color: var(--dim); }
+  .t.r { color: var(--red); }
+  .acc { display: flex; gap: 6px; justify-content: flex-end; }
+  .btn { font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 10px; background: var(--chip); color: var(--text); white-space: nowrap; }
+  .btn.ret { background: var(--violet-soft); color: var(--violet); box-shadow: 0 0 0 1.5px var(--violet) inset; }
+  .btn.dots { padding: 7px 10px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+  .kpi { padding: 12px 14px; } .kpi small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .kpi b { display: block; font-size: 19px; margin-top: 4px; } .kpi span { font-size: 11.5px; color: var(--dim); }
+  .nota { margin-top: 14px; font-size: 12px; color: var(--faint); }
+  /* Modal */
+  .modal { padding: 22px; margin-top: 14px; }
+  .field { margin-top: 14px; } .field label { display: block; font-size: 12px; font-weight: 700; color: var(--dim); margin-bottom: 6px; }
+  .in { border: 1px solid var(--card-border); background: var(--input); border-radius: 12px; padding: 11px 13px; font-size: 14px; }
+  .in.big { font-size: 22px; font-weight: 800; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .efecto { margin-top: 16px; border-radius: 14px; background: var(--violet-soft); padding: 13px 14px; }
+  .efecto h4 { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--violet); margin-bottom: 8px; }
+  .ef { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: var(--dim); }
+  .ef b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .ef .ar { color: var(--faint); margin: 0 6px; }
+  .pie { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .pie .ok { background: var(--accent-grad); color: var(--accent-ink); padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 13px; }
+  .pie .no { background: var(--chip); padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 13px; }
+  .mv { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin-top: 12px; }
+  .bd { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--violet-soft); color: var(--violet); }
+  .mv .m { margin-left: auto; font-weight: 800; color: var(--green); }
+</style></head>
+<body>
+  <div class="page">
+    <span class="tag">Cuentas de socios</span>
+    <h1>Cuentas de socios</h1>
+    <div class="sub">Botón nuevo en cada cuenta personal: <b>Retiro socio</b>.</div>
+
+    <div class="kpis">
+      <div class="card kpi"><small>Le deben a la empresa</small><b style="color:var(--red)">US$ 25.160,42</b><span>Fede, Juan y Manos</span></div>
+      <div class="card kpi"><small>Retiros de socios</small><b>US$ 21.976,28</b><span>después: 25.866,28</span></div>
+      <div class="card kpi"><small>Saldo después de retiros</small><b>baja 3.890,00</b><span>con el retiro de Fede</span></div>
+    </div>
+
+    <div class="card">
+      <div class="th"><span>CUENTA</span><span>DETALLE</span><span style="text-align:right">SALDO</span><span></span></div>
+      <div class="fila">
+        <div class="who"><span class="av">JU</span><div><b>Juan</b><small>Personal</small></div></div>
+        <span class="ds">—</span>
+        <span class="t r">US$ 18.527,22<small>le debe a la empresa</small></span>
+        <div class="acc"><span class="btn ret">Retiro socio</span><span class="btn">Ver movimientos</span><span class="btn dots">···</span></div>
+      </div>
+      <div class="fila">
+        <div class="who"><span class="av o">GA</span><div><b>Gastos operativo</b><small>Operativa</small></div></div>
+        <span class="ds">—</span>
+        <span class="t">US$ 12.202,95<small>total acumulado</small></span>
+        <div class="acc"><span class="btn">Ver movimientos</span><span class="btn dots">···</span></div>
+      </div>
+      <div class="fila">
+        <div class="who"><span class="av">FE</span><div><b>Fede</b><small>Personal</small></div></div>
+        <span class="ds">—</span>
+        <span class="t r">US$ 5.765,04<small>le debe a la empresa</small></span>
+        <div class="acc"><span class="btn ret">Retiro socio</span><span class="btn">Ver movimientos</span><span class="btn dots">···</span></div>
+      </div>
+      <div class="fila">
+        <div class="who"><span class="av">MA</span><div><b>Manos</b><small>Personal</small></div></div>
+        <span class="ds">—</span>
+        <span class="t r">US$ 868,17<small>le debe a la empresa</small></span>
+        <div class="acc"><span class="btn ret">Retiro socio</span><span class="btn">Ver movimientos</span><span class="btn dots">···</span></div>
+      </div>
+    </div>
+    <div class="nota">"Retiro socio" solo aparece en las cuentas personales. "+ Movimiento" sigue igual dentro del menú ··· y de Ver movimientos.</div>
+  </div>
+
+  <div class="side">
+    <span class="tag">Al tocar "Retiro socio" en Fede</span>
+    <div class="card modal">
+      <h2>Retiro socio — Fede</h2>
+      <div class="sub">Lo que el socio se lleva de su parte. Se descuenta de lo que debe y cuenta como retiro.</div>
+      <div class="field"><label>Monto (USD)</label><div class="in big">3.890,00</div></div>
+      <div class="row2">
+        <div class="field"><label>Fecha</label><div class="in">12/11/2026</div></div>
+        <div class="field"><label>Concepto</label><div class="in">Saldar deuda</div></div>
+      </div>
+      <div class="efecto">
+        <h4>Qué va a pasar</h4>
+        <div class="ef">Deuda de Fede <span><b>5.765,04</b><span class="ar">→</span><b>1.875,04</b></span></div>
+        <div class="ef">Retiros de socios <span><b>21.976,28</b><span class="ar">→</span><b>25.866,28</b></span></div>
+        <div class="ef">Saldo después de retiros <span><b>baja 3.890,00</b></span></div>
+        <div class="ef">Wallet <span><b>no se mueve</b></span></div>
+      </div>
+      <div class="pie"><span class="no">Cancelar</span><span class="ok">Registrar retiro</span></div>
+    </div>
+
+    <span class="tag" style="margin-top:22px">Así queda en los movimientos de Fede</span>
+    <div class="card mv">
+      <div><span class="bd">Retiro socio</span><div style="font-size:13px;font-weight:600;margin-top:4px">Saldar deuda</div><small style="font-size:11.5px;color:var(--faint)">12/11/2026</small></div>
+      <span class="m">−US$ 3.890,00</span>
+    </div>
+  </div>
+</body></html>

@@ -217,7 +217,7 @@ export default function MiSocio() {
                   <span className="amt" style={{ color: colorDeuda(m.monto) }}>{montoSigno(m.monto)}</span>
                 </div>
                 <div className="t2">
-                  <span>{dateShort(m.fecha)} · {m.categoria.toLowerCase()}{m.notas ? ` · ${m.notas}` : ""}</span>
+                  <span>{dateShort(m.fecha)} · {m.categoria === "RETIRO" && m.monto < 0 ? "retiro socio" : m.categoria.toLowerCase()}{m.notas ? ` · ${m.notas}` : ""}</span>
                   <span>{m.monto > 0 ? "suma a lo que debés" : m.monto < 0 ? "a tu favor" : ""}</span>
                 </div>
               </div>
