@@ -2601,3 +2601,7 @@ CREATE TABLE IF NOT EXISTS pedidos_clave (
   resuelto_at    TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_pedidos_clave_estado ON pedidos_clave(estado, created_at);
+
+-- Retiro socio con Compensación (12/11/2026, pedido de Leo): la compensación que le baja la deuda al socio queda vinculada al retiro que
+-- la generó, para que "Deshacer" el retiro la borre también. Ver crearRetiroSocio/deshacerRetiro en repo/partnerAccounts.ts.
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS vinculado_a TEXT;

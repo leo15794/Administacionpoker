@@ -71,6 +71,24 @@ export default function CuentasSocios() {
   const [borrando, setBorrando] = useState<string | null>(null);
   const [retiroSocioDe, setRetiroSocioDe] = useState<any | null>(null);
   const [verRetiros, setVerRetiros] = useState(false);
+
+  async function deshacerRetiro(r: any, socio: string) {
+    const partes = [`¿Deshacer el retiro de ${socio} del ${dateShort(r.fecha)} por ${usd(r.monto)}?`, "", `"${r.concepto}"`, ""];
+    if (r.compensado) partes.push(`También se borra la compensación de ${usd(r.compensado)} que le bajó la deuda.`);
+    if (r.wallet) partes.push(`Se revierte la salida de ${usd(r.monto)} en Wallet.`);
+    partes.push("Se borra el movimiento: no se puede volver atrás.");
+    if (!(await confirmDialog(partes.join("\n")))) return;
+    setBorrando(r.id);
+    try {
+      await api.deshacerRetiro(r.id);
+      refresh();
+      setMovimientos({});
+    } catch (err: any) {
+      await alertDialog(err.message || "No se pudo deshacer el retiro.");
+    } finally {
+      setBorrando(null);
+    }
+  }
   // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador, orden y paginación.
   const [tipoCuenta, setTipoCuenta] = useState<"todas" | "personal" | "operativa">("todas");
   const [buscaCuenta, setBuscaCuenta] = useState("");
@@ -229,7 +247,11 @@ export default function CuentasSocios() {
                       <span className={`badge ${r.retiroSocio ? "cs-badge-retiro" : "neutral"}`}>{r.retiroSocio ? "Retiro socio" : "Retiro"}</span>
                       <span className="c">{r.concepto}</span>
                       {r.wallet && <span className="badge neutral">Wallet</span>}
+                      {r.compensado > 0 && <span className="badge neutral" title={`Le bajó ${usd(r.compensado)} de la deuda`}>Compensado</span>}
                       <span className="m">{usd(r.monto)}</span>
+                      <button type="button" className="btn secondary small" disabled={borrando === r.id} onClick={() => deshacerRetiro(r, g.nombre)}>
+                        {borrando === r.id ? "..." : "Deshacer"}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -702,35 +724,16 @@ function RetiroSocioForm({ cuenta, cuentaRetiros, retirosActuales, onDone }: { c
     if (!concept.trim()) return setMsg({ ok: false, text: "El concepto es obligatorio." });
     setLoading(true);
     try {
-      // Va a la cuenta operativa de retiros, en positivo: suma a Retiros de socios (baja el Saldo después de retiros) sin tocar la deuda
-      // del socio. El nombre del socio queda en el concepto para el historial de retiros.
-      await api.crearMovimientoCuentaSocio({
-        accountId: cuentaRetiros.id,
-        category: "RETIRO",
-        concept: `Retiro socio · ${cuenta.name} — ${concept.trim()}`,
-        amount: monto,
+      // Retiro (y su Compensación si se tildó) en una sola operación del servidor: ver crearRetiroSocio en repo/partnerAccounts.ts.
+      await api.crearRetiroSocio({
+        socioAccountId: cuenta.id,
+        monto,
+        concepto: concept.trim(),
         entryDate,
         notes: notes.trim() || undefined,
         moveWallet,
+        compensa,
       });
-      // "Compensación" (12/11/2026, pedido de Leo): además del retiro, el mismo monto se le descuenta de la deuda al socio con un
-      // movimiento Compensación en su cuenta. Wallet se mueve una sola vez (en el retiro).
-      if (compensa) {
-        try {
-          await api.crearMovimientoCuentaSocio({
-            accountId: cuenta.id,
-            category: "COMPENSACION",
-            concept: `Compensación por retiro socio — ${concept.trim()}`,
-            amount: -monto,
-            entryDate,
-            notes: notes.trim() || undefined,
-            moveWallet: false,
-          });
-        } catch (err: any) {
-          setMsg({ ok: false, text: `El retiro quedó registrado, pero no se pudo descontar de la deuda: ${err.message || "error"}. Cargá la compensación a mano.` });
-          return;
-        }
-      }
       onDone();
     } catch (err: any) {
       setMsg({ ok: false, text: err.message || "No se pudo registrar el retiro." });

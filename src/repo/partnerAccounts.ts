@@ -234,6 +234,87 @@ export async function eliminarMovimiento(id: string, createdBy?: string | null) 
   await pool.query(`DELETE FROM partner_account_entries WHERE id = $1`, [id]);
 }
 
+// Columna vinculado_a (ver schema.sql): se crea sola la primera vez por si todavía no se corrió la migración.
+let vinculoListo = false;
+async function asegurarVinculo() {
+  if (vinculoListo) return;
+  await pool.query(`ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS vinculado_a TEXT`);
+  vinculoListo = true;
+}
+
+export interface RetiroSocioInput {
+  socioAccountId: string;
+  monto: number; // positivo
+  concepto: string;
+  entryDate?: string;
+  notes?: string;
+  moveWallet?: boolean;
+  compensa?: boolean;
+}
+
+/**
+ * Botón "Retiro socio" (12/11/2026, pedido de Leo). El retiro va a la cuenta operativa de retiros, en positivo, con el socio en el
+ * concepto: suma a Retiros de socios y baja el Saldo después de retiros sin tocar la deuda del socio (y mueve Wallet si se pide). Con
+ * "Compensación", además se carga una Compensación por el mismo monto en negativo en la cuenta del socio (le baja la deuda), vinculada al
+ * retiro para poder deshacer las dos juntas.
+ */
+export async function crearRetiroSocio(input: RetiroSocioInput, createdBy?: string | null) {
+  await asegurarVinculo();
+  const monto = Math.abs(Number(input.monto));
+  if (!monto) throw new Error("Poné el monto del retiro.");
+  if (!input.concepto.trim()) throw new Error("El concepto es obligatorio.");
+  const socioR = await pool.query(`SELECT id, name, kind FROM partner_accounts WHERE id = $1 AND active = true`, [input.socioAccountId]);
+  const socio = socioR.rows[0];
+  if (!socio) throw new Error("No se encontró la cuenta del socio.");
+  if (socio.kind === "OPERATIVA") throw new Error("El retiro socio se hace desde la cuenta de un socio, no desde una cuenta operativa.");
+  const retirosR = await pool.query(
+    `SELECT id FROM partner_accounts WHERE active = true AND kind = 'OPERATIVA' AND name ILIKE '%retiro%' ORDER BY created_at LIMIT 1`
+  );
+  if (!retirosR.rows[0]) throw new Error('Falta la cuenta operativa "Retiros de socios": creala desde "+ Nueva cuenta" (tipo Operativa).');
+
+  const retiro = await crearMovimiento(
+    {
+      accountId: retirosR.rows[0].id,
+      category: "RETIRO",
+      concept: `Retiro socio · ${socio.name} — ${input.concepto.trim()}`,
+      amount: monto,
+      entryDate: input.entryDate,
+      notes: input.notes,
+      moveWallet: !!input.moveWallet,
+    },
+    createdBy
+  );
+  if (input.compensa) {
+    try {
+      await pool.query(
+        `INSERT INTO partner_account_entries (id, account_id, category, concept, amount, entry_date, notes, vinculado_a)
+         VALUES ($1,$2,'COMPENSACION',$3,$4,COALESCE($5, CURRENT_DATE),$6,$7)`,
+        [newId("pentry"), socio.id, `Compensación por retiro socio — ${input.concepto.trim()}`, -monto, input.entryDate || null, input.notes?.trim() || null, retiro.id]
+      );
+    } catch (err) {
+      // Sin la compensación no se deja el retiro a medias.
+      await eliminarMovimiento(retiro.id, createdBy);
+      throw err;
+    }
+  }
+  return retiro;
+}
+
+/**
+ * Deshacer un retiro (12/11/2026, pedido de Leo: "necesito poder tirar para atrás un retiro de socios"). Borra el retiro, revierte su
+ * movimiento en Wallet si lo tenía (eliminarMovimiento) y borra la Compensación que haya generado en la cuenta del socio.
+ */
+export async function deshacerRetiro(id: string, createdBy?: string | null) {
+  await asegurarVinculo();
+  const r = await pool.query(`SELECT id, category FROM partner_account_entries WHERE id = $1`, [id]);
+  if (!r.rows[0]) throw new Error("No se encontró ese retiro (puede que ya se haya deshecho).");
+  if (r.rows[0].category !== "RETIRO") throw new Error("Ese movimiento no es un retiro.");
+  const vinculados = await pool.query(`SELECT id FROM partner_account_entries WHERE vinculado_a = $1`, [id]);
+  for (const v of vinculados.rows) await eliminarMovimiento(v.id, createdBy);
+  await eliminarMovimiento(id, createdBy);
+  return { compensacionesBorradas: vinculados.rows.length };
+}
+
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -341,6 +422,9 @@ export async function getAgregadosSocios() {
   );
   // Un retiro cargado en una cuenta operativa (la de "Retiros de socios") se agrupa con el socio que nombra: el botón Retiro socio guarda
   // "Retiro socio · <socio> — <concepto>"; los viejos (ej. "Fede migracion") empiezan con el nombre del socio.
+  await asegurarVinculo();
+  const compR = await pool.query(`SELECT vinculado_a, SUM(-amount) AS monto FROM partner_account_entries WHERE vinculado_a IS NOT NULL GROUP BY vinculado_a`);
+  const compensado = new Map<string, number>(compR.rows.map((c) => [c.vinculado_a as string, Number(c.monto)]));
   const personalesR = await pool.query(`SELECT id, name FROM partner_accounts WHERE active = true AND kind <> 'OPERATIVA'`);
   const personales = personalesR.rows.map((p) => ({ id: p.id as string, name: String(p.name), key: String(p.name).trim().toLowerCase() }));
   const porCuenta = new Map<string, { accountId: string; nombre: string; operativa: boolean; total: number; retiros: any[] }>();
@@ -367,7 +451,7 @@ export async function getAgregadosSocios() {
       porCuenta.set(grupoId, g);
     }
     g.total = round2(g.total + Math.abs(monto));
-    g.retiros.push({ id: r.id, concepto, monto: Math.abs(monto), retiroSocio, fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null });
+    g.retiros.push({ id: r.id, concepto, monto: Math.abs(monto), retiroSocio, fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null, compensado: compensado.get(r.id) ?? 0 });
   }
   const retirosPorSocio = Array.from(porCuenta.values()).sort((a, b) => Number(a.operativa) - Number(b.operativa) || b.total - a.total);
 

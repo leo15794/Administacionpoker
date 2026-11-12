@@ -690,6 +690,9 @@ export const api = {
     }>
   ) => request(`/partner-accounts/movimientos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   eliminarMovimientoCuentaSocio: (id: string) => request(`/partner-accounts/movimientos/${id}`, { method: "DELETE" }),
+  crearRetiroSocio: (data: { socioAccountId: string; monto: number; concepto: string; entryDate?: string; notes?: string; moveWallet?: boolean; compensa?: boolean }) =>
+    request("/partner-accounts/retiro-socio", { method: "POST", body: JSON.stringify(data) }),
+  deshacerRetiro: (id: string) => request(`/partner-accounts/retiros/${id}`, { method: "DELETE" }) as Promise<{ compensacionesBorradas: number }>,
 
   // Ajuste histórico de "Ganancia operativa histórica" (01/10/2026, caso planilla pre-sistema):
   // suma un total aparte arriba del cálculo en vivo de los cierres reales -- ver

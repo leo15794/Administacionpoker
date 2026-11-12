@@ -10,6 +10,8 @@ import {
   crearMovimiento,
   editarMovimiento,
   eliminarMovimiento,
+  crearRetiroSocio,
+  deshacerRetiro,
   getAgregadosSocios,
   listGananciaHistoricaAjustes,
   crearGananciaHistoricaAjuste,
@@ -121,6 +123,35 @@ partnerAccountsRouter.delete("/movimientos/:id", requireAuth, requireAdmin, asyn
   try {
     await eliminarMovimiento(req.params.id, req.user?.email);
     res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Retiro socio (12/11/2026): ver crearRetiroSocio / deshacerRetiro en repo/partnerAccounts.ts.
+const retiroSocioSchema = z.object({
+  socioAccountId: z.string(),
+  monto: z.number().positive("Poné el monto del retiro."),
+  concepto: z.string().min(1, "El concepto es obligatorio."),
+  entryDate: z.string().optional(),
+  notes: z.string().optional(),
+  moveWallet: z.boolean().optional(),
+  compensa: z.boolean().optional(),
+});
+
+partnerAccountsRouter.post("/retiro-socio", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = retiroSocioSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.status(201).json(await crearRetiroSocio(parsed.data, req.user?.email));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+partnerAccountsRouter.delete("/retiros/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  try {
+    res.json(await deshacerRetiro(req.params.id, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
