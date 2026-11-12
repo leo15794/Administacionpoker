@@ -3,7 +3,6 @@
 // se rutean a su cuenta (weekly_closings.routed_to_partner_account_id), con el detalle por jugador. Nunca recibe un id de cuenta del cliente: el
 // id sale del token (ver routes/portal.ts).
 import { pool } from "../db/pool.js";
-import { SALDO_CUENTA_SQL, RETIRADO_CUENTA_SQL } from "./partnerAccounts.js";
 
 // Si todavía no se corrió "npm run migrate", el primer uso del rol SOCIO crea la columna y deja el CHECK al día (idempotente, una vez por proceso).
 let schemaListo = false;
@@ -25,7 +24,7 @@ const n = (x: any) => Number(x ?? 0);
 
 export async function getMiSocio(accountId: string) {
   const cuentaR = await pool.query(
-    `SELECT pa.id, pa.name, pa.description, pa.kind, ${SALDO_CUENTA_SQL} AS saldo, ${RETIRADO_CUENTA_SQL} AS retirado
+    `SELECT pa.id, pa.name, pa.description, pa.kind, COALESCE(SUM(e.amount), 0) AS saldo
      FROM partner_accounts pa LEFT JOIN partner_account_entries e ON e.account_id = pa.id
      WHERE pa.id = $1 GROUP BY pa.id`,
     [accountId]
@@ -97,7 +96,7 @@ export async function getMiSocio(accountId: string) {
   }
 
   return {
-    cuenta: { id: cuenta.id, nombre: cuenta.name, descripcion: cuenta.description, saldo: n(cuenta.saldo), retirado: n(cuenta.retirado) },
+    cuenta: { id: cuenta.id, nombre: cuenta.name, descripcion: cuenta.description, saldo: n(cuenta.saldo) },
     movimientos: movR.rows.map((m) => ({ id: m.id, categoria: m.category, concepto: String(m.concept).replace(/\s*\(agente id [^)]*\)/, m.agente ? ` · ${m.agente}` : ""), monto: n(m.amount), fecha: String(m.entry_date).slice(0, 10), notas: m.notes })),
     semanas: Array.from(semanas.values()),
   };

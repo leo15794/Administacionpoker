@@ -79,9 +79,6 @@ export default function MiSocio() {
           />,
         ]
       : []),
-    ...(Number(cuenta.retirado) > 0
-      ? [<PortalMini key="r" label="Retirado" value={usd(cuenta.retirado)} sub="no suma a tu saldo" color="#a371f7" />]
-      : []),
     <PortalMini key="a" label="Agentes a tu cuenta" value={String(cantAgentes)} sub={`${semanas.length} semana${semanas.length === 1 ? "" : "s"} cargada${semanas.length === 1 ? "" : "s"}`} />,
   ];
 
@@ -212,24 +209,20 @@ export default function MiSocio() {
         <div className="muted">Todavía no hay movimientos en tu cuenta.</div>
       ) : (
         <div style={{ maxHeight: 640, overflowY: "auto" }}>
-          {movimientos.map((m) => {
-            // Un retiro no cambia el saldo (12/11/2026, mockup 91): se muestra en gris.
-            const retiro = m.categoria === "RETIRO";
-            return (
-              <div key={m.id} className={`pt-card${retiro || m.monto < 0 ? "" : " ng"}`}>
-                <div className="b">
-                  <div className="t1">
-                    <span className="n">{m.concepto}</span>
-                    <span className="amt" style={{ color: retiro ? "var(--text-dim)" : colorDeuda(m.monto) }}>{retiro ? usd(Math.abs(m.monto)) : montoSigno(m.monto)}</span>
-                  </div>
-                  <div className="t2">
-                    <span>{dateShort(m.fecha)} · {m.categoria.toLowerCase()}{m.notas ? ` · ${m.notas}` : ""}</span>
-                    <span>{retiro ? "retiro · no afecta el saldo" : m.monto > 0 ? "suma a lo que debés" : m.monto < 0 ? "a tu favor" : ""}</span>
-                  </div>
+          {movimientos.map((m) => (
+            <div key={m.id} className={`pt-card${m.monto < 0 ? "" : " ng"}`}>
+              <div className="b">
+                <div className="t1">
+                  <span className="n">{m.concepto}</span>
+                  <span className="amt" style={{ color: colorDeuda(m.monto) }}>{montoSigno(m.monto)}</span>
+                </div>
+                <div className="t2">
+                  <span>{dateShort(m.fecha)} · {m.categoria.toLowerCase()}{m.notas ? ` · ${m.notas}` : ""}</span>
+                  <span>{m.monto > 0 ? "suma a lo que debés" : m.monto < 0 ? "a tu favor" : ""}</span>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </PortalPane>

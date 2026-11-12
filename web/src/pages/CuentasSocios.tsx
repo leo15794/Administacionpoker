@@ -58,7 +58,6 @@ export default function CuentasSocios() {
   const [showNuevoAjusteHistorico, setShowNuevoAjusteHistorico] = useState(false);
   const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
-  const [verRetiros, setVerRetiros] = useState(false);
   // Lista con el estilo de la Wallet (23/10/2026, pedido de Leo, mockup aprobado): pestañas, buscador, orden y paginación.
   const [tipoCuenta, setTipoCuenta] = useState<"todas" | "personal" | "operativa">("todas");
   const [buscaCuenta, setBuscaCuenta] = useState("");
@@ -173,14 +172,7 @@ export default function CuentasSocios() {
             <WmConteos
               items={[
                 { etiqueta: "GANANCIA OPERATIVA HISTÓRICA", valor: usd(agregados.gananciaOperativaHistorica) },
-                {
-                  etiqueta: "RETIROS DE SOCIOS",
-                  valor: (
-                    <button type="button" className="cs-ret-link" onClick={() => setVerRetiros((v) => !v)} title="Ver los retiros de cada socio">
-                      {usd(agregados.retirosSocios)} <span>{verRetiros ? "▴" : "▾"}</span>
-                    </button>
-                  ),
-                },
+                { etiqueta: "RETIROS DE SOCIOS", valor: usd(agregados.retirosSocios) },
                 { etiqueta: "GASTOS OPERATIVOS", valor: usd(agregados.gastosOperativos) },
                 { etiqueta: "INGRESOS / AJUSTES", valor: usd(agregados.ingresosAjustes) },
                 { etiqueta: "GANANCIA NETA HISTÓRICA (ANTES DE SUELDO)", valor: usd(agregados.gananciaNetaHistorica) },
@@ -191,37 +183,6 @@ export default function CuentasSocios() {
             />
           )}
         </WmSaldoCard>
-
-        {verRetiros && agregados && (
-          <div className="wm-card cs-ret">
-            <div className="wm-cab">
-              <div className="wm-h">Retiros por socio <span className="wm-n">{usd(agregados.retirosSocios)}</span></div>
-              <span className="muted" style={{ fontSize: 12 }}>Todos los movimientos con categoría Retiro · no cambian el saldo de deuda del socio</span>
-            </div>
-            {(agregados.retirosPorSocio ?? []).length === 0 ? (
-              <div className="muted" style={{ padding: "8px 0" }}>Todavía no hay retiros cargados.</div>
-            ) : (
-              (agregados.retirosPorSocio ?? []).map((g: any) => (
-                <div key={g.accountId} className="cs-ret-g">
-                  <div className="cs-ret-h">
-                    <span className="wm-av">{String(g.nombre).trim().slice(0, 2).toUpperCase()}</span>
-                    <b>{g.nombre}</b>
-                    <small>{g.retiros.length} retiro{g.retiros.length === 1 ? "" : "s"}{g.operativa ? " · cuenta operativa" : ""}</small>
-                    <span className="cs-ret-tot">{usd(g.total)}</span>
-                  </div>
-                  {g.retiros.map((r: any) => (
-                    <div key={r.id} className="cs-ret-r" title={r.notas || undefined}>
-                      <span className="f">{dateShort(r.fecha).slice(0, 5)}</span>
-                      <span className="c">{r.concepto}</span>
-                      {r.wallet && <span className="badge neutral">Wallet</span>}
-                      <span className="m">{usd(r.monto)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        )}
 
         <div className="wm-card">
           <div className="wm-cab">
@@ -271,7 +232,6 @@ export default function CuentasSocios() {
                     <span className={`t ${operativa ? "" : claseDebeFavor(c.saldo) === "neg" ? "r" : "p"}`}>
                       {usd(c.saldo)}
                       <small>{operativa ? "total acumulado" : labelDebeFavor(c.saldo)}</small>
-                      {!operativa && Number(c.retirado) > 0 && <small className="cs-retirado">Retirado {usd(c.retirado)}</small>}
                     </span>
                     <div className="acc">
                       <button className="btn secondary small" onClick={() => abrirMovimientos(c.id)}>Ver movimientos</button>
@@ -392,12 +352,6 @@ export default function CuentasSocios() {
                 {usd(cuentaMovimientos.saldo)}
               </div>
             </div>
-            {cuentaMovimientos.kind !== "OPERATIVA" && Number(cuentaMovimientos.retirado) > 0 && (
-              <div>
-                <div style={{ fontSize: 13 }} className="muted">Retirado · {cuentaMovimientos.retiros} retiro{cuentaMovimientos.retiros === 1 ? "" : "s"}</div>
-                <div className="cuenta-card-saldo cs-retirado" style={{ fontSize: 26 }}>{usd(cuentaMovimientos.retirado)}</div>
-              </div>
-            )}
             <button className="btn secondary small" onClick={() => setShowNuevoMov(cuentaMovimientos.id)}>+ Movimiento</button>
           </div>
 
@@ -407,10 +361,8 @@ export default function CuentasSocios() {
             <div className="muted">Sin movimientos todavía.</div>
           ) : (
             <div className="movimientos-list">
-              {movimientos[cuentaMovimientos.id].map((m) => {
-                const retiroAparte = m.category === "RETIRO" && cuentaMovimientos.kind !== "OPERATIVA";
-                return (
-                <div className={`movimiento-row${retiroAparte ? " cs-mov-ret" : ""}`} key={m.id}>
+              {movimientos[cuentaMovimientos.id].map((m) => (
+                <div className="movimiento-row" key={m.id}>
                   <div className="movimiento-row-main">
                     <div className="movimiento-row-top">
                       <span className="badge neutral">{CATEGORY_LABEL[m.category] ?? m.category}</span>
@@ -433,9 +385,8 @@ export default function CuentasSocios() {
                     {m.notes && <div className="muted movimiento-row-notes" title={m.notes}>{m.notes}</div>}
                   </div>
                   <div className="movimiento-row-side">
-                    <div className={`movimiento-row-amount ${cuentaMovimientos.kind === "OPERATIVA" || retiroAparte ? "" : claseDebeFavor(m.amount)}`}>
-                      {usd(retiroAparte ? Math.abs(Number(m.amount)) : m.amount)}
-                      {retiroAparte && <small className="cs-no-afecta">no afecta el saldo</small>}
+                    <div className={`movimiento-row-amount ${cuentaMovimientos.kind === "OPERATIVA" ? "" : claseDebeFavor(m.amount)}`}>
+                      {usd(m.amount)}
                     </div>
                     <div className="row-actions">
                       <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
@@ -450,8 +401,7 @@ export default function CuentasSocios() {
                     </div>
                   </div>
                 </div>
-                );
-              })}
+              ))}
             </div>
           )}
         </Modal>
@@ -602,8 +552,7 @@ function MovimientoForm({ accountId, movimiento, onDone }: { accountId: string; 
     <form onSubmit={onSubmit}>
       <div className="muted" style={{ marginBottom: 14 }}>
         El monto es libre (positivo o negativo) — vos decidís el signo para el saldo de la cuenta. En los totales de "Retiros de socios" y
-        "Gastos operativos" siempre cuenta como plata que salió, con cualquier signo. Un Retiro en la cuenta de un socio no cambia su
-        saldo de deuda: queda como "Retirado".
+        "Gastos operativos" siempre cuenta como plata que salió, con cualquier signo.
       </div>
       <div className="form-grid">
         <div className="field">

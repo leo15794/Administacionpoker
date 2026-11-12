@@ -36,14 +36,6 @@ export function fechaSinCorrimiento(fecha: string | Date): Date {
   return new Date(y, m - 1, d, 12, 0, 0);
 }
 
-// Retiros separados de la deuda (12/11/2026, pedido de Leo, mockup 91): en una cuenta personal un movimiento RETIRO no suma ni
-// resta al saldo (la deuda del socio con la empresa); queda a la vista como "Retirado" y en el total de Retiros de socios. En una
-// cuenta operativa todo suma, como siempre (es solo un total acumulado). Se usa con el alias "pa" para la cuenta y "e" para el
-// movimiento.
-export const SALDO_CUENTA_SQL = `COALESCE(SUM(e.amount) FILTER (WHERE pa.kind = 'OPERATIVA' OR e.category <> 'RETIRO'), 0)`;
-export const RETIRADO_CUENTA_SQL = `COALESCE(SUM(ABS(e.amount)) FILTER (WHERE e.category = 'RETIRO'), 0)`;
-export const RETIROS_CANT_SQL = `(COUNT(e.id) FILTER (WHERE e.category = 'RETIRO'))::int`;
-
 export type PartnerEntryCategory = "COMPENSACION" | "COMISION" | "PAGO" | "RETIRO" | "GASTO" | "AJUSTE" | "OTRO";
 
 export type PartnerAccountKind = "SOCIO" | "OPERATIVA";
@@ -67,7 +59,7 @@ export interface PartnerEntryInput {
 // Todas las cuentas activas con su saldo (suma de movimientos) y cantidad de movimientos.
 export async function listPartnerAccounts() {
   const r = await pool.query(
-    `SELECT pa.*, ${SALDO_CUENTA_SQL} as saldo, COUNT(e.id)::int as movimientos, ${RETIRADO_CUENTA_SQL} as retirado, ${RETIROS_CANT_SQL} as retiros
+    `SELECT pa.*, COALESCE(SUM(e.amount), 0) as saldo, COUNT(e.id)::int as movimientos
      FROM partner_accounts pa
      LEFT JOIN partner_account_entries e ON e.account_id = pa.id
      WHERE pa.active = true
@@ -339,25 +331,6 @@ export async function getAgregadosSocios() {
   const totales: Record<string, number> = { RETIRO: 0, GASTO: 0, AJUSTE: 0 };
   for (const row of porCategoria.rows) totales[row.category] = Number(row.total);
 
-  // Detalle del KPI Retiros de socios, agrupado por cuenta (mockup 91).
-  const retirosR = await pool.query(
-    `SELECT e.id, e.account_id, pa.name AS account_name, pa.kind, e.concept, ABS(e.amount) AS amount, e.entry_date, e.notes, e.treasury_adjustment_id
-     FROM partner_account_entries e JOIN partner_accounts pa ON pa.id = e.account_id
-     WHERE e.category = 'RETIRO'
-     ORDER BY e.entry_date DESC, e.created_at DESC`
-  );
-  const porCuenta = new Map<string, { accountId: string; nombre: string; operativa: boolean; total: number; retiros: any[] }>();
-  for (const r of retirosR.rows) {
-    let g = porCuenta.get(r.account_id);
-    if (!g) {
-      g = { accountId: r.account_id, nombre: r.account_name, operativa: r.kind === "OPERATIVA", total: 0, retiros: [] };
-      porCuenta.set(r.account_id, g);
-    }
-    g.total = round2(g.total + Number(r.amount));
-    g.retiros.push({ id: r.id, concepto: r.concept, monto: Number(r.amount), fecha: toFecha(r.entry_date), notas: r.notes, wallet: r.treasury_adjustment_id != null });
-  }
-  const retirosPorSocio = Array.from(porCuenta.values()).sort((a, b) => b.total - a.total);
-
   const gananciaNeta = round2(gananciaOperativa - totales.GASTO + totales.AJUSTE);
   // Sueldo de Manos: se descuenta una sola vez, el de cada período cerrado (no cuando se paga).
   const sueldosManos = round2(await totalSueldosPeriodosCerrados());
@@ -367,7 +340,6 @@ export async function getAgregadosSocios() {
   return {
     gananciaOperativaHistorica: gananciaOperativa,
     retirosSocios: totales.RETIRO,
-    retirosPorSocio,
     gastosOperativos: totales.GASTO,
     ingresosAjustes: totales.AJUSTE,
     gananciaNetaHistorica: gananciaNeta,
