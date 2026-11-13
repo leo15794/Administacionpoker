@@ -487,7 +487,6 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           se mueve arrastrando la marca a un borde. En celular sigue el cajón (ver .dock-fichas en index.css). */}
       {pos !== "top" && (
         <nav className="dock-fichas" aria-label="Menú">
-          <div className="df-grip brand-mark-drag" onPointerDown={empezarArrastre} title="Arrastrá a un borde (abajo, izquierda o arriba) para mover el menú">P</div>
           {role === "ADMIN" ? (
             NAV_GROUPS.map((grupo, gi) => {
               const keys = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);

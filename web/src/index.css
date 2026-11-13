@@ -3230,11 +3230,6 @@ body {
     border-radius: 26px; scrollbar-width: none;
   }
   .dock-fichas::-webkit-scrollbar { display: none; }
-  .df-grip {
-    width: 42px; height: 42px; border-radius: 14px; flex-shrink: 0;
-    background: var(--accent-grad); color: var(--accent-ink); font-weight: 800; font-size: 15px;
-    display: grid; place-items: center; box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.35);
-  }
   .df-g { display: flex; align-items: center; gap: 2px; }
   .df-gl { font-size: 8.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
   .df-sep { background: var(--border); flex-shrink: 0; }
@@ -3262,7 +3257,6 @@ body {
     position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
     flex-direction: row; align-items: flex-end; padding: 8px 14px 8px 10px; max-width: calc(100vw - 28px); overflow-x: auto;
   }
-  .app-shell.menu-bottom .df-grip { align-self: center; margin-right: 8px; }
   .app-shell.menu-bottom .df-gl { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; margin-right: 2px; }
   .app-shell.menu-bottom .df-sep { width: 1px; height: 40px; margin: 0 8px 8px; align-self: center; }
   .app-shell.menu-bottom .df-k.active i { margin-top: -12px; }
@@ -3286,7 +3280,6 @@ body {
     position: sticky; top: 14px; height: calc(100vh - 28px); width: 82px; flex-shrink: 0;
     flex-direction: column; align-items: center; padding: 12px 0; overflow-y: auto;
   }
-  .app-shell.menu-left .df-grip { margin-bottom: 8px; }
   .app-shell.menu-left .df-g { flex-direction: column; }
   .app-shell.menu-left .df-gl { margin: 4px 0 3px; }
   .app-shell.menu-left .df-sep { width: 40px; height: 1px; margin: 8px 0; }
