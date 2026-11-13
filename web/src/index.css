@@ -3806,3 +3806,30 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .dock-fichas.df-arrastrable { cursor: grab; }
 .dock-fichas.df-arrastrable .df-k { cursor: pointer; }
 body.dp-dragging-menu .dock-fichas.df-arrastrable { cursor: grabbing; }
+
+/* Dock: cada grupo con su color (mockup 97 opción A, 13/11/2026). Operación azul, Finanzas verde, Reportes violeta: fondo suave por grupo,
+   íconos y título del grupo en su color, y la ficha activa pintada con el color de su grupo y una rayita abajo. Solo dock (abajo / izquierda). */
+.df-g-operacion { --gc: 68, 147, 248; --gc2: 47, 125, 224; }
+.df-g-finanzas { --gc: 63, 185, 80; --gc2: 38, 150, 64; }
+.df-g-reportes { --gc: 163, 113, 247; --gc2: 128, 84, 214; }
+:root[data-theme="light"] .df-g-operacion { --gc: 31, 111, 209; --gc2: 22, 88, 172; }
+:root[data-theme="light"] .df-g-finanzas { --gc: 21, 122, 87; --gc2: 16, 98, 70; }
+:root[data-theme="light"] .df-g-reportes { --gc: 124, 91, 214; --gc2: 99, 68, 184; }
+@media (min-width: 769px) {
+  .dock-fichas .df-g[class*="df-g-"] { background: rgba(var(--gc), 0.08); border-radius: 18px; padding: 4px 6px 3px; }
+  .dock-fichas .df-g[class*="df-g-"] .df-gl { color: rgb(var(--gc)); }
+  .dock-fichas .df-g[class*="df-g-"] .df-k i { color: rgb(var(--gc)); background: rgba(var(--gc), 0.10); }
+  .dock-fichas .df-g[class*="df-g-"] .df-k:hover i { background: rgba(var(--gc), 0.20); }
+  .dock-fichas .df-g[class*="df-g-"] .df-k.active i {
+    background: linear-gradient(135deg, rgb(var(--gc)), rgb(var(--gc2))); color: #fff;
+    box-shadow: 0 10px 22px rgba(var(--gc), 0.45);
+  }
+  .dock-fichas .df-g[class*="df-g-"] .df-k.active { position: relative; }
+  .dock-fichas .df-g[class*="df-g-"] .df-k.active::after {
+    content: ""; position: absolute; bottom: -4px; left: 50%; width: 18px; height: 3px; margin-left: -9px; border-radius: 3px; background: rgb(var(--gc));
+  }
+  .dock-fichas .df-g[class*="df-g-"] .df-k.drag-over i { outline-color: rgb(var(--gc)); }
+  .app-shell.menu-bottom .dock-fichas .df-sep:not(.df-sep-fin) { width: 6px; background: none; margin: 0; }
+  .app-shell.menu-left .dock-fichas .df-sep:not(.df-sep-fin) { height: 6px; background: none; margin: 0; }
+  .app-shell.menu-left .dock-fichas .df-g[class*="df-g-"] { padding: 6px 3px 8px; }
+}

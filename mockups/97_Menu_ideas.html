@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 97 (13/11/2026): tres ideas para que el menú (dock de abajo) tenga más personalidad. Pedido de Leo. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --op: #4493f8; --op-rgb: 68,147,248; --fin: #3fb950; --fin-rgb: 63,185,80; --rep: #a371f7; --rep-rgb: 163,113,247;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16);
+    --dock: rgba(22,28,38,.82); --dock-border: rgba(255,255,255,.09); --ic: rgba(255,255,255,.06);
+    --card: rgba(29,36,48,.55); --card-border: rgba(255,255,255,.07); --red: #f85149;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --op: #1f6fd1; --op-rgb: 31,111,209; --fin: #157a57; --fin-rgb: 21,122,87; --rep: #7c5bd6; --rep-rgb: 124,91,214;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14);
+    --dock: rgba(255,255,255,.88); --dock-border: rgba(11,24,18,.08); --ic: rgba(11,24,18,.05);
+    --card: rgba(255,255,255,.6); --card-border: rgba(11,24,18,.06); --red: #c23744;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 26px 36px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin-top: 4px; margin-bottom: 18px; }
+  .op { margin-bottom: 18px; padding: 18px 20px 22px; border-radius: 22px; background: var(--card); border: 1px solid var(--card-border); }
+  .op h2 { font-size: 16px; font-weight: 800; display: flex; gap: 10px; align-items: center; }
+  .op h2 .l { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: rgba(var(--accent-rgb), .16); color: var(--accent); font-size: 13px; }
+  .op p { font-size: 12.5px; color: var(--dim); margin: 4px 0 16px 36px; }
+  .dock { display: flex; align-items: flex-end; gap: 4px; padding: 10px 16px; border-radius: 24px; background: var(--dock); border: 1px solid var(--dock-border); box-shadow: 0 14px 40px rgba(0,0,0,.30); width: fit-content; margin: 0 auto; }
+  .k { width: 62px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--dim); position: relative; }
+  .i { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: var(--ic); font-size: 17px; }
+  .sep { width: 1px; align-self: stretch; background: var(--dock-border); margin: 4px 8px; }
+  .gl { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8.5px; font-weight: 800; letter-spacing: .12em; color: var(--faint); align-self: center; }
+
+  /* A: grupos con color */
+  .A .g { display: flex; align-items: flex-end; gap: 2px; padding: 4px 6px 2px; border-radius: 16px; }
+  .A .g.op1 { background: rgba(var(--op-rgb), .07); } .A .g.fin1 { background: rgba(var(--fin-rgb), .07); } .A .g.rep1 { background: rgba(var(--rep-rgb), .07); }
+  .A .op1 .i { color: var(--op); } .A .fin1 .i { color: var(--fin); } .A .rep1 .i { color: var(--rep); }
+  .A .op1 .gl { color: var(--op); } .A .fin1 .gl { color: var(--fin); } .A .rep1 .gl { color: var(--rep); }
+  .A .k.on .i { background: var(--op); color: #fff; box-shadow: 0 6px 18px rgba(var(--op-rgb), .45); }
+  .A .k.on { color: var(--text); font-weight: 800; }
+  .A .k.on::after { content: ""; position: absolute; bottom: -6px; width: 18px; height: 3px; border-radius: 3px; background: var(--op); }
+
+  /* B: lupa al pasar el mouse */
+  .B .k { transition: none; }
+  .B .k.z2 .i { width: 52px; height: 52px; font-size: 22px; margin-bottom: 2px; }
+  .B .k.z1 .i { width: 46px; height: 46px; font-size: 19px; }
+  .B .k.z2 { width: 72px; color: var(--text); font-weight: 800; }
+  .B .k.z2::before { content: "Wallet · USDT 12.430"; position: absolute; top: -40px; white-space: nowrap; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 8px; background: var(--text); color: var(--bg); }
+  .B .k.on .i { background: var(--accent-grad); color: var(--accent-ink); }
+  .B .k.on::after { content: ""; position: absolute; bottom: -7px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+  /* C: contadores y atajos */
+  .C .b { position: absolute; top: -4px; right: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; border: 2px solid var(--dock); }
+  .C .b.n { background: #d29922; }
+  .C .k.on .i { background: rgba(var(--accent-rgb), .18); color: var(--accent); outline: 2px solid rgba(var(--accent-rgb), .55); outline-offset: 2px; }
+  .C .k.on { color: var(--text); font-weight: 800; }
+  .C .fav { display: flex; align-items: center; gap: 6px; padding: 0 10px 0 4px; }
+  .C .fav .st { font-size: 15px; color: #d29922; }
+  .C .busca { height: 40px; width: 150px; border-radius: 13px; background: var(--ic); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; color: var(--faint); align-self: center; margin-left: 6px; }
+  .C .busca kbd { margin-left: auto; font-family: inherit; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--dock-border); }
+</style></head>
+<body>
+  <h1>Menú con más personalidad</h1>
+  <div class="sub">Tres ideas sobre el dock de abajo. Se pueden combinar. Mockup 97.</div>
+
+  <div class="op">
+    <h2><span class="l">A</span>Cada grupo con su color</h2>
+    <p>Operación azul, Finanzas verde, Reportes violeta. Cada grupo tiene su fondo suave, los íconos toman su color y la sección activa se ilumina con una rayita abajo. De un vistazo sabés en qué parte estás.</p>
+    <div class="dock A">
+      <div class="g op1"><span class="gl">OPERACIÓN</span>
+        <div class="k"><div class="i">▤</div>Resumen</div><div class="k"><div class="i">⊞</div>Admin.</div><div class="k on"><div class="i">◷</div>Cierres</div><div class="k"><div class="i">⛁</div>Bancados</div><div class="k"><div class="i">⚿</div>Usuarios</div>
+      </div>
+      <div class="g fin1"><span class="gl">FINANZAS</span>
+        <div class="k"><div class="i">$</div>Wallet</div><div class="k"><div class="i">⛨</div>Garantías</div><div class="k"><div class="i">◈</div>Proveed.</div><div class="k"><div class="i">♛</div>Superv.</div><div class="k"><div class="i">♠</div>Agentes</div><div class="k"><div class="i">◎</div>Socios</div>
+      </div>
+      <div class="g rep1"><span class="gl">REPORTES</span>
+        <div class="k"><div class="i">▥</div>Por club</div><div class="k"><div class="i">⌒</div>Rodeo</div><div class="k"><div class="i">↗</div>Financiero</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="op">
+    <h2><span class="l">B</span>Lupa al pasar el mouse</h2>
+    <p style="margin-bottom:48px">El ícono bajo el mouse crece y los vecinos un poco menos. Arriba aparece un globito con un dato rápido (ej. saldo de Wallet), y la sección activa queda pintada con un puntito abajo.</p>
+    <div class="dock B">
+      <span class="gl">OPERACIÓN</span>
+      <div class="k"><div class="i">▤</div>Resumen</div><div class="k"><div class="i">⊞</div>Admin.</div><div class="k on"><div class="i">◷</div>Cierres</div><div class="k"><div class="i">⛁</div>Bancados</div><div class="k"><div class="i">⚿</div>Usuarios</div>
+      <div class="sep"></div><span class="gl">FINANZAS</span>
+      <div class="k z1"><div class="i">⛨</div>Garantías</div><div class="k z2"><div class="i">$</div>Wallet</div><div class="k z1"><div class="i">◈</div>Proveed.</div><div class="k"><div class="i">♛</div>Superv.</div><div class="k"><div class="i">♠</div>Agentes</div><div class="k"><div class="i">◎</div>Socios</div>
+      <div class="sep"></div><span class="gl">REPORTES</span>
+      <div class="k"><div class="i">▥</div>Por club</div><div class="k"><div class="i">⌒</div>Rodeo</div><div class="k"><div class="i">↗</div>Financiero</div>
+    </div>
+  </div>
+
+  <div class="op">
+    <h2><span class="l">C</span>Contadores, favoritos y buscador</h2>
+    <p>Globitos con lo que está pendiente (pedidos de clave, retiros de supervisores, cierres con fechas raras). Una estrella fija tus 3–4 secciones más usadas al principio, y un buscador (Ctrl+K) te lleva a cualquier pantalla o agente escribiendo.</p>
+    <div class="dock C">
+      <div class="fav"><span class="st">★</span>
+        <div class="k on"><div class="i">◷</div>Cierres<span class="b n">6</span></div><div class="k"><div class="i">$</div>Wallet</div><div class="k"><div class="i">♠</div>Agentes</div>
+      </div>
+      <div class="sep"></div>
+      <div class="k"><div class="i">▤</div>Resumen</div><div class="k"><div class="i">⊞</div>Admin.</div><div class="k"><div class="i">⚿</div>Usuarios<span class="b">2</span></div><div class="k"><div class="i">♛</div>Superv.<span class="b">1</span></div><div class="k"><div class="i">◈</div>Proveed.</div><div class="k"><div class="i">◎</div>Socios</div><div class="k"><div class="i">↗</div>Financiero</div>
+      <div class="busca">⌕ Ir a… <kbd>Ctrl K</kbd></div>
+    </div>
+  </div>
+</body></html>

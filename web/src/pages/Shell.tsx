@@ -505,7 +505,7 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
               return (
                 <Fragment key={grupo.key}>
                   {gi > 0 && <span className="df-sep" aria-hidden="true" />}
-                  <div className="df-g">
+                  <div className={`df-g df-g-${grupo.key}`}>
                     <span className="df-gl">{grupo.label}</span>
                     {keys.map((key) => {
                       const item = NAV_ITEMS.find((i) => i.key === key);
