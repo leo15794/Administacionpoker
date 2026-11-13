@@ -19,6 +19,11 @@ function Monto({ value }: { value: number | string | null | undefined }) {
   return <span className={`money ${n >= 0 ? "pos" : "neg"}`}>{usd(n)}</span>;
 }
 
+// Fracción del deal (0.6) → texto del formulario en % ("60"), sin decimales flotantes (0.6 * 100 = 60.00000000000001).
+function pctTexto(fraccion: number | string | null | undefined): string {
+  return String(Math.round(Number(fraccion ?? 0) * 10000) / 100);
+}
+
 export default function Cierres() {
   const { alertDialog, promptDialog } = useConfirmDialog();
   // Deep-link desde otras pantallas (ej. Resumen financiero → "ver en Cierres" de una fila de
@@ -595,6 +600,58 @@ function NuevoCierre({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Deal de Administración (13/11/2026, pedido de Leo, mockup 94): al elegir agente y club se trae el deal cargado para ese club
+  // (sistema, % rakeback, % rebate) vigente para la semana del cierre. Sin deal se avisa y se deja cargar a mano.
+  const [todosDeals, setTodosDeals] = useState<any[]>([]);
+  const [deal, setDeal] = useState<any | null>(null);
+  const [dealCargando, setDealCargando] = useState(false);
+  const dealAplicado = useRef<string | null>(null);
+  useEffect(() => {
+    api.todosLosDeals().then(setTodosDeals).catch(() => {});
+  }, []);
+  const dealsDelAgente = todosDeals.filter((d) => d.agent_id === agentId);
+  useEffect(() => {
+    if (!agentId || !clubId) {
+      setDeal(null);
+      return;
+    }
+    let vigente = true;
+    setDealCargando(true);
+    api
+      .configVigente(agentId, clubId, weekEnd || undefined)
+      .then((cfg: any) => {
+        if (!vigente) return;
+        setDeal(cfg);
+        // Solo se pisan los campos cuando cambia el deal (otro agente, club o versión), no cada vez que se toca la fecha:
+        // así un % cambiado a mano para este cierre no se pierde.
+        const clave = [agentId, clubId, cfg.source, cfg.system, cfg.rakebackPct, cfg.rebatePct].join("|");
+        if (dealAplicado.current === clave) return;
+        dealAplicado.current = clave;
+        if (cfg.source === "deal") {
+          setSystem(cfg.system);
+          setRakebackPct(pctTexto(cfg.rakebackPct));
+          setRebatePct(pctTexto(cfg.rebatePct));
+        } else {
+          setRakebackPct("");
+          setRebatePct(agentes.find((a) => a.id === agentId)?.account_type === "BANCADO" ? "50" : "0");
+        }
+        invalidarPreview();
+      })
+      .catch(() => {
+        if (vigente) setDeal(null);
+      })
+      .finally(() => {
+        if (vigente) setDealCargando(false);
+      });
+    return () => {
+      vigente = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId, clubId, weekEnd]);
+  const conDeal = deal?.source === "deal";
+  const difiereRakeback = conDeal && Number(rakebackPct) !== Number(pctTexto(deal.rakebackPct));
+  const difiereRebate = conDeal && Number(rebatePct) !== Number(pctTexto(deal.rebatePct));
+
   const agenteSeleccionado = agentes.find((a) => a.id === agentId);
   const esBancado = agenteSeleccionado?.account_type === "BANCADO";
   const clubSeleccionado = clubes.find((c) => c.id === clubId);
@@ -625,6 +682,8 @@ function NuevoCierre({
     if (agente?.default_system) {
       setSystem(agente.default_system);
     }
+    const suyos = todosDeals.filter((d) => d.agent_id === id);
+    if (!clubId && suyos.length === 1) elegirClub(suyos[0].club_id);
   }
 
   function elegirClub(id: string) {
@@ -797,6 +856,32 @@ function NuevoCierre({
         </div>
       )}
 
+      {agentId && clubId && deal && !dealCargando && (conDeal ? (
+        <div className="cd-banner ok">
+          <div className="cd-ico">✓</div>
+          <div>
+            <b>Deal de Administración · {agenteSeleccionado?.name} en {clubSeleccionado?.name}</b>
+            <small>
+              {weekEnd ? `Vigente para la semana que termina el ${dateShort(weekEnd)}` : "Vigente hoy (elegí la semana para ver el de esa fecha)"}
+              {deal.validFrom ? ` · rige desde el ${dateShort(String(deal.validFrom).slice(0, 10))}` : ""}
+            </small>
+          </div>
+          <div className="cd-pills">
+            <span>{deal.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span>
+            <span>{pctTexto(deal.rakebackPct)}% rakeback</span>
+            <span>{pctTexto(deal.rebatePct)}% rebate</span>
+          </div>
+        </div>
+      ) : (
+        <div className="cd-banner warn">
+          <div className="cd-ico">!</div>
+          <div>
+            <b>{agenteSeleccionado?.name} no tiene deal en {clubSeleccionado?.name}</b>
+            <small>Cargá el % a mano. Para que se complete solo, cargalo en Administración → Asignar % a agente.</small>
+          </div>
+        </div>
+      ))}
+
       {agentId && (
         <div className="muted" style={{ marginBottom: 10 }}>
           Vas a liquidar este cierre como{" "}
@@ -815,22 +900,49 @@ function NuevoCierre({
           </div>
           <div className="field">
             <label>Club</label>
-            <select value={clubId} onChange={(e) => elegirClub(e.target.value)}>
+            <select value={clubId} onChange={(e) => elegirClub(e.target.value)} className={conDeal ? "cd-in-deal" : undefined}>
               <option value="">Elegir...</option>
-              {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {agentId && dealsDelAgente.length > 0 ? (
+                <>
+                  <optgroup label="Con deal cargado">
+                    {clubes
+                      .filter((c) => dealsDelAgente.some((d) => d.club_id === c.id))
+                      .map((c) => {
+                        const d = dealsDelAgente.find((x) => x.club_id === c.id);
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.name} — {pctTexto(d.rakeback_pct)}% · {d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}
+                          </option>
+                        );
+                      })}
+                  </optgroup>
+                  {clubes.some((c) => !dealsDelAgente.some((d) => d.club_id === c.id)) && (
+                    <optgroup label="Sin deal (se carga a mano)">
+                      {clubes.filter((c) => !dealsDelAgente.some((d) => d.club_id === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </optgroup>
+                  )}
+                </>
+              ) : (
+                clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)
+              )}
             </select>
           </div>
           <div className="field">
             <label>Sistema</label>
-            <select value={system} onChange={(e) => { setSystem(e.target.value as any); invalidarPreview(); }}>
+            <select value={system} onChange={(e) => { setSystem(e.target.value as any); invalidarPreview(); }} className={conDeal && deal.system === system ? "cd-in-deal" : undefined}>
               <option value="WIN_LOSE">Win/Lose</option>
               <option value="PREPAGO">Prepago</option>
             </select>
+            {conDeal && deal.system !== system && (
+              <div className="cd-hint warn">
+                ⚠ El deal dice {deal.system === "PREPAGO" ? "Prepago" : "Win/Lose"}. Estás usando {system === "PREPAGO" ? "Prepago" : "Win/Lose"} solo en este cierre.
+              </div>
+            )}
             {/* (29/09/2026, pedido de Leo) -- se autocompleta al elegir agente, pero si se
                 cambia a mano queda bien visible que no coincide con lo registrado, para no
                 liquidar por error el sistema equivocado (ahora con consecuencias reales: ver
                 repo/closings.ts). */}
-            {agenteSeleccionado?.default_system && agenteSeleccionado.default_system !== system && (
+            {!conDeal && agenteSeleccionado?.default_system && agenteSeleccionado.default_system !== system && (
               <div className="muted" style={{ fontSize: 11, marginTop: 4, color: "var(--warn, #b45309)" }}>
                 ⚠ {agenteSeleccionado.name} está registrado como{" "}
                 {agenteSeleccionado.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}, y lo estás por liquidar
@@ -896,11 +1008,15 @@ function NuevoCierre({
           )}
           <div className="field">
             <label>{esBancado ? "% Rakeback (100% para el bancado)" : "% Rakeback"}</label>
-            <input value={rakebackPct} onChange={(e) => { setRakebackPct(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+            <input value={rakebackPct} onChange={(e) => { setRakebackPct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRakeback ? "cd-in-edit" : "cd-in-deal") : undefined} />
+            {conDeal && !difiereRakeback && <div className="cd-hint">Del deal. Lo podés cambiar para este cierre.</div>}
+            {difiereRakeback && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rakebackPct)}%. Estás usando {rakebackPct || 0}% solo en este cierre.</div>}
           </div>
           <div className="field">
             <label>{esBancado ? "% de la mesa para el bancado (si ganó)" : "% Rebate"}</label>
-            <input value={rebatePct} onChange={(e) => { setRebatePct(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+            <input value={rebatePct} onChange={(e) => { setRebatePct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRebate ? "cd-in-edit" : "cd-in-deal") : undefined} />
+            {conDeal && !difiereRebate && <div className="cd-hint">Del deal.</div>}
+            {difiereRebate && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rebatePct)}%. Estás usando {rebatePct || 0}% solo en este cierre.</div>}
           </div>
           <div className="field">
             <label>Rodeo (opcional, USD)</label>

@@ -1002,7 +1002,9 @@ catalogRouter.get("/agents/:agentId/players", requireAuth, requireAdmin, async (
 // excel entero, porque previsualizarCierre nunca vuelve a resolver el % — solo hace la cuenta
 // con lo que le mandan).
 catalogRouter.get("/agents/:agentId/clubs/:clubId/config-vigente", requireAuth, requireAdmin, async (req, res) => {
-  res.json(await resolverConfigVigente(req.params.agentId, req.params.clubId));
+  // ?fecha=YYYY-MM-DD (13/11/2026): el cierre manual pide el deal vigente para la semana que se está cerrando, no el de hoy.
+  const fecha = typeof req.query.fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.fecha) ? req.query.fecha : undefined;
+  res.json(await resolverConfigVigente(req.params.agentId, req.params.clubId, fecha));
 });
 
 // Borra una fila de jugador mal asignada (ej. quedó en el club equivocado por el bug del

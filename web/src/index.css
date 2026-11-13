@@ -3695,3 +3695,20 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 :root[data-theme="light"] .wz-efecto h4 { color: #7c5bd6; }
 .wz-efecto > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; color: var(--text-dim); }
 .wz-efecto b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Cierre manual: deal de Administración precargado (mockup 94, 13/11/2026) */
+.cd-banner { display: flex; gap: 12px; align-items: center; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; }
+.cd-banner.ok { background: rgba(var(--accent-rgb, 68,147,248), .10); border: 1px solid rgba(var(--accent-rgb, 68,147,248), .30); }
+.cd-banner.warn { background: rgba(210,153,34,.13); border: 1px solid rgba(210,153,34,.40); }
+.cd-banner b { font-weight: 700; }
+.cd-banner small { display: block; color: var(--text-dim, #9da7b3); font-size: 12px; margin-top: 2px; }
+.cd-ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; flex: none; }
+.cd-banner.ok .cd-ico { background: rgba(var(--accent-rgb, 68,147,248), .18); color: var(--accent); }
+.cd-banner.warn .cd-ico { background: rgba(210,153,34,.20); color: #d29922; }
+.cd-pills { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.cd-pills span { font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: rgba(127,127,127,.14); white-space: nowrap; }
+.cd-in-deal { border-color: rgba(var(--accent-rgb, 68,147,248), .55) !important; box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 68,147,248), .10); }
+.cd-in-edit { border-color: #d29922 !important; }
+.cd-hint { font-size: 11px; margin-top: 4px; color: var(--text-dim, #9da7b3); }
+.cd-hint.warn { color: #d29922; font-weight: 600; }
+@media (max-width: 700px) { .cd-banner { flex-wrap: wrap; } .cd-pills { margin-left: 42px; justify-content: flex-start; } }

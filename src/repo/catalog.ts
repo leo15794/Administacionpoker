@@ -568,7 +568,7 @@ export async function upsertDeal(
  */
 export async function resolverConfigVigente(agentId: string, clubId: string, atDate: string | Date = new Date()) {
   const dealRes = await pool.query(
-    `SELECT system, rakeback_pct, rebate_pct FROM agent_club_deals
+    `SELECT system, rakeback_pct, rebate_pct, valid_from FROM agent_club_deals
      WHERE agent_id = $1 AND club_id = $2
        AND valid_from::date <= $3::date
        AND (valid_to IS NULL OR valid_to::date > $3::date)
@@ -580,6 +580,7 @@ export async function resolverConfigVigente(agentId: string, clubId: string, atD
       system: dealRes.rows[0].system as "PREPAGO" | "WIN_LOSE",
       rakebackPct: Number(dealRes.rows[0].rakeback_pct),
       rebatePct: Number(dealRes.rows[0].rebate_pct),
+      validFrom: dealRes.rows[0].valid_from as Date | string | null,
       source: "deal" as const,
     };
   }
