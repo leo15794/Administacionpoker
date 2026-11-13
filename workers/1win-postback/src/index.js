@@ -68,13 +68,17 @@ export default {
         return json({ ok: true, ignored: true, reason: 'unmapped_event', event: rawEvent });
       }
 
-      // RichAds (mismo prefijo que epicbet-postback)
+      // RichAds (mismo prefijo que epicbet-postback). En la campaña de RichAds el link de 1win lleva
+      // sub1=ra.1.0.[CLICK_ID]; RichAds reemplaza [CLICK_ID] y aca se toma todo lo que va despues del 3er punto.
+      // Registro -> action=conversion ("Main conversion"); deposito -> action=conversion1 ("Approved Conversion").
       if (sub1.startsWith('ra.')) {
         const clickId = sub1.split('.').slice(3).join('.');
+        const action = eventName === 'Purchase' ? 'conversion1' : 'conversion';
         const r = await fetch(
-          'https://us.ahows.co/log?action=conversion&key=' + encodeURIComponent(clickId) + '&price=' + amount
+          'https://us.ahows.co/log?action=' + action + '&key=' + encodeURIComponent(clickId) + '&price=' + amount
         );
-        return json({ ok: true, eventName, sentTo: 'richads', status: r.status });
+        console.log('richads', JSON.stringify({ eventName, rawEvent, action, status: r.status, tx, country }));
+        return json({ ok: true, eventName, sentTo: 'richads', action, status: r.status });
       }
 
       // Meta CAPI
