@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 95 (13/11/2026): formulario "Aplicar cierre semanal" reordenado. Pedido de Leo: "quedó bastante feo". Secciones numeradas,
+     extras plegados, ayudas cortas y un resumen fijo a la derecha con los botones. Datos de ejemplo. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --green: #3fb950; --red: #f85149; --warn: #d29922;
+    --glow1: rgba(68,147,248,.28); --glow2: rgba(63,185,80,.16);
+    --card: rgba(29,36,48,.72); --card-border: rgba(255,255,255,.08); --card-shadow: 0 10px 30px rgba(0,0,0,.35);
+    --chip: rgba(255,255,255,.07); --line: rgba(255,255,255,.07); --input: rgba(255,255,255,.05); --sec: rgba(255,255,255,.025);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7f5; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --green: #157a57; --red: #c23744; --warn: #a15c07;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.14);
+    --card: rgba(255,255,255,.85); --card-border: rgba(11,24,18,.06); --card-shadow: 0 8px 26px rgba(11,24,18,.08);
+    --chip: rgba(11,24,18,.05); --line: rgba(11,24,18,.07); --input: rgba(11,24,18,.03); --sec: rgba(11,24,18,.02);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 26px 36px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 18px; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+  .chips { display: flex; gap: 8px; margin-top: 10px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: var(--chip); color: var(--dim); }
+  .chip.w { color: var(--warn); }
+  .btn { height: 40px; padding: 0 18px; border-radius: 999px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--card-border); background: var(--chip); }
+  .btn.p { background: var(--accent-grad); color: var(--accent-ink); border: 0; }
+  .btn.off { opacity: .45; }
+  .lay { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 22px; box-shadow: var(--card-shadow); }
+  .form { padding: 8px 22px; }
+  .sec { padding: 16px 0; border-top: 1px solid var(--line); }
+  .sec:first-child { border-top: 0; }
+  .sh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .n { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 800; background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+  .sh b { font-size: 14px; font-weight: 800; }
+  .sh small { font-size: 12px; color: var(--faint); margin-left: auto; }
+  .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .f label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--dim); margin-bottom: 6px; }
+  .in { height: 40px; border-radius: 11px; background: var(--input); border: 1px solid var(--card-border); padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+  .in.sel::after { content: "▾"; color: var(--faint); font-size: 12px; }
+  .in.deal { border-color: rgba(var(--accent-rgb), .55); }
+  .in .u { font-size: 12px; color: var(--faint); }
+  .cd { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(var(--accent-rgb), .14); color: var(--accent); }
+  .dealb { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 12px; border-radius: 12px; background: rgba(var(--accent-rgb), .08); border: 1px solid rgba(var(--accent-rgb), .25); font-size: 12.5px; }
+  .dealb .ok { color: var(--accent); font-weight: 800; }
+  .dealb span.m { color: var(--dim); }
+  .wk { display: flex; gap: 8px; align-items: center; }
+  .wk .in { flex: 1; }
+  .wk .q { font-size: 12px; font-weight: 700; padding: 0 12px; height: 40px; display: grid; place-items: center; border-radius: 11px; background: var(--chip); color: var(--dim); white-space: nowrap; }
+  .wk .q.on { background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+  .extras { display: flex; align-items: center; gap: 10px; }
+  .extras .tg { font-size: 13px; font-weight: 700; }
+  .extras .tg::before { content: "▸ "; color: var(--faint); }
+  .extras .s { font-size: 12px; color: var(--faint); }
+  .hint { font-size: 11.5px; color: var(--faint); margin-top: 5px; }
+  /* resumen */
+  .res { padding: 20px 22px; position: sticky; top: 0; }
+  .res h3 { font-size: 15px; font-weight: 800; }
+  .res .who { font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+  .rl { margin-top: 16px; }
+  .r { display: flex; justify-content: space-between; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .r:first-child { border-top: 0; }
+  .r span { color: var(--dim); }
+  .r b { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tot { margin-top: 10px; padding: 14px; border-radius: 14px; background: var(--sec); border: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
+  .tot span { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--dim); }
+  .tot b { font-size: 24px; font-weight: 800; color: var(--green); }
+  .st { margin-top: 12px; font-size: 12px; color: var(--faint); display: flex; gap: 6px; align-items: center; }
+  .st i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); display: inline-block; }
+  .bs { display: grid; gap: 8px; margin-top: 14px; }
+  .bs .btn { width: 100%; border-radius: 12px; }
+</style></head>
+<body>
+  <div class="top">
+    <div>
+      <h1>Cierres semanales</h1>
+      <div class="chips"><span class="chip">Semana 02/11/2026 – 08/11/2026</span><span class="chip">43 cierres · 6 clubes</span><span class="chip">8 semanas cargadas</span><span class="chip w">● 6 con fechas raras</span></div>
+    </div>
+    <div style="display:flex;gap:10px"><span class="btn">Importar archivo</span><span class="btn p">Cerrar formulario</span></div>
+  </div>
+
+  <div class="lay">
+    <div class="card form">
+      <div class="sec">
+        <div class="sh"><span class="n">1</span><b>Agente y club</b></div>
+        <div class="g3">
+          <div class="f"><label>AGENTE</label><div class="in sel">Nico Ruiz</div></div>
+          <div class="f"><label>CLUB</label><div class="in sel deal">SupremaPoker</div></div>
+          <div class="f"><label>SISTEMA</label><div class="in sel deal">Win/Lose <span class="cd">DEAL</span></div></div>
+        </div>
+        <div class="dealb"><span class="ok">✓ Deal de Administración</span><span class="m">Win/Lose · 60% rakeback · 0% rebate · rige desde el 01/10/2026</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="sh"><span class="n">2</span><b>Semana</b></div>
+        <div class="wk">
+          <span class="q on">Semana pasada</span><span class="q">Esta semana</span>
+          <div class="in">03/11/2026<span class="u">desde</span></div>
+          <div class="in">09/11/2026<span class="u">hasta</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sh"><span class="n">3</span><b>Números de la semana</b><small>en USD</small></div>
+        <div class="g4">
+          <div class="f"><label>RESULTADO (WIN/LOSE)</label><div class="in">-1.240,00</div></div>
+          <div class="f"><label>RAKE TOTAL</label><div class="in">860,00</div></div>
+          <div class="f"><label>% RAKEBACK</label><div class="in deal">60 <span class="cd">DEAL</span></div></div>
+          <div class="f"><label>% REBATE</label><div class="in deal">0 <span class="cd">DEAL</span></div></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="extras"><span class="tg">Extras (opcional)</span><span class="s">Rodeo · Ajuste manual · Observación — sin cargar</span></div>
+        <div class="hint">Se abre solo si los necesitás. Las explicaciones largas pasan al ícono ⓘ de cada campo.</div>
+      </div>
+    </div>
+
+    <div class="card res">
+      <h3>Resumen del cierre</h3>
+      <div class="who">Nico Ruiz · SupremaPoker · 03/11 – 09/11</div>
+      <div class="rl">
+        <div class="r"><span>Rakeback 60%</span><b>516,00</b></div>
+        <div class="r"><span>Rebate 0%</span><b>0,00</b></div>
+        <div class="r"><span>Rodeo + ajuste</span><b>0,00</b></div>
+      </div>
+      <div class="tot"><span>CIERRE FINAL</span><b>US$ 516,00</b></div>
+      <div class="st"><i style="background:var(--green)"></i> Vista previa real, calculada contra la base. Si cambiás un campo, se vuelve a pedir.</div>
+      <div class="bs">
+        <span class="btn">Recalcular vista previa</span>
+        <span class="btn p">Aplicar cierre</span>
+      </div>
+    </div>
+  </div>
+</body></html>

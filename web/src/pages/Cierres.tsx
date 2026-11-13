@@ -536,6 +536,18 @@ export default function Cierres() {
   );
 }
 
+// Semana lunes–domingo relativa a hoy (0 = esta, -1 = la pasada), en fechas locales YYYY-MM-DD.
+function semanaRelativa(offset: number): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const dia = lunes.getDay();
+  lunes.setDate(lunes.getDate() + (dia === 0 ? -6 : 1 - dia) + offset * 7);
+  const domingo = new Date(lunes);
+  domingo.setDate(domingo.getDate() + 6);
+  const f = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { desde: f(lunes), hasta: f(domingo) };
+}
+
 function mondayOf(dateStr: string) {
   const d = new Date(dateStr);
   const day = d.getDay();
@@ -577,6 +589,7 @@ function NuevoCierre({
   const [ajusteManual, setAjusteManual] = useState("0");
   const [ajusteManualNota, setAjusteManualNota] = useState("");
   const [observation, setObservation] = useState("");
+  const [extrasAbiertos, setExtrasAbiertos] = useState(false);
   // Clubes en fichas (hoy: X-Poker — ver Configuración → Clubes, campo "Unidad"): el reporte de
   // la plataforma viene en fichas, no en USD, y el valor de la ficha puede cambiar de una semana
   // a otra (hoy USD 1,20 según la planilla, pero es un parámetro, no una constante) — por eso se
@@ -826,266 +839,294 @@ function NuevoCierre({
     }
   }
 
+  // Mockup 95 (13/11/2026, pedido de Leo: "quedó bastante feo"): formulario en 4 pasos numerados, extras plegados y un resumen fijo a
+  // la derecha con la vista previa real y los botones.
+  const semanaElegida = (s: { desde: string; hasta: string }) => weekStart === s.desde && weekEnd === s.hasta;
+  const pasada = semanaRelativa(-1);
+  const actual = semanaRelativa(0);
+  function usarSemana(s: { desde: string; hasta: string }) {
+    setWeekStart(s.desde);
+    setWeekEnd(s.hasta);
+    invalidarPreview();
+  }
+  const hayExtras = (Number(rodeoManual) || 0) !== 0 || (Number(ajusteManual) || 0) !== 0 || !!observation.trim();
+  const extrasVisibles = extrasAbiertos || hayExtras;
+  const calc = previewVigente && previewResult ? previewResult.calc : null;
+  const nombreSistema = (s: string) => (s === "PREPAGO" ? "Prepago" : "Win/Lose");
+
   return (
-    <div className="panel">
-      <h3>Aplicar cierre semanal <Ayuda>{esBancado
-          ? "Cuenta tipo Bancado: la mesa se reparte 50/50 (ajustable) y el rakeback es 100% del bancado — si viene con memoria pendiente, se descuenta antes de acreditarle nada."
-          : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como un movimiento más en el sistema."}
-        {" "}Primero calculá la vista previa (corre el cálculo real contra la base, sin guardar nada) — recién ahí se habilita aplicar.</Ayuda></h3>
-
-      {adelantosDelAgente.length > 0 && (
-        <div className="warning" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>
-            ⚠ {agenteSeleccionado?.name} tiene {adelantosDelAgente.length === 1 ? "un adelanto de rakeback activo" : `${adelantosDelAgente.length} adelantos de rakeback activos`} (en cualquier club): pendiente{" "}
-            <strong>{usd(adelantoPendienteTotal)}</strong> en total
-            {adelantosDelAgente.length > 1 && (
-              <>
-                {" "}({adelantosDelAgente.map((a, i) => (
-                  <span key={a.id}>
-                    {i > 0 && ", "}
-                    {usd(Number(a.amount) - Number(a.consumed))}{a.club_origen_name ? ` (${a.club_origen_name})` : ""}
-                  </span>
-                ))})
-              </>
-            )}
-            . Este cierre se va a pagar completo — si corresponde descontar parte del rakeback de este cierre contra algún adelanto, hacelo a mano después en Adelantos (Cargar movimiento).
-          </span>
-          <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/movimientos")}>
-            Ir a Adelantos
-          </button>
-        </div>
-      )}
-
-      {agentId && clubId && deal && !dealCargando && (conDeal ? (
-        <div className="cd-banner ok">
-          <div className="cd-ico">✓</div>
-          <div>
-            <b>Deal de Administración · {agenteSeleccionado?.name} en {clubSeleccionado?.name}</b>
-            <small>
-              {weekEnd ? `Vigente para la semana que termina el ${dateShort(weekEnd)}` : "Vigente hoy (elegí la semana para ver el de esa fecha)"}
-              {deal.validFrom ? ` · rige desde el ${dateShort(String(deal.validFrom).slice(0, 10))}` : ""}
-            </small>
-          </div>
-          <div className="cd-pills">
-            <span>{deal.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</span>
-            <span>{pctTexto(deal.rakebackPct)}% rakeback</span>
-            <span>{pctTexto(deal.rebatePct)}% rebate</span>
-          </div>
-        </div>
-      ) : (
-        <div className="cd-banner warn">
-          <div className="cd-ico">!</div>
-          <div>
-            <b>{agenteSeleccionado?.name} no tiene deal en {clubSeleccionado?.name}</b>
-            <small>Cargá el % a mano. Para que se complete solo, cargalo en Administración → Asignar % a agente.</small>
-          </div>
-        </div>
-      ))}
-
-      {agentId && (
-        <div className="muted" style={{ marginBottom: 10 }}>
-          Vas a liquidar este cierre como{" "}
-          <strong>{system === "PREPAGO" ? "Prepago" : "Win/Lose"}</strong>.
-        </div>
-      )}
-
-      <form onSubmit={onSubmit}>
-        <div className="form-grid">
-          <div className="field">
-            <label>Agente</label>
-            <select value={agentId} onChange={(e) => elegirAgente(e.target.value)}>
-              <option value="">Elegir...</option>
-              {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Club</label>
-            <select value={clubId} onChange={(e) => elegirClub(e.target.value)} className={conDeal ? "cd-in-deal" : undefined}>
-              <option value="">Elegir...</option>
-              {agentId && dealsDelAgente.length > 0 ? (
+    <div className="cm-lay">
+      <div className="panel cm-form">
+        {adelantosDelAgente.length > 0 && (
+          <div className="warning" style={{ margin: "14px 0 4px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <span>
+              ⚠ {agenteSeleccionado?.name} tiene {adelantosDelAgente.length === 1 ? "un adelanto de rakeback activo" : `${adelantosDelAgente.length} adelantos de rakeback activos`} (en cualquier club): pendiente{" "}
+              <strong>{usd(adelantoPendienteTotal)}</strong> en total
+              {adelantosDelAgente.length > 1 && (
                 <>
-                  <optgroup label="Con deal cargado">
-                    {clubes
-                      .filter((c) => dealsDelAgente.some((d) => d.club_id === c.id))
-                      .map((c) => {
-                        const d = dealsDelAgente.find((x) => x.club_id === c.id);
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {c.name} — {pctTexto(d.rakeback_pct)}% · {d.system === "PREPAGO" ? "Prepago" : "Win/Lose"}
-                          </option>
-                        );
-                      })}
-                  </optgroup>
-                  {clubes.some((c) => !dealsDelAgente.some((d) => d.club_id === c.id)) && (
-                    <optgroup label="Sin deal (se carga a mano)">
-                      {clubes.filter((c) => !dealsDelAgente.some((d) => d.club_id === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </optgroup>
-                  )}
+                  {" "}({adelantosDelAgente.map((a, i) => (
+                    <span key={a.id}>
+                      {i > 0 && ", "}
+                      {usd(Number(a.amount) - Number(a.consumed))}{a.club_origen_name ? ` (${a.club_origen_name})` : ""}
+                    </span>
+                  ))})
                 </>
-              ) : (
-                clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)
               )}
-            </select>
+              . Este cierre se va a pagar completo — si corresponde descontar parte del rakeback contra algún adelanto, hacelo a mano después en Adelantos.
+            </span>
+            <button type="button" className="btn secondary small" onClick={() => nav("/dashboard/movimientos")}>
+              Ir a Adelantos
+            </button>
           </div>
-          <div className="field">
-            <label>Sistema</label>
-            <select value={system} onChange={(e) => { setSystem(e.target.value as any); invalidarPreview(); }} className={conDeal && deal.system === system ? "cd-in-deal" : undefined}>
-              <option value="WIN_LOSE">Win/Lose</option>
-              <option value="PREPAGO">Prepago</option>
-            </select>
-            {conDeal && deal.system !== system && (
-              <div className="cd-hint warn">
-                ⚠ El deal dice {deal.system === "PREPAGO" ? "Prepago" : "Win/Lose"}. Estás usando {system === "PREPAGO" ? "Prepago" : "Win/Lose"} solo en este cierre.
+        )}
+
+        <form id="cm-nuevo-cierre" onSubmit={onSubmit}>
+          <section className="cm-sec">
+            <div className="cm-sh">
+              <span className="cm-n">1</span>
+              <b>Agente y club</b>
+              <Ayuda>{esBancado
+                ? "Cuenta tipo Bancado: la mesa se reparte 50/50 (ajustable) y el rakeback es 100% del bancado — si viene con memoria pendiente, se descuenta antes de acreditarle nada."
+                : "Se calcula con el mismo motor que valida las reglas especiales (ej. Manzur 75% rake) y se aplica como un movimiento más en el sistema."}</Ayuda>
+            </div>
+            <div className="cm-g3">
+              <div className="field">
+                <label>Agente</label>
+                <select value={agentId} onChange={(e) => elegirAgente(e.target.value)}>
+                  <option value="">Elegir...</option>
+                  {agentes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
               </div>
-            )}
-            {/* (29/09/2026, pedido de Leo) -- se autocompleta al elegir agente, pero si se
-                cambia a mano queda bien visible que no coincide con lo registrado, para no
-                liquidar por error el sistema equivocado (ahora con consecuencias reales: ver
-                repo/closings.ts). */}
-            {!conDeal && agenteSeleccionado?.default_system && agenteSeleccionado.default_system !== system && (
-              <div className="muted" style={{ fontSize: 11, marginTop: 4, color: "var(--warn, #b45309)" }}>
-                ⚠ {agenteSeleccionado.name} está registrado como{" "}
-                {agenteSeleccionado.default_system === "PREPAGO" ? "Prepago" : "Win/Lose"}, y lo estás por liquidar
-                como {system === "PREPAGO" ? "Prepago" : "Win/Lose"}.
+              <div className="field">
+                <label>Club</label>
+                <select value={clubId} onChange={(e) => elegirClub(e.target.value)} className={conDeal ? "cd-in-deal" : undefined}>
+                  <option value="">Elegir...</option>
+                  {agentId && dealsDelAgente.length > 0 ? (
+                    <>
+                      <optgroup label="Con deal cargado">
+                        {clubes
+                          .filter((c) => dealsDelAgente.some((d) => d.club_id === c.id))
+                          .map((c) => {
+                            const d = dealsDelAgente.find((x) => x.club_id === c.id);
+                            return (
+                              <option key={c.id} value={c.id}>
+                                {c.name} — {pctTexto(d.rakeback_pct)}% · {nombreSistema(d.system)}
+                              </option>
+                            );
+                          })}
+                      </optgroup>
+                      {clubes.some((c) => !dealsDelAgente.some((d) => d.club_id === c.id)) && (
+                        <optgroup label="Sin deal (se carga a mano)">
+                          {clubes.filter((c) => !dealsDelAgente.some((d) => d.club_id === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </optgroup>
+                      )}
+                    </>
+                  ) : (
+                    clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)
+                  )}
+                </select>
               </div>
-            )}
-          </div>
-          <div className="field">
-            <label>Semana desde</label>
-            <input
-              value={weekStart}
-              onChange={(e) => {
-                setWeekStart(e.target.value);
-                invalidarPreview();
-                if (e.target.value && !weekEnd) {
-                  const monday = mondayOf(e.target.value);
-                  const sunday = new Date(monday);
-                  sunday.setDate(sunday.getDate() + 6);
-                  setWeekEnd(sunday.toISOString().slice(0, 10));
-                }
-              }}
-              type="date"
-            />
-          </div>
-          <div className="field">
-            <label>Semana hasta</label>
-            <input value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); invalidarPreview(); }} type="date" />
-          </div>
-          <div className="field">
-            <label>{esBancado ? "Resultado en la mesa (bancado ganó/perdió, USD)" : esFichas ? "Resultado (win/lose, fichas)" : "Resultado (win/lose, USD)"}</label>
-            <input value={result} onChange={(e) => { setResult(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
-          </div>
-          <div className="field">
-            <label>{esFichas ? "Rake total (fichas)" : "Rake total (USD)"}</label>
-            <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
-          </div>
-          {esFichas && (
-            <div className="field">
-              <label>Valor de la ficha (USD)</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input value={valorFicha} onChange={(e) => { setValorFicha(e.target.value); invalidarPreview(); }} type="number" step="0.01" style={{ flex: 1 }} />
-                {esTiny && (
-                  <button
-                    type="button"
-                    className="btn secondary small"
-                    disabled={cotizando}
-                    onClick={traerCotizacionEnVivo}
-                    title="Traer la cotización USDT/TWD en vivo de MAX (max.maicoin.com)"
-                  >
-                    {cotizando ? "..." : "🔄 En vivo"}
-                  </button>
+              <div className="field">
+                <label>Sistema</label>
+                <select value={system} onChange={(e) => { setSystem(e.target.value as any); invalidarPreview(); }} className={conDeal && deal.system === system ? "cd-in-deal" : undefined}>
+                  <option value="WIN_LOSE">Win/Lose</option>
+                  <option value="PREPAGO">Prepago</option>
+                </select>
+                {conDeal && deal.system !== system && (
+                  <div className="cd-hint warn">⚠ El deal dice {nombreSistema(deal.system)}. Estás usando {nombreSistema(system)} solo en este cierre.</div>
+                )}
+                {/* (29/09/2026, pedido de Leo) -- sin deal, se compara con el sistema registrado del agente (ver repo/closings.ts). */}
+                {!conDeal && agenteSeleccionado?.default_system && agenteSeleccionado.default_system !== system && (
+                  <div className="cd-hint warn">
+                    ⚠ {agenteSeleccionado.name} está registrado como {nombreSistema(agenteSeleccionado.default_system)} y lo estás por liquidar como {nombreSistema(system)}.
+                  </div>
                 )}
               </div>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {usd((Number(result) || 0) * (Number(valorFicha) || 0))} win/lose · {usd((Number(rakeTotal) || 0) * (Number(valorFicha) || 0))} rake
-              </span>
-              {cotizacionMsg && (
-                <div className={cotizacionMsg.ok ? "success" : "error"} style={{ marginTop: 6, fontSize: 12, padding: "6px 9px" }}>
-                  {cotizacionMsg.text}
+            </div>
+            {agentId && clubId && deal && !dealCargando && (conDeal ? (
+              <div className="cm-deal ok">
+                <b>✓ Deal de Administración</b>
+                <span>
+                  {nombreSistema(deal.system)} · {pctTexto(deal.rakebackPct)}% rakeback · {pctTexto(deal.rebatePct)}% rebate
+                  {deal.validFrom ? ` · rige desde el ${dateShort(String(deal.validFrom).slice(0, 10))}` : ""}
+                  {weekEnd ? "" : " · elegí la semana para ver el de esa fecha"}
+                </span>
+              </div>
+            ) : (
+              <div className="cm-deal warn">
+                <b>! Sin deal en {clubSeleccionado?.name}</b>
+                <span>Cargá el % a mano. Para que se complete solo, cargalo en Administración → Asignar % a agente.</span>
+              </div>
+            ))}
+          </section>
+
+          <section className="cm-sec">
+            <div className="cm-sh"><span className="cm-n">2</span><b>Semana</b></div>
+            <div className="cm-semana">
+              <button type="button" className={`cm-q ${semanaElegida(pasada) ? "on" : ""}`} onClick={() => usarSemana(pasada)}>Semana pasada</button>
+              <button type="button" className={`cm-q ${semanaElegida(actual) ? "on" : ""}`} onClick={() => usarSemana(actual)}>Esta semana</button>
+              <div className="field">
+                <label>Desde</label>
+                <input
+                  value={weekStart}
+                  onChange={(e) => {
+                    setWeekStart(e.target.value);
+                    invalidarPreview();
+                    if (e.target.value && !weekEnd) {
+                      const monday = mondayOf(e.target.value);
+                      const sunday = new Date(monday);
+                      sunday.setDate(sunday.getDate() + 6);
+                      setWeekEnd(sunday.toISOString().slice(0, 10));
+                    }
+                  }}
+                  type="date"
+                />
+              </div>
+              <div className="field">
+                <label>Hasta</label>
+                <input value={weekEnd} onChange={(e) => { setWeekEnd(e.target.value); invalidarPreview(); }} type="date" />
+              </div>
+            </div>
+          </section>
+
+          <section className="cm-sec">
+            <div className="cm-sh"><span className="cm-n">3</span><b>Números de la semana</b><small>{esFichas ? "en fichas" : "en USD"}</small></div>
+            <div className="cm-g4">
+              <div className="field">
+                <label>{esBancado ? "Resultado en la mesa" : "Resultado (win/lose)"}</label>
+                <input value={result} onChange={(e) => { setResult(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+              </div>
+              <div className="field">
+                <label>Rake total</label>
+                <input value={rakeTotal} onChange={(e) => { setRakeTotal(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+              </div>
+              <div className="field">
+                <label>{esBancado ? "% Rakeback (bancado)" : "% Rakeback"}</label>
+                <input value={rakebackPct} onChange={(e) => { setRakebackPct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRakeback ? "cd-in-edit" : "cd-in-deal") : undefined} />
+                {difiereRakeback && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rakebackPct)}%. Solo en este cierre.</div>}
+              </div>
+              <div className="field">
+                <label>{esBancado ? "% mesa para el bancado" : "% Rebate"}</label>
+                <input value={rebatePct} onChange={(e) => { setRebatePct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRebate ? "cd-in-edit" : "cd-in-deal") : undefined} />
+                {difiereRebate && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rebatePct)}%. Solo en este cierre.</div>}
+              </div>
+            </div>
+            {esFichas && (
+              <div className="cm-fichas">
+                <div className="field">
+                  <label>Valor de la ficha (USD)</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input value={valorFicha} onChange={(e) => { setValorFicha(e.target.value); invalidarPreview(); }} type="number" step="0.01" style={{ flex: 1 }} />
+                    {esTiny && (
+                      <button type="button" className="btn secondary small" disabled={cotizando} onClick={traerCotizacionEnVivo} title="Traer la cotización USDT/TWD en vivo de MAX (max.maicoin.com)">
+                        {cotizando ? "..." : "🔄 En vivo"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-          <div className="field">
-            <label>{esBancado ? "% Rakeback (100% para el bancado)" : "% Rakeback"}</label>
-            <input value={rakebackPct} onChange={(e) => { setRakebackPct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRakeback ? "cd-in-edit" : "cd-in-deal") : undefined} />
-            {conDeal && !difiereRakeback && <div className="cd-hint">Del deal. Lo podés cambiar para este cierre.</div>}
-            {difiereRakeback && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rakebackPct)}%. Estás usando {rakebackPct || 0}% solo en este cierre.</div>}
-          </div>
-          <div className="field">
-            <label>{esBancado ? "% de la mesa para el bancado (si ganó)" : "% Rebate"}</label>
-            <input value={rebatePct} onChange={(e) => { setRebatePct(e.target.value); invalidarPreview(); }} type="number" step="0.01" className={conDeal ? (difiereRebate ? "cd-in-edit" : "cd-in-deal") : undefined} />
-            {conDeal && !difiereRebate && <div className="cd-hint">Del deal.</div>}
-            {difiereRebate && <div className="cd-hint warn">⚠ El deal dice {pctTexto(deal.rebatePct)}%. Estás usando {rebatePct || 0}% solo en este cierre.</div>}
-          </div>
-          <div className="field">
-            <label>Rodeo (opcional, USD)</label>
-            <input value={rodeoManual} onChange={(e) => { setRodeoManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
-            <span className="muted" style={{ fontSize: 12 }}>
-              Solo si este club paga Rodeo (SupremaPoker) y este cierre no viene de una importación de archivo — se suma directo, sin memoria automática.
-            </span>
-          </div>
-          <div className="field">
-            <label>Ajuste manual (tickets promocionales, opcional, USD)</label>
-            <input value={ajusteManual} onChange={(e) => { setAjusteManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
-            <span className="muted" style={{ fontSize: 12 }}>
-              Monto libre que se suma (o resta, si es negativo) directo al cierre final del agente — ej. tickets promocionales asignados a mano. Requiere nota.
-            </span>
-          </div>
-          {Number(ajusteManual) !== 0 && (
-            <div className="field">
-              <label>Nota del ajuste manual (obligatoria)</label>
-              <input value={ajusteManualNota} onChange={(e) => { setAjusteManualNota(e.target.value); invalidarPreview(); }} placeholder="Ej: ticket promocional torneo X" />
-            </div>
-          )}
-        </div>
-        <div className="field">
-          <label>Observación (opcional)</label>
-          <input value={observation} onChange={(e) => setObservation(e.target.value)} />
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-          <button type="button" className="btn secondary" disabled={previewLoading} onClick={calcularVistaPrevia}>
-            {previewLoading ? "Calculando..." : "Calcular vista previa"}
-          </button>
-          {previewVigente && <span className="badge pos">Vista previa lista — se puede aplicar</span>}
-          {!previewVigente && previewResult && <span className="badge neutral">Cambiaste algo — recalculá la vista previa</span>}
-        </div>
-
-        {previewError && <div className="error" style={{ marginBottom: 12 }}>⚠ {previewError}</div>}
-
-        {previewVigente && previewResult && !esBancado && (
-          <div className="muted" style={{ marginBottom: 12 }}>
-            Vista previa (real, calculada contra la base): rakeback {usd(previewResult.calc?.rakeback)} + rebate{" "}
-            {usd(previewResult.calc?.rebate)} → cierre final{" "}
-            <strong style={{ color: Number(previewResult.calc?.finalClosing) >= 0 ? "var(--green)" : "var(--red)" }}>
-              {usd(previewResult.calc?.finalClosing)}
-            </strong>
-            {previewResult.calc?.ruleApplied && <> · regla especial aplicada: <span className="badge neutral">{previewResult.calc.ruleApplied}</span></>}
-            {previewResult.supervisorAgentId && (
-              <> · el rebate ({usd(previewResult.calc?.rebate)}) se desvía al rakeback centralizado del supervisor, no entra al saldo de este agente.</>
+                <span className="muted">
+                  = {usd((Number(result) || 0) * (Number(valorFicha) || 0))} win/lose · {usd((Number(rakeTotal) || 0) * (Number(valorFicha) || 0))} rake
+                </span>
+                {cotizacionMsg && <div className={cotizacionMsg.ok ? "success" : "error"} style={{ fontSize: 12, padding: "6px 9px" }}>{cotizacionMsg.text}</div>}
+              </div>
             )}
+          </section>
+
+          <section className="cm-sec">
+            <button type="button" className="cm-extras" onClick={() => setExtrasAbiertos((v) => !v)} aria-expanded={extrasVisibles}>
+              <span className="cm-tg">{extrasVisibles ? "▾" : "▸"} Extras (opcional)</span>
+              <span className="cm-s">
+                {hayExtras
+                  ? [
+                      (Number(rodeoManual) || 0) !== 0 && `Rodeo ${usd(Number(rodeoManual))}`,
+                      (Number(ajusteManual) || 0) !== 0 && `Ajuste ${usd(Number(ajusteManual))}`,
+                      observation.trim() && "Con observación",
+                    ].filter(Boolean).join(" · ")
+                  : "Rodeo · Ajuste manual · Observación — sin cargar"}
+              </span>
+            </button>
+            {extrasVisibles && (
+              <div className="cm-g3" style={{ marginTop: 12 }}>
+                <div className="field">
+                  <label>Rodeo (USD) <Ayuda>Solo si este club paga Rodeo (SupremaPoker) y este cierre no viene de una importación de archivo — se suma directo, sin memoria automática.</Ayuda></label>
+                  <input value={rodeoManual} onChange={(e) => { setRodeoManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+                </div>
+                <div className="field">
+                  <label>Ajuste manual (USD) <Ayuda>Monto libre que se suma (o resta, si es negativo) directo al cierre final del agente — ej. tickets promocionales asignados a mano. Requiere nota.</Ayuda></label>
+                  <input value={ajusteManual} onChange={(e) => { setAjusteManual(e.target.value); invalidarPreview(); }} type="number" step="0.01" />
+                </div>
+                {Number(ajusteManual) !== 0 && (
+                  <div className="field">
+                    <label>Nota del ajuste (obligatoria)</label>
+                    <input value={ajusteManualNota} onChange={(e) => { setAjusteManualNota(e.target.value); invalidarPreview(); }} placeholder="Ej: ticket promocional torneo X" />
+                  </div>
+                )}
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Observación</label>
+                  <input value={observation} onChange={(e) => setObservation(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </section>
+        </form>
+      </div>
+
+      <aside className="panel cm-res">
+        <h3>Resumen del cierre</h3>
+        <div className="cm-who">
+          {agenteSeleccionado || clubSeleccionado || weekStart
+            ? [agenteSeleccionado?.name, clubSeleccionado?.name, weekStart && weekEnd ? `${dateShort(weekStart)} – ${dateShort(weekEnd)}` : null].filter(Boolean).join(" · ")
+            : "Elegí agente, club y semana"}
+        </div>
+        <div className="cm-liq">Se liquida como <b>{nombreSistema(system)}</b></div>
+
+        {esBancado ? (
+          <div className="cm-rl">
+            <div className="cm-r"><span>Ganancia DigiPlayers</span><b>{calc ? usd(calc.digiplayersShare) : "—"}</b></div>
+            <div className="cm-r"><span>Memoria</span><b>{calc ? `${usd(calc.deudaAnterior)} → ${usd(calc.deudaNueva)}` : "—"}</b></div>
+          </div>
+        ) : (
+          <div className="cm-rl">
+            <div className="cm-r"><span>Rakeback {rakebackPct || 0}%</span><b>{calc ? usd(calc.rakeback) : "—"}</b></div>
+            <div className="cm-r"><span>Rebate {rebatePct || 0}%</span><b>{calc ? usd(calc.rebate) : "—"}</b></div>
+            {calc?.rodeo != null && Number(calc.rodeo) !== 0 && <div className="cm-r"><span>Rodeo</span><b>{usd(calc.rodeo)}</b></div>}
+            {(Number(ajusteManual) || 0) !== 0 && <div className="cm-r"><span>Ajuste manual</span><b>{usd(Number(ajusteManual))}</b></div>}
+          </div>
+        )}
+        <div className="cm-tot">
+          <span>{esBancado ? "SE ACREDITA" : "CIERRE FINAL"}</span>
+          <b className={calc ? (Number(calc.finalClosing) >= 0 ? "pos" : "neg") : ""}>{calc ? usd(calc.finalClosing) : "—"}</b>
+        </div>
+
+        {calc && (calc.ruleApplied || previewResult.supervisorAgentId || previewResult.routedToPartnerAccountName) && (
+          <div className="cm-notas">
+            {calc.ruleApplied && <div>Regla especial aplicada: <span className="badge neutral">{calc.ruleApplied}</span></div>}
+            {previewResult.supervisorAgentId && <div>El rebate ({usd(calc.rebate)}) va al rakeback centralizado del supervisor, no al saldo de este agente.</div>}
             {previewResult.routedToPartnerAccountName && (
-              <> · <strong>este agente es una identidad de socio</strong>: no le forma balance propio — se acredita como {usd(-Number(previewResult.calc?.finalClosing))} en la cuenta de socio "{previewResult.routedToPartnerAccountName}" (Cuentas de socios).</>
+              <div>Es una identidad de socio: se acredita {usd(-Number(calc.finalClosing))} en la cuenta "{previewResult.routedToPartnerAccountName}" (Cuentas de socios).</div>
             )}
           </div>
         )}
-        {previewVigente && previewResult && esBancado && (
-          <div className="muted" style={{ marginBottom: 12 }}>
-            Vista previa (real, con la memoria pendiente ya aplicada): se acredita al bancado{" "}
-            <strong style={{ color: Number(previewResult.calc?.finalClosing) >= 0 ? "var(--green)" : "var(--red)" }}>
-              {usd(previewResult.calc?.finalClosing)}
-            </strong>
-            . Ganancia DigiPlayers (informativa): {usd(previewResult.calc?.digiplayersShare)}. Memoria:{" "}
-            {usd(previewResult.calc?.deudaAnterior)} → {usd(previewResult.calc?.deudaNueva)}.
-          </div>
-        )}
 
-        {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
-        <button className="btn" disabled={loading || !previewVigente || !previewResult} title={!previewVigente ? "Calculá la vista previa primero" : undefined}>
-          {loading ? "Aplicando..." : "Aplicar cierre"}
-        </button>
-      </form>
+        <div className="cm-st">
+          <i className={previewVigente ? "ok" : ""} />
+          {previewVigente
+            ? "Vista previa real, calculada contra la base. Si cambiás un campo, se vuelve a pedir."
+            : previewResult
+            ? "Cambiaste algo: recalculá la vista previa."
+            : "Calculá la vista previa (no guarda nada) para poder aplicar."}
+        </div>
+        {previewError && <div className="error" style={{ marginTop: 10 }}>⚠ {previewError}</div>}
+        {msg && <div className={msg.ok ? "success" : "error"} style={{ marginTop: 10 }}>{msg.text}</div>}
+        <div className="cm-bs">
+          <button type="button" className="btn secondary" disabled={previewLoading} onClick={calcularVistaPrevia}>
+            {previewLoading ? "Calculando..." : previewResult ? "Recalcular vista previa" : "Calcular vista previa"}
+          </button>
+          <button type="submit" form="cm-nuevo-cierre" className="btn" disabled={loading || !previewVigente || !previewResult} title={!previewVigente ? "Calculá la vista previa primero" : undefined}>
+            {loading ? "Aplicando..." : "Aplicar cierre"}
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -1212,6 +1253,8 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
   // Plataforma elegida arriba (pestañas) — SUPREMA y GG ya tienen parser propio; X-Poker
   // todavía muestra un aviso de "todavía no soportado" en vez del importador.
   const [plataforma, setPlataforma] = useState<"SUPREMA" | "GG" | "TINY" | "XPOKER">("SUPREMA");
+  const [filtroFilas, setFiltroFilas] = useState<"todos" | "sindeal" | "extras">("todos");
+  const [ajusteAbierto, setAjusteAbierto] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     // Misma lista de "todos los clubes activos" para cualquier plataforma (ver nota en
@@ -1652,32 +1695,91 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
     { key: "XPOKER", label: "X-Poker" },
   ];
 
+  // Mockup 96 (13/11/2026): mismo estilo que el cierre manual (mockup 95). Los pasos terminados se pliegan en una línea con "Cambiar",
+  // la tabla de revisión tiene menos columnas (el ajuste manual se abre por fila) y el total y los botones quedan en un resumen a la derecha.
+  const archivoListo = hojasDetectadas.length > 0 || confirmado;
+  const hayRevision = confirmado && filas.length > 0;
+  const nombrePlataforma = PLATAFORMAS.find((p) => p.key === plataforma)?.label ?? plataforma;
+  const nombreArchivo = plataforma === "TINY" ? `${tinyFiles.length} archivo${tinyFiles.length === 1 ? "" : "s"}` : file?.name ?? "";
+  const semPasada = semanaRelativa(-1);
+  const semActual = semanaRelativa(0);
+  const esSemana = (s: { desde: string; hasta: string }) => weekStart === s.desde && weekEnd === s.hasta;
+
+  function elegirArchivos(lista: FileList | null) {
+    const archivos = lista ? Array.from(lista).filter((f) => /\.xlsx$/i.test(f.name)) : [];
+    if (plataforma === "TINY") setTinyFiles(archivos);
+    else setFile(archivos[0] ?? null);
+    setFilas([]);
+    setHojasDetectadas([]);
+    setConfirmado(false);
+    setAnalisisError(null);
+  }
+
+  // "Cambiar" en los pasos 1 y 2: vuelve a antes de analizar, conservando archivo y semana.
+  function volverAlArchivo() {
+    setFilas([]);
+    setHojasDetectadas([]);
+    setConfirmado(false);
+    setSinAgentePorClub([]);
+    setBancadosPorClub([]);
+    setTinyRebateUnionPorClub([]);
+    setAgentesAutoCreados([]);
+    setHojasFormatoInvalido([]);
+    setResumenAplicacion(null);
+  }
+
+  const conExtras = (f: FilaImport) =>
+    f.rodeoJugadores.length > 0 || f.jugadoresDetalle.some((j) => j.subagenteName) || (Number(f.ajusteManual) || 0) !== 0;
+  const filasVisibles = filas.filter((f) =>
+    filtroFilas === "sindeal" ? f.configSource !== "deal" : filtroFilas === "extras" ? conExtras(f) : true
+  );
+  const conPrevia = incluidas.filter((f) => f.previewResult?.calc && !f.previewError);
+  const totalRakeback = conPrevia.reduce((s, f) => s + Number(f.previewResult.calc.rakeback ?? 0), 0);
+  const totalRebate = conPrevia.reduce((s, f) => s + Number(f.previewResult.calc.rebate ?? 0), 0);
+  const algunaPrevia = filas.some((f) => f.previewResult);
+
   return (
-    <div className="panel">
-      <h3>Importar cierre desde archivo <Ayuda>Cada plataforma tiene su propio archivo y su propia liquidación — elegí primero la plataforma del archivo que vas
-        a subir.</Ayuda></h3>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {PLATAFORMAS.map((p) => (
-          <button
-            key={p.key}
-            className={plataforma === p.key ? "btn" : "btn secondary"}
-            onClick={() => {
-              setPlataforma(p.key);
-              setFile(null);
-              setTinyFiles([]);
-              setFilas([]);
-              setHojasDetectadas([]);
-              setConfirmado(false);
-              setAnalisisError(null);
-            }}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+    <div className={`cm-lay ${hayRevision ? "" : "solo"}`}>
+    <div className="panel cm-form">
+      <section className="cm-sec">
+        <div className="cm-sh">
+          <span className={`cm-n ${archivoListo ? "ok" : ""}`}>{archivoListo ? "✓" : "1"}</span>
+          <b>Plataforma</b>
+          {archivoListo ? (
+            <>
+              <span className="cm-done">· <em>{nombrePlataforma}</em></span>
+              <button type="button" className="cm-ch" onClick={volverAlArchivo}>Cambiar</button>
+            </>
+          ) : (
+            <Ayuda>Cada plataforma tiene su propio archivo y su propia liquidación — elegí primero la plataforma del archivo que vas a subir.</Ayuda>
+          )}
+        </div>
+        {!archivoListo && (
+          <div className="cm-seg">
+            {PLATAFORMAS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={plataforma === p.key ? "on" : ""}
+                onClick={() => {
+                  setPlataforma(p.key);
+                  setFile(null);
+                  setTinyFiles([]);
+                  setFilas([]);
+                  setHojasDetectadas([]);
+                  setConfirmado(false);
+                  setAnalisisError(null);
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {plataforma === "XPOKER" && (
-        <div className="muted" style={{ marginBottom: 14 }}>
+        <div className="muted" style={{ padding: "4px 0 16px" }}>
           Todavía no tenemos el importador de X-Poker armado — falta construir el parser para el formato de esa
           plataforma (y su liquidación, que también está pendiente). Mandame un archivo de ejemplo y un cierre de esa
           semana ya calculado a mano, y lo armamos igual que se hizo con Suprema y GG.
@@ -1686,76 +1788,77 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
 
       {(plataforma === "SUPREMA" || plataforma === "GG" || plataforma === "TINY") && (
       <>
-      <div className="muted" style={{ marginBottom: 14 }}>
-        El % de rakeback/rebate de cada agente sale SIEMPRE de la configuración ya cargada en Agentes/Clubes — el archivo
-        nunca lo trae.
-        {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
-        {plataforma === "TINY" &&
-          " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) — el sistema toma a los sub-agentes reales de adentro de cada archivo (no al super agente) y les liquida con la misma fórmula de siempre (resultado + rake) × % rebate. Los números del reporte NO están en USD: hay que cargar la tasa de esta semana para convertirlos (ver campo abajo)."}
-      </div>
-
-      <div className="form-grid">
-        <div className="field">
-          <label>{plataforma === "TINY" ? "Archivos (.xlsx) — uno por super agente" : "Archivo (.xlsx)"}</label>
-          {plataforma === "TINY" ? (
-            <input
-              type="file"
-              accept=".xlsx"
-              multiple
-              onChange={(e) => {
-                setTinyFiles(e.target.files ? Array.from(e.target.files) : []);
-                setFilas([]);
-                setHojasDetectadas([]);
-                setConfirmado(false);
-                setAnalisisError(null);
-              }}
-            />
+      <section className="cm-sec">
+        <div className="cm-sh">
+          <span className={`cm-n ${archivoListo ? "ok" : ""}`}>{archivoListo ? "✓" : "2"}</span>
+          <b>Archivo y semana</b>
+          {archivoListo ? (
+            <>
+              <span className="cm-done">· <em>{nombreArchivo}</em> · {dateShort(weekStart)} – {dateShort(weekEnd)}{plataforma === "TINY" ? ` · tasa ${tinyRate}` : ""}</span>
+              <button type="button" className="cm-ch" onClick={volverAlArchivo}>Cambiar</button>
+            </>
           ) : (
-            <input
-              type="file"
-              accept=".xlsx"
-              onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setFilas([]);
-                setHojasDetectadas([]);
-                setConfirmado(false);
-                setAnalisisError(null);
+            <Ayuda>
+              El % de rakeback/rebate de cada agente sale SIEMPRE del deal cargado en Administración — el archivo nunca lo trae.
+              {plataforma === "GG" && " En GG el cierre agrupa por Super Agent (el nivel más alto de la cadena Super Agent → Agent → Member) y el rebate se calcula sobre (Resultado + Rake) × % del club."}
+              {plataforma === "TINY" &&
+                " En Tiny cada super agente baja su PROPIO archivo (subí varios juntos si tenés más de uno) — el sistema toma a los sub-agentes reales de adentro de cada archivo (no al super agente) y les liquida con la misma fórmula de siempre (resultado + rake) × % rebate. Los números del reporte NO están en USD: hay que cargar la tasa de esta semana para convertirlos."}
+            </Ayuda>
+          )}
+        </div>
+        {!archivoListo && (
+          <>
+            <label
+              className={`cm-drop ${(plataforma === "TINY" ? tinyFiles.length > 0 : !!file) ? "lleno" : ""}`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                elegirArchivos(e.dataTransfer.files);
               }}
-            />
-          )}
-          {plataforma === "TINY" && tinyFiles.length > 0 && (
-            <div className="muted" style={{ marginTop: 4 }}>
-              {tinyFiles.length} archivo(s): {tinyFiles.map((f) => f.name).join(", ")}
+            >
+              <input type="file" accept=".xlsx" multiple={plataforma === "TINY"} onChange={(e) => elegirArchivos(e.target.files)} />
+              {plataforma === "TINY" ? (
+                tinyFiles.length > 0 ? (
+                  <><b>{tinyFiles.length} archivo{tinyFiles.length === 1 ? "" : "s"}</b> {tinyFiles.map((f) => f.name).join(", ")} · <u>cambiar</u></>
+                ) : (
+                  <><b>Soltá los .xlsx acá</b> (uno por super agente) o tocá para elegirlos</>
+                )
+              ) : file ? (
+                <><b>{file.name}</b> · <u>cambiar</u></>
+              ) : (
+                <><b>Soltá el .xlsx acá</b> o tocá para elegirlo</>
+              )}
+            </label>
+            <div className="cm-semana" style={{ marginTop: 12 }}>
+              <button type="button" className={`cm-q ${esSemana(semPasada) ? "on" : ""}`} onClick={() => { setWeekStart(semPasada.desde); setWeekEnd(semPasada.hasta); }}>Semana pasada</button>
+              <button type="button" className={`cm-q ${esSemana(semActual) ? "on" : ""}`} onClick={() => { setWeekStart(semActual.desde); setWeekEnd(semActual.hasta); }}>Esta semana</button>
+              <div className="field">
+                <label>Desde</label>
+                <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Hasta</label>
+                <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
+              </div>
             </div>
-          )}
-        </div>
-        <div className="field">
-          <label>Semana desde</label>
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Semana hasta</label>
-          <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
-        </div>
-        {plataforma === "TINY" && (
-          <div className="field">
-            <label>Tasa de esta semana (fichas por USD)</label>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Ej: 31.78"
-              value={tinyRate}
-              onChange={(e) => { setTinyRate(e.target.value); setFilas([]); setConfirmado(false); }}
-            />
-            <span className="muted" style={{ fontSize: 12 }}>
-              El reporte de Tiny trae los números en su propia unidad, no en USD — se divide todo por esta tasa. Cambia cada semana, revisala antes de analizar.
-            </span>
-          </div>
+            {plataforma === "TINY" && (
+              <div className="field" style={{ maxWidth: 320, marginTop: 12 }}>
+                <label>Tasa de esta semana (fichas por USD) <Ayuda>El reporte de Tiny trae los números en su propia unidad, no en USD — se divide todo por esta tasa. Cambia cada semana, revisala antes de analizar.</Ayuda></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Ej: 31.78"
+                  value={tinyRate}
+                  onChange={(e) => { setTinyRate(e.target.value); setFilas([]); setConfirmado(false); }}
+                />
+              </div>
+            )}
+            <button className="btn" style={{ marginTop: 14 }} disabled={analizando} onClick={analizar}>
+              {analizando ? "Analizando..." : "Analizar archivo"}
+            </button>
+          </>
         )}
-      </div>
-      <button className="btn secondary" disabled={analizando} onClick={analizar}>
-        {analizando ? "Analizando..." : "Analizar archivo"}
-      </button>
+      </section>
 
       {analisisError && <div className="error" style={{ marginTop: 12 }}>⚠ {analisisError}</div>}
 
@@ -1767,9 +1870,26 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
         </div>
       )}
 
+      {hojasDetectadas.length > 0 && confirmado && (
+        <section className="cm-sec">
+          <div className="cm-sh">
+            <span className="cm-n ok">✓</span>
+            <b>Club de cada hoja</b>
+            <span className="cm-done">
+              ·{" "}
+              {hojasDetectadas
+                .filter((h) => !hojaIgnorada[h.sheetName])
+                .map((h) => `${hojasDetectadas.length > 1 ? `${h.sheetName} → ` : ""}${clubesSuprema.find((c) => c.id === clubElegidoPorHoja[h.sheetName])?.name ?? "?"}`)
+                .join(" · ")}
+            </span>
+            <button type="button" className="cm-ch" onClick={() => setConfirmado(false)}>Cambiar</button>
+          </div>
+        </section>
+      )}
+
       {hojasDetectadas.length > 0 && !confirmado && (
-        <div style={{ marginTop: 12 }}>
-          <h4>Elegí el club</h4>
+        <section className="cm-sec">
+          <div className="cm-sh"><span className="cm-n">3</span><b>Club de cada hoja</b></div>
           <div className="muted" style={{ marginBottom: 8 }}>
             El archivo trae {hojasDetectadas.length === 1 ? "1 grupo de datos" : `${hojasDetectadas.length} grupos de datos`} — elegí a qué club corresponde cada uno (o tildá "Ignorar" para no procesarlo esta semana).
           </div>
@@ -1833,7 +1953,11 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
           >
             {analizando ? "Procesando..." : "Confirmar clubes y procesar"}
           </button>
-        </div>
+        </section>
+      )}
+
+      {hayRevision && (
+        <div className="cm-sh" style={{ paddingTop: 14, borderTop: "1px solid var(--border)" }}><span className="cm-n">4</span><b>Revisar y aplicar</b></div>
       )}
 
       {agentesAutoCreados.length > 0 && (
@@ -1846,8 +1970,13 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
       )}
 
       {sinAgentePorClub.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <h4>Jugadores sin agente asignado</h4>
+        <details className="cm-al warn">
+          <summary>
+            <b>{sinAgentePorClub.reduce((n, g) => n + g.items.length, 0)} jugador{sinAgentePorClub.reduce((n, g) => n + g.items.length, 0) === 1 ? "" : "es"} sin agente</b>
+            <span>en {sinAgentePorClub.map((g) => g.clubName).join(", ")}</span>
+            <em>Asignar</em>
+          </summary>
+        <div className="cm-al-body">
           {sinAgentePorClub.map((grupo) => {
             // Agrupa por agente crudo del archivo (agentIdRaw||agentNameRaw) — varios jugadores
             // suelen compartir el mismo superagente todavía no creado; un solo clic lo crea y
@@ -1913,11 +2042,17 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             );
           })}
         </div>
+        </details>
       )}
 
       {bancadosPorClub.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <h4>Jugadores bancados omitidos del cierre</h4>
+        <details className="cm-al info">
+          <summary>
+            <b>{bancadosPorClub.reduce((n, g) => n + g.items.length, 0)} bancado{bancadosPorClub.reduce((n, g) => n + g.items.length, 0) === 1 ? "" : "s"} omitido{bancadosPorClub.reduce((n, g) => n + g.items.length, 0) === 1 ? "" : "s"}</b>
+            <span>no entran a ningún cierre</span>
+            <em>Ver</em>
+          </summary>
+        <div className="cm-al-body">
           <div className="muted" style={{ marginBottom: 10 }}>
             Estos jugadores están marcados en "Jugadores bancados" — no entran al cierre agregado de su agente, se contabilizan
             aparte. El total de acá abajo NO está incluido en ningún cierre que vayas a aplicar.
@@ -1948,11 +2083,18 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             );
           })}
         </div>
+        </details>
       )}
 
       {tinyRebateUnionPorClub.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <h4>Rebate Union de Tiny (conciliacion) <Ayuda>Rebate Union: lo que Tiny/la Union nos reconoce a NOSOTROS por super agente, calculado sobre el RG Pre-rake
+        <details className="cm-al info">
+          <summary>
+            <b>Rebate Union de Tiny</b>
+            <span>conciliación por super agente</span>
+            <em>Ver</em>
+          </summary>
+        <div className="cm-al-body">
+          <h4 style={{ margin: "0 0 8px" }}>Rebate Union de Tiny (conciliacion) <Ayuda>Rebate Union: lo que Tiny/la Union nos reconoce a NOSOTROS por super agente, calculado sobre el RG Pre-rake
             P&amp;L (excl. JP) del archivo -- 10% si esa base es negativa, 0 si es positiva o cero. Es un calculo
             INDEPENDIENTE del rebate que nosotros les pagamos a cada agente (columna "Suma Rebate agentes"); nunca se
             reparte directo a los agentes. Diferencia = Rebate Union - Suma Rebate agentes: positiva es margen extra
@@ -2005,180 +2147,200 @@ function ImportarCierre({ agentes, onDone }: { agentes: any[]; onDone: () => voi
             );
           })}
         </div>
+        </details>
       )}
 
-      {confirmado && filas.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h4 style={{ margin: 0 }}>Cierres a aplicar ({incluidas.length} de {filas.length})</h4>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn secondary small" onClick={() => setFilas((fs) => fs.map((f) => ({ ...f, included: true })))}>
-                Seleccionar todos
-              </button>
-              <button className="btn secondary small" onClick={() => setFilas((fs) => fs.map((f) => ({ ...f, included: false })))}>
-                Deseleccionar todos
-              </button>
-              <button className="btn secondary small" onClick={() => setConfirmado(false)}>Cambiar clubes</button>
-              <button className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
-                {previsualizandoTodo ? "Calculando..." : "Calcular vista previa de todos"}
-              </button>
+      {hayRevision && (
+        <div style={{ paddingBottom: 6 }}>
+          <div className="ci-tools">
+            <b>Cierres a aplicar</b>
+            <span className="ci-c">{incluidas.length} de {filas.length}</span>
+            <div className="ci-sp">
+              <div className="cm-seg chico">
+                {([
+                  ["todos", "Todos", filas.length],
+                  ["sindeal", "Sin deal", sinConfigurarCount],
+                  ["extras", "Con extras", filas.filter(conExtras).length],
+                ] as const).map(([k, t, n]) => (
+                  <button key={k} type="button" className={filtroFilas === k ? "on" : ""} onClick={() => setFiltroFilas(k)}>
+                    {t} {n}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="table-scroll">
-          <table className="table-compact" style={{ marginTop: 10 }}>
-            <thead>
-              <tr>
-                <th></th><th>Club</th><th>Agente</th><th>Sistema</th><th>Jugadores</th><th className="num">Resultado</th><th className="num">Rake</th>
-                <th>% Rakeback</th><th>% Rebate</th><th>Config</th><th>Rodeo</th><th>Subagentes</th><th>Ajuste manual (USD)</th><th>Nota ajuste</th><th>Cierre final (vista previa)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={f.key} style={!f.included ? { opacity: 0.5 } : undefined}>
-                  <td><input type="checkbox" checked={f.included} onChange={() => toggleIncluded(f.key)} /></td>
-                  <td>{f.clubName}</td>
-                  <td>{f.agentName}</td>
-                  {/* (29/09/2026, pedido de Leo: mostrar el sistema al empezar el cierre) --
-                      acá ya viene resuelto por el servidor por agente, solo se muestra. */}
-                  <td className="muted">{f.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</td>
-                  <td>{f.jugadores}</td>
-                  <td className="num"><Monto value={f.resultado} /></td>
-                  <td className="num"><Monto value={f.rakeTotal} /></td>
-                  <td>
-                    <div className="muted" style={{ fontSize: 12 }}>{(f.rakebackPct * 100).toFixed(1)}%</div>
-                    {(() => {
-                      const calc = f.applyResult?.calc ?? f.previewResult?.calc;
-                      if (!calc || calc.rakeback == null) return null;
-                      return <strong><Monto value={calc.rakeback} /></strong>;
-                    })()}
-                  </td>
-                  <td>
-                    {(f.rebatePct * 100).toFixed(1)}%
-                    {(() => {
-                      const calc = f.applyResult?.calc ?? f.previewResult?.calc;
-                      if (!calc || calc.rebate == null) return null;
-                      return (
-                        <span className="muted">
-                          {" "}
-                          · <Monto value={calc.rebate} />
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td>
-                    {f.configSource === "deal" ? (
-                      <span className="badge pos">Deal agente</span>
-                    ) : (
-                      <span className="badge neg" title="No tiene un deal cargado para este club — no se puede aplicar así. Cargale el % en Administración (Asignar % a agente) y volvé a calcular la vista previa.">
-                        Sin configurar
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {f.rodeoJugadores.length > 0 ? (
-                      <span title="Solo SupremaPoker: se le suma al cierre la parte del agente ya neta de su memoria por jugador.">
-                        {f.rodeoJugadores.length} jug.
-                        {(f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo) != null && (
-                          <> · <Monto value={f.applyResult?.calc?.rodeo ?? f.previewResult?.calc?.rodeo} /></>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
-                  <td>
-                    {f.jugadoresDetalle.length > 0 ? (
-                      <button className="btn secondary small" onClick={() => setSubagenteModalFila(f.key)}>
-                        {f.jugadoresDetalle.filter((j) => j.subagenteName).length > 0
-                          ? `${f.jugadoresDetalle.filter((j) => j.subagenteName).length} con subagente`
-                          : `Ver ${f.jugadoresDetalle.length} jug.`}
-                      </button>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
-                  <td>
+            <table className="ci-tabla">
+              <thead>
+                <tr>
+                  <th>
                     <input
-                      type="number"
-                      step="0.01"
-                      value={f.ajusteManual}
-                      disabled={!!f.applyResult}
-                      onChange={(e) => setAjusteManualFila(f.key, e.target.value)}
-                      style={{ width: 72 }}
+                      type="checkbox"
+                      title="Tildar / destildar todos"
+                      checked={filas.length > 0 && filas.every((f) => f.included)}
+                      onChange={(e) => setFilas((fs) => fs.map((f) => ({ ...f, included: e.target.checked })))}
                     />
-                  </td>
-                  <td>
-                    {(Number(f.ajusteManual) || 0) !== 0 && (
-                      <input
-                        type="text"
-                        placeholder="Motivo (obligatorio)"
-                        value={f.ajusteManualNota}
-                        disabled={!!f.applyResult}
-                        onChange={(e) => setAjusteManualNotaFila(f.key, e.target.value)}
-                        style={{ width: 110 }}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}
-                    {f.applyResult && !f.applyResult.alreadyApplied && <span className="badge pos">Aplicado: <Monto value={f.applyResult.calc?.finalClosing} /></span>}
-                    {!f.applyResult && f.previewLoading && "..."}
-                    {!f.applyResult && f.previewError && <span className="error">⚠ {f.previewError}</span>}
-                    {!f.applyResult && !f.previewError && f.previewResult && (
-                      <strong>
-                        <Monto value={f.previewResult.calc?.finalClosing} />
-                        {f.previewResult.calc?.ruleApplied && <> · {f.previewResult.calc.ruleApplied}</>}
-                      </strong>
-                    )}
-                    {f.applyError && <div className="error">⚠ {f.applyError}</div>}
-                  </td>
+                  </th>
+                  <th>Agente · club</th>
+                  <th className="num">Jug.</th>
+                  <th className="num">Resultado</th>
+                  <th className="num">Rake</th>
+                  <th>Deal</th>
+                  <th>Extras</th>
+                  <th className="num">Cierre final</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filasVisibles.map((f) => {
+                  const calc = f.applyResult?.calc ?? f.previewResult?.calc;
+                  const tieneAjuste = (Number(f.ajusteManual) || 0) !== 0;
+                  const ajusteVisible = !!ajusteAbierto[f.key] || tieneAjuste;
+                  const conSub = f.jugadoresDetalle.filter((j) => j.subagenteName).length;
+                  return (
+                    <Fragment key={f.key}>
+                      <tr className={f.included ? "" : "off"}>
+                        <td><input type="checkbox" checked={f.included} onChange={() => toggleIncluded(f.key)} /></td>
+                        <td>
+                          <b className="ci-ag">{f.agentName}</b>
+                          <small className="ci-sub">{f.clubName} · {f.system === "PREPAGO" ? "Prepago" : "Win/Lose"}</small>
+                        </td>
+                        <td className="num">{f.jugadores}</td>
+                        <td className="num"><Monto value={f.resultado} /></td>
+                        <td className="num"><Monto value={f.rakeTotal} /></td>
+                        <td>
+                          {f.configSource === "deal" ? (
+                            <span className="ci-bd deal" title={calc ? `Rakeback ${usd(calc.rakeback)} · Rebate ${usd(calc.rebate)}` : "Deal de Administración"}>
+                              {pctTexto(f.rakebackPct)}% · {pctTexto(f.rebatePct)}%
+                            </span>
+                          ) : (
+                            <span className="ci-bd no" title="No tiene un deal cargado para este club — no se puede aplicar así. Cargale el % en Administración (Asignar % a agente) y volvé a calcular la vista previa.">
+                              Sin deal
+                            </span>
+                          )}
+                        </td>
+                        <td className="ci-extras">
+                          {f.rodeoJugadores.length > 0 && (
+                            <span className="ci-bd x" title="Solo SupremaPoker: se le suma al cierre la parte del agente ya neta de su memoria por jugador.">
+                              Rodeo {f.rodeoJugadores.length} jug.{calc?.rodeo != null ? ` · ${usd(calc.rodeo)}` : ""}
+                            </span>
+                          )}
+                          {f.jugadoresDetalle.length > 0 && (
+                            <button type="button" className="ci-bd x btn-bd" onClick={() => setSubagenteModalFila(f.key)}>
+                              {conSub > 0 ? `${conSub} con subagente` : `${f.jugadoresDetalle.length} jug.`}
+                            </button>
+                          )}
+                          {!tieneAjuste && !f.applyResult && (
+                            <button type="button" className="ci-bd x btn-bd" onClick={() => setAjusteAbierto((s) => ({ ...s, [f.key]: !s[f.key] }))}>
+                              {ajusteVisible ? "– ajuste" : "+ ajuste"}
+                            </button>
+                          )}
+                          {tieneAjuste && <span className="ci-bd x">Ajuste {usd(Number(f.ajusteManual))}</span>}
+                        </td>
+                        <td className="num ci-fin">
+                          {f.applyResult?.alreadyApplied && <span className="badge neutral">Ya existía</span>}
+                          {f.applyResult && !f.applyResult.alreadyApplied && (
+                            <><Monto value={f.applyResult.calc?.finalClosing} /><small>aplicado</small></>
+                          )}
+                          {!f.applyResult && f.previewLoading && "..."}
+                          {!f.applyResult && !f.previewLoading && f.previewError && <small className="neg">⚠ {f.previewError}</small>}
+                          {!f.applyResult && !f.previewLoading && !f.previewError && f.previewResult && (
+                            <>
+                              <Monto value={f.previewResult.calc?.finalClosing} />
+                              <small>{f.previewResult.calc?.ruleApplied ? f.previewResult.calc.ruleApplied : "vista previa"}</small>
+                            </>
+                          )}
+                          {!f.applyResult && !f.previewLoading && !f.previewError && !f.previewResult && (
+                            <><span className="muted">—</span><small>{f.configSource === "deal" ? "sin calcular" : "cargá el deal"}</small></>
+                          )}
+                          {f.applyError && <small className="neg">⚠ {f.applyError}</small>}
+                        </td>
+                      </tr>
+                      {ajusteVisible && (
+                        <tr className={`ci-aj ${f.included ? "" : "off"}`}>
+                          <td />
+                          <td colSpan={7}>
+                            <div className="ci-aj-in">
+                            <span>Ajuste manual (USD) <Ayuda>Tickets promocionales u otro monto libre que se suma (o resta) directo al cierre final de este agente. Si no es 0, la nota es obligatoria.</Ayuda></span>
+                            <input type="number" step="0.01" value={f.ajusteManual} disabled={!!f.applyResult} onChange={(e) => setAjusteManualFila(f.key, e.target.value)} />
+                            <input
+                              type="text"
+                              placeholder="Motivo (obligatorio si hay ajuste)"
+                              value={f.ajusteManualNota}
+                              disabled={!!f.applyResult}
+                              onChange={(e) => setAjusteManualNotaFila(f.key, e.target.value)}
+                            />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           {sinConfigurarCount > 0 && (
             <div className="error" style={{ marginTop: 10 }}>
-              {sinConfigurarCount} fila{sinConfigurarCount === 1 ? "" : "s"} sin deal cargado (badge "Sin configurar") — quedaron
-              destildadas y no entran en este lote. Cargales el % en Administración y volvé a calcular la vista previa para incluirlas.
+              {sinConfigurarCount} fila{sinConfigurarCount === 1 ? "" : "s"} sin deal cargado — quedaron destildadas y no entran en este lote.
+              Cargales el % en Administración y volvé a calcular la vista previa para incluirlas.
             </div>
           )}
-
           {hayIncluidasSinNotaAjuste && (
             <div className="error" style={{ marginTop: 10 }}>
               Hay filas incluidas con un ajuste manual cargado pero sin nota — completá el motivo antes de aplicar.
             </div>
           )}
-
-          {todasPrevisualizadas && (
-            <div className="muted" style={{ marginTop: 10 }}>
-              Total a acreditar/cobrar en estos {incluidas.length} cierres: <strong>{usd(totalCierreFinal)}</strong>
-            </div>
-          )}
-
-          {resumenAplicacion && <div className="success" style={{ marginTop: 10 }}>{resumenAplicacion}</div>}
-
-          <button
-            className="btn"
-            style={{ marginTop: 12 }}
-            disabled={!todasPrevisualizadas || hayIncluidasSinConfigurar || hayIncluidasSinNotaAjuste || aplicandoTodo}
-            title={
-              hayIncluidasSinConfigurar
-                ? "Hay filas incluidas sin deal cargado — cargales el % o destildalas antes de aplicar."
-                : hayIncluidasSinNotaAjuste
-                ? "Hay filas con un ajuste manual cargado pero sin nota — completá el motivo antes de aplicar."
-                : !todasPrevisualizadas
-                ? "Calculá la vista previa de todos los cierres primero"
-                : undefined
-            }
-            onClick={aplicarTodo}
-          >
-            {aplicandoTodo ? "Aplicando..." : `Aplicar ${incluidas.length} cierre(s)`}
-          </button>
         </div>
       )}
       </>
+      )}
+    </div>
+
+      {hayRevision && (
+        <aside className="panel cm-res">
+          <h3>Resumen de la importación</h3>
+          <div className="cm-who">{nombrePlataforma} · {dateShort(weekStart)} – {dateShort(weekEnd)}</div>
+          <div className="cm-rl">
+            <div className="cm-r"><span>Cierres incluidos</span><b>{incluidas.length} de {filas.length}</b></div>
+            <div className="cm-r"><span>Sin deal (no se aplican)</span><b className={sinConfigurarCount > 0 ? "w" : ""}>{sinConfigurarCount}</b></div>
+            <div className="cm-r"><span>Rakeback total</span><b>{conPrevia.length ? usd(totalRakeback) : "—"}</b></div>
+            <div className="cm-r"><span>Rebate total</span><b>{conPrevia.length ? usd(totalRebate) : "—"}</b></div>
+          </div>
+          <div className="cm-tot">
+            <span>TOTAL</span>
+            <b className={todasPrevisualizadas ? (totalCierreFinal >= 0 ? "pos" : "neg") : ""}>{todasPrevisualizadas ? usd(totalCierreFinal) : "—"}</b>
+          </div>
+          <div className="cm-st">
+            <i className={todasPrevisualizadas ? "ok" : ""} />
+            {todasPrevisualizadas
+              ? "Vista previa real de todos los incluidos. Si cambiás algo, se vuelve a pedir."
+              : "Calculá la vista previa de todos (no guarda nada) para poder aplicar."}
+          </div>
+          {resumenAplicacion && <div className="success" style={{ marginTop: 10 }}>{resumenAplicacion}</div>}
+          <div className="cm-bs">
+            <button type="button" className="btn secondary" disabled={previsualizandoTodo} onClick={previsualizarTodo}>
+              {previsualizandoTodo ? "Calculando..." : algunaPrevia ? "Recalcular vista previa" : "Calcular vista previa de todos"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={!todasPrevisualizadas || hayIncluidasSinConfigurar || hayIncluidasSinNotaAjuste || aplicandoTodo}
+              title={
+                hayIncluidasSinConfigurar
+                  ? "Hay filas incluidas sin deal cargado — cargales el % o destildalas antes de aplicar."
+                  : hayIncluidasSinNotaAjuste
+                  ? "Hay filas con un ajuste manual cargado pero sin nota — completá el motivo antes de aplicar."
+                  : !todasPrevisualizadas
+                  ? "Calculá la vista previa de todos los cierres primero"
+                  : undefined
+              }
+              onClick={aplicarTodo}
+            >
+              {aplicandoTodo ? "Aplicando..." : `Aplicar ${incluidas.length} cierre${incluidas.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        </aside>
       )}
 
       {subagenteModalFila && (() => {
