@@ -486,7 +486,18 @@ export default function Shell({ role }: { role: "ADMIN" | "AGENT" | "SUPERVISOR"
           Cada sección es una ficha; se reordenan arrastrándolas dentro de su grupo (mismo orden guardado que el menú de siempre) y el dock entero
           se mueve arrastrando la marca a un borde. En celular sigue el cajón (ver .dock-fichas en index.css). */}
       {pos !== "top" && (
-        <nav className="dock-fichas" aria-label="Menú">
+        <nav
+          className="dock-fichas df-arrastrable"
+          aria-label="Menú"
+          title="Arrastrá el fondo del menú a un borde (abajo, izquierda o arriba) para moverlo"
+          onPointerDown={(e) => {
+            // Sin la marca "P" (13/11/2026): el dock se mueve arrastrando su fondo (o los títulos de grupo), nunca desde una ficha.
+            // Solo con mouse, para no pelear con el scroll táctil.
+            if (e.pointerType === "touch") return;
+            if ((e.target as HTMLElement).closest("a, button, input, select, .df-k")) return;
+            empezarArrastre(e);
+          }}
+        >
           {role === "ADMIN" ? (
             NAV_GROUPS.map((grupo, gi) => {
               const keys = navOrder.filter((key) => NAV_ITEMS.find((i) => i.key === key)?.group === grupo.key);

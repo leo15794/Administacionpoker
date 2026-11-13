@@ -3803,3 +3803,6 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
   .cm-g3 > .field:first-child { grid-column: 1 / -1; }
   .cm-semana { grid-template-columns: 1fr 1fr; }
 }
+.dock-fichas.df-arrastrable { cursor: grab; }
+.dock-fichas.df-arrastrable .df-k { cursor: pointer; }
+body.dp-dragging-menu .dock-fichas.df-arrastrable { cursor: grabbing; }
