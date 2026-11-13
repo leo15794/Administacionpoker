@@ -1,7 +1,36 @@
 import { pool, newId } from "../db/pool.js";
 
+// Cuentas de tesorería. ZELLE (13/11/2026, mockup 93): saldo en USD aparte de la wallet de USDT.
+export type LedgerTesoreria = "WALLET_MANOS" | "CAJA_EFECTIVO" | "ZELLE";
+export const NOMBRE_LEDGER: Record<string, string> = { WALLET_MANOS: "USDT", ZELLE: "Zelle", CAJA_EFECTIVO: "Caja efectivo" };
+
+/** Ledger de tesorería que corresponde a un medio de pago real (USDT, Zelle, efectivo). */
+export function ledgerDeMedio(medio: string): LedgerTesoreria {
+  return medio === "EFECTIVO" ? "CAJA_EFECTIVO" : medio === "ZELLE" ? "ZELLE" : "WALLET_MANOS";
+}
+
+// El CHECK de ledger admite ZELLE y treasury_adjustments tiene pase_id (ver schema.sql). Se aplica sola una vez por proceso, desde
+// asegurarSchemaSesiones (lib/sesiones.ts), que corre antes de cualquier pedido con sesión.
+let schemaTesoreria: Promise<void> | null = null;
+export function asegurarSchemaTesoreria(): Promise<void> {
+  schemaTesoreria ??= pool.query(`DO $$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT conrelid::regclass::text AS tabla, conname FROM pg_constraint
+    WHERE contype = 'c' AND conrelid IN ('treasury_entries'::regclass, 'treasury_adjustments'::regclass)
+      AND pg_get_constraintdef(oid) LIKE '%CAJA_EFECTIVO%' AND pg_get_constraintdef(oid) NOT LIKE '%ZELLE%'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', c.tabla, c.conname);
+    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I CHECK (ledger IN (''WALLET_MANOS'',''CAJA_EFECTIVO'',''ZELLE''))', c.tabla, c.conname);
+  END LOOP;
+END $$;
+ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS pase_id TEXT;`).then(() => undefined).catch((e) => { schemaTesoreria = null; throw e; });
+  return schemaTesoreria;
+}
+
 export interface NewTreasuryAdjustment {
-  ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
+  ledger: LedgerTesoreria;
   direction: "INGRESO" | "EGRESO";
   amount: number;
   custodian?: string | null; // obligatorio si ledger = CAJA_EFECTIVO
@@ -100,5 +129,68 @@ export async function revertirAjusteTesoreria(id: string, motivo?: string, rever
     ]
   );
   await pool.query(`UPDATE treasury_adjustments SET status = 'REVERTIDO', reverted_by_id = $2 WHERE id = $1`, [id, idReversa]);
+  // Un pase entre USDT y Zelle son dos ajustes: revertir uno revierte el otro (no puede quedar un solo lado).
+  if (original.pase_id) {
+    const otros = await pool.query(
+      `SELECT id FROM treasury_adjustments WHERE pase_id = $1 AND id <> $2 AND status <> 'REVERTIDO'`,
+      [original.pase_id, id]
+    );
+    for (const o of otros.rows) await revertirAjusteTesoreria(o.id, motivo ? `${motivo} (otro lado del pase)` : "Otro lado del pase.", revertidoPor);
+  }
   return { found: true, id, idReversa };
+}
+
+export interface PaseEntreCuentasInput {
+  desde: "WALLET_MANOS" | "ZELLE";
+  hacia: "WALLET_MANOS" | "ZELLE";
+  montoSale: number;
+  montoEntra: number;
+  motivo?: string;
+  occurredAt?: Date;
+  createdBy?: string | null;
+}
+
+const fmt2 = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * "Mover entre USDT y Zelle" (13/11/2026, mockup 93): egreso en una cuenta e ingreso en la otra, con el mismo pase_id. Los montos pueden
+ * ser distintos (cambio o comisión): la diferencia queda anotada en el motivo de los dos lados. No es ingreso ni gasto de la empresa.
+ */
+export async function registrarPaseEntreCuentas(input: PaseEntreCuentasInput) {
+  await asegurarSchemaTesoreria();
+  if (input.desde === input.hacia) throw new Error("Elegí cuentas distintas para mover.");
+  const sale = Math.abs(Number(input.montoSale));
+  const entra = Math.abs(Number(input.montoEntra));
+  if (!sale || !entra) throw new Error("Poné cuánto sale y cuánto entra.");
+  const de = NOMBRE_LEDGER[input.desde];
+  const a = NOMBRE_LEDGER[input.hacia];
+  const dif = Math.round((sale - entra) * 100) / 100;
+  const nota = input.motivo?.trim() ? ` — ${input.motivo.trim()}` : "";
+  const difTxt = dif !== 0 ? `; diferencia ${fmt2(dif)}` : "";
+  const paseId = newId("pase");
+  const cuando = input.occurredAt ?? new Date();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ids: string[] = [];
+    for (const lado of [
+      { ledger: input.desde, direction: "EGRESO", amount: sale, reason: `Movido a ${a}${nota} (entraron ${fmt2(entra)} en ${a}${difTxt})` },
+      { ledger: input.hacia, direction: "INGRESO", amount: entra, reason: `Recibido desde ${de}${nota} (salieron ${fmt2(sale)} de ${de}${difTxt})` },
+    ]) {
+      const id = newId("tad");
+      ids.push(id);
+      await client.query(
+        `INSERT INTO treasury_adjustments (id, ledger, direction, amount, reason, occurred_at, created_by, pase_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [id, lado.ledger, lado.direction, lado.amount, lado.reason, cuando, input.createdBy ?? null, paseId]
+      );
+    }
+    await client.query("COMMIT");
+    return { paseId, ids, diferencia: dif };
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }

@@ -133,7 +133,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
     pool.query(
       `SELECT id, occurred_at, ledger, direction, amount, reason
        FROM treasury_adjustments
-       WHERE status <> 'REVERTIDO' AND occurred_at >= $1 AND occurred_at < $2
+       WHERE status <> 'REVERTIDO' AND pase_id IS NULL AND occurred_at >= $1 AND occurred_at < $2
        ORDER BY occurred_at`,
       [desde, hastaParam]
     ),
@@ -208,7 +208,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
       id: row.id,
       fecha: toFecha(row.occurred_at),
       categoria: "WALLET",
-      subcategoria: `Ajuste manual — ${row.ledger === "WALLET_MANOS" ? "Wallet USDT" : "Caja efectivo"}`,
+      subcategoria: `Ajuste manual — ${row.ledger === "WALLET_MANOS" ? "Wallet USDT" : row.ledger === "ZELLE" ? "Zelle" : "Caja efectivo"}`,
       tipo: row.direction,
       monto: row.direction === "INGRESO" ? Number(row.amount) : -Number(row.amount),
       detalle: row.reason,
@@ -220,7 +220,7 @@ export async function getResumenFinanciero(desde: string, hasta: string) {
       id: row.id,
       fecha: toFecha(row.occurred_at),
       categoria: "WALLET",
-      subcategoria: `Movimiento de agente — ${row.ledger === "WALLET_MANOS" ? "Wallet USDT" : "Caja efectivo"}`,
+      subcategoria: `Movimiento de agente — ${row.ledger === "WALLET_MANOS" ? "Wallet USDT" : row.ledger === "ZELLE" ? "Zelle" : "Caja efectivo"}`,
       tipo: row.direction,
       monto: row.direction === "INGRESO" ? Number(row.amount) : -Number(row.amount),
       detalle: `${row.agent_name} (${row.type})`,

@@ -2605,3 +2605,20 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_clave_estado ON pedidos_clave(estado, cre
 -- Retiro socio con Compensación (12/11/2026, pedido de Leo): la compensación que le baja la deuda al socio queda vinculada al retiro que
 -- la generó, para que "Deshacer" el retiro la borre también. Ver crearRetiroSocio/deshacerRetiro en repo/partnerAccounts.ts.
 ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS vinculado_a TEXT;
+
+-- Wallet con cuenta Zelle aparte (13/11/2026, pedido de Leo, mockup 93): los movimientos con medio ZELLE van al ledger ZELLE (antes iban a
+-- WALLET_MANOS y se veían como USDT). "Mover entre USDT y Zelle" son dos treasury_adjustments (egreso de una cuenta, ingreso en la otra)
+-- con el mismo pase_id, para revertirlos juntos. Ver repo/treasury.ts (asegurarSchemaTesoreria, registrarPaseEntreCuentas).
+DO $$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT conrelid::regclass::text AS tabla, conname FROM pg_constraint
+    WHERE contype = 'c' AND conrelid IN ('treasury_entries'::regclass, 'treasury_adjustments'::regclass)
+      AND pg_get_constraintdef(oid) LIKE '%CAJA_EFECTIVO%' AND pg_get_constraintdef(oid) NOT LIKE '%ZELLE%'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', c.tabla, c.conname);
+    EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I CHECK (ledger IN (''WALLET_MANOS'',''CAJA_EFECTIVO'',''ZELLE''))', c.tabla, c.conname);
+  END LOOP;
+END $$;
+ALTER TABLE treasury_adjustments ADD COLUMN IF NOT EXISTS pase_id TEXT;

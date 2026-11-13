@@ -12,11 +12,13 @@
 // Se consulta la base con un caché corto por proceso (15 s) para no sumar una consulta por cada pedido.
 import { pool, newId } from "../db/pool.js";
 import { asegurarSchemaSubagentes } from "../repo/subagentes.js";
+import { asegurarSchemaTesoreria } from "../repo/treasury.js";
 
 let schemaListo: Promise<void> | null = null;
 export function asegurarSchemaSesiones(): Promise<void> {
   schemaListo ??= (async () => {
     await asegurarSchemaSubagentes();
+    await asegurarSchemaTesoreria();
     await pool.query(`
       ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS sesion_desde TIMESTAMPTZ;
       ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;

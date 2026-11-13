@@ -111,7 +111,8 @@ export async function registrarMovimiento(input: NewMovement) {
     // Tesorería: el medio de pago define el ledger (regla BIT-051/052).
     // SIN_TESORERIA (ej. transferencias internas de fichas) no genera entrada de caja.
     if (paymentMethod === "USDT" || paymentMethod === "EFECTIVO" || paymentMethod === "ZELLE") {
-      const ledger = paymentMethod === "EFECTIVO" ? "CAJA_EFECTIVO" : "WALLET_MANOS";
+      // Zelle tiene su propia cuenta desde el 13/11/2026 (mockup 93); antes caía en la wallet de USDT.
+      const ledger = paymentMethod === "EFECTIVO" ? "CAJA_EFECTIVO" : paymentMethod === "ZELLE" ? "ZELLE" : "WALLET_MANOS";
       if (paymentMethod === "EFECTIVO" && !input.custodian) {
         throw new Error("Un movimiento en EFECTIVO requiere custodio físico (regla BIT-051/052).");
       }

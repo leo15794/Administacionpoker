@@ -3673,3 +3673,25 @@ td { border-bottom-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .cs-ret-r .c { color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-ret-r .m { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 700px) { .cs-ret-r { padding-left: 10px; flex-wrap: wrap; } .cs-ret-r .f { width: auto; } }
+
+/* Wallet con cuentas USDT y Zelle (mockup 93). */
+.wz-cuentas { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.wz-cuenta { flex: 0 1 230px; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 16px; padding: 11px 16px; background: var(--panel); border: 1px solid var(--border); }
+.wz-cuenta small { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
+.wz-cuenta small i { width: 9px; height: 9px; border-radius: 50%; background: #26a17b; }
+.wz-cuenta.z small i { background: #a371f7; }
+.wz-cuenta b { display: block; font-size: 19px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.wz-cuenta.on.u { box-shadow: 0 0 0 2px #26a17b inset; }
+.wz-cuenta.on.z { box-shadow: 0 0 0 2px #a371f7 inset; }
+.wm-b.wz-mover { background: rgba(163,113,247,.14); border-color: #a371f7; color: #a371f7 !important; }
+:root[data-theme="light"] .wm-b.wz-mover { background: rgba(124,91,214,.10); border-color: #7c5bd6; color: #7c5bd6 !important; }
+.wm-pill.pase { background: rgba(163,113,247,.16); color: #a371f7; }
+:root[data-theme="light"] .wm-pill.pase { background: rgba(124,91,214,.12); color: #7c5bd6; }
+.wz-sentido { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; margin-bottom: 4px; }
+.wz-sentido > .btn { height: 40px; margin-bottom: 14px; }
+.wz-efecto { margin: 6px 0 14px; border-radius: 14px; padding: 12px 14px; background: rgba(163,113,247,.12); }
+:root[data-theme="light"] .wz-efecto { background: rgba(124,91,214,.10); }
+.wz-efecto h4 { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #a371f7; margin: 0 0 6px; }
+:root[data-theme="light"] .wz-efecto h4 { color: #7c5bd6; }
+.wz-efecto > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; color: var(--text-dim); }
+.wz-efecto b { color: var(--text); font-variant-numeric: tabular-nums; }

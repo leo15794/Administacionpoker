@@ -5,7 +5,7 @@ import { listAllBalances, listSaldoFinancieroPorAgenteClub, getSaldoHistorico } 
 import { getRakebackPendienteEnFechas } from "../repo/rakebackPendiente.js";
 import { getAdelantoRakebackEnFechas } from "../repo/advances.js";
 import { listClosings } from "../repo/closings.js";
-import { registrarAjusteTesoreria, revertirAjusteTesoreria } from "../repo/treasury.js";
+import { registrarAjusteTesoreria, registrarPaseEntreCuentas, revertirAjusteTesoreria } from "../repo/treasury.js";
 import { listarComisionesReferidos, pagarComisionesReferido } from "../repo/supervisorReferidos.js";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { getResumenClubSemanal, listSemanasConCierres, upsertClubWeeklyExtras } from "../repo/clubResumen.js";
@@ -570,7 +570,7 @@ dashboardRouter.get("/resumen-financiero", requireAuth, requireAdmin, async (req
 dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) => {
   // Filtro opcional por ledger (ej. ?ledger=WALLET_MANOS para la pestaña de Wallet, que
   // necesita ver todo el historial real importado y no solo los últimos 150 de golpe).
-  const ledgerFiltro = req.query.ledger === "WALLET_MANOS" || req.query.ledger === "CAJA_EFECTIVO" ? req.query.ledger : null;
+  const ledgerFiltro = req.query.ledger === "WALLET_MANOS" || req.query.ledger === "CAJA_EFECTIVO" || req.query.ledger === "ZELLE" ? req.query.ledger : null;
   const limiteMovimientos = ledgerFiltro ? 600 : 150;
 
   const [porLedgerAuto, porLedgerAjuste, porCustodioAuto, porCustodioAjuste, movsAuto, ajustes] = await Promise.all([
@@ -619,7 +619,7 @@ dashboardRouter.get("/tesoreria", requireAuth, requireAdmin, async (req, res) =>
       ledgerFiltro ? [limiteMovimientos, ledgerFiltro] : [limiteMovimientos]
     ),
     pool.query(
-      `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by, status
+      `SELECT id, ledger, direction, amount, custodian, occurred_at, reason, created_by, status, pase_id
        FROM treasury_adjustments
        ${ledgerFiltro ? "WHERE ledger = $2" : ""}
        ORDER BY occurred_at DESC LIMIT $1`,
@@ -681,7 +681,7 @@ dashboardRouter.delete("/tesoreria/ajuste/:id", requireAuth, requireAdmin, async
 });
 
 const ajusteSchema = z.object({
-  ledger: z.enum(["WALLET_MANOS", "CAJA_EFECTIVO"]),
+  ledger: z.enum(["WALLET_MANOS", "CAJA_EFECTIVO", "ZELLE"]),
   direction: z.enum(["INGRESO", "EGRESO"]),
   amount: z.number().positive(),
   custodian: z.string().optional(),
@@ -702,6 +702,31 @@ dashboardRouter.post("/tesoreria/ajuste", requireAuth, requireAdmin, async (req:
   }
   try {
     const r = await registrarAjusteTesoreria({
+      ...parsed.data,
+      occurredAt: parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : undefined,
+      createdBy: req.user?.email ?? null,
+    });
+    res.status(201).json(r);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Mover plata entre USDT y Zelle (13/11/2026, mockup 93): ver registrarPaseEntreCuentas en repo/treasury.ts.
+const paseSchema = z.object({
+  desde: z.enum(["WALLET_MANOS", "ZELLE"]),
+  hacia: z.enum(["WALLET_MANOS", "ZELLE"]),
+  montoSale: z.number().positive("Poné cuánto sale."),
+  montoEntra: z.number().positive("Poné cuánto entra."),
+  motivo: z.string().optional(),
+  occurredAt: z.string().optional(),
+});
+
+dashboardRouter.post("/tesoreria/pase", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = paseSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const r = await registrarPaseEntreCuentas({
       ...parsed.data,
       occurredAt: parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : undefined,
       createdBy: req.user?.email ?? null,

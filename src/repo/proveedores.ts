@@ -1017,7 +1017,7 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     if (moveWallet) {
       const proveedorNombre = (await pool.query(`SELECT name FROM proveedores WHERE id = $1`, [input.proveedorId])).rows[0]?.name ?? "proveedor";
       const { id: treasuryId } = await registrarAjusteTesoreria({
-        ledger: medio === "EFECTIVO" ? "CAJA_EFECTIVO" : "WALLET_MANOS",
+        ledger: medio === "EFECTIVO" ? "CAJA_EFECTIVO" : medio === "ZELLE" ? "ZELLE" : "WALLET_MANOS",
         direction: input.direction === "PAGO" ? "EGRESO" : "INGRESO",
         amount: Math.abs(input.amount),
         custodian: medio === "EFECTIVO" ? input.custodian?.trim() : null,

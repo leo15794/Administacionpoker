@@ -33,6 +33,8 @@ const horaTxt = (iso: string) => loc(iso).toLocaleTimeString("es-AR", { hour: "2
 function partes(m: any): { persona: string; concepto: string } {
   if (m.source !== "ajuste") return { persona: m.agent_name || "Agente", concepto: LABEL[m.type] ?? m.type };
   const o = String(m.observation || "").trim();
+  // Pase entre USDT y Zelle (13/11/2026): "Movido a Zelle — motivo (entraron ...)" / "Recibido desde USDT — ...".
+  if (m.pase_id) return { persona: o.split(" — ")[0].replace(/ \(.*$/, ""), concepto: "Pase entre cuentas" };
   if (esReversion(m)) {
     const x = o.match(/Original: "(Supervisor .+?) — (\w+)/i);
     return x ? { persona: x[1], concepto: `Reversión de ${x[2].toLowerCase()}` } : { persona: "Reversión", concepto: "Reversión de un movimiento" };
@@ -61,8 +63,13 @@ function leer<T>(clave: string, def: T): T {
   }
 }
 
-export default function WalletMovimientos({ titulo, saldo, movimientos, totalMovimientos, borrando, onRevertir, onNuevo }: {
+export default function WalletMovimientos({ titulo, saldo, movimientos, totalMovimientos, borrando, onRevertir, onNuevo, unidad = "USDT", selectorCuentas, botonesExtra, archivo = "wallet.csv" }: {
   titulo: ReactNode;
+  // Cuenta que se está viendo (13/11/2026, Wallet con pestañas USDT y Zelle): unidad de los montos, pestañas de arriba y botones extra.
+  unidad?: string;
+  selectorCuentas?: ReactNode;
+  botonesExtra?: ReactNode;
+  archivo?: string;
   saldo: number;
   movimientos: any[];
   totalMovimientos: number;
@@ -123,7 +130,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
   const recorte = pg.recorte;
 
   function exportar() {
-    exportCsv("wallet.csv", visibles.map(({ m, p }) => ({
+    exportCsv(archivo, visibles.map(({ m, p }) => ({
       fecha: m.occurred_at, direccion: m.direction, monto: m.amount, persona: p.persona, concepto: p.concepto,
       estado: esRev(m) ? "REVERTIDO" : esReversion(m) ? "REVERSION" : "APLICADO",
       origen: m.source === "ajuste" ? "Ajuste / historial" : "Movimiento de agente", cargado_por: m.created_by ?? "",
@@ -134,19 +141,21 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
   return (
     <div className="wm">
       <div className="topbar">
-        <div>{titulo}<Contexto chips={[{ texto: "USDT" }, { texto: `${totalMovimientos} movimientos` }, saldo < -0.004 && { texto: "Saldo negativo", tono: "alerta" }, !!(busca || persona || tipo || minimo || maximo) && { texto: `Filtrando: ${visibles.length}`, tono: "fuerte" }]} /></div>
+        <div>{titulo}<Contexto chips={[{ texto: unidad }, { texto: `${totalMovimientos} movimientos` }, saldo < -0.004 && { texto: "Saldo negativo", tono: "alerta" }, !!(busca || persona || tipo || minimo || maximo) && { texto: `Filtrando: ${visibles.length}`, tono: "fuerte" }]} /></div>
         <button className="btn secondary" onClick={exportar} disabled={visibles.length === 0} title="Exporta lo que estás viendo con los filtros aplicados">⬇ Exportar CSV</button>
       </div>
 
+      {selectorCuentas}
       <div className="wm-card wm-saldo">
         <div>
           <div className="wm-lbl">SALDO NETO</div>
-          <div className={`wm-big ${saldo >= 0 ? "pos" : "neg"}`}><Cifra texto={nf(saldo)} /> <small>USDT</small></div>
+          <div className={`wm-big ${saldo >= 0 ? "pos" : "neg"}`}><Cifra texto={nf(saldo)} /> <small>{unidad}</small></div>
           <div className="muted" style={{ fontSize: 12.5 }}>Saldo de todos los movimientos ({totalMovimientos})</div>
         </div>
         <div className="wm-btns">
           <button className="wm-b in" onClick={() => onNuevo("INGRESO")}>＋ Registrar ingreso</button>
           <button className="wm-b out" onClick={() => onNuevo("EGRESO")}>− Registrar egreso</button>
+          {botonesExtra}
         </div>
       </div>
 
@@ -199,12 +208,12 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
                 </div>
                 <div className="wm-fh"><b>{fechaTxt(m.occurred_at)}</b><span>{horaTxt(m.occurred_at)}</span></div>
                 <div>
-                  {r ? <span className="wm-pill gris">Revertido</span> : rv ? <span className="wm-pill neutro">Reversión</span> : <span className={`wm-pill ${ing1 ? "in" : "out"}`}>{ing1 ? "Ingreso" : "Egreso"}</span>}
+                  {r ? <span className="wm-pill gris">Revertido</span> : rv ? <span className="wm-pill neutro">Reversión</span> : m.pase_id ? <span className="wm-pill pase">⇄ Pase</span> : <span className={`wm-pill ${ing1 ? "in" : "out"}`}>{ing1 ? "Ingreso" : "Egreso"}</span>}
                 </div>
-                <div className={`wm-imp ${ing1 ? "in" : "out"}`}>{ing1 ? "+" : "−"}{nf(m.amount)} <small>USDT</small></div>
+                <div className={`wm-imp ${ing1 ? "in" : "out"}`}>{ing1 ? "+" : "−"}{nf(m.amount)} <small>{unidad}</small></div>
                 <div>
                   {!r && (
-                    <ActionsMenu items={[{ label: borrando === m.id ? "Revirtiendo..." : "Revertir…", onClick: () => onRevertir(m), disabled: borrando === m.id, danger: true }]} title="Más acciones" />
+                    <ActionsMenu items={[{ label: borrando === m.id ? "Revirtiendo..." : m.pase_id ? "Revertir el pase (los dos lados)…" : "Revertir…", onClick: () => onRevertir(m), disabled: borrando === m.id, danger: true }]} title="Más acciones" />
                   )}
                 </div>
               </div>
@@ -217,7 +226,7 @@ export default function WalletMovimientos({ titulo, saldo, movimientos, totalMov
             <span>Ingresos <b className="in">+{nf(ing)}</b></span>
             <span>Egresos <b className="out">−{nf(egr)}</b></span>
             <span>Neto <b className={neto >= 0 ? "in" : "out"}>{neto >= 0 ? "+" : "−"}{nf(Math.abs(neto))}</b></span>
-            <small>de los movimientos filtrados · USDT</small>
+            <small>de los movimientos filtrados · {unidad}</small>
           </div>
         </div>
         <WmPaginacion p={pg} unidad="movimientos" />

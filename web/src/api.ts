@@ -334,7 +334,7 @@ export const api = {
     if (params.hasta) qs.set("hasta", params.hasta);
     return request(`/dashboard/movimientos/saldo-historico?${qs.toString()}`);
   },
-  tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" } = {}) =>
+  tesoreria: (params: { ledger?: "WALLET_MANOS" | "CAJA_EFECTIVO" | "ZELLE" } = {}) =>
     request(`/dashboard/tesoreria${params.ledger ? `?ledger=${params.ledger}` : ""}`),
   // Resumen financiero (18/09/2026): ganancias generadas + ingresos/egresos reales de todo el
   // sistema, filtrable por rango de fechas — ver repo/resumenFinanciero.ts.
@@ -362,8 +362,11 @@ export const api = {
       `/movements/cierre-semanal/semana/${weekStart}/definitivo${clubId ? `?clubId=${clubId}` : ""}`,
       { method: "DELETE" }
     ),
+  // Mover plata entre USDT y Zelle (13/11/2026, mockup 93).
+  paseTesoreria: (data: { desde: "WALLET_MANOS" | "ZELLE"; hacia: "WALLET_MANOS" | "ZELLE"; montoSale: number; montoEntra: number; motivo?: string; occurredAt?: string }) =>
+    request("/dashboard/tesoreria/pase", { method: "POST", body: JSON.stringify(data) }),
   ajustarTesoreria: (data: {
-    ledger: "WALLET_MANOS" | "CAJA_EFECTIVO";
+    ledger: "WALLET_MANOS" | "CAJA_EFECTIVO" | "ZELLE";
     direction: "INGRESO" | "EGRESO";
     amount: number;
     custodian?: string;
