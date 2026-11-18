@@ -13,6 +13,7 @@ import {
   listMovimientosSupervisor,
   revertirMovimientoSupervisor,
   actualizarLinkPagoMovimientoSupervisor,
+  editarMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
   listMigracionHistorica,
   previsualizarImportacionSaldos,
@@ -124,6 +125,27 @@ supervisoresRouter.put("/movimientos/:movId/link-pago", requireAuth, requireAdmi
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await actualizarLinkPagoMovimientoSupervisor(req.params.movId, parsed.data.paymentLink));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Editar un movimiento (18/11/2026, mockup 98). Ver editarMovimientoSupervisor: lo que no mueve plata se guarda
+// directo; importe o club revierte el original y carga uno corregido.
+const editarMovimientoSchema = z.object({
+  notes: z.string().nullable().optional(),
+  paymentLink: z.string().nullable().optional(),
+  occurredAt: z.string().nullable().optional(),
+  agentId: z.string().nullable().optional(),
+  concepto: z.string().nullable().optional(),
+  amount: z.number().optional(),
+  clubId: z.string().nullable().optional(),
+});
+supervisoresRouter.put("/movimientos/:movId", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = editarMovimientoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await editarMovimientoSupervisor(req.params.movId, { ...parsed.data, editedBy: req.user?.email ?? null }));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

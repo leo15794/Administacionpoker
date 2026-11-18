@@ -60,6 +60,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   const [saldosPorAgente, setSaldosPorAgente] = useState<any[] | null>(null);
   const [clubesExpandidos, setClubesExpandidos] = useState<Record<string, boolean>>({});
   const [showMovimiento, setShowMovimiento] = useState(false);
+  const [editandoMov, setEditandoMov] = useState<any | null>(null);
   const [pagoCobro, setPagoCobro] = useState<"PAGO" | "COBRO" | null>(null);
   // Importar saldos de los agentes a cargo (20/10/2026): propuesta por agente + modal.
   const [importables, setImportables] = useState<any[] | null>(null);
@@ -238,6 +239,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
   function accionesMovimiento(m: any) {
     return [
+      { label: "Editar", onClick: () => setEditandoMov(m) },
       { label: m.payment_link ? "Cambiar link de pago" : "Agregar link de pago", onClick: () => onLinkPago(m) },
       { label: "Revertir", onClick: () => onRevertirMovimiento(m.id), danger: true },
     ];
@@ -1091,7 +1093,10 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 <div className="saldo-sub">{m.agent_name ?? "sin agente"}{m.usdt_real ? " · USDT real" : ""}</div>
                               </td>
                               <td className="num"><span className={`saldo-big ${esSalidaSup(m) ? "neg" : Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</span></td>
-                              <td className="muted" style={{ fontSize: 12, maxWidth: 260 }} title={m.notes || undefined}>{m.notes ? (m.notes.length > 70 ? `${m.notes.slice(0, 70)}…` : m.notes) : "—"}</td>
+                              <td className="muted" style={{ fontSize: 12, maxWidth: 260 }} title={m.notes || undefined}>
+                                {m.notes ? (m.notes.length > 70 ? `${m.notes.slice(0, 70)}…` : m.notes) : "—"}
+                                {m.edited_at && <span className="em-ed" title={`Editado${m.edited_by ? ` por ${m.edited_by}` : ""}${m.edited_at ? ` el ${dateShort(m.edited_at)}` : ""}${m.reemplaza_a ? " · corrige un movimiento revertido" : ""}`}>{m.reemplaza_a ? "corregido" : "editado"}</span>}
+                              </td>
                               <td>
                                 {m.status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>}
                                 {m.payment_link && <> <a className="link-pago" href={m.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a></>}
@@ -1116,6 +1121,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                               <div className="saldo-sub" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                                 {m.status === "REVERTIDO" ? <span className="pill r">Revertido</span> : <span className="pill g">Aplicado</span>}
                                 {dateShort(m.occurred_at)} · {m.club_name}{m.agent_name ? ` · ${m.agent_name}` : ""}
+                                {m.edited_at && <span className="em-ed" title={`Editado${m.edited_by ? ` por ${m.edited_by}` : ""}${m.edited_at ? ` el ${dateShort(m.edited_at)}` : ""}${m.reemplaza_a ? " · corrige un movimiento revertido" : ""}`}>{m.reemplaza_a ? "corregido" : "editado"}</span>}
                               </div>
                               {m.status !== "REVERTIDO" && <ActionsMenu items={accionesMovimiento(m)} />}
                             </div>
@@ -1249,6 +1255,23 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
         </Modal>
       )}
 
+      {editandoMov && seleccionado && (
+        <Modal title="Editar movimiento" onClose={() => setEditandoMov(null)}>
+          <EditarMovimientoForm
+            mov={editandoMov}
+            supervisor={seleccionado}
+            clubes={clubes}
+            subordinados={agentesModo ? [] : subordinados ?? []}
+            sinAgente={agentesModo}
+            onCancel={() => setEditandoMov(null)}
+            onDone={() => {
+              setEditandoMov(null);
+              refrescarSeleccionado();
+            }}
+          />
+        </Modal>
+      )}
+
       {showMovimiento && seleccionado && (
         <Modal title={`Movimiento — ${seleccionado.name}`} onClose={() => setShowMovimiento(false)}>
           <MovimientoForm
@@ -1266,6 +1289,203 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
         </Modal>
       )}
     </div>
+  );
+}
+
+// Editar un movimiento (18/11/2026, pedido de Leo, mockup 98). Lo que no mueve plata (fecha, agente, notas, link,
+// concepto) se guarda directo; si cambia el importe o el club, el servidor revierte el original y carga uno corregido.
+const fechaLocalMov = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// Efecto de un movimiento sobre fichas reales / cuenta corriente (mismo criterio que registrarMovimientoSupervisor).
+function deltasMovSup(type: string, amount: number, usdtReal: boolean, campoFichas: boolean): { f: number; cc: number } {
+  if (type === "CARGA") return { f: amount, cc: usdtReal ? 0 : -amount };
+  if (type === "DESCARGA") return { f: -amount, cc: usdtReal ? 0 : amount };
+  if (type === "PAGO" || type === "DESCUENTO") return { f: 0, cc: -amount };
+  if (type === "COBRO") return { f: 0, cc: amount };
+  return campoFichas ? { f: amount, cc: 0 } : { f: 0, cc: amount };
+}
+
+function EditarMovimientoForm({
+  mov,
+  supervisor,
+  clubes,
+  subordinados,
+  sinAgente,
+  onCancel,
+  onDone,
+}: {
+  mov: any;
+  supervisor: any;
+  clubes: any[];
+  subordinados: any[];
+  sinAgente?: boolean;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const sinClub = mov.type === "PAGO" || mov.type === "COBRO" || mov.type === "DESCUENTO";
+  const fem = mov.type === "CARGA" || mov.type === "DESCARGA"; // "la descarga" / "el ajuste"
+  const fechaOrig = fechaLocalMov(mov.occurred_at);
+  const amountOrig = Math.round(Number(mov.amount) * 100) / 100;
+  const [fecha, setFecha] = useState(fechaOrig);
+  const [agentId, setAgentId] = useState<string>(mov.agent_id ?? "");
+  const [clubId, setClubId] = useState<string>(mov.club_id ?? "");
+  const [amount, setAmount] = useState(String(amountOrig));
+  const [concepto, setConcepto] = useState<string>(mov.concepto ?? "");
+  const [notes, setNotes] = useState<string>(mov.notes ?? "");
+  const [link, setLink] = useState<string>(mov.payment_link ?? "");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  const montoNum = Math.round(Number(String(amount).replace(",", ".")) * 100) / 100;
+  const montoOk = Number.isFinite(montoNum) && (mov.type === "AJUSTE" ? montoNum !== 0 : montoNum > 0);
+  const cambiaImporte = montoOk && montoNum !== amountOrig;
+  const cambiaClub = !sinClub && clubId !== (mov.club_id ?? "");
+  const cambiaPlata = cambiaImporte || cambiaClub;
+  const ch = {
+    fecha: fecha !== fechaOrig,
+    agente: !sinAgente && agentId !== (mov.agent_id ?? ""),
+    notas: notes.trim() !== (mov.notes ?? ""),
+    link: link.trim() !== (mov.payment_link ?? ""),
+    concepto: mov.type === "DESCUENTO" && concepto.trim() !== (mov.concepto ?? ""),
+  };
+  const hayCambios = cambiaPlata || Object.values(ch).some(Boolean);
+  const nombreClub = (id: string) => clubes.find((c) => c.id === id)?.name ?? "—";
+  const nombreAgente = (id: string) => (id ? subordinados.find((a) => a.id === id)?.name ?? mov.agent_name ?? id : "ninguno");
+  const fmtUsd = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const conSigno = (n: number) => `${n > 0.004 ? "+" : ""}${fmtUsd(n)}`;
+  const clase = (on: boolean) => (on ? "em-ch" : undefined);
+  const antes = (on: boolean, txt: string) => (on ? <div className="em-was">antes: <s>{txt || "vacío"}</s></div> : null);
+
+  const campoFichas = Number(mov.fichas_reales_delta) !== 0;
+  const dViejo = deltasMovSup(mov.type, amountOrig, !!mov.usdt_real, campoFichas);
+  const dNuevo = deltasMovSup(mov.type, montoOk ? montoNum : amountOrig, !!mov.usdt_real, campoFichas);
+  const dF = Math.round((dNuevo.f - dViejo.f) * 100) / 100;
+  const dCc = Math.round((dNuevo.cc - dViejo.cc) * 100) / 100;
+  const fichasAntes = Number(supervisor.fichas_reales ?? 0);
+  const ccAntes = Number(supervisor.cuenta_corriente ?? 0);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!montoOk) return setMsg(mov.type === "AJUSTE" ? "El importe del ajuste no puede ser 0." : "El importe tiene que ser mayor a 0.");
+    if (!sinClub && !clubId) return setMsg("El club es obligatorio.");
+    if (mov.type === "DESCUENTO" && !concepto.trim()) return setMsg("Indicá el concepto del descuento.");
+    if (!hayCambios) return onCancel();
+    if (cambiaPlata && !confirm(`Se va a revertir el movimiento original y cargar uno nuevo de ${fmtUsd(montoNum)}. ¿Seguimos?`)) return;
+    setGuardando(true);
+    try {
+      await api.editarMovimientoSupervisor(mov.id, {
+        occurredAt: ch.fecha ? fecha : undefined,
+        agentId: ch.agente ? agentId || null : undefined,
+        notes: ch.notas ? notes.trim() || null : undefined,
+        paymentLink: ch.link ? link.trim() || null : undefined,
+        concepto: ch.concepto ? concepto.trim() : undefined,
+        amount: cambiaImporte ? montoNum : undefined,
+        clubId: cambiaClub ? clubId : undefined,
+      });
+      onDone();
+    } catch (err: any) {
+      setMsg(err.message || "No se pudo guardar.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="em-form">
+      <div className="em-sub">
+        {TIPO_LABEL[mov.type] ?? mov.type} · {dateShort(mov.occurred_at)}{mov.club_name ? ` · ${mov.club_name}` : ""}
+        {mov.usdt_real ? " · USDT real" : ""}. Lo que cambies se marca en color.
+      </div>
+
+      <div className="em-sec">IMPORTE{sinClub ? "" : " Y CLUB"}</div>
+      <div className="em-g2">
+        <div className="field">
+          <label>Importe (US$){mov.type === "AJUSTE" ? " — puede ser negativo" : ""}</label>
+          <input className={clase(cambiaImporte)} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {antes(cambiaImporte, fmtUsd(amountOrig))}
+        </div>
+        {!sinClub && (
+          <div className="field">
+            <label>Club</label>
+            <select className={clase(cambiaClub)} value={clubId} onChange={(e) => setClubId(e.target.value)}>
+              <option value="">Elegir...</option>
+              {clubes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {antes(cambiaClub, mov.club_name ?? nombreClub(mov.club_id))}
+          </div>
+        )}
+      </div>
+
+      <div className="em-sec">DATOS</div>
+      <div className="em-g2">
+        <div className="field">
+          <label>Fecha</label>
+          <input type="date" className={clase(ch.fecha)} value={fecha} onChange={(e) => setFecha(e.target.value || fechaOrig)} />
+          {antes(ch.fecha, dateShort(mov.occurred_at))}
+        </div>
+        {!sinAgente && (
+          <div className="field">
+            <label>Agente de origen</label>
+            <select className={clase(ch.agente)} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">— Ninguno —</option>
+              {mov.agent_id && !subordinados.some((a) => a.id === mov.agent_id) && <option value={mov.agent_id}>{mov.agent_name ?? mov.agent_id}</option>}
+              {subordinados.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            {antes(ch.agente, nombreAgente(mov.agent_id ?? ""))}
+          </div>
+        )}
+      </div>
+      {mov.type === "DESCUENTO" && (
+        <div className="field">
+          <label>Concepto</label>
+          <input className={clase(ch.concepto)} value={concepto} onChange={(e) => setConcepto(e.target.value)} />
+          {antes(ch.concepto, mov.concepto ?? "")}
+        </div>
+      )}
+      <div className="field">
+        <label>Notas</label>
+        <textarea className={clase(ch.notas)} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        {antes(ch.notas, mov.notes ?? "")}
+      </div>
+      <div className="field">
+        <label>Link de pago</label>
+        <input className={clase(ch.link)} placeholder="Pegá el link (opcional)" value={link} onChange={(e) => setLink(e.target.value)} />
+        {antes(ch.link, mov.payment_link ?? "")}
+      </div>
+
+      {!cambiaPlata ? (
+        <div className="em-note ok"><i>✓</i><div>Estos cambios <b>no tocan saldos</b> ni la Wallet. Se guardan tal cual y la fila queda marcada como editada.</div></div>
+      ) : (
+        <>
+          <div className="em-note w">
+            <i>!</i>
+            <div>
+              {cambiaImporte ? "Cambia el importe" : "Cambia el club"}: se <b>revierte</b> {fem ? "la" : "el"} {(TIPO_LABEL[mov.type] ?? mov.type).toLowerCase().replace("usdt", "USDT")} de {fmtUsd(amountOrig)}
+              {cambiaClub ? ` en ${mov.club_name ?? nombreClub(mov.club_id)}` : ""} y se carga {fem ? "una nueva" : "uno nuevo"} de <b>{fmtUsd(montoNum)}</b>
+              {cambiaClub ? <> en <b>{nombreClub(clubId)}</b></> : ""}. {fem ? "Las dos quedan" : "Los dos quedan"} en el historial ({fem ? "la vieja" : "el viejo"} como {fem ? "revertida" : "revertido"}).
+              {mov.usdt_real ? " La Wallet también se corrige." : ""}
+            </div>
+          </div>
+          {(dF !== 0 || dCc !== 0) && (
+            <div className="em-diff">
+              {dF !== 0 && <><span>Fichas reales</span><b>{conSigno(dF)}</b><em>{fmtUsd(fichasAntes)} → {fmtUsd(fichasAntes + dF)}</em></>}
+              {dCc !== 0 && <><span>Cuenta corriente</span><b>{conSigno(dCc)}</b><em>{fmtUsd(ccAntes)} → {fmtUsd(ccAntes + dCc)}</em></>}
+            </div>
+          )}
+        </>
+      )}
+
+      {msg && <div className="error">{msg}</div>}
+      <div className="em-bs">
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className={`btn${cambiaPlata ? " em-warn" : ""}`} disabled={guardando || !hayCambios}>
+          {guardando ? "Guardando..." : cambiaPlata ? "Revertir y cargar corregido" : "Guardar cambios"}
+        </button>
+      </div>
+    </form>
   );
 }
 

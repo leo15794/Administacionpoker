@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 98 (17/11/2026): editar un movimiento de Supervisores / Agentes. Pedido de Leo. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --glow1: rgba(68,147,248,.24); --glow2: rgba(63,185,80,.14);
+    --card: rgba(22,28,38,.86); --card-border: rgba(255,255,255,.08); --panel2: rgba(255,255,255,.04);
+    --green: #3fb950; --green-soft: rgba(63,185,80,.14); --red: #f85149; --amber: #d29922; --amber-soft: rgba(210,153,34,.13);
+    --input: rgba(255,255,255,.05); --shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef5f1; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.12);
+    --card: rgba(255,255,255,.92); --card-border: rgba(11,24,18,.07); --panel2: rgba(11,24,18,.03);
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --amber: #9a6a10; --amber-soft: rgba(196,140,30,.13);
+    --input: #fff; --shadow: 0 24px 60px rgba(11,24,18,.16);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 26px 36px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin: 4px 0 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; padding: 18px 20px; }
+  .lbl { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  .lbl .n { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: rgba(var(--accent-rgb), .16); color: var(--accent); font-size: 12px; }
+  .exp { font-size: 12.5px; color: var(--dim); margin: 0 0 14px 34px; line-height: 1.45; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px; }
+  td { padding: 10px 8px; border-top: 1px solid var(--card-border); vertical-align: middle; }
+  .num { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+  .pill.d { background: var(--amber-soft); color: var(--amber); }
+  .club b { display: block; font-weight: 700; } .club small { color: var(--faint); font-size: 11.5px; }
+  .ed { font-size: 10.5px; font-weight: 700; color: var(--faint); margin-left: 6px; border: 1px solid var(--card-border); padding: 1px 6px; border-radius: 6px; }
+  .dots { width: 40px; height: 28px; border-radius: 9px; border: 1px solid var(--card-border); display: grid; place-items: center; font-weight: 800; color: var(--dim); position: relative; }
+  .menu { position: absolute; right: 0; top: 34px; width: 200px; background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 3; text-align: left; }
+  .menu div { padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; }
+  .menu .on { background: rgba(var(--accent-rgb), .12); color: var(--accent); font-weight: 800; }
+  .menu .r { color: var(--red); }
+  .modal { margin-top: 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--card-border); box-shadow: var(--shadow); padding: 18px 20px; }
+  .mh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .mh h3 { font-size: 17px; font-weight: 800; }
+  .mh span { font-size: 12px; color: var(--faint); margin-left: auto; }
+  .ms { font-size: 12.5px; color: var(--dim); margin-bottom: 14px; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .f label { display: block; font-size: 11.5px; font-weight: 700; color: var(--dim); margin-bottom: 5px; }
+  .in { height: 38px; border-radius: 10px; border: 1px solid var(--card-border); background: var(--input); padding: 0 12px; display: flex; align-items: center; font-size: 13px; }
+  .in.ch { border-color: rgba(var(--accent-rgb), .7); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
+  .in.ta { height: 58px; align-items: flex-start; padding-top: 10px; }
+  .in.lock { color: var(--faint); background: var(--panel2); }
+  .was { font-size: 11px; color: var(--faint); margin-top: 4px; } .was s { opacity: .8; }
+  .sec { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; color: var(--faint); margin: 4px 0 8px; }
+  .note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.45; margin-bottom: 12px; }
+  .note.ok { background: var(--green-soft); color: var(--text); } .note.ok i { color: var(--green); }
+  .note.w { background: var(--amber-soft); border: 1px solid var(--amber); }
+  .note i { font-style: normal; font-weight: 800; }
+  .note b { font-weight: 800; }
+  .diff { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px; font-size: 12.5px; padding: 10px 12px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--card-border); margin-bottom: 12px; }
+  .diff span { color: var(--dim); } .diff b { text-align: right; font-variant-numeric: tabular-nums; }
+  .bs { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn { height: 38px; padding: 0 16px; border-radius: 11px; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+  .btn.p { background: var(--accent-grad); color: var(--accent-ink); }
+  .btn.s { border: 1px solid var(--card-border); color: var(--dim); }
+  .btn.wb { background: var(--amber); color: #1a1200; }
+  :root[data-theme="light"] .btn.wb { color: #fff; }
+</style></head>
+<body>
+  <h1>Editar un movimiento</h1>
+  <div class="sub">Supervisores y Agentes → pestaña Movimientos → "···" → <b>Editar</b>. Mockup 98.</div>
+
+  <div class="grid">
+    <!-- Caso 1: solo texto -->
+    <div class="card">
+      <div class="lbl"><span class="n">1</span>Corregir un dato que no mueve plata</div>
+      <p class="exp">Notas, link de pago, fecha o agente de origen. Se guarda directo, sin revertir nada, y la fila queda con la marca <b>editado</b> (al pasar el mouse dice quién y cuándo).</p>
+      <table>
+        <tr><th>FECHA</th><th>TIPO</th><th>CLUB · AGENTE</th><th class="num">IMPORTE</th><th>NOTAS</th><th></th></tr>
+        <tr><td>17/11/2026</td><td><span class="pill">Carga</span></td><td class="club"><b>Fénix GG</b><small>PerroSalchicha</small></td><td class="num pos">+US$ 1.000,00</td><td>—</td>
+          <td><div class="dots">···<div class="menu"><div class="on">✎ Editar</div><div>Agregar link de pago</div><div class="r">Revertir</div></div></div></td></tr>
+        <tr><td>17/11/2026</td><td><span class="pill">Carga</span></td><td class="club"><b>Fénix GG</b><small>fishagro</small></td><td class="num pos">+US$ 1.000,00</td><td>Carga por Zelle<span class="ed">editado</span></td><td><div class="dots">···</div></td></tr>
+      </table>
+
+      <div class="modal">
+        <div class="mh"><h3>Editar movimiento</h3><span>Carga · 17/11/2026 · Fénix GG</span></div>
+        <div class="ms">Cambiá lo que esté mal. Lo que cambies se marca en azul.</div>
+        <div class="sec">DATOS</div>
+        <div class="g2">
+          <div class="f"><label>Fecha</label><div class="in">17/11/2026</div></div>
+          <div class="f"><label>Agente de origen</label><div class="in ch">fishagro ▾</div><div class="was">antes: <s>PerroSalchicha</s></div></div>
+        </div>
+        <div class="f" style="margin-bottom:12px"><label>Notas</label><div class="in ta ch">Carga por Zelle</div><div class="was">antes: <s>vacío</s></div></div>
+        <div class="f" style="margin-bottom:12px"><label>Link de pago</label><div class="in">Pegá el link (opcional)</div></div>
+        <div class="note ok"><i>✓</i><div>Estos cambios <b>no tocan saldos</b> ni la Wallet. Se guardan tal cual.</div></div>
+        <div class="bs"><div class="btn s">Cancelar</div><div class="btn p">Guardar cambios</div></div>
+      </div>
+    </div>
+
+    <!-- Caso 2: importe -->
+    <div class="card">
+      <div class="lbl"><span class="n">2</span>Corregir el importe o el club</div>
+      <p class="exp">Eso sí mueve saldos. Para no perder el historial, al guardar se <b>revierte el original</b> y se carga <b>uno nuevo corregido</b>, en un solo paso. Si tocó la Wallet, la Wallet también se corrige.</p>
+
+      <div class="modal">
+        <div class="mh"><h3>Editar movimiento</h3><span>Descarga · 17/11/2026 · Fénix GG</span></div>
+        <div class="ms">lamnotbluff! · cargada por admin</div>
+        <div class="sec">IMPORTE Y CLUB</div>
+        <div class="g2">
+          <div class="f"><label>Importe (US$)</label><div class="in ch">261,94</div><div class="was">antes: <s>216,94</s></div></div>
+          <div class="f"><label>Club</label><div class="in">Fénix GG ▾</div></div>
+        </div>
+        <div class="f" style="margin-bottom:12px"><label>Tipo</label><div class="in lock">Descarga — el tipo no se cambia: revertí y cargá uno nuevo</div></div>
+        <div class="sec">DATOS</div>
+        <div class="g2">
+          <div class="f"><label>Fecha</label><div class="in">17/11/2026</div></div>
+          <div class="f"><label>Agente de origen</label><div class="in">lamnotbluff! ▾</div></div>
+        </div>
+        <div class="f" style="margin-bottom:12px"><label>Notas</label><div class="in">—</div></div>
+
+        <div class="note w"><i>!</i><div>Cambia el importe: se <b>revierte</b> la descarga de US$ 216,94 y se carga una nueva de <b>US$ 261,94</b>. Las dos quedan en el historial (la vieja como revertida).</div></div>
+        <div class="diff">
+          <span>Fichas reales</span><b>−US$ 45,00</b><span>12.430,20 → 12.385,20</span>
+          <span>Cuenta corriente</span><b>+US$ 45,00</b><span>−3.210,00 → −3.165,00</span>
+        </div>
+        <div class="bs"><div class="btn s">Cancelar</div><div class="btn wb">Revertir y cargar corregido</div></div>
+      </div>
+    </div>
+  </div>
+</body></html>

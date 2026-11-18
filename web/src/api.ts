@@ -468,6 +468,11 @@ export const api = {
     }
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
+  // Editar un movimiento (18/11/2026, mockup 98): undefined = no se toca. Importe o club revierte y recarga corregido.
+  editarMovimientoSupervisor: (
+    movId: string,
+    data: { occurredAt?: string; agentId?: string | null; notes?: string | null; paymentLink?: string | null; concepto?: string; amount?: number; clubId?: string }
+  ) => request(`/supervisores/movimientos/${movId}`, { method: "PUT", body: JSON.stringify(data) }),
   linkPagoMovimientoSupervisor: (movId: string, paymentLink: string | null) =>
     request(`/supervisores/movimientos/${movId}/link-pago`, { method: "PUT", body: JSON.stringify({ paymentLink }) }),
   migracionHistoricaSupervisor: (supervisorId: string) => request(`/supervisores/${supervisorId}/migracion-historica`),

@@ -2413,6 +2413,12 @@ ALTER TABLE supervisor_movimientos ADD CONSTRAINT supervisor_movimientos_type_ch
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS concepto TEXT;
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS semana DATE;
 
+-- Editar un movimiento (18/11/2026, mockup 98): marca de editado y, si se corrigio importe o club, de cual viene el
+-- corregido (el original queda REVERTIDO). Ver editarMovimientoSupervisor en repo/supervisores.ts.
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_by TEXT;
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS reemplaza_a TEXT;
+
 -- ============ Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo) ============
 -- Siempre manuales: el admin elige a quién mandar (ver repo/notificaciones.ts). Una fila por suscripción
 -- del navegador/celular de un login (puede tener varias: celular y compu).

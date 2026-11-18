@@ -628,6 +628,141 @@ export async function revertirMovimientoSupervisor(movimientoId: string) {
   }
 }
 
+// Editar un movimiento ya cargado (18/11/2026, pedido de Leo: "a veces nos equivocamos en algún copy o algo", mockup 98).
+// Dos caminos:
+//  - Lo que NO mueve plata (notas, link de pago, fecha, agente de origen, concepto de un descuento): se guarda directo
+//    sobre la misma fila y queda marcada como editada (edited_at / edited_by). El agente solo cambia el desglose por
+//    agente, nunca el total de la cuenta; la fecha solo cambia el orden.
+//  - Importe o club: eso sí mueve saldos, así que nunca se pisa el ledger: se revierte el original (con su Wallet, si
+//    tocó Wallet) y se carga uno nuevo corregido con el mismo tipo, que guarda en reemplaza_a de cuál viene.
+let columnasEdicionListas = false;
+async function asegurarColumnasEdicion() {
+  if (columnasEdicionListas) return;
+  await pool.query(`
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_by TEXT;
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS reemplaza_a TEXT;`);
+  columnasEdicionListas = true;
+}
+
+export interface EditarMovimientoSupervisorInput {
+  notes?: string | null;
+  paymentLink?: string | null;
+  occurredAt?: string | null; // YYYY-MM-DD
+  agentId?: string | null;
+  concepto?: string | null;
+  amount?: number;
+  clubId?: string | null;
+  editedBy?: string | null;
+}
+
+export async function editarMovimientoSupervisor(movimientoId: string, input: EditarMovimientoSupervisorInput) {
+  await asegurarColumnasEdicion();
+  const r = await pool.query(
+    `SELECT sm.*, a.exigir_agente_en_movimientos, a.default_system, to_char(sm.semana, 'YYYY-MM-DD') AS semana_txt,
+            to_char(sm.occurred_at AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') AS fecha_local
+     FROM supervisor_movimientos sm JOIN agents a ON a.id = sm.supervisor_agent_id WHERE sm.id = $1`,
+    [movimientoId]
+  );
+  const mov = r.rows[0];
+  if (!mov) throw new Error("Movimiento no encontrado.");
+  if (mov.status === "REVERTIDO") throw new Error("Este movimiento está revertido: no se puede editar.");
+
+  const cuenta = await agentesDeLaCuenta(mov.supervisor_agent_id);
+  const individual = !!cuenta?.individual;
+  const esPagoCobro = mov.type === "PAGO" || mov.type === "COBRO";
+  const sinClub = esPagoCobro || mov.type === "DESCUENTO";
+
+  // Normaliza lo que llega (undefined = no se toca).
+  let link: string | null | undefined = input.paymentLink;
+  if (link !== undefined) {
+    link = link?.trim() || null;
+    if (link && /\s/.test(link)) throw new Error("El link no puede tener espacios.");
+    if (link && !/^https?:\/\//i.test(link)) link = `https://${link}`;
+  }
+  const notes = input.notes === undefined ? undefined : input.notes?.trim() || null;
+  const concepto = input.concepto === undefined || mov.type !== "DESCUENTO" ? undefined : input.concepto?.trim() || null;
+  if (mov.type === "DESCUENTO" && concepto === null) throw new Error("Indicá el concepto del descuento.");
+  const agentId = input.agentId === undefined || individual ? undefined : input.agentId || null;
+  if (agentId === null && mov.exigir_agente_en_movimientos && !(mov.default_system === "WIN_LOSE" && esPagoCobro)) {
+    throw new Error("Este supervisor exige indicar el agente de origen del movimiento.");
+  }
+  if (agentId) {
+    const ok = (cuenta?.agentes ?? []).some((a: any) => a.id === agentId);
+    if (!ok) throw new Error("Ese agente no es de esta cuenta.");
+  }
+  let fecha: string | undefined;
+  if (input.occurredAt) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.occurredAt)) throw new Error("Fecha inválida.");
+    fecha = input.occurredAt;
+  }
+
+  const amountActual = round2(Number(mov.amount));
+  const amountNuevo = input.amount === undefined ? amountActual : round2(input.amount);
+  const clubNuevo = sinClub ? mov.club_id : input.clubId === undefined ? mov.club_id : input.clubId || null;
+  const cambiaPlata = amountNuevo !== amountActual || clubNuevo !== mov.club_id;
+
+  if (!cambiaPlata) {
+    const sets: string[] = [];
+    const vals: any[] = [movimientoId];
+    const set = (col: string, v: any) => {
+      vals.push(v);
+      sets.push(`${col} = $${vals.length}`);
+    };
+    if (notes !== undefined && notes !== (mov.notes ?? null)) set("notes", notes);
+    if (link !== undefined && link !== (mov.payment_link ?? null)) set("payment_link", link);
+    if (concepto !== undefined && concepto !== (mov.concepto ?? null)) set("concepto", concepto);
+    if (agentId !== undefined && agentId !== (mov.agent_id ?? null)) set("agent_id", agentId);
+    // Fecha (día de Argentina, el mismo que se ve en pantalla): se corre esa cantidad de días, se conserva la hora.
+    if (fecha && fecha !== mov.fecha_local) {
+      vals.push(fecha, mov.fecha_local);
+      sets.push(`occurred_at = occurred_at + (($${vals.length - 1}::date - $${vals.length}::date) * interval '1 day')`);
+    }
+    if (sets.length === 0) return { id: movimientoId, cambios: 0, reemplazado: false };
+    const cambios = sets.length;
+    set("edited_at", new Date());
+    set("edited_by", input.editedBy ?? null);
+    await pool.query(`UPDATE supervisor_movimientos SET ${sets.join(", ")} WHERE id = $1 AND status <> 'REVERTIDO'`, vals);
+    if (link !== undefined) {
+      await pool.query(`UPDATE supervisor_solicitudes_retiro SET payment_link = $2 WHERE movimiento_id = $1`, [movimientoId, link]);
+    }
+    return { id: movimientoId, cambios, reemplazado: false };
+  }
+
+  // Importe o club: revertir + cargar uno nuevo corregido (mismo tipo, mismo USDT real, mismo campo de ajuste).
+  if (mov.type === "AJUSTE") {
+    if (amountNuevo === 0) throw new Error("El importe del ajuste no puede ser 0.");
+  } else if (!(amountNuevo > 0)) {
+    throw new Error("El importe debe ser mayor a 0.");
+  }
+  if (!sinClub && !clubNuevo) throw new Error("El club es obligatorio.");
+
+  await revertirMovimientoSupervisor(movimientoId);
+  const nuevo = await registrarMovimientoSupervisor({
+    supervisorAgentId: mov.supervisor_agent_id,
+    clubId: clubNuevo,
+    agentId: agentId !== undefined ? agentId : mov.agent_id,
+    type: mov.type,
+    concepto: concepto !== undefined ? concepto : mov.concepto,
+    semana: mov.semana_txt ?? null,
+    amount: amountNuevo,
+    campoAjuste: mov.type === "AJUSTE" ? (Number(mov.fichas_reales_delta) !== 0 ? "FICHAS" : "CUENTA_CORRIENTE") : undefined,
+    usdtReal: !!mov.usdt_real,
+    notes: notes !== undefined ? notes : mov.notes,
+    paymentLink: link !== undefined ? link : mov.payment_link,
+    createdBy: mov.created_by ?? undefined,
+  });
+  // El corregido conserva fecha y hora del original (corrido de día si también se cambió la fecha).
+  await pool.query(
+    `UPDATE supervisor_movimientos
+     SET occurred_at = $2::timestamptz + (($3::date - $4::date) * interval '1 day'), edited_at = now(), edited_by = $5, reemplaza_a = $6
+     WHERE id = $1`,
+    [nuevo.id, mov.occurred_at, fecha ?? mov.fecha_local, mov.fecha_local, input.editedBy ?? null, movimientoId]
+  );
+  await pool.query(`UPDATE supervisor_solicitudes_retiro SET movimiento_id = $2 WHERE movimiento_id = $1`, [movimientoId, nuevo.id]);
+  return { id: nuevo.id, cambios: 1, reemplazado: true, reemplazaA: movimientoId };
+}
+
 // Corrección histórica (una sola vez, por supervisor): cuando se prende usa_cuenta_consolidada
 // para un supervisor que YA tenía agentes operando con saldo propio (caso Edwar, confirmado por
 // Leo), esto mueve ese saldo acumulado a la cuenta nueva, dejando registro línea por línea en
