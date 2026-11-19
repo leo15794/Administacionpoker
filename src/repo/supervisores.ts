@@ -111,6 +111,10 @@ export async function listCuentasAgentes(incluirBaja = false) {
      LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
      WHERE a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR' ${incluirBaja ? "" : "AND a.active = true"}
        AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
+       -- (19/11/2026, caso Cachito1976 bajo Blas) un agente a cargo de un supervisor con cuenta consolidada vive en la cuenta
+       -- del supervisor: si además tiene la marca prendida pero su cuenta propia nunca se usó, no se muestra repetido acá.
+       AND NOT (sc.supervisor_agent_id IS NULL
+                AND EXISTS (SELECT 1 FROM agents su WHERE su.name = a.supervisor AND su.usa_cuenta_consolidada = true))
      ORDER BY a.name`
   );
   return r.rows;
@@ -357,6 +361,15 @@ export async function agenteTieneCuentaPropia(agentId: string): Promise<{ tiene:
   const a = await pool.query(`SELECT name, usa_cuenta_consolidada FROM agents WHERE id = $1`, [agentId]);
   if (!a.rows[0] || !a.rows[0].usa_cuenta_consolidada) return { tiene: false, name: a.rows[0]?.name ?? null };
   const cuenta = await agentesDeLaCuenta(agentId);
+  // Mismo criterio que listCuentasAgentes: a cargo de un supervisor con cuenta consolidada y sin cuenta propia usada = no tiene.
+  if (cuenta?.individual) {
+    const r = await pool.query(
+      `SELECT 1 FROM agents a JOIN agents su ON su.name = a.supervisor AND su.usa_cuenta_consolidada = true
+       WHERE a.id = $1 AND NOT EXISTS (SELECT 1 FROM supervisor_cuentas sc WHERE sc.supervisor_agent_id = a.id)`,
+      [agentId]
+    );
+    if (r.rows.length > 0) return { tiene: false, name: a.rows[0].name };
+  }
   return { tiene: !!cuenta?.individual, name: a.rows[0].name };
 }
 
