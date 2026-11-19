@@ -32,14 +32,14 @@ import {
 export const supervisoresRouter = Router();
 
 supervisoresRouter.get("/", requireAuth, requireAdmin, async (req, res) => {
-  res.json(await listSupervisoresConsolidados());
+  res.json(await listSupervisoresConsolidados(req.query.incluirBaja === "true"));
 });
 
 // Sección "Agentes" (20/10/2026): cuentas de agentes individuales. Comparten TODO lo demás (/:id/movimientos,
 // /:id/cierre-semanal/..., /:id/importar-saldos, etc.) con las cuentas de supervisores: el id es el del titular.
 // Van antes de "/:id" para que "cuentas-agentes" no se tome como un id.
 supervisoresRouter.get("/cuentas-agentes", requireAuth, requireAdmin, async (req, res) => {
-  res.json(await listCuentasAgentes());
+  res.json(await listCuentasAgentes(req.query.incluirBaja === "true"));
 });
 supervisoresRouter.get("/cuentas-agentes/pdf-datos", requireAuth, requireAdmin, async (req, res) => {
   try {

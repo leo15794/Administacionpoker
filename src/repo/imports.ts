@@ -227,6 +227,23 @@ export async function resolvePlayerAgent(
     // solo (cacheado por esta corrida) en vez de reportarlo como "sin agente" — el % de
     // rakeback/rebate queda en el default del club hasta que se cargue un deal específico,
     // igual que cualquier agente nuevo (ver resolverConfigVigente).
+    // Antes de crear: si es un agente DADO DE BAJA (19/11/2026, mockup 99), no se crea un duplicado -- se avisa.
+    const deBaja = await pool.query(
+      `SELECT name FROM agents
+       WHERE active = false
+         AND (($2::text IS NOT NULL AND external_id = $2)
+              OR regexp_replace(lower(trim(name)), '\\s+', ' ', 'g') = regexp_replace(lower(trim($1)), '\\s+', ' ', 'g'))
+       LIMIT 1`,
+      [row.agentNameRaw, row.agentIdRaw ?? null]
+    );
+    if (deBaja.rows[0]) {
+      return {
+        agentId: null,
+        agentName: null,
+        resolvedBy: null,
+        motivo: `El agente "${deBaja.rows[0].name}" está dado de baja. Si volvió a trabajar, reactivalo en Administración y volvé a importar; si no, asigná el jugador a mano.`,
+      };
+    }
     const clave = row.agentIdRaw ?? row.agentNameRaw;
     const cacheado = autoCreadosCache.get(clave);
     if (cacheado) return cacheado;

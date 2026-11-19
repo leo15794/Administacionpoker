@@ -438,12 +438,15 @@ export const api = {
   // (players/ledger/deals/etc, ver eliminarAgenteDefinitivo). Para duplicados de prueba o
   // auto-creados por error del importador; un agente con historial real se da de baja, no se borra.
   eliminarAgente: (id: string) => request(`/catalog/agents/${id}`, { method: "DELETE" }),
+  // Antes de dar de baja (19/11/2026, mockup 99): saldos en cada lugar y qué lo impide.
+  chequeoBajaAgente: (id: string) =>
+    request(`/catalog/agents/${id}/chequeo-baja`) as Promise<{ agentId: string; name: string; saldos: { donde: string; monto: number }[]; bloqueos: string[]; puede: boolean }>,
 
   // Cuentas consolidadas para supervisores (30/09/2026) -- sistema aislado, ver
   // src/repo/supervisores.ts. supervisorId es el id del agente que tiene usa_cuenta_consolidada.
-  supervisoresConsolidados: () => request("/supervisores"),
+  supervisoresConsolidados: (incluirBaja?: boolean) => request(`/supervisores${incluirBaja ? "?incluirBaja=true" : ""}`),
   // Sección "Agentes" (20/10/2026): cuentas de agentes individuales (mismo motor que las de supervisores).
-  cuentasAgentes: () => request("/supervisores/cuentas-agentes"),
+  cuentasAgentes: (incluirBaja?: boolean) => request(`/supervisores/cuentas-agentes${incluirBaja ? "?incluirBaja=true" : ""}`),
   agentesSinCuenta: () => request("/supervisores/cuentas-agentes/sin-cuenta"),
   pdfDatosCuentasAgentes: (week?: string) => request(`/supervisores/cuentas-agentes/pdf-datos${week ? `?week=${week}` : ""}`),
   activarCuentaAgente: (agentId: string) => request(`/supervisores/cuentas-agentes/${agentId}/activar`, { method: "POST" }),

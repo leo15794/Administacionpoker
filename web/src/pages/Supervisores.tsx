@@ -4,6 +4,7 @@ import { usd, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import Loading from "../components/Loading";
 import ActionsMenu from "../components/ActionsMenu";
+import DarDeBajaAgente from "../components/DarDeBajaAgente";
 import { generarPdfCuentasAgentes, type ContenidoPdf, type FormatoPdf } from "../pdfCuentasAgentes";
 import Ayuda from "../components/Ayuda";
 import { exportCsv } from "../csv";
@@ -89,9 +90,28 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   const [buscaLista, setBuscaLista] = useState("");
   const [ordenLista, setOrdenLista] = useState<"saldo" | "nombre">("saldo");
 
+  // Dados de baja (19/11/2026, mockup 99): vienen aparte y solo se ven en su pestaña.
+  const [deBaja, setDeBaja] = useState<any[]>([]);
+  const [verBaja, setVerBaja] = useState(false);
+  const [bajaPara, setBajaPara] = useState<{ id: string; name: string; cuenta: boolean } | null>(null);
+
   function refresh() {
     setError("");
-    (agentesModo ? api.cuentasAgentes() : api.supervisoresConsolidados()).then(setSupervisores).catch((e) => setError(e.message));
+    (agentesModo ? api.cuentasAgentes(true) : api.supervisoresConsolidados(true))
+      .then((rows: any[]) => {
+        setSupervisores(rows.filter((x) => x.active !== false));
+        setDeBaja(rows.filter((x) => x.active === false));
+      })
+      .catch((e) => setError(e.message));
+  }
+
+  async function reactivar(x: any) {
+    try {
+      await api.editarAgente(x.id, { active: true });
+      refresh();
+    } catch (e: any) {
+      alert(e.message || "No se pudo reactivar.");
+    }
   }
 
   function refreshSolicitudes() {
@@ -432,7 +452,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
           <div className="wm-card">
             <div className="wm-cab">
-              <div className="wm-h">Cuentas <span className="wm-n">{listaVisible.length}</span></div>
+              <div className="wm-h">Cuentas <span className="wm-n">{verBaja ? deBaja.length : listaVisible.length}</span></div>
               <div className="wm-fil">
                 <input className="wm-in" placeholder={`Buscar ${quien.toLowerCase()}...`} value={buscaLista} onChange={(e) => setBuscaLista(e.target.value)} />
                 <select className="wm-in" value={ordenLista} onChange={(e) => setOrdenLista(e.target.value as "saldo" | "nombre")} aria-label="Orden">
@@ -460,14 +480,39 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               </div>
             </div>
             <WmTabs
-              actual={tipoListaActual}
-              onChange={setTipoLista}
+              actual={verBaja ? "baja" : tipoListaActual}
+              onChange={(k) => {
+                if (k === "baja") return setVerBaja(true);
+                setVerBaja(false);
+                setTipoLista(k);
+              }}
               tabs={[
                 { k: "prepago", t: "Prepago", n: supervisoresPrepago.length },
                 { k: "winlose", t: "Win/Lose", n: supervisoresWinLose.length },
+                ...(deBaja.length > 0 || verBaja ? [{ k: "baja" as const, t: "Dados de baja", n: deBaja.length }] : []),
               ]}
             />
 
+            {verBaja && (
+              <div className="ag-table-wrap" style={{ display: "block" }}>
+                <table className="saldos-table">
+                  <thead><tr><th>{quien}</th><th>Sistema</th><th>Baja</th><th></th></tr></thead>
+                  <tbody>
+                    {deBaja.filter((x) => qLista === "" || String(x.name).toLowerCase().includes(qLista)).map((x) => (
+                      <tr key={x.id}>
+                        <td className="bj-baja"><b>{x.name}</b><span className="bj-tag">de baja</span></td>
+                        <td className="bj-baja">{esWinLose(x) ? "Win/Lose" : "Prepago"}</td>
+                        <td className="bj-baja">{x.baja_at ? dateShort(x.baja_at) : "—"}</td>
+                        <td style={{ textAlign: "right" }}><button className="btn small secondary" onClick={() => reactivar(x)}>Reactivar</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {deBaja.length === 0 && <div className="muted" style={{ padding: "16px 8px" }}>No hay cuentas dadas de baja.</div>}
+              </div>
+            )}
+
+            {!verBaja && (<>
             <div className="ag-table-wrap">
               <div className={`sp-th ${tipoListaActual === "winlose" ? "w" : ""}`}>
                 <span>{quien.toUpperCase()}</span>
@@ -552,6 +597,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
               </div>
             </div>
             <WmPaginacion p={pgSup} unidad="cuentas" />
+            </>)}
           </div>
         </div>
       )}
@@ -619,6 +665,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                       label: `${agentesModo ? "Importar saldo" : "Importar saldos"}${importables && importables.filter((f) => f.estado === "NUEVO").length > 0 ? ` (${importables.filter((f) => f.estado === "NUEVO").length})` : ""}`,
                       onClick: () => setShowImportar(true),
                     },
+                    { label: "Dar de baja", onClick: () => setBajaPara({ id: seleccionado.id, name: seleccionado.name, cuenta: true }), danger: true },
                   ]}
                 />
                 <button className="icon-btn" title="Cerrar la cuenta" onClick={() => setSeleccionado(null)}>✕</button>
@@ -1042,6 +1089,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                             oculto
                               ? { label: "Mostrar en la cuenta", onClick: () => toggleOcultoAgente(a.id, a.name, false), disabled: ocultando === a.id }
                               : { label: "Ocultar…", onClick: () => toggleOcultoAgente(a.id, a.name, true), disabled: ocultando === a.id },
+                            { label: "Dar de baja", onClick: () => setBajaPara({ id: a.id, name: a.name, cuenta: false }), danger: true },
                           ]}
                         />
                       </div>
@@ -1253,6 +1301,29 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
             }}
           />
         </Modal>
+      )}
+
+      {bajaPara && (
+        <DarDeBajaAgente
+          agentId={bajaPara.id}
+          name={bajaPara.name}
+          onClose={() => setBajaPara(null)}
+          onDone={() => {
+            const eraLaCuenta = bajaPara.cuenta;
+            setBajaPara(null);
+            if (eraLaCuenta) setSeleccionado(null);
+            else refrescarSeleccionado();
+            refresh();
+          }}
+          onSaldar={
+            bajaPara.cuenta
+              ? (cc) => {
+                  setBajaPara(null);
+                  setPagoCobro(cc > 0 ? "PAGO" : "COBRO");
+                }
+              : undefined
+          }
+        />
       )}
 
       {editandoMov && seleccionado && (

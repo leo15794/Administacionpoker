@@ -1771,6 +1771,9 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS oculto_en_supervisor BOOLEAN NOT NUL
 -- semanal del agente se carga igual (club, rake y ganancia no cambian) pero NO suma ni resta saldo: no genera rakeback pendiente, no
 -- se aplica a ninguna cuenta de Supervisores/Agentes y no se ofrece para activarle una cuenta.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS solo_referencia BOOLEAN NOT NULL DEFAULT FALSE;
+-- Dar de baja (19/11/2026, mockup 99, ver src/repo/bajaAgentes.ts): fecha de la baja y qué accesos al portal apagó (para prenderlos al reactivar).
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS baja_at TIMESTAMPTZ;
+ALTER TABLE agent_users ADD COLUMN IF NOT EXISTS desactivado_por_baja BOOLEAN NOT NULL DEFAULT FALSE;
 -- (28/10/2026) Los numeros reales del reporte de un agente solo de referencia quedan aca: el cierre operativo sigue en cero, pero el cierre de
 -- Proveedores (Suprema) los toma para su linea (resultado + rake x 80%).
 ALTER TABLE weekly_closings ADD COLUMN IF NOT EXISTS ref_result NUMERIC;

@@ -36,6 +36,7 @@ import { listCargasPendientesPorAgentes, consumirCarga, eliminarCarga, eliminarM
 import { eliminarMovimientoAdelanto } from "../repo/advances.js";
 import { revertirPagoPendiente } from "../repo/rakebackPendiente.js";
 import { pool, newId } from "../db/pool.js";
+import { chequeoBajaAgente, darDeBajaAgente, reactivarAgente } from "../repo/bajaAgentes.js";
 
 const ACCOUNT_TYPES = ["PREPAGO", "WIN_LOSE", "BANCADO", "INTERNO", "SUPERVISOR", "UNION"] as const;
 // Catálogo cerrado de reglas especiales que el motor de cierre sabe interpretar (ver
@@ -1124,13 +1125,20 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
   const parsed = agentEditSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
+    // Baja / reactivación (19/11/2026, mockup 99): pasa por bajaAgentes.ts, que exige todo en 0 y apaga el acceso al portal.
+    if (parsed.data.active === false) {
+      const ag = await darDeBajaAgente(req.params.id);
+      if (!ag) return res.status(404).json({ error: "Agente no encontrado" });
+    } else if (parsed.data.active === true) {
+      const ag = await reactivarAgente(req.params.id);
+      if (!ag) return res.status(404).json({ error: "Agente no encontrado" });
+    }
     const agent = await updateAgent(req.params.id, {
       name: parsed.data.name,
       defaultSystem: parsed.data.defaultSystem,
       supervisor: parsed.data.supervisor === undefined ? undefined : parsed.data.supervisor?.trim() || null,
       accountType: parsed.data.accountType,
       externalId: parsed.data.externalId === undefined ? undefined : parsed.data.externalId?.trim() || null,
-      active: parsed.data.active,
       personKey: parsed.data.personKey === undefined ? undefined : parsed.data.personKey?.trim() || null,
       usaCuentaConsolidada: parsed.data.usaCuentaConsolidada,
       modeloCuenta: parsed.data.modeloCuenta,
@@ -1143,6 +1151,13 @@ catalogRouter.patch("/agents/:id", requireAuth, requireAdmin, async (req, res) =
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// Antes de dar de baja: saldos que tiene en cada lugar y qué lo impide (mockup 99).
+catalogRouter.get("/agents/:id/chequeo-baja", requireAuth, requireAdmin, async (req, res) => {
+  const ch = await chequeoBajaAgente(req.params.id);
+  if (!ch) return res.status(404).json({ error: "Agente no encontrado" });
+  res.json(ch);
 });
 
 // Borrado real (no "dar de baja") — solo funciona si el agente no tiene ningún rastro real

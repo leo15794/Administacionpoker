@@ -41,14 +41,15 @@ async function getCuentaParaUpdate(client: PoolClient, supervisorAgentId: string
   return r.rows[0];
 }
 
-export async function listSupervisoresConsolidados() {
+// incluirBaja (19/11/2026, mockup 99): por defecto los dados de baja no aparecen; la pestaña "Dados de baja" los pide.
+export async function listSupervisoresConsolidados(incluirBaja = false) {
   const r = await pool.query(
     `SELECT a.*, COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente,
             sc.updated_at as cuenta_updated_at,
-            (SELECT COUNT(*)::int FROM agents sub WHERE sub.supervisor = a.name) as n_sub
+            (SELECT COUNT(*)::int FROM agents sub WHERE sub.supervisor = a.name AND sub.active = true) as n_sub
      FROM agents a
      LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
-     WHERE a.usa_cuenta_consolidada = true
+     WHERE a.usa_cuenta_consolidada = true ${incluirBaja ? "" : "AND a.active = true"}
        AND (a.account_type = 'SUPERVISOR' OR EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name))
      ORDER BY a.name`
   );
@@ -77,7 +78,8 @@ export async function listSubordinados(supervisorAgentId: string) {
   // agentes que ya no son subordinados quedan afuera; lo que no tiene agente asignado no se reparte.
   const saldos = await listSaldosPorAgenteSupervisor(supervisorAgentId);
   const porAgente = new Map<string, number>(saldos.filter((f) => f.agentId).map((f) => [f.agentId as string, f.cuentaCorriente]));
-  return cuenta.agentes.map((a: any) => ({ ...a, cc_agente: round2(porAgente.get(a.id) ?? 0) }));
+  // Los dados de baja ya no figuran como agentes a cargo (mockup 99).
+  return cuenta.agentes.filter((a: any) => a.active !== false).map((a: any) => ({ ...a, cc_agente: round2(porAgente.get(a.id) ?? 0) }));
 }
 
 // Cuenta de un AGENTE INDIVIDUAL (20/10/2026, pedido de Leo: "crearia la seccion Agentes", mismo sistema que los
@@ -101,13 +103,13 @@ export async function agentesDeLaCuenta(ownerId: string) {
 }
 
 // Cuentas de agentes individuales (sección "Agentes"): con cuenta consolidada, no supervisor y sin nadie a cargo.
-export async function listCuentasAgentes() {
+export async function listCuentasAgentes(incluirBaja = false) {
   const r = await pool.query(
     `SELECT a.*, COALESCE(sc.fichas_reales, 0) as fichas_reales, COALESCE(sc.cuenta_corriente, 0) as cuenta_corriente,
             sc.updated_at as cuenta_updated_at, 0 as n_sub
      FROM agents a
      LEFT JOIN supervisor_cuentas sc ON sc.supervisor_agent_id = a.id
-     WHERE a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR'
+     WHERE a.usa_cuenta_consolidada = true AND a.account_type <> 'SUPERVISOR' ${incluirBaja ? "" : "AND a.active = true"}
        AND NOT EXISTS (SELECT 1 FROM agents sub WHERE sub.supervisor = a.name)
      ORDER BY a.name`
   );
@@ -1024,7 +1026,11 @@ export async function listSaldosPorAgenteSupervisor(supervisorAgentId: string): 
     });
   }
 
-  return filas;
+  // Dados de baja (19/11/2026, mockup 99): fuera de la tabla si ya no tienen nada (solo se dan de baja en 0).
+  const deBaja = new Set(subRes.rows.filter((a: any) => a.active === false).map((a) => a.id));
+  return filas.filter(
+    (f) => !(f.agentId && deBaja.has(f.agentId) && Math.abs(f.fichasTiempoReal) < 0.01 && Math.abs(f.cuentaCorriente) < 0.01)
+  );
 }
 
 // Saldo individual de cada agente, EN VIVO, partido por club (ver nota en SaldoPorAgenteSupervisor

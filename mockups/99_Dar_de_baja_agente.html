@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 99 (19/11/2026): dar de baja agentes que ya no trabajan, y que desaparezcan de todos lados. Pedido de Leo. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --glow1: rgba(68,147,248,.24); --glow2: rgba(63,185,80,.14);
+    --card: rgba(22,28,38,.86); --card-border: rgba(255,255,255,.08); --panel2: rgba(255,255,255,.04);
+    --green: #3fb950; --green-soft: rgba(63,185,80,.14); --red: #f85149; --red-soft: rgba(248,81,73,.12); --amber: #d29922; --amber-soft: rgba(210,153,34,.13);
+    --shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef5f1; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.12);
+    --card: rgba(255,255,255,.92); --card-border: rgba(11,24,18,.07); --panel2: rgba(11,24,18,.03);
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --red-soft: rgba(194,55,68,.10); --amber: #9a6a10; --amber-soft: rgba(196,140,30,.13);
+    --shadow: 0 24px 60px rgba(11,24,18,.16);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 26px 36px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin: 4px 0 18px; }
+  .grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 22px; }
+  .col { display: flex; flex-direction: column; gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; padding: 18px 20px; }
+  .lbl { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  .lbl .n { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: rgba(var(--accent-rgb), .16); color: var(--accent); font-size: 12px; }
+  .exp { font-size: 12.5px; color: var(--dim); margin: 0 0 12px 34px; line-height: 1.45; }
+  .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--card-border); margin-bottom: 4px; font-size: 14px; font-weight: 700; color: var(--dim); }
+  .tabs div { padding: 6px 2px 9px; } .tabs small { font-size: 11px; color: var(--faint); margin-left: 4px; }
+  .tabs .on { color: var(--accent); border-bottom: 2px solid var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px; }
+  td { padding: 9px 8px; border-top: 1px solid var(--card-border); vertical-align: middle; }
+  .ag { display: flex; gap: 10px; align-items: center; } .ag b { display: block; font-weight: 700; } .ag small { color: var(--faint); font-size: 11.5px; }
+  .av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; background: #1e8a63; flex: none; }
+  .num { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pos { color: var(--green); }
+  .st { color: var(--dim); font-size: 12.5px; }
+  .baja td { opacity: .55; } .baja .ag b { display: inline; }
+  .tag { font-size: 10.5px; font-weight: 700; color: var(--faint); border: 1px solid var(--card-border); padding: 1px 6px; border-radius: 6px; margin-left: 6px; }
+  .dots { width: 40px; height: 28px; border-radius: 9px; border: 1px solid var(--card-border); display: grid; place-items: center; font-weight: 800; color: var(--dim); position: relative; margin-left: auto; }
+  .menu { position: absolute; right: 0; top: 34px; width: 190px; background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 3; text-align: left; }
+  .menu div { padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; }
+  .menu .on { background: var(--red-soft); color: var(--red); font-weight: 800; }
+  .modal { border-radius: 18px; background: var(--card); border: 1px solid var(--card-border); box-shadow: var(--shadow); padding: 18px 20px; }
+  .mh h3 { font-size: 17px; font-weight: 800; }
+  .ms { font-size: 12.5px; color: var(--dim); margin: 4px 0 14px; line-height: 1.45; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .box { border-radius: 12px; padding: 10px 12px; background: var(--panel2); border: 1px solid var(--card-border); font-size: 12.5px; line-height: 1.6; }
+  .box h4 { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; color: var(--faint); margin-bottom: 4px; }
+  .box .x { color: var(--red); font-weight: 800; margin-right: 6px; } .box .k { color: var(--green); font-weight: 800; margin-right: 6px; }
+  .note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.45; margin-bottom: 12px; }
+  .note.ok { background: var(--green-soft); } .note.ok i { color: var(--green); }
+  .note.w { background: var(--amber-soft); border: 1px solid var(--amber); } .note.w i { color: var(--amber); }
+  .note i { font-style: normal; font-weight: 800; }
+  .bs { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn { height: 36px; padding: 0 16px; border-radius: 11px; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+  .btn.s { border: 1px solid var(--card-border); color: var(--dim); }
+  .btn.r { background: var(--red); color: #fff; }
+  .btn.p { background: var(--accent-grad); color: var(--accent-ink); }
+  .btn.sm { height: 28px; padding: 0 12px; font-size: 12px; border: 1px solid var(--card-border); color: var(--text); border-radius: 9px; }
+</style></head>
+<body>
+  <h1>Dar de baja un agente que ya no trabaja</h1>
+  <div class="sub">Se hace desde Agentes, desde Supervisores (agentes a cargo) o desde Administración. Nunca se borra el historial: el agente deja de aparecer en el día a día. Mockup 99.</div>
+
+  <div class="grid">
+    <div class="col">
+      <div class="card">
+        <div class="lbl"><span class="n">1</span>"···" → Dar de baja</div>
+        <p class="exp">Nuevo en la lista de Agentes y en "Agentes a cargo" de cada supervisor. Abajo aparece la pestaña <b>Dados de baja</b>.</p>
+        <div class="tabs"><div>Prepago<small>7</small></div><div class="on">Win/Lose<small>5</small></div><div>Dados de baja<small>2</small></div></div>
+        <table>
+          <tr><th>AGENTE</th><th class="num">CUENTA CORRIENTE</th><th>ESTADO</th><th></th></tr>
+          <tr><td><div class="ag"><span class="av">MA</span><div><b>MacT-GG</b><small>Win/Lose</small></div></div></td><td class="num pos">US$ 38</td><td class="st">Le debemos</td><td><div class="dots">···</div></td></tr>
+          <tr><td><div class="ag"><span class="av" style="background:#0b4a35">CA</span><div><b>Cachito1976</b><small>Win/Lose</small></div></div></td><td class="num">US$ 0</td><td class="st">Al día</td><td><div class="dots">···</div></td></tr>
+          <tr><td><div class="ag"><span class="av" style="background:#b8975a">EL</span><div><b>El Latigo Loco</b><small>Win/Lose</small></div></div></td><td class="num">US$ 0</td><td class="st">Al día</td>
+            <td><div class="dots">···<div class="menu"><div>Ver cuenta</div><div>Editar datos</div><div class="on">Dar de baja</div></div></div></td></tr>
+          <tr><td><div class="ag"><span class="av">EZ</span><div><b>eze.f23</b><small>Win/Lose</small></div></div></td><td class="num">US$ 0</td><td class="st">Al día</td><td><div class="dots">···</div></td></tr>
+        </table>
+      </div>
+
+      <div class="modal">
+        <div class="mh"><h3>¿Dar de baja a El Latigo Loco?</h3></div>
+        <div class="ms">Para agentes que ya no trabajan más con nosotros. Se puede reactivar cuando quieras desde "Dados de baja".</div>
+        <div class="two">
+          <div class="box"><h4>DEJA DE APARECER EN</h4>
+            <div><span class="x">✕</span>Agentes, Supervisores y Administración</div>
+            <div><span class="x">✕</span>Resumen, Saldos y Liquidaciones</div>
+            <div><span class="x">✕</span>Listas para cargar movimientos y cierres</div>
+            <div><span class="x">✕</span>"Para hacer" y avisos</div>
+            <div><span class="x">✕</span>Su acceso al portal (no puede entrar)</div>
+          </div>
+          <div class="box"><h4>SE CONSERVA</h4>
+            <div><span class="k">✓</span>Movimientos y cierres ya cargados</div>
+            <div><span class="k">✓</span>Semanas pasadas en reportes y PDFs</div>
+            <div><span class="k">✓</span>Los números de su supervisor y proveedor</div>
+            <div><span class="k">✓</span>Si aparece en un reporte nuevo, avisa</div>
+          </div>
+        </div>
+        <div class="note ok"><i>✓</i><div>Saldo en <b>US$ 0</b> en todas sus cuentas: se puede dar de baja.</div></div>
+        <div class="bs"><div class="btn s">Cancelar</div><div class="btn r">Dar de baja</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="lbl"><span class="n">2</span>Si todavía tiene saldo, no se puede</div>
+        <p class="exp">Así no desaparece plata de los totales. Primero se salda con un pago o cobro y después se da de baja.</p>
+        <div class="modal" style="box-shadow:none">
+          <div class="mh"><h3>¿Dar de baja a MacT-GG?</h3></div>
+          <div class="ms">Para agentes que ya no trabajan más con nosotros.</div>
+          <div class="note w"><i>!</i><div>Todavía tiene saldo: <b>le debemos US$ 38</b> en la cuenta corriente. Registrá el pago para dejarlo en 0 y después lo das de baja.</div></div>
+          <div class="bs"><div class="btn s">Cancelar</div><div class="btn p">Registrar pago</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="lbl"><span class="n">3</span>Pestaña "Dados de baja"</div>
+        <p class="exp">Aparecen atenuados, con la fecha de baja. Se puede ver su cuenta (solo lectura) o reactivarlo.</p>
+        <div class="tabs"><div>Prepago<small>7</small></div><div>Win/Lose<small>4</small></div><div class="on">Dados de baja<small>2</small></div></div>
+        <table>
+          <tr><th>AGENTE</th><th class="num">SALDO</th><th>BAJA</th><th></th></tr>
+          <tr class="baja"><td><div class="ag"><span class="av" style="background:#b8975a">EL</span><div><b>El Latigo Loco</b><span class="tag">de baja</span><small style="display:block">Win/Lose</small></div></div></td><td class="num">US$ 0</td><td class="st">19/11/2026</td><td style="text-align:right"><span class="btn sm" style="display:inline-grid">Reactivar</span></td></tr>
+          <tr class="baja"><td><div class="ag"><span class="av" style="background:#6b4fa0">PI</span><div><b>Pirata77</b><span class="tag">de baja</span><small style="display:block">Prepago · Sup. Uriel</small></div></div></td><td class="num">US$ 0</td><td class="st">02/11/2026</td><td style="text-align:right"><span class="btn sm" style="display:inline-grid">Reactivar</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</body></html>

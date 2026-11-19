@@ -5,6 +5,7 @@ import { exportCsv } from "../csv";
 import Modal from "../components/Modal";
 import EstadoCuentaAgente from "../components/EstadoCuentaAgente";
 import ActionsMenu from "../components/ActionsMenu";
+import DarDeBajaAgente from "../components/DarDeBajaAgente";
 import { Contexto, ParaHacer, BarraSaldo, Portada, type ItemParaHacer } from "../components/Identidad";
 import { useConfirmDialog } from "../components/ConfirmProvider";
 import Loading from "../components/Loading";
@@ -162,14 +163,10 @@ export default function Agentes() {
 
   // Dar de baja: NUNCA borra nada — el agente/club deja de listarse como activo (no puede
   // recibir cierres/movimientos nuevos), pero su historial ya cargado queda intacto.
-  async function darDeBajaAgente(a: any) {
-    if (!(await confirmDialog(`¿Dar de baja a "${a.name}"? Deja de aparecer para cargar cierres nuevos, pero su historial se conserva igual.`))) return;
-    try {
-      await api.editarAgente(a.id, { active: false });
-      refresh();
-    } catch (err: any) {
-      await alertDialog(err.message || "No se pudo dar de baja al agente.");
-    }
+  // (19/11/2026, mockup 99) con el modal que revisa que tenga todo en 0.
+  const [bajaPara, setBajaPara] = useState<{ id: string; name: string } | null>(null);
+  function darDeBajaAgente(a: any) {
+    setBajaPara({ id: a.id, name: a.name });
   }
 
   async function darDeBajaClub(c: any) {
@@ -594,6 +591,17 @@ export default function Agentes() {
         </>
       )}
 
+      {bajaPara && (
+        <DarDeBajaAgente
+          agentId={bajaPara.id}
+          name={bajaPara.name}
+          onClose={() => setBajaPara(null)}
+          onDone={() => {
+            setBajaPara(null);
+            refresh();
+          }}
+        />
+      )}
       {historialAgent && (
         <Modal title={`Estado de cuenta — ${historialAgent.name}`} onClose={() => setHistorialAgent(null)} wide>
           <EstadoCuentaAgente agentId={historialAgent.id} />
