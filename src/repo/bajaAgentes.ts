@@ -92,7 +92,8 @@ export async function darDeBajaAgente(agentId: string) {
   const r = await pool.query(`UPDATE agents SET active = false, baja_at = now(), updated_at = now() WHERE id = $1 RETURNING *`, [agentId]);
   // Sin acceso al portal (los admins nunca se tocan). Se marca cuáles apagó la baja para volver a prenderlos al reactivar.
   await pool.query(
-    `UPDATE agent_users SET active = false, desactivado_por_baja = true WHERE agent_id = $1 AND active = true AND role <> 'ADMIN'`,
+    // Solo los usuarios de agente: un usuario SUPERVISOR atado a este agente (caso "Blas" atado a Cachito1976, 19/11/2026) no se corta.
+    `UPDATE agent_users SET active = false, desactivado_por_baja = true WHERE agent_id = $1 AND active = true AND role = 'AGENT'`,
     [agentId]
   );
   return r.rows[0];
