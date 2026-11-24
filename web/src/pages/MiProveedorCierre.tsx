@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import RodeoProveedorDesglose from "../components/RodeoProveedorDesglose";
 import { colorSigno, montoSigno } from "../components/PortalUI";
 import Cifra from "../components/Cifra";
 
@@ -157,6 +158,7 @@ export default function MiProveedorCierre() {
               <div><div className="saldo-sub" style={{ margin: 0 }}>Rodeo</div><b>{dato(rodeo) ? usdCents(Number(rodeo)) : "—"}</b></div>
               <div><div className="saldo-sub" style={{ margin: 0 }}>Monto bruto</div><b>{usdCents(Number(l.monto_crudo))}</b></div>
             </div>
+            {!esAgente && l.rodeo_detalle && <div style={{ marginBottom: 12, maxWidth: 380 }}><RodeoProveedorDesglose detalle={l.rodeo_detalle} /></div>}
             <div className="saldo-sub" style={{ marginBottom: 12 }}>
               Aplicado a tu saldo: <b style={{ color: colorSigno(aplicado) }}>{montoSigno(aplicado)}</b>
             </div>

@@ -31,11 +31,68 @@ async function calcularClubRebate(resumen: ResumenClubSemanal): Promise<number> 
   return 0;
 }
 
+// Memoria de rodeo del PROVEEDOR (24/11/2026, pedido de Leo: "el proveedor tiene memoria, funciona de la misma manera que nosotros le
+// hacemos a un agente"). Es por club: cada semana se netea el rodeo de todos los agentes del club; si da negativo el proveedor no cobra
+// rodeo y ese monto queda como memoria; si da positivo, primero tapa la memoria y recién lo que sobra va al 35%. Se recalcula siempre
+// desde el historial de cierres (nunca se guarda un acumulado que se pueda desincronizar con un cierre revertido o reimportado).
+// Los rodeos cargados a mano (sin detalle por jugador) no entran en la memoria: se suman tal cual, como antes.
+export const PCT_RODEO_PROVEEDOR = 0.35;
+
+export interface RodeoProveedorSemana {
+  netoClub: number;
+  memoriaAnterior: number;
+  tapado: number; // cuánto de la memoria tapó esta semana
+  aRepartir: number; // neto ya descontada la memoria (0 si no alcanzó)
+  memoriaNueva: number;
+  manual: number;
+  monto: number; // aRepartir × 35% + manual (sin signo de dirección)
+}
+
+async function netosRodeoPorSemana(clubId: string, hastaWeekStart?: string): Promise<{ weekStart: string; neto: number }[]> {
+  const r = await pool.query(
+    `SELECT wc.week_start::date::text AS ws,
+            SUM(COALESCE((SELECT SUM((j->>'baseRodeo')::numeric) FROM jsonb_array_elements(wc.rodeo_detalle->'jugadores') j), 0)) AS neto
+     FROM weekly_closings wc
+     WHERE wc.club_id = $1 AND wc.status <> 'REVERTIDO' AND wc.rodeo_detalle IS NOT NULL
+       AND ($2::date IS NULL OR wc.week_start < $2::date)
+     GROUP BY 1 ORDER BY 1`,
+    [clubId, hastaWeekStart ?? null]
+  );
+  return r.rows.map((x: any) => ({ weekStart: x.ws, neto: round2(Number(x.neto)) }));
+}
+
+function arrastrarMemoria(netos: number[]): number {
+  let mem = 0;
+  for (const n of netos) mem = round2(Math.max(0, mem - n));
+  return mem;
+}
+
+export async function memoriaRodeoProveedorAntesDe(clubId: string, weekStart: string): Promise<number> {
+  return arrastrarMemoria((await netosRodeoPorSemana(clubId, weekStart)).map((x) => x.neto));
+}
+
+// Memoria vigente hoy por club (para mostrar en Proveedores): incluye todas las semanas cargadas.
+export async function memoriaRodeoProveedorActual(clubId: string): Promise<{ memoria: number; ultimaSemana: string | null }> {
+  const netos = await netosRodeoPorSemana(clubId);
+  return { memoria: arrastrarMemoria(netos.map((x) => x.neto)), ultimaSemana: netos.length ? netos[netos.length - 1].weekStart : null };
+}
+
+export async function calcularRodeoProveedorSemana(resumen: ResumenClubSemanal): Promise<RodeoProveedorSemana> {
+  const netoClub = round2(resumen.rodeoNetoClub);
+  const memoriaAnterior = await memoriaRodeoProveedorAntesDe(resumen.clubId, resumen.weekStart);
+  const aRepartir = round2(Math.max(0, netoClub - memoriaAnterior));
+  const memoriaNueva = round2(Math.max(0, memoriaAnterior - netoClub));
+  const tapado = netoClub > 0 ? round2(Math.min(netoClub, memoriaAnterior)) : 0;
+  const manual = round2(resumen.rodeoManualProveedor);
+  return { netoClub, memoriaAnterior, tapado, aRepartir, memoriaNueva, manual, monto: round2(aRepartir * PCT_RODEO_PROVEEDOR + manual) };
+}
+
 export interface LineaClubPreview {
   resumen: ResumenClubSemanal;
   participacionRake: number;
   clubRebate: number;
   impactoRodeo: number;
+  rodeo: RodeoProveedorSemana;
   montoCrudo: number;
   montoAplicado: number;
 }
@@ -47,6 +104,8 @@ let columnaRodeoLista = false;
 async function asegurarColumnaRodeo() {
   if (columnaRodeoLista) return;
   await pool.query(`ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS rodeo_a_favor_nuestro BOOLEAN NOT NULL DEFAULT false`);
+  // Desglose del rodeo con memoria del proveedor (24/11/2026): neto del club, memoria antes/después, lo que se repartió.
+  await pool.query(`ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS rodeo_detalle JSONB`);
   columnaRodeoLista = true;
 }
 
@@ -87,11 +146,13 @@ export async function calcularLineaClubPreview(
 
   const participacionRake = resumen.rakeTotal * rakebackPct;
   const clubRebate = await calcularClubRebate(resumen);
-  const impactoRodeo = (rodeoAFavorNuestro ? 1 : -1) * round2(resumen.rodeoUnionProveedor); // 35% del rodeo a repartir (antes: el 15% del agente)
+  // 35% del rodeo neto del club, ya descontada la memoria del proveedor (ver calcularRodeoProveedorSemana).
+  const rodeo = await calcularRodeoProveedorSemana(resumen);
+  const impactoRodeo = (rodeoAFavorNuestro ? 1 : -1) * rodeo.monto;
   const montoCrudo = resumen.resultadoTotal + participacionRake + clubRebate + impactoRodeo;
   const montoAplicado = -montoCrudo; // inversión exclusiva de Proveedores
 
-  return { resumen, participacionRake, clubRebate, impactoRodeo, montoCrudo, montoAplicado };
+  return { resumen, participacionRake, clubRebate, impactoRodeo, rodeo, montoCrudo, montoAplicado };
 }
 
 // Repositorio de Proveedores (22/09/2026, pedido de Leo) -- entidad separada de agents.
@@ -165,7 +226,16 @@ export async function listSaldosProveedores() {
      JOIN clubs c ON c.id = ps.club_id
      ORDER BY p.name, c.name`
   );
-  return r.rows;
+  // Memoria de rodeo vigente del club (24/11/2026), solo en clubes con rodeo cargado.
+  const memorias = new Map<string, { memoria: number; ultimaSemana: string | null }>();
+  for (const clubId of new Set<string>(r.rows.map((x: any) => x.club_id))) {
+    const m = await memoriaRodeoProveedorActual(clubId);
+    if (m.ultimaSemana) memorias.set(clubId, m);
+  }
+  return r.rows.map((x: any) => {
+    const m = memorias.get(x.club_id);
+    return { ...x, memoria_rodeo: m ? m.memoria : null, memoria_rodeo_semana: m ? m.ultimaSemana : null };
+  });
 }
 
 // Historial de movimientos que arman el saldo de un proveedor+club (22/09/2026, pedido de
@@ -373,6 +443,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       rakebackPct: number | null;
       clubRebate: number | null;
       impactoRodeo: number | null;
+      rodeoDetalle: RodeoProveedorSemana | null;
       montoCrudo: number;
       montoAplicado: number;
       saldoAnterior: number;
@@ -399,6 +470,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           rakebackPct: linea.rakebackPct as number,
           clubRebate: preview.clubRebate,
           impactoRodeo: preview.impactoRodeo,
+          rodeoDetalle: preview.rodeo,
           montoCrudo: preview.montoCrudo,
           montoAplicado: preview.montoAplicado,
           saldoAnterior,
@@ -445,6 +517,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           rakebackPct: calcAgente.referencia ? PCT_REFERENCIA : null,
           clubRebate: null,
           impactoRodeo: null,
+          rodeoDetalle: null,
           montoCrudo,
           montoAplicado,
           saldoAnterior,
@@ -470,6 +543,7 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
         rakebackPct: null,
         clubRebate: null,
         impactoRodeo: null,
+        rodeoDetalle: null,
         montoCrudo: monto,
         montoAplicado: monto,
         saldoAnterior,
@@ -515,8 +589,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
       await client.query(
         `INSERT INTO proveedor_cierre_lineas
           (id, cierre_id, tipo, club_id, agent_id, weekly_closing_id, resultado_total, rake_total,
-           rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+           rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes, rodeo_detalle)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
           newId("pclin"),
           id,
@@ -534,6 +608,8 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           linea.saldoAnterior,
           linea.saldoNuevo,
           linea.notes,
+          linea.rodeoDetalle ? JSON.stringify(linea.rodeoDetalle) : null,
+          linea.rodeoDetalle ? JSON.stringify(linea.rodeoDetalle) : null,
         ]
       );
     }
@@ -862,8 +938,8 @@ async function aplicarOAgregarLineaClubAutomatica(
     await client.query(
       `INSERT INTO proveedor_cierre_lineas
         (id, cierre_id, tipo, club_id, agent_id, weekly_closing_id, resultado_total, rake_total,
-         rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes)
-       VALUES ($1,$2,'CLUB',$3,NULL,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         rakeback_pct, club_rebate, impacto_rodeo, monto_crudo, monto_aplicado, saldo_anterior, saldo_nuevo, notes, rodeo_detalle)
+       VALUES ($1,$2,'CLUB',$3,NULL,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         newId("pclin"),
         cierreId,
@@ -878,6 +954,7 @@ async function aplicarOAgregarLineaClubAutomatica(
         saldoAnterior,
         saldoNuevo,
         "Línea agregada automáticamente al guardar el resumen semanal del club.",
+        JSON.stringify(preview.rodeo),
       ]
     );
 

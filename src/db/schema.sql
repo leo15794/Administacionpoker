@@ -1270,6 +1270,8 @@ CREATE INDEX IF NOT EXISTS proveedor_cierre_lineas_cierre_idx ON proveedor_cierr
 -- exist" -- bug real detectado 22/09/2026.
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS club_rebate NUMERIC(18,4);
 ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS impacto_rodeo NUMERIC(18,4);
+-- Memoria de rodeo del proveedor (24/11/2026): desglose de la línea de club (neto del club, memoria antes/después, lo repartido).
+ALTER TABLE proveedor_cierre_lineas ADD COLUMN IF NOT EXISTS rodeo_detalle JSONB;
 
 -- Rodeo a favor nuestro (27/10/2026, pedido de Leo: en el proveedor Suprema el rodeo es a favor nuestro, no del proveedor). Si es true,
 -- el rodeo (35% Union) suma al cierre bruto de las lineas de club en vez de restar, y asi baja lo que le debemos al proveedor.

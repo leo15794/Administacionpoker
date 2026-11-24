@@ -82,6 +82,8 @@ export interface ResumenClubSemanal {
   rodeoPagadoAgentes: number;
   /** Parte de la Unión (35%) del rodeo a repartir de los agentes del club: es lo que toma el cierre de Proveedores. */
   rodeoUnionProveedor: number;
+  rodeoNetoClub: number; // neto de los rodeos (con detalle) de todos los agentes del club esa semana, puede ser negativo
+  rodeoManualProveedor: number; // rodeos cargados a mano (sin detalle): se suman tal cual
   gananciaRodeoClub: number;
   gananciaPorRake: number;
   ingresoPorVentas: number;
@@ -271,6 +273,8 @@ export async function getResumenClubSemanal(clubId: string, weekStart: string): 
     rebateTotal,
     rodeoPagadoAgentes,
     rodeoUnionProveedor: Math.max(0, rodeoNetoClub) * 0.35 + rodeoManualProveedor,
+    rodeoNetoClub: Math.round(rodeoNetoClub * 100) / 100,
+    rodeoManualProveedor,
     gananciaRodeoClub,
     gananciaPorRake,
     ingresoPorVentas,

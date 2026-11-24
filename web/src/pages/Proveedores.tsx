@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { cargarLibreriasPdf } from "../pdfLibs";
-import { usd, pct, dateShort } from "../fmt";
+import { usd, usdCents, pct, dateShort } from "../fmt";
 import Modal from "../components/Modal";
 import ActionsMenu from "../components/ActionsMenu";
 import Loading from "../components/Loading";
@@ -11,6 +11,7 @@ import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
 import { PcImporte, PcTotal, PcLista, PcSeg, PcResumen, fmtPc, numPc } from "../components/PagoPiezas";
+import RodeoProveedorDesglose from "../components/RodeoProveedorDesglose";
 
 // Sección "Proveedores" (22/09/2026, pedido de Leo) -- entidad separada de Agentes/Clubes,
 // a propósito no comparte pantallas ni datos con esas ("no mezclarlo con lo que ya tenemos").
@@ -764,7 +765,14 @@ function ClubSaldoRow({ saldo }: { saldo: any }) {
       <div onClick={toggle} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 2px", cursor: "pointer" }}>
         <div>
           <div className="saldo-name" style={{ fontWeight: 600 }}>{saldo.club_name}</div>
-          <div className="saldo-sub">actualizado {dateShort(saldo.updated_at)}</div>
+          <div className="saldo-sub">
+            actualizado {dateShort(saldo.updated_at)}
+            {saldo.memoria_rodeo !== null && saldo.memoria_rodeo !== undefined && (
+              Number(saldo.memoria_rodeo) > 0.004
+                ? <span className="pill r" style={{ marginLeft: 8 }}>Memoria rodeo {usdCents(saldo.memoria_rodeo)}</span>
+                : <span className="pill g" style={{ marginLeft: 8 }}>Rodeo sin memoria</span>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className={`saldo-big ${monto > 0 ? "pos" : monto < 0 ? "neg" : "neutral"}`}>{monto < 0 ? "−" : ""}{usd(Math.abs(monto))}</span>
@@ -841,7 +849,10 @@ function LineasCierre({ lineas }: { lineas: any[] | null }) {
                 <td>{rakeTotal !== null && rakeTotal !== undefined ? usd(rakeTotal) : "—"}</td>
                 <td>{(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== null && (esAgente ? l.wc_rakeback_pct : l.rakeback_pct) !== undefined ? pct(esAgente ? l.wc_rakeback_pct : l.rakeback_pct) : "—"}</td>
                 <td>{l.club_rebate !== null ? usd(l.club_rebate) : "—"}</td>
-                <td>{rodeo !== null && rodeo !== undefined ? usd(rodeo) : "—"}</td>
+                <td style={{ minWidth: l.rodeo_detalle ? 190 : undefined }}>
+                  {rodeo !== null && rodeo !== undefined ? usd(rodeo) : "—"}
+                  {!esAgente && <RodeoProveedorDesglose detalle={l.rodeo_detalle} compacto />}
+                </td>
                 <td>{usd(l.monto_crudo)}</td>
                 <td><b>{usd(l.monto_aplicado)}</b></td>
               </tr>
@@ -1196,6 +1207,12 @@ function LineaClubEditor({
           {Number(preview.clubRebate) !== 0 && <> · Rebate del club: {usd(preview.clubRebate)}</>}
           {Number(preview.impactoRodeo) !== 0 && <> · Rodeo: {usd(preview.impactoRodeo)}</>}
           {" "}· Cierre bruto = {usd(preview.montoCrudo)} · Se guarda invertido: <b>{usd(preview.montoAplicado)}</b>
+        </div>
+      )}
+      {preview && resumen && !error && preview.rodeo && (Math.abs(Number(preview.rodeo.netoClub)) > 0.004 || Number(preview.rodeo.memoriaAnterior) > 0.004) && (
+        <div style={{ marginTop: 8, maxWidth: 360 }}>
+          <div className="muted" style={{ fontSize: 11.5, fontWeight: 650, marginBottom: 4 }}>RODEO CON MEMORIA DEL PROVEEDOR</div>
+          <RodeoProveedorDesglose detalle={preview.rodeo} />
         </div>
       )}
       {!soloUna && (

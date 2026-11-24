@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { usdCents, dateShort } from "../fmt";
 import Loading from "../components/Loading";
+import RodeoProveedorDesglose from "../components/RodeoProveedorDesglose";
 import Modal from "../components/Modal";
 import { PortalTop, PortalHero, PortalMini, PortalTabs, PortalCols, PortalPane, PortalCard, BarraDivergente, MovRow, SolicitudesRetiro, colorSigno, montoSigno } from "../components/PortalUI";
 
@@ -175,6 +176,7 @@ export default function MiProveedor() {
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Rodeo</div><b>{dato(rodeo) ? usdCents(Number(rodeo)) : "—"}</b></div>
                                 <div><div className="saldo-sub" style={{ margin: 0 }}>Monto bruto</div><b>{usdCents(Number(l.monto_crudo))}</b></div>
                               </div>
+                              {!esAgente && l.rodeo_detalle && <div style={{ marginTop: 8 }}><RodeoProveedorDesglose detalle={l.rodeo_detalle} /></div>}
                               <div className="saldo-sub" style={{ marginTop: 8 }}>Aplicado a tu saldo: <b style={{ color: colorSigno(Number(l.monto_aplicado)) }}>{montoSigno(Number(l.monto_aplicado))}</b></div>
                               </>)}
                             </div>
