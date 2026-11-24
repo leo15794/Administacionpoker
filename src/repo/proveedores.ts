@@ -33,19 +33,19 @@ async function calcularClubRebate(resumen: ResumenClubSemanal): Promise<number> 
 
 // Memoria de rodeo del PROVEEDOR (24/11/2026, pedido de Leo: "el proveedor tiene memoria, funciona de la misma manera que nosotros le
 // hacemos a un agente"). Es por club: cada semana se netea el rodeo de todos los agentes del club; si da negativo el proveedor no cobra
-// rodeo y ese monto queda como memoria; si da positivo, primero tapa la memoria y recién lo que sobra va al 35%. Se recalcula siempre
-// desde el historial de cierres (nunca se guarda un acumulado que se pueda desincronizar con un cierre revertido o reimportado).
-// Los rodeos cargados a mano (sin detalle por jugador) no entran en la memoria: se suman tal cual, como antes.
+// rodeo y el neto ENTERO queda como memoria; si da positivo, se saca el 35% y a ese 35% se le resta la memoria (24/11/2026, Leo:
+// "es -257.44 + 291.59"). Se recalcula siempre desde el historial de cierres (nunca se guarda un acumulado que se pueda desincronizar
+// con un cierre revertido o reimportado). Los rodeos cargados a mano (sin detalle por jugador) no entran en la memoria: se suman tal cual.
 export const PCT_RODEO_PROVEEDOR = 0.35;
 
 export interface RodeoProveedorSemana {
   netoClub: number;
+  parte35: number; // 35% del neto del club si dio positivo (0 si dio negativo)
   memoriaAnterior: number;
-  tapado: number; // cuánto de la memoria tapó esta semana
-  aRepartir: number; // neto ya descontada la memoria (0 si no alcanzó)
+  tapado: number; // cuánto de la memoria se descontó esta semana
   memoriaNueva: number;
   manual: number;
-  monto: number; // aRepartir × 35% + manual (sin signo de dirección)
+  monto: number; // parte35 - tapado + manual (sin signo de dirección)
 }
 
 async function netosRodeoPorSemana(clubId: string, hastaWeekStart?: string): Promise<{ weekStart: string; neto: number }[]> {
@@ -61,9 +61,17 @@ async function netosRodeoPorSemana(clubId: string, hastaWeekStart?: string): Pro
   return r.rows.map((x: any) => ({ weekStart: x.ws, neto: round2(Number(x.neto)) }));
 }
 
+// Una semana: negativa suma el neto entero a la memoria; positiva saca el 35% y le descuenta la memoria.
+function semanaRodeo(neto: number, memoriaAnterior: number) {
+  if (neto < 0) return { parte35: 0, tapado: 0, memoriaNueva: round2(memoriaAnterior - neto) };
+  const parte35 = round2(neto * PCT_RODEO_PROVEEDOR);
+  const tapado = round2(Math.min(parte35, memoriaAnterior));
+  return { parte35, tapado, memoriaNueva: round2(memoriaAnterior - tapado) };
+}
+
 function arrastrarMemoria(netos: number[]): number {
   let mem = 0;
-  for (const n of netos) mem = round2(Math.max(0, mem - n));
+  for (const n of netos) mem = semanaRodeo(n, mem).memoriaNueva;
   return mem;
 }
 
@@ -80,11 +88,9 @@ export async function memoriaRodeoProveedorActual(clubId: string): Promise<{ mem
 export async function calcularRodeoProveedorSemana(resumen: ResumenClubSemanal): Promise<RodeoProveedorSemana> {
   const netoClub = round2(resumen.rodeoNetoClub);
   const memoriaAnterior = await memoriaRodeoProveedorAntesDe(resumen.clubId, resumen.weekStart);
-  const aRepartir = round2(Math.max(0, netoClub - memoriaAnterior));
-  const memoriaNueva = round2(Math.max(0, memoriaAnterior - netoClub));
-  const tapado = netoClub > 0 ? round2(Math.min(netoClub, memoriaAnterior)) : 0;
+  const s = semanaRodeo(netoClub, memoriaAnterior);
   const manual = round2(resumen.rodeoManualProveedor);
-  return { netoClub, memoriaAnterior, tapado, aRepartir, memoriaNueva, manual, monto: round2(aRepartir * PCT_RODEO_PROVEEDOR + manual) };
+  return { netoClub, parte35: s.parte35, memoriaAnterior, tapado: s.tapado, memoriaNueva: s.memoriaNueva, manual, monto: round2(s.parte35 - s.tapado + manual) };
 }
 
 export interface LineaClubPreview {
