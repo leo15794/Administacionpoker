@@ -615,7 +615,6 @@ export async function aplicarCierreProveedor(input: CierreProveedorInput) {
           linea.saldoNuevo,
           linea.notes,
           linea.rodeoDetalle ? JSON.stringify(linea.rodeoDetalle) : null,
-          linea.rodeoDetalle ? JSON.stringify(linea.rodeoDetalle) : null,
         ]
       );
     }
