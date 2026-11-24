@@ -7,13 +7,14 @@ const num = (n: number | null | undefined) =>
 const conSigno = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${Number(n) > 0 ? "+" : Number(n) < 0 ? "−" : ""}${num(Math.abs(Number(n)))}`);
 const claseSigno = (n: number | null | undefined) => (n === null || n === undefined || Number(n) === 0 ? "" : Number(n) < 0 ? "neg" : "pos");
 
-export default function CierreAgenteCard({ c, abiertoInicial }: { c: any; abiertoInicial: boolean }) {
+export default function CierreAgenteCard({ c, abiertoInicial, ajustes = [] }: { c: any; abiertoInicial: boolean; ajustes?: any[] }) {
   const [abierto, setAbierto] = useState(abiertoInicial);
   const jug: any[] = c.jugadores_detalle ?? [];
   const sinMonto = c.final_closing === null || c.final_closing === undefined;
   const pct = c.rakeback_pct === null || c.rakeback_pct === undefined ? "" : ` ${(Math.round(Number(c.rakeback_pct) * 10000) / 100).toLocaleString("es-AR")}%`;
   const sistema = c.system === "PREPAGO" ? "Prepago" : c.system === "WIN_LOSE" ? "Win/Lose" : null;
   const suma = (k: string) => jug.reduce((t, j) => t + Number(j[k] ?? 0), 0);
+  const totalConAjustes = Number(c.final_closing ?? 0) + ajustes.reduce((t, a) => t + Number(a.monto), 0);
   return (
     <div className={`ca-card${abierto ? " open" : ""}`}>
       <button type="button" className="ca-h" onClick={() => setAbierto(!abierto)}>
@@ -38,6 +39,25 @@ export default function CierreAgenteCard({ c, abiertoInicial }: { c: any; abiert
                 <div><small>Rakeback{pct}</small><b className={claseSigno(c.rakeback)}>{conSigno(c.rakeback)}</b></div>
                 <div><small>Rebate</small><b className={claseSigno(c.rebate)}>{conSigno(c.rebate)}</b></div>
                 <div className="tot"><small>Cierre</small><b className={claseSigno(c.final_closing)}>{conSigno(c.final_closing)}</b></div>
+              </div>
+            </>
+          )}
+          {ajustes.length > 0 && (
+            <>
+              <div className="ca-lbl">Ajustes de la semana</div>
+              <div className="ca-aj">
+                {ajustes.map((a) => (
+                  <div key={a.id} className="ca-aj-f">
+                    <span><b>{a.nota || "Ajuste"}</b><small>{dateShort(a.fecha).slice(0, 5)}{a.club ? ` · ${a.club}` : ""}</small></span>
+                    <b className={claseSigno(a.monto)}>{conSigno(a.monto)}</b>
+                  </div>
+                ))}
+                {!sinMonto && (
+                  <div className="ca-aj-f tot">
+                    <span><b>Cierre + ajustes</b></span>
+                    <b className={claseSigno(totalConAjustes)}>{conSigno(totalConAjustes)}</b>
+                  </div>
+                )}
               </div>
             </>
           )}

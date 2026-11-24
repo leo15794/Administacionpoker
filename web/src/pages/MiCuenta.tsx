@@ -44,6 +44,17 @@ export default function MiCuenta() {
   const totalNeto = data.saldos.reduce((s: number, b: any) => s + saldoNeto(b), 0);
   const variosClubes = data.saldos.length > 1;
   const cierres: any[] = data.cierres ?? [];
+  // Ajustes de la cuenta (24/11/2026, pedido de Leo): se muestran dentro del cierre de su semana, con su descripción. Si esa semana hay
+  // cierres de varios clubes, va al del mismo club; si no coincide ninguno, al primero de la semana.
+  const ajustesPorCierre = new Map<string, any[]>();
+  for (const m of (data.movimientos_cuenta ?? []) as any[]) {
+    if (m.tipo !== "AJUSTE") continue;
+    const dia = String(m.fecha).slice(0, 10);
+    const deLaSemana = cierres.filter((c) => c.week_start && c.week_end && String(c.week_start).slice(0, 10) <= dia && dia <= String(c.week_end).slice(0, 10));
+    const destino = deLaSemana.find((c) => m.club && c.club_name === m.club) ?? deLaSemana[0];
+    if (!destino) continue;
+    ajustesPorCierre.set(destino.id, [...(ajustesPorCierre.get(destino.id) ?? []), m]);
+  }
   const ultimos = cierres.slice(0, 4);
   const sumaUltimos = ultimos.reduce((s, c) => s + Number(c.final_closing ?? 0), 0);
   // Acuerdo con su supervisor (05/11/2026): con % cargados por el supervisor, los cierres llegan ya calculados con esos %.
@@ -162,7 +173,7 @@ export default function MiCuenta() {
         ) : cierres.length === 0 ? (
           <div className="muted">Todavía no hay cierres semanales cargados.</div>
         ) : (
-          cierres.map((c: any, i: number) => <CierreAgenteCard key={c.id} c={c} abiertoInicial={i === 0} />)
+          cierres.map((c: any, i: number) => <CierreAgenteCard key={c.id} c={c} abiertoInicial={i === 0} ajustes={ajustesPorCierre.get(c.id)} />)
         )}
       </div>
     );

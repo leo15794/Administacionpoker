@@ -72,8 +72,13 @@ portalRouter.get("/mis-agentes", requireAuth, async (req: AuthedRequest, res) =>
 async function movimientosCuentaAgente(agentId: string, supervisor: string) {
   const nombreSup = supervisor.trim().toLowerCase();
   const limpiarNota = (tipo: string, nota: string | null): string | null => {
-    // Los ajustes son correcciones internas (pueden mostrar saldos): sin nota.
-    if (!nota || tipo === "AJUSTE" || nota.includes("→")) return null;
+    if (!nota || nota.includes("→")) return null;
+    // Ajustes (24/11/2026, pedido de Leo: que el agente vea la descripción, ej. "Vip"): solo las notas cortas escritas a mano. Las
+    // automáticas o internas (saldos, ocultar/mostrar, migración, reversiones, ids) siguen sin mostrarse.
+    if (tipo === "AJUSTE") {
+      const n = nota.trim();
+      if (n.length > 60 || /US\$|svmov_|mov_|autom[aá]tic|dentro de tu cuenta|migraci|reversi|consolidada|correcci|saldo/i.test(n)) return null;
+    }
     if (tipo === "PAGO_RAKEBACK") {
       const m = nota.match(/cierre (\d{4})-(\d{2})-(\d{2})/);
       return m ? `cierre del ${m[3]}/${m[2]}` : null;
