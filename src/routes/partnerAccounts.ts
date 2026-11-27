@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
 import { movimientoDeGastoComision, editarMovimientoSupervisor } from "../repo/supervisores.js";
+import { pagoProveedorDeGastoComision, editarComisionPagoProveedor } from "../repo/proveedores.js";
 import {
   listPartnerAccounts,
   crearCuenta,
@@ -117,6 +118,9 @@ partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (
     if (await movimientoDeGastoComision(req.params.id)) {
       return res.status(400).json({ error: "Esta comisión viene de un pago de Supervisores: editá el % o quién la paga con \"Editar comisión\"." });
     }
+    if (await pagoProveedorDeGastoComision(req.params.id)) {
+      return res.status(400).json({ error: "Esta comisión viene de un pago de Proveedores: editá el % o quién la paga con \"Editar comisión\"." });
+    }
     res.json(await editarMovimiento(req.params.id, parsed.data, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -130,6 +134,11 @@ partnerAccountsRouter.delete("/movimientos/:id", requireAuth, requireAdmin, asyn
     const movId = await movimientoDeGastoComision(req.params.id);
     if (movId) {
       await editarMovimientoSupervisor(movId, { comisionPct: 0, editedBy: req.user?.email ?? null });
+      return res.json({ ok: true, comisionQuitada: true });
+    }
+    const pagoId = await pagoProveedorDeGastoComision(req.params.id);
+    if (pagoId) {
+      await editarComisionPagoProveedor(pagoId, 0, null, req.user?.email ?? null);
       return res.json({ ok: true, comisionQuitada: true });
     }
     await eliminarMovimiento(req.params.id, req.user?.email);

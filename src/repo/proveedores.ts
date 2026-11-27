@@ -1030,6 +1030,60 @@ export interface PagoProveedorInput {
   // proveedores") -- link de pago/trackeo de una transferencia real de USDT, igual que
   // supervisor_movimientos.payment_link. Opcional, disponible para cualquier Pago/Cobro.
   paymentLink?: string | null;
+  // Comisión (27/11/2026, pedido de Leo, mismo criterio que Supervisores / mockup 100): % sobre el importe que nos cobran o nos
+  // pagan. El saldo del proveedor se mueve solo por el importe; la comisión mueve la tesorería y va a Gastos operativos de Socios.
+  comisionPct?: number | null;
+  comisionQuien?: "NOSOTROS" | "ELLOS" | null;
+}
+
+let columnasComisionProvListas = false;
+export async function asegurarColumnasComisionProveedor() {
+  if (columnasComisionProvListas) return;
+  await pool.query(`
+    ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_pct NUMERIC(9,4);
+    ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_monto NUMERIC(18,2);
+    ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_quien TEXT;
+    ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS proveedor_pago_id TEXT;`);
+  columnasComisionProvListas = true;
+}
+
+function calcularComision(amount: number, direction: "PAGO" | "COBRO", pctIn?: number | null, quienIn?: string | null) {
+  const pct = pctIn ? Math.round(Number(pctIn) * 10000) / 10000 : 0;
+  if (!Number.isFinite(pct) || pct < 0 || pct >= 100) throw new Error("El % de comisión tiene que estar entre 0 y 100.");
+  const quien: "NOSOTROS" | "ELLOS" = quienIn === "ELLOS" ? "ELLOS" : "NOSOTROS";
+  const monto = pct > 0 ? round2((Math.abs(amount) * pct) / 100) : 0;
+  // Lo que se suma a la tesorería: la comisión que pagamos sale de más (o entra de menos); la que nos pagan, al revés.
+  const ajusteTesoreria = monto === 0 ? 0 : (direction === "PAGO") === (quien === "NOSOTROS") ? monto : -monto;
+  return { pct, quien, monto, ajusteTesoreria };
+}
+
+// Gasto operativo de la comisión en Socios (+ si la pagamos, − si nos la pagan), atado al pago por proveedor_pago_id.
+async function registrarGastoComisionProveedor(
+  client: PoolClient,
+  pago: { id: string; direction: string; amount: number; proveedorNombre: string; fecha?: string | null },
+  c: { pct: number; quien: "NOSOTROS" | "ELLOS"; monto: number }
+) {
+  let cuenta = (await client.query(
+    `SELECT id FROM partner_accounts WHERE kind = 'OPERATIVA' AND active = true AND name ILIKE 'gastos%' ORDER BY created_at LIMIT 1`
+  )).rows[0]?.id;
+  if (!cuenta) {
+    cuenta = newId("pacc");
+    await client.query(`INSERT INTO partner_accounts (id, name, kind) VALUES ($1, 'Gastos operativo', 'OPERATIVA')`, [cuenta]);
+  }
+  const fmtN = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  await client.query(
+    `INSERT INTO partner_account_entries (id, account_id, category, concept, amount, entry_date, notes, proveedor_pago_id)
+     VALUES ($1, $2, 'GASTO', $3, $4, COALESCE($5::date, (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date), $6, $7)`,
+    [
+      newId("pentry"),
+      cuenta,
+      `Comisión ${String(c.pct).replace(".", ",")}% · ${pago.direction === "PAGO" ? "Pago a" : "Cobro de"} ${pago.proveedorNombre} · US$ ${fmtN(Math.abs(pago.amount))}`,
+      c.quien === "NOSOTROS" ? c.monto : -c.monto,
+      pago.fecha ?? null,
+      c.quien === "NOSOTROS" ? "Comisión que pagamos nosotros (Proveedores)." : "Comisión que nos pagaron (Proveedores).",
+      pago.id,
+    ]
+  );
 }
 
 /**
@@ -1050,6 +1104,9 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
   if (medio === "EFECTIVO" && !input.custodian?.trim()) {
     throw new Error("Un pago/cobro en efectivo requiere custodio (BIT-051/052).");
   }
+  // Comisión: solo en pagos/cobros (un ajuste es una corrección, no plata que se mueve).
+  const comision = origen === "AJUSTE" ? calcularComision(input.amount, input.direction, 0) : calcularComision(input.amount, input.direction, input.comisionPct, input.comisionQuien);
+  if (comision.monto > 0) await asegurarColumnasComisionProveedor();
 
   const client: PoolClient = await pool.connect();
   try {
@@ -1090,6 +1147,16 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
       await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado + $1 WHERE id = $2`, [delta, input.cierreLineaId]);
     }
 
+    const proveedorNombre = (await client.query(`SELECT name FROM proveedores WHERE id = $1`, [input.proveedorId])).rows[0]?.name ?? "proveedor";
+    if (comision.monto > 0) {
+      const r3 = await client.query(
+        `UPDATE proveedor_pagos SET comision_pct = $2, comision_monto = $3, comision_quien = $4 WHERE id = $1 RETURNING *`,
+        [id, comision.pct, comision.monto, comision.quien]
+      );
+      pago = r3.rows[0];
+      await registrarGastoComisionProveedor(client, { id, direction: input.direction, amount: input.amount, proveedorNombre }, comision);
+    }
+
     await client.query("COMMIT");
 
     // Ajuste de tesorería fuera de la transacción de arriba (mismo patrón que
@@ -1097,13 +1164,15 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     // no un client propio). Si esto llegara a fallar, el pago ya quedó registrado en
     // proveedor_pagos/proveedor_saldos -- Leo puede revertirlo y recargarlo si hace falta.
     if (moveWallet) {
-      const proveedorNombre = (await pool.query(`SELECT name FROM proveedores WHERE id = $1`, [input.proveedorId])).rows[0]?.name ?? "proveedor";
       const { id: treasuryId } = await registrarAjusteTesoreria({
         ledger: medio === "EFECTIVO" ? "CAJA_EFECTIVO" : medio === "ZELLE" ? "ZELLE" : "WALLET_MANOS",
         direction: input.direction === "PAGO" ? "EGRESO" : "INGRESO",
-        amount: Math.abs(input.amount),
+        amount: round2(Math.abs(input.amount) + comision.ajusteTesoreria),
         custodian: medio === "EFECTIVO" ? input.custodian?.trim() : null,
-        reason: `${input.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${proveedorNombre} (${medio})${input.notes ? ` -- ${input.notes}` : ""}`,
+        reason:
+          `${input.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${proveedorNombre} (${medio})` +
+          (comision.monto ? ` (importe ${Math.abs(input.amount).toFixed(2)} ${comision.ajusteTesoreria > 0 ? "+" : "−"} comisión ${comision.pct}% ${comision.monto.toFixed(2)})` : "") +
+          `${input.notes ? ` -- ${input.notes}` : ""}`,
         createdBy: input.createdBy ?? null,
       });
       const r2 = await pool.query(`UPDATE proveedor_pagos SET treasury_adjustment_id = $1 WHERE id = $2 RETURNING *`, [treasuryId, id]);
@@ -1117,6 +1186,68 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
   } finally {
     client.release();
   }
+}
+
+// Editar o quitar la comisión de un pago/cobro ya cargado (27/11/2026). El saldo del proveedor no cambia (la comisión nunca lo
+// tocó): se rehace solo la tesorería (se revierte el asiento y se carga uno nuevo con el importe ± la comisión nueva) y el gasto en
+// Socios. pct 0 la quita.
+export async function editarComisionPagoProveedor(id: string, pctIn: number, quienIn?: "NOSOTROS" | "ELLOS" | null, editadoPor?: string | null) {
+  await asegurarColumnasComisionProveedor();
+  const pago = (await pool.query(`SELECT pp.*, p.name AS proveedor_name FROM proveedor_pagos pp JOIN proveedores p ON p.id = pp.proveedor_id WHERE pp.id = $1`, [id])).rows[0];
+  if (!pago) throw new Error("Pago no encontrado.");
+  if (pago.status === "REVERTIDO") throw new Error("Este pago está revertido: no se puede editar la comisión.");
+  if ((pago.origen ?? "PAGO_COBRO") === "AJUSTE") throw new Error("Un ajuste no lleva comisión.");
+  const amount = Number(pago.amount);
+  const c = calcularComision(amount, pago.direction, pctIn, quienIn ?? pago.comision_quien);
+  const antes = calcularComision(amount, pago.direction, Number(pago.comision_monto) > 0 ? Number(pago.comision_pct) : 0, pago.comision_quien);
+  if (c.monto === antes.monto && c.quien === antes.quien) return { id, cambios: 0 };
+
+  // Tesorería: revertir el asiento viejo y cargar uno nuevo (si el pago movía tesorería).
+  let treasuryId: string | null = pago.treasury_adjustment_id ?? null;
+  if (pago.treasury_adjustment_id) {
+    const adj = (await pool.query(`SELECT * FROM treasury_adjustments WHERE id = $1`, [pago.treasury_adjustment_id])).rows[0];
+    await revertirAjusteTesoreria(pago.treasury_adjustment_id, `Se cambió la comisión del pago/cobro ${id} de Proveedores.`, editadoPor ?? null);
+    const nuevo = await registrarAjusteTesoreria({
+      ledger: adj.ledger,
+      direction: pago.direction === "PAGO" ? "EGRESO" : "INGRESO",
+      amount: round2(amount + c.ajusteTesoreria),
+      custodian: adj.custodian ?? null,
+      reason:
+        `${pago.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${pago.proveedor_name} (${pago.medio})` +
+        (c.monto ? ` (importe ${amount.toFixed(2)} ${c.ajusteTesoreria > 0 ? "+" : "−"} comisión ${c.pct}% ${c.monto.toFixed(2)})` : "") +
+        " -- comisión corregida",
+      createdBy: editadoPor ?? null,
+    });
+    treasuryId = nuevo.id;
+  }
+
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE proveedor_pagos SET comision_pct = $2, comision_monto = $3, comision_quien = $4, treasury_adjustment_id = $5 WHERE id = $1`,
+      [id, c.monto ? c.pct : null, c.monto || null, c.monto ? c.quien : null, treasuryId]
+    );
+    await client.query(`DELETE FROM partner_account_entries WHERE proveedor_pago_id = $1`, [id]);
+    if (c.monto > 0) {
+      const fecha = (await client.query(`SELECT (occurred_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS f FROM proveedor_pagos WHERE id = $1`, [id])).rows[0]?.f ?? null;
+      await registrarGastoComisionProveedor(client, { id, direction: pago.direction, amount, proveedorNombre: pago.proveedor_name, fecha }, c);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { id, cambios: 1, comision: c.monto };
+}
+
+// Pago de proveedor a partir de su gasto de comisión en Socios (para editar o quitar desde Socios → Gastos operativos).
+export async function pagoProveedorDeGastoComision(entryId: string): Promise<string | null> {
+  await asegurarColumnasComisionProveedor();
+  const r = await pool.query(`SELECT proveedor_pago_id FROM partner_account_entries WHERE id = $1`, [entryId]);
+  return r.rows[0]?.proveedor_pago_id ?? null;
 }
 
 export async function revertirPagoProveedor(id: string) {
@@ -1148,6 +1279,10 @@ export async function revertirPagoProveedor(id: string) {
       await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado - $1 WHERE id = $2`, [delta, pago.cierre_linea_id]);
     }
     await client.query(`UPDATE proveedor_pagos SET status = 'REVERTIDO' WHERE id = $1`, [id]);
+    // La comisión (27/11/2026) se va con el pago: se borra su gasto operativo de Socios.
+    if (Number(pago.comision_monto) > 0) {
+      await client.query(`DELETE FROM partner_account_entries WHERE proveedor_pago_id = $1`, [id]);
+    }
 
     await client.query("COMMIT");
 
@@ -1369,6 +1504,9 @@ export async function eliminarPagoProveedorDefinitivo(id: string) {
       ]);
     }
 
+    if (Number(pago.comision_monto) > 0) {
+      await client.query(`DELETE FROM partner_account_entries WHERE proveedor_pago_id = $1`, [id]);
+    }
     await client.query(`DELETE FROM proveedor_pagos WHERE id = $1`, [id]);
     await client.query("COMMIT");
 

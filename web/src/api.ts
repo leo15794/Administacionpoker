@@ -581,8 +581,13 @@ export const api = {
     custodian?: string;
     // paymentLink (16/10/2026, pedido de Leo): ver repo/proveedores.ts (PagoProveedorInput).
     paymentLink?: string | null;
+    // Comisión (27/11/2026, mismo criterio que Supervisores / mockup 100).
+    comisionPct?: number | null;
+    comisionQuien?: "NOSOTROS" | "ELLOS" | null;
   }) => request("/proveedores/pagos", { method: "POST", body: JSON.stringify(data) }),
   revertirPagoProveedor: (id: string) => request(`/proveedores/pagos/${id}`, { method: "DELETE" }),
+  editarComisionPagoProveedor: (id: string, data: { comisionPct: number; comisionQuien?: "NOSOTROS" | "ELLOS" | null }) =>
+    request(`/proveedores/pagos/${id}/comision`, { method: "PUT", body: JSON.stringify(data) }),
   // Líneas con saldo pendiente de un proveedor (30/09/2026) -- para el picker de Pago/Cobro.
   lineasPendientesProveedor: (proveedorId: string) => request(`/proveedores/${proveedorId}/lineas-pendientes`),
   eliminarPagoProveedorDefinitivo: (id: string) => request(`/proveedores/pagos/${id}/definitivo`, { method: "DELETE" }),

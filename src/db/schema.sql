@@ -2428,6 +2428,11 @@ ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_pct NUMERIC
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_monto NUMERIC(18,2);
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_quien TEXT;
 ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS supervisor_movimiento_id TEXT;
+-- Comisión en Pago/cobro de Proveedores (27/11/2026, mismo criterio).
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_pct NUMERIC(9,4);
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_monto NUMERIC(18,2);
+ALTER TABLE proveedor_pagos ADD COLUMN IF NOT EXISTS comision_quien TEXT;
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS proveedor_pago_id TEXT;
 
 -- ============ Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo) ============
 -- Siempre manuales: el admin elige a quién mandar (ver repo/notificaciones.ts). Una fila por suscripción

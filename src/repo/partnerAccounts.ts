@@ -12,15 +12,16 @@ import { periodoDeMovimientoDeSueldo, totalSueldosPeriodosCerrados } from "./sue
 // que salió (valor absoluto), se hayan cargado en positivo o en negativo -- el monto es libre y
 // un gasto cargado con "-" se terminaba sumando a la ganancia. AJUSTE mantiene el signo (puede
 // ser ingreso o descuento). Lo usan Cuentas de socios y Ganancia por período.
-// Excepción (27/11/2026, mockup 100): la comisión de un Pagar/Cobrar de Supervisores conserva su signo -- negativa = nos la pagaron,
+// Excepción (27/11/2026, mockup 100): la comisión de un Pagar/Cobrar de Supervisores o de Proveedores conserva su signo -- negativa = nos la pagaron,
 // así baja los gastos operativos en vez de sumarlos.
-export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') AND supervisor_movimiento_id IS NULL THEN ABS(amount) ELSE amount END)`;
+export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') AND supervisor_movimiento_id IS NULL AND proveedor_pago_id IS NULL THEN ABS(amount) ELSE amount END)`;
 
 // La columna supervisor_movimiento_id la crea la comisión de Supervisores; se asegura acá antes de usar MONTO_CATEGORIA_SQL.
 let columnaComisionLista = false;
 export async function asegurarColumnaComisionSocios(q: { query: (sql: string) => Promise<any> } = pool) {
   if (columnaComisionLista) return;
   await q.query(`ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS supervisor_movimiento_id TEXT`);
+  await q.query(`ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS proveedor_pago_id TEXT`);
   columnaComisionLista = true;
 }
 

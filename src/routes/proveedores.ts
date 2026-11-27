@@ -16,6 +16,7 @@ import {
   obtenerCierreAgentePreview,
   registrarPagoProveedor,
   revertirPagoProveedor,
+  editarComisionPagoProveedor,
   listPagosProveedor,
   listLineasPendientesProveedor,
   listGarantiasProveedores,
@@ -257,6 +258,8 @@ const pagoSchema = z.object({
   // paymentLink (16/10/2026, pedido de Leo) -- ver comentario largo en repo/proveedores.ts
   // (PagoProveedorInput).
   paymentLink: z.string().nullable().optional(),
+  comisionPct: z.number().min(0).max(99.99).nullable().optional(),
+  comisionQuien: z.enum(["NOSOTROS", "ELLOS"]).nullable().optional(),
 });
 proveedoresRouter.post("/pagos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = pagoSchema.safeParse(req.body);
@@ -312,6 +315,21 @@ proveedoresRouter.post("/solicitudes-retiro/:id/rechazar", requireAuth, requireA
 // formulario de Pago/Cobro, que deja elegir varias (de distintos clubes/semanas) en una tanda.
 proveedoresRouter.get("/:id/lineas-pendientes", requireAuth, requireAdmin, async (req, res) => {
   res.json(await listLineasPendientesProveedor(req.params.id));
+});
+
+// Editar o quitar la comisión de un pago/cobro (27/11/2026): { comisionPct: 0 } la quita.
+const comisionPagoSchema = z.object({
+  comisionPct: z.number().min(0).max(99.99),
+  comisionQuien: z.enum(["NOSOTROS", "ELLOS"]).nullable().optional(),
+});
+proveedoresRouter.put("/pagos/:id/comision", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
+  const parsed = comisionPagoSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    res.json(await editarComisionPagoProveedor(req.params.id, parsed.data.comisionPct, parsed.data.comisionQuien ?? null, req.user?.email ?? null));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 proveedoresRouter.delete("/pagos/:id", requireAuth, requireAdmin, async (req, res) => {
