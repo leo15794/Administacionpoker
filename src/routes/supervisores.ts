@@ -12,6 +12,7 @@ import {
   registrarMovimientoSupervisor,
   listMovimientosSupervisor,
   revertirMovimientoSupervisor,
+  eliminarMovimientoSupervisor,
   actualizarLinkPagoMovimientoSupervisor,
   editarMovimientoSupervisor,
   migrarSaldoHistoricoSupervisor,
@@ -102,6 +103,8 @@ const movimientoSchema = z.object({
   // Link de pago/trackeo (16/10/2026, pedido de Leo) -- opcional, disponible en cualquier
   // Carga/Descarga manual, no solo las que vienen de resolver una solicitud (ver abajo).
   paymentLink: z.string().nullable().optional(),
+  comisionPct: z.number().min(0).max(99.99).nullable().optional(),
+  comisionQuien: z.enum(["NOSOTROS", "ELLOS"]).nullable().optional(),
 });
 supervisoresRouter.post("/:id/movimientos", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = movimientoSchema.safeParse(req.body);
@@ -140,12 +143,23 @@ const editarMovimientoSchema = z.object({
   concepto: z.string().nullable().optional(),
   amount: z.number().optional(),
   clubId: z.string().nullable().optional(),
+  comisionPct: z.number().min(0).max(99.99).nullable().optional(),
+  comisionQuien: z.enum(["NOSOTROS", "ELLOS"]).nullable().optional(),
 });
 supervisoresRouter.put("/movimientos/:movId", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   const parsed = editarMovimientoSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
     res.json(await editarMovimientoSupervisor(req.params.movId, { ...parsed.data, editedBy: req.user?.email ?? null }));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Eliminar un movimiento (27/11/2026, para pruebas): revierte lo que movió (cuenta, Wallet, comisión) y borra la fila.
+supervisoresRouter.delete("/movimientos/:movId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await eliminarMovimientoSupervisor(req.params.movId));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

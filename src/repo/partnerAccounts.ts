@@ -12,7 +12,17 @@ import { periodoDeMovimientoDeSueldo, totalSueldosPeriodosCerrados } from "./sue
 // que salió (valor absoluto), se hayan cargado en positivo o en negativo -- el monto es libre y
 // un gasto cargado con "-" se terminaba sumando a la ganancia. AJUSTE mantiene el signo (puede
 // ser ingreso o descuento). Lo usan Cuentas de socios y Ganancia por período.
-export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') THEN ABS(amount) ELSE amount END)`;
+// Excepción (27/11/2026, mockup 100): la comisión de un Pagar/Cobrar de Supervisores conserva su signo -- negativa = nos la pagaron,
+// así baja los gastos operativos en vez de sumarlos.
+export const MONTO_CATEGORIA_SQL = `(CASE WHEN category IN ('RETIRO','GASTO') AND supervisor_movimiento_id IS NULL THEN ABS(amount) ELSE amount END)`;
+
+// La columna supervisor_movimiento_id la crea la comisión de Supervisores; se asegura acá antes de usar MONTO_CATEGORIA_SQL.
+let columnaComisionLista = false;
+export async function asegurarColumnaComisionSocios(q: { query: (sql: string) => Promise<any> } = pool) {
+  if (columnaComisionLista) return;
+  await q.query(`ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS supervisor_movimiento_id TEXT`);
+  columnaComisionLista = true;
+}
 
 // "YYYY-MM-DD" (o una fecha DATE de la base, que pg devuelve como medianoche UTC) interpretada
 // tal cual en una zona con offset negativo (Argentina, UTC-3) aparece un día antes al mostrarla
@@ -388,6 +398,7 @@ export async function eliminarGananciaHistoricaAjuste(id: string) {
  * mostrar un número distinto al de ahí.
  */
 export async function getAgregadosSocios() {
+  await asegurarColumnaComisionSocios();
   const clubesSemana = await pool.query(
     `SELECT DISTINCT club_id, week_start FROM weekly_closings WHERE status IN ('APLICADO','CORREGIDO')`
   );

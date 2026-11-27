@@ -415,6 +415,9 @@ export interface MovimientoSupervisorInput {
    * supervisor_movimientos.payment_link, visible para el supervisor en su propio historial
    * (Mi Supervisión). Opcional: una Carga/Descarga manual sigue funcionando igual sin esto. */
   paymentLink?: string | null;
+  /** Solo PAGO/COBRO (27/11/2026, mockup 100): % de comisión sobre el importe y quién la paga. */
+  comisionPct?: number | null;
+  comisionQuien?: ComisionQuien | null;
   createdBy?: string | null;
 }
 
@@ -433,7 +436,34 @@ export interface MovimientoSupervisorInput {
 // indique (para correcciones puntuales que no son ni una carga ni una descarga real); no mueve
 // Wallet Manos salvo que se tilde USDT real (05/11/2026): ahí positivo = ingreso y negativo =
 // egreso por el valor absoluto. Nunca toca balances/ledger_movements de ningún agente.
+// Comisión en Pagar/Cobrar (27/11/2026, pedido de Leo, mockup 100): un % sobre el importe que nos cobran o que nos pagan.
+// La cuenta del supervisor se mueve solo por el importe; la comisión mueve la Wallet (opción "a" de Leo: un pago de 1.000 al
+// 2% que pagamos nosotros saca 1.020) y queda registrada como Gasto en la cuenta "Gastos operativo" de Socios (+ si la pagamos,
+// − si nos la pagan), atada al movimiento: revertir, editar o eliminar el pago corrige también el gasto.
+export type ComisionQuien = "NOSOTROS" | "ELLOS";
+let columnasComisionListas = false;
+export async function asegurarColumnasComision() {
+  if (columnasComisionListas) return;
+  await pool.query(`
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_pct NUMERIC(9,4);
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_monto NUMERIC(18,2);
+    ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_quien TEXT;
+    ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS supervisor_movimiento_id TEXT;`);
+  columnasComisionListas = true;
+}
+
+async function cuentaGastosOperativos(client: PoolClient): Promise<string> {
+  const r = await client.query(
+    `SELECT id FROM partner_accounts WHERE kind = 'OPERATIVA' AND active = true AND name ILIKE 'gastos%' ORDER BY created_at LIMIT 1`
+  );
+  if (r.rows[0]) return r.rows[0].id;
+  const id = newId("pacc");
+  await client.query(`INSERT INTO partner_accounts (id, name, kind) VALUES ($1, 'Gastos operativo', 'OPERATIVA')`, [id]);
+  return id;
+}
+
 export async function registrarMovimientoSupervisor(input: MovimientoSupervisorInput) {
+  await asegurarColumnasComision();
   const sup = await pool.query(`SELECT * FROM agents WHERE id = $1`, [input.supervisorAgentId]);
   if (!sup.rows[0]) throw new Error("Supervisor no encontrado.");
   if (!sup.rows[0].usa_cuenta_consolidada) throw new Error("Este agente no tiene la cuenta consolidada activada.");
@@ -482,6 +512,14 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
   // USDT"): solo si se tilda; el signo del ajuste define el lado de Wallet Manos (positivo = entró plata, negativo = salió).
   const usdtReal = esPagoCobro || (input.type !== "DESCUENTO" && !!input.usdtReal);
 
+  // Comisión (solo Pagar/Cobrar). Con 0 o vacío no hay comisión y todo queda como antes.
+  const comisionPct = esPagoCobro && input.comisionPct ? round2(Number(input.comisionPct) * 100) / 100 : 0;
+  if (comisionPct < 0 || comisionPct >= 100 || !Number.isFinite(comisionPct)) throw new Error("El % de comisión tiene que estar entre 0 y 100.");
+  const comisionQuien: ComisionQuien = input.comisionQuien === "ELLOS" ? "ELLOS" : "NOSOTROS";
+  const comisionMonto = comisionPct > 0 ? round2((amount * comisionPct) / 100) : 0;
+  // Lo que se mueve en la Wallet: la comisión que pagamos sale de más (o entra de menos); la que nos pagan, al revés.
+  const ajusteWalletComision = comisionMonto === 0 ? 0 : (input.type === "PAGO") === (comisionQuien === "NOSOTROS") ? comisionMonto : -comisionMonto;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -520,12 +558,14 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
     if (usdtReal) {
       const esAjuste = input.type === "AJUSTE";
       const direction = input.type === "CARGA" || input.type === "COBRO" || (esAjuste && input.amount > 0) ? "INGRESO" : "EGRESO";
-      const montoWallet = esAjuste ? Math.abs(round2(input.amount)) : amount;
+      const montoWallet = esAjuste ? Math.abs(round2(input.amount)) : round2(amount + ajusteWalletComision);
       const { id: adjId } = await registrarAjusteTesoreria({
         ledger: "WALLET_MANOS",
         direction,
         amount: montoWallet,
-        reason: `Supervisor ${sup.rows[0].name} — ${input.type.toLowerCase()} US$ ${montoWallet.toFixed(2)}`,
+        reason:
+          `Supervisor ${sup.rows[0].name} — ${input.type.toLowerCase()} US$ ${montoWallet.toFixed(2)}` +
+          (comisionMonto ? ` (importe ${amount.toFixed(2)} ${ajusteWalletComision > 0 ? "+" : "−"} comisión ${comisionPct}% ${comisionMonto.toFixed(2)})` : ""),
         createdBy: input.createdBy ?? null,
       });
       treasuryAdjustmentId = adjId;
@@ -548,6 +588,26 @@ export async function registrarMovimientoSupervisor(input: MovimientoSupervisorI
         input.type === "DESCUENTO" ? input.concepto!.trim() : null, input.type === "DESCUENTO" ? input.semana ?? null : null,
       ]
     );
+    if (comisionMonto > 0) {
+      await client.query(
+        `UPDATE supervisor_movimientos SET comision_pct = $2, comision_monto = $3, comision_quien = $4 WHERE id = $1`,
+        [id, comisionPct, comisionMonto, comisionQuien]
+      );
+      // Gasto operativo en Socios: + si la pagamos nosotros (cuenta como gasto), − si nos la pagan (baja los gastos).
+      const fmtN = (n: number) => n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      await client.query(
+        `INSERT INTO partner_account_entries (id, account_id, category, concept, amount, entry_date, notes, supervisor_movimiento_id)
+         VALUES ($1, $2, 'GASTO', $3, $4, (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date, $5, $6)`,
+        [
+          newId("pentry"),
+          await cuentaGastosOperativos(client),
+          `Comisión ${String(comisionPct).replace(".", ",")}% · ${input.type === "PAGO" ? "Pago a" : "Cobro de"} ${sup.rows[0].name} · US$ ${fmtN(amount)}`,
+          comisionQuien === "NOSOTROS" ? comisionMonto : -comisionMonto,
+          comisionQuien === "NOSOTROS" ? "Comisión que pagamos nosotros (Supervisores)." : "Comisión que nos pagaron (Supervisores).",
+          id,
+        ]
+      );
+    }
     await client.query(
       `UPDATE supervisor_cuentas SET fichas_reales = $1, cuenta_corriente = $2, updated_at = now() WHERE id = $3`,
       [fichasNuevo, ccNuevo, cuenta.id]
@@ -620,6 +680,10 @@ export async function revertirMovimientoSupervisor(movimientoId: string) {
       [fichasNuevo, ccNuevo, cuenta.id]
     );
     await client.query(`UPDATE supervisor_movimientos SET status = 'REVERTIDO' WHERE id = $1`, [movimientoId]);
+    // La comisión de un Pagar/Cobrar (mockup 100) se va con el pago: se borra su gasto operativo de Socios.
+    if (mov.comision_monto) {
+      await client.query(`DELETE FROM partner_account_entries WHERE supervisor_movimiento_id = $1`, [movimientoId]);
+    }
     // Deshace el espejo en el balance del agente (ver registrarMovimientoSupervisor) si era una cuenta de agente individual.
     const cuentaMov = await agentesDeLaCuenta(mov.supervisor_agent_id);
     if (cuentaMov?.individual && mov.club_id && Number(mov.fichas_reales_delta) !== 0) {
@@ -668,6 +732,9 @@ export interface EditarMovimientoSupervisorInput {
   concepto?: string | null;
   amount?: number;
   clubId?: string | null;
+  // Comisión de Pagar/Cobrar (mockup 100): 0 la quita. Cambiarla revierte y recarga el pago, como el importe.
+  comisionPct?: number | null;
+  comisionQuien?: ComisionQuien | null;
   editedBy?: string | null;
 }
 
@@ -715,7 +782,12 @@ export async function editarMovimientoSupervisor(movimientoId: string, input: Ed
   const amountActual = round2(Number(mov.amount));
   const amountNuevo = input.amount === undefined ? amountActual : round2(input.amount);
   const clubNuevo = sinClub ? mov.club_id : input.clubId === undefined ? mov.club_id : input.clubId || null;
-  const cambiaPlata = amountNuevo !== amountActual || clubNuevo !== mov.club_id;
+  const pctActual = mov.comision_monto ? Number(mov.comision_pct) : 0;
+  const quienActual: ComisionQuien = mov.comision_quien === "ELLOS" ? "ELLOS" : "NOSOTROS";
+  const pctNuevo = !esPagoCobro || input.comisionPct === undefined ? pctActual : Number(input.comisionPct || 0);
+  const quienNuevo: ComisionQuien = !esPagoCobro || !input.comisionQuien ? quienActual : input.comisionQuien;
+  const cambiaComision = pctNuevo !== pctActual || (pctNuevo > 0 && quienNuevo !== quienActual);
+  const cambiaPlata = amountNuevo !== amountActual || clubNuevo !== mov.club_id || cambiaComision;
 
   if (!cambiaPlata) {
     const sets: string[] = [];
@@ -765,6 +837,8 @@ export async function editarMovimientoSupervisor(movimientoId: string, input: Ed
     usdtReal: !!mov.usdt_real,
     notes: notes !== undefined ? notes : mov.notes,
     paymentLink: link !== undefined ? link : mov.payment_link,
+    comisionPct: pctNuevo,
+    comisionQuien: quienNuevo,
     createdBy: mov.created_by ?? undefined,
   });
   // El corregido conserva fecha y hora del original (corrido de día si también se cambió la fecha).
@@ -775,7 +849,35 @@ export async function editarMovimientoSupervisor(movimientoId: string, input: Ed
     [nuevo.id, mov.occurred_at, fecha ?? mov.fecha_local, mov.fecha_local, input.editedBy ?? null, movimientoId]
   );
   await pool.query(`UPDATE supervisor_solicitudes_retiro SET movimiento_id = $2 WHERE movimiento_id = $1`, [movimientoId, nuevo.id]);
+  // La comisión corregida conserva la fecha del pago.
+  await pool.query(
+    `UPDATE partner_account_entries e SET entry_date = (sm.occurred_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+     FROM supervisor_movimientos sm WHERE sm.id = $1 AND e.supervisor_movimiento_id = sm.id`,
+    [nuevo.id]
+  );
   return { id: nuevo.id, cambios: 1, reemplazado: true, reemplazaA: movimientoId };
+}
+
+// Eliminar un movimiento (27/11/2026, pedido de Leo: "siempre agregá para poder editar y eliminar, así hacemos pruebas"). Si
+// estaba aplicado, primero se revierte (cuenta, Wallet y comisión en Socios) y después se borra la fila. El asiento de Wallet
+// nunca se borra: queda con su reversa, como en el borrado definitivo de Proveedores.
+export async function eliminarMovimientoSupervisor(movimientoId: string) {
+  await asegurarColumnasComision();
+  const r = await pool.query(`SELECT id, status FROM supervisor_movimientos WHERE id = $1`, [movimientoId]);
+  if (!r.rows[0]) throw new Error("Movimiento no encontrado.");
+  if (r.rows[0].status !== "REVERTIDO") await revertirMovimientoSupervisor(movimientoId);
+  await pool.query(`UPDATE supervisor_solicitudes_retiro SET movimiento_id = NULL WHERE movimiento_id = $1`, [movimientoId]);
+  await pool.query(`UPDATE supervisor_movimientos SET reemplaza_a = NULL WHERE reemplaza_a = $1`, [movimientoId]).catch(() => {});
+  await pool.query(`DELETE FROM partner_account_entries WHERE supervisor_movimiento_id = $1`, [movimientoId]);
+  await pool.query(`DELETE FROM supervisor_movimientos WHERE id = $1`, [movimientoId]);
+  return { id: movimientoId, eliminado: true };
+}
+
+// Comisión de un movimiento a partir de su gasto en Socios (para editar o quitar desde Socios → Gastos operativos).
+export async function movimientoDeGastoComision(entryId: string): Promise<string | null> {
+  await asegurarColumnasComision();
+  const r = await pool.query(`SELECT supervisor_movimiento_id FROM partner_account_entries WHERE id = $1`, [entryId]);
+  return r.rows[0]?.supervisor_movimiento_id ?? null;
 }
 
 // Corrección histórica (una sola vez, por supervisor): cuando se prende usa_cuenta_consolidada

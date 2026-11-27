@@ -11,7 +11,7 @@ import { exportCsv } from "../csv";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 import Cifra from "../components/Cifra";
 import { Contexto, ParaHacer, BarraSaldo, Portada, type ItemParaHacer } from "../components/Identidad";
-import { PcImporte, PcTotal, PcLista, PcResumen, fmtPc } from "../components/PagoPiezas";
+import { PcImporte, PcTotal, PcLista, PcResumen, PcSeg, fmtPc } from "../components/PagoPiezas";
 
 // Cuentas consolidadas para supervisores (30/09/2026, pedido de Leo: "Edwar es un super
 // agente, todo lo que pase con sus agentes va todo al mismo lugar") -- sección separada de
@@ -258,11 +258,42 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
   }
 
   function accionesMovimiento(m: any) {
+    const eliminar = { label: "Eliminar", onClick: () => onEliminarMovimiento(m), danger: true };
+    // Revertido: solo se puede eliminar (para limpiar pruebas).
+    if (m.status === "REVERTIDO") return [eliminar];
     return [
       { label: "Editar", onClick: () => setEditandoMov(m) },
       { label: m.payment_link ? "Cambiar link de pago" : "Agregar link de pago", onClick: () => onLinkPago(m) },
+      ...(Number(m.comision_monto) > 0 ? [{ label: "Quitar comisión", onClick: () => onQuitarComision(m) }] : []),
       { label: "Revertir", onClick: () => onRevertirMovimiento(m.id), danger: true },
+      eliminar,
     ];
+  }
+
+  // Comisión (mockup 100): quitarla recarga el pago sin comisión (la Wallet y Socios se corrigen solos).
+  async function onQuitarComision(m: any) {
+    if (!confirm(`¿Quitar la comisión de ${fmtPc(Number(m.comision_monto))}? Se corrige la Wallet y se saca el gasto de Socios. El pago queda.`)) return;
+    try {
+      await api.editarMovimientoSupervisor(m.id, { comisionPct: 0 });
+      refrescarSeleccionado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo quitar la comisión.");
+    }
+  }
+
+  // Eliminar (27/11/2026, para pruebas): revierte lo que movió y borra la fila del historial.
+  async function onEliminarMovimiento(m: any) {
+    const texto =
+      m.status === "REVERTIDO"
+        ? "¿Eliminar este movimiento revertido? Se borra del historial."
+        : "¿Eliminar este movimiento? Se deshace lo que movió (cuenta, Wallet y comisión en Socios) y se borra del historial. No se puede deshacer.";
+    if (!confirm(texto)) return;
+    try {
+      await api.eliminarMovimientoSupervisor(m.id);
+      refrescarSeleccionado();
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar.");
+    }
   }
 
   async function onRevertirMovimiento(id: string) {
@@ -1135,7 +1166,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                           {movsVisibles.map((m) => (
                             <tr key={m.id} style={m.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                               <td className="muted">{dateShort(m.occurred_at)}</td>
-                              <td><span className={`pill ${esSalidaSup(m) ? "a" : m.type === "CARGA" || m.type === "COBRO" ? "g" : ""}`}>{TIPO_LABEL[m.type] ?? m.type}</span></td>
+                              <td><span className={`pill ${esSalidaSup(m) ? "a" : m.type === "CARGA" || m.type === "COBRO" ? "g" : ""}`}>{TIPO_LABEL[m.type] ?? m.type}</span><ComisionMov m={m} /></td>
                               <td>
                                 <div className="saldo-name" style={{ fontWeight: 600 }}>{m.club_name}</div>
                                 <div className="saldo-sub">{m.agent_name ?? "sin agente"}{m.usdt_real ? " · USDT real" : ""}</div>
@@ -1150,7 +1181,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 {m.payment_link && <> <a className="link-pago" href={m.payment_link} target="_blank" rel="noreferrer">Ver pago ↗</a></>}
                               </td>
                               <td style={{ width: 60, textAlign: "right" }}>
-                                {m.status !== "REVERTIDO" && <ActionsMenu items={accionesMovimiento(m)} />}
+                                <ActionsMenu items={accionesMovimiento(m)} />
                               </td>
                             </tr>
                           ))}
@@ -1162,7 +1193,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                         <div key={m.id} className={`saldo-card ${esSalidaSup(m) || Number(m.amount) < 0 ? "is-neg" : "is-pos"}`} style={m.status === "REVERTIDO" ? { opacity: 0.55 } : undefined}>
                           <div className="saldo-card-body">
                             <div className="saldo-card-top">
-                              <div className="saldo-name">{TIPO_LABEL[m.type] ?? m.type}</div>
+                              <div className="saldo-name">{TIPO_LABEL[m.type] ?? m.type}<ComisionMov m={m} /></div>
                               <div className={`saldo-big ${esSalidaSup(m) || Number(m.amount) < 0 ? "neg" : "pos"}`}>{montoMovSup(m)}</div>
                             </div>
                             <div className="saldo-card-mid">
@@ -1171,7 +1202,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
                                 {dateShort(m.occurred_at)} · {m.club_name}{m.agent_name ? ` · ${m.agent_name}` : ""}
                                 {m.edited_at && <span className="em-ed" title={`Editado${m.edited_by ? ` por ${m.edited_by}` : ""}${m.edited_at ? ` el ${dateShort(m.edited_at)}` : ""}${m.reemplaza_a ? " · corrige un movimiento revertido" : ""}`}>{m.reemplaza_a ? "corregido" : "editado"}</span>}
                               </div>
-                              {m.status !== "REVERTIDO" && <ActionsMenu items={accionesMovimiento(m)} />}
+                              <ActionsMenu items={accionesMovimiento(m)} />
                             </div>
                             {m.notes && <div className="saldo-card-foot"><span style={{ fontSize: 12 }}>{m.notes.length > 90 ? `${m.notes.slice(0, 90)}…` : m.notes}</span></div>}
                           </div>
@@ -1378,6 +1409,16 @@ function deltasMovSup(type: string, amount: number, usdtReal: boolean, campoFich
   return campoFichas ? { f: amount, cc: 0 } : { f: 0, cc: amount };
 }
 
+// Comisión de un Pagar/Cobrar debajo del tipo, en el historial (mockup 100).
+function ComisionMov({ m }: { m: any }) {
+  if (!(Number(m.comision_monto) > 0)) return null;
+  return (
+    <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--amber)", marginTop: 3 }}>
+      comisión {String(Number(m.comision_pct)).replace(".", ",")}% · {fmtPc(Number(m.comision_monto))} ({m.comision_quien === "ELLOS" ? "nos la pagan" : "nosotros"})
+    </span>
+  );
+}
+
 function EditarMovimientoForm({
   mov,
   supervisor,
@@ -1408,12 +1449,22 @@ function EditarMovimientoForm({
   const [link, setLink] = useState<string>(mov.payment_link ?? "");
   const [msg, setMsg] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  // Comisión de Pagar/Cobrar (mockup 100).
+  const esPagoCobro = mov.type === "PAGO" || mov.type === "COBRO";
+  const pctOrig = Number(mov.comision_monto) > 0 ? Number(mov.comision_pct) : 0;
+  const quienOrig: "NOSOTROS" | "ELLOS" = mov.comision_quien === "ELLOS" ? "ELLOS" : "NOSOTROS";
+  const [pct, setPct] = useState(pctOrig ? String(pctOrig).replace(".", ",") : "");
+  const [quien, setQuien] = useState<"NOSOTROS" | "ELLOS">(quienOrig);
 
   const montoNum = Math.round(Number(String(amount).replace(",", ".")) * 100) / 100;
   const montoOk = Number.isFinite(montoNum) && (mov.type === "AJUSTE" ? montoNum !== 0 : montoNum > 0);
+  const pctNum = pct.trim() === "" ? 0 : Number(pct.replace(",", "."));
+  const pctOk = Number.isFinite(pctNum) && pctNum >= 0 && pctNum < 100;
+  const cambiaComision = esPagoCobro && pctOk && (pctNum !== pctOrig || (pctNum > 0 && quien !== quienOrig));
+  const comisionNueva = pctOk ? Math.round(((montoOk ? montoNum : amountOrig) * pctNum) / 100 * 100) / 100 : 0;
   const cambiaImporte = montoOk && montoNum !== amountOrig;
   const cambiaClub = !sinClub && clubId !== (mov.club_id ?? "");
-  const cambiaPlata = cambiaImporte || cambiaClub;
+  const cambiaPlata = cambiaImporte || cambiaClub || cambiaComision;
   const ch = {
     fecha: fecha !== fechaOrig,
     agente: !sinAgente && agentId !== (mov.agent_id ?? ""),
@@ -1443,8 +1494,9 @@ function EditarMovimientoForm({
     if (!montoOk) return setMsg(mov.type === "AJUSTE" ? "El importe del ajuste no puede ser 0." : "El importe tiene que ser mayor a 0.");
     if (!sinClub && !clubId) return setMsg("El club es obligatorio.");
     if (mov.type === "DESCUENTO" && !concepto.trim()) return setMsg("Indicá el concepto del descuento.");
+    if (!pctOk) return setMsg("El % de comisión tiene que estar entre 0 y 100.");
     if (!hayCambios) return onCancel();
-    if (cambiaPlata && !confirm(`Se va a revertir el movimiento original y cargar uno nuevo de ${fmtUsd(montoNum)}. ¿Seguimos?`)) return;
+    if (cambiaPlata && !confirm(`Se va a revertir el movimiento original y cargar uno nuevo de ${fmtUsd(montoNum)}${esPagoCobro && pctNum > 0 ? ` con comisión de ${fmtUsd(comisionNueva)}` : ""}. ¿Seguimos?`)) return;
     setGuardando(true);
     try {
       await api.editarMovimientoSupervisor(mov.id, {
@@ -1455,6 +1507,8 @@ function EditarMovimientoForm({
         concepto: ch.concepto ? concepto.trim() : undefined,
         amount: cambiaImporte ? montoNum : undefined,
         clubId: cambiaClub ? clubId : undefined,
+        comisionPct: cambiaComision ? pctNum : undefined,
+        comisionQuien: cambiaComision ? quien : undefined,
       });
       onDone();
     } catch (err: any) {
@@ -1489,6 +1543,25 @@ function EditarMovimientoForm({
           </div>
         )}
       </div>
+
+      {esPagoCobro && (
+        <>
+          <div className="em-sec">COMISIÓN</div>
+          <div className="em-g2">
+            <div className="field">
+              <label>% comisión (vacío o 0 = sin comisión)</label>
+              <input className={clase(cambiaComision && pctNum !== pctOrig)} inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} placeholder="Ej. 2" />
+              {cambiaComision && pctNum !== pctOrig
+                ? <div className="em-was">antes: <s>{pctOrig ? `${String(pctOrig).replace(".", ",")}%` : "sin comisión"}</s> → ahora {fmtUsd(comisionNueva)}</div>
+                : pctNum > 0 && <div className="em-was">= {fmtUsd(comisionNueva)}</div>}
+            </div>
+            <div className="field">
+              <label>¿Quién la paga?</label>
+              <PcSeg opciones={[{ value: "NOSOTROS", label: "Nosotros" }, { value: "ELLOS", label: "Nos la pagan" }]} value={quien} onChange={setQuien} />
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="em-sec">DATOS</div>
       <div className="em-g2">
@@ -1586,6 +1659,9 @@ function PagoCobroForm({
   const [sel, setSel] = useState<Record<string, string>>({});
   const [paymentLink, setPaymentLink] = useState("");
   const [notes, setNotes] = useState("");
+  // Comisión (27/11/2026, mockup 100): % sobre el importe que nos cobran o nos pagan. Va a Gastos operativos de Socios.
+  const [comisionPct, setComisionPct] = useState("");
+  const [comisionQuien, setComisionQuien] = useState<"NOSOTROS" | "ELLOS">("NOSOTROS");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -1605,6 +1681,16 @@ function PagoCobroForm({
   const totalAntes = fichas + cc;
   const totalNuevo = fichas + ccNuevo;
   const fmt = fmtPc;
+  const pctNum = comisionPct.trim() === "" ? 0 : num(comisionPct);
+  const pctValido = Number.isFinite(pctNum) && pctNum >= 0 && pctNum < 100;
+  const r2c = (n: number) => Math.round(n * 100) / 100;
+  // Una comisión por cada movimiento (si hay varios agentes, cada uno lleva la suya).
+  const comisionTotal = pctValido && pctNum > 0 && montoValido
+    ? r2c((hayAgentes ? montosAgentes : [monto]).reduce((t, m) => t + r2c((m * pctNum) / 100), 0))
+    : 0;
+  // Lo que se mueve en la Wallet: la comisión que pagamos sale de más (o entra de menos); la que nos pagan, al revés.
+  const walletComision = comisionTotal === 0 ? 0 : (tipo === "PAGO") === (comisionQuien === "NOSOTROS") ? comisionTotal : -comisionTotal;
+  const montoWallet = montoValido ? r2c(monto + walletComision) : 0;
   // Al tildar un agente se completa solo con lo pendiente en la dirección del movimiento (mockup 68): Pagar → lo que le
   // debemos (su cuenta corriente positiva); Cobrar → lo que nos debe. Se puede corregir para pagar una parte.
   const [completadas, setCompletadas] = useState<Record<string, boolean>>({});
@@ -1632,6 +1718,7 @@ function PagoCobroForm({
     if (agenteObligatorio && !hayAgentes) {
       return setMsg({ ok: false, text: "Este supervisor exige indicar el agente de origen." });
     }
+    if (!pctValido) return setMsg({ ok: false, text: "El % de comisión tiene que estar entre 0 y 100." });
     setLoading(true);
     // Un movimiento por agente, uno atrás del otro. Si alguno falla, los anteriores ya quedaron registrados: se sacan de la
     // selección y se avisa cuáles, para no repetirlos al reintentar.
@@ -1645,6 +1732,8 @@ function PagoCobroForm({
           agentId: id,
           notes: notes.trim() || null,
           paymentLink: paymentLink.trim() || null,
+          comisionPct: pctNum > 0 ? pctNum : null,
+          comisionQuien: pctNum > 0 ? comisionQuien : null,
         });
         if (id) hechos.push(id);
       }
@@ -1724,8 +1813,35 @@ function PagoCobroForm({
         <label>Observación</label>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opcional" />
       </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>% comisión (opcional)</label>
+          <input value={comisionPct} onChange={(e) => setComisionPct(e.target.value)} inputMode="decimal" placeholder="Ej. 2" />
+          {comisionTotal > 0 && <div className="saldo-sub" style={{ marginTop: 4 }}>= <b>{fmt(comisionTotal)}</b></div>}
+        </div>
+        <div className="field">
+          <label>¿Quién paga la comisión?</label>
+          <PcSeg
+            opciones={[{ value: "NOSOTROS", label: "Nosotros" }, { value: "ELLOS", label: "Nos la pagan" }]}
+            value={comisionQuien}
+            onChange={setComisionQuien}
+          />
+        </div>
+      </div>
       <PcResumen
         filas={[
+          ...(comisionTotal > 0
+            ? [
+                {
+                  label: tipo === "PAGO" ? "Sale de Wallet Manos" : "Entra a Wallet Manos",
+                  valor: <><b>{fmt(montoWallet)}</b> <span className="muted">({fmt(monto)} {walletComision > 0 ? "+" : "−"} {fmt(comisionTotal)} comisión)</span></>,
+                },
+                {
+                  label: "Gasto operativo (Socios)",
+                  valor: <b className={comisionQuien === "NOSOTROS" ? "neg" : "pos"}>{comisionQuien === "NOSOTROS" ? "+" : "−"}{fmt(comisionTotal)}</b>,
+                },
+              ]
+            : []),
           { label: "Cuenta corriente", antes: cc, despues: ccNuevo },
           ...(!winLose
             ? [
@@ -1744,7 +1860,7 @@ function PagoCobroForm({
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
         <button className="btn" disabled={loading || !montoValido}>
-          {loading ? "Guardando..." : `${tipo === "PAGO" ? "Pagar" : "Cobrar"}${montoValido ? " " + fmt(monto) : ""}${tildados.length > 1 ? " (" + tildados.length + " agentes)" : ""}`}
+          {loading ? "Guardando..." : `${tipo === "PAGO" ? "Pagar" : "Cobrar"}${montoValido ? " " + fmt(monto) : ""}${comisionTotal > 0 ? " + comisión " + fmt(comisionTotal) : ""}${tildados.length > 1 ? " (" + tildados.length + " agentes)" : ""}`}
         </button>
       </div>
     </form>

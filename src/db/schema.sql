@@ -2423,6 +2423,11 @@ ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS semana DATE;
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS edited_by TEXT;
 ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS reemplaza_a TEXT;
+-- Comisión en Pagar/Cobrar de Supervisores (27/11/2026, mockup 100): % sobre el importe, quién la paga y su gasto en Socios.
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_pct NUMERIC(9,4);
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_monto NUMERIC(18,2);
+ALTER TABLE supervisor_movimientos ADD COLUMN IF NOT EXISTS comision_quien TEXT;
+ALTER TABLE partner_account_entries ADD COLUMN IF NOT EXISTS supervisor_movimiento_id TEXT;
 
 -- ============ Avisos push a supervisores, proveedores y agentes (21/10/2026, pedido de Leo) ============
 -- Siempre manuales: el admin elige a quién mandar (ver repo/notificaciones.ts). Una fila por suscripción

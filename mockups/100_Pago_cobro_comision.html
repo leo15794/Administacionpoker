@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = location.hash === "#dia" ? "light" : "dark";</script>
+<style>
+  /* Mockup 100 (27/11/2026): comision en Pagar/Cobrar de Supervisores. Pedido de Leo. */
+  :root {
+    --bg: #0d1117; --text: #e6edf3; --dim: #9da7b3; --faint: #808a96;
+    --accent: #4493f8; --accent-rgb: 68,147,248; --accent-grad: linear-gradient(135deg,#5aa2ff,#2f7de0); --accent-ink: #06101f;
+    --glow1: rgba(68,147,248,.24); --glow2: rgba(63,185,80,.14);
+    --card: rgba(22,28,38,.86); --card-border: rgba(255,255,255,.08); --panel2: rgba(255,255,255,.04);
+    --green: #3fb950; --green-soft: rgba(63,185,80,.14); --red: #f85149; --amber: #d29922; --amber-soft: rgba(210,153,34,.13);
+    --input: rgba(255,255,255,.05); --shadow: 0 24px 60px rgba(0,0,0,.45);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef5f1; --text: #14201a; --dim: #55655c; --faint: #7c887f;
+    --accent: #157a57; --accent-rgb: 21,122,87; --accent-grad: linear-gradient(135deg,#1e9a6e,#146b4c); --accent-ink: #fff;
+    --glow1: rgba(45,190,133,.30); --glow2: rgba(138,106,50,.12);
+    --card: rgba(255,255,255,.92); --card-border: rgba(11,24,18,.07); --panel2: rgba(11,24,18,.03);
+    --green: #157a57; --green-soft: rgba(21,122,87,.12); --red: #c23744; --amber: #9a6a10; --amber-soft: rgba(196,140,30,.13);
+    --input: #fff; --shadow: 0 24px 60px rgba(11,24,18,.16);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1440px; height: 960px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background: radial-gradient(800px 560px at 10% 0%, var(--glow1), transparent 62%), radial-gradient(760px 620px at 95% 100%, var(--glow2), transparent 60%), var(--bg);
+    padding: 26px 36px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 13px; color: var(--dim); margin: 4px 0 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; padding: 18px 20px; }
+  .lbl { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  .lbl .n { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: rgba(var(--accent-rgb), .16); color: var(--accent); font-size: 12px; }
+  .exp { font-size: 12.5px; color: var(--dim); margin: 0 0 14px 34px; line-height: 1.45; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; color: var(--faint); text-align: left; padding: 8px; }
+  td { padding: 10px 8px; border-top: 1px solid var(--card-border); vertical-align: middle; }
+  .num { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+  .pill.d { background: var(--amber-soft); color: var(--amber); }
+  .club b { display: block; font-weight: 700; } .club small { color: var(--faint); font-size: 11.5px; }
+  .ed { font-size: 10.5px; font-weight: 700; color: var(--faint); margin-left: 6px; border: 1px solid var(--card-border); padding: 1px 6px; border-radius: 6px; }
+  .dots { width: 40px; height: 28px; border-radius: 9px; border: 1px solid var(--card-border); display: grid; place-items: center; font-weight: 800; color: var(--dim); position: relative; }
+  .menu { position: absolute; right: 0; top: 34px; width: 200px; background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 3; text-align: left; }
+  .menu div { padding: 9px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; }
+  .menu .on { background: rgba(var(--accent-rgb), .12); color: var(--accent); font-weight: 800; }
+  .menu .r { color: var(--red); }
+  .modal { margin-top: 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--card-border); box-shadow: var(--shadow); padding: 18px 20px; }
+  .mh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .mh h3 { font-size: 17px; font-weight: 800; }
+  .mh span { font-size: 12px; color: var(--faint); margin-left: auto; }
+  .ms { font-size: 12.5px; color: var(--dim); margin-bottom: 14px; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .f label { display: block; font-size: 11.5px; font-weight: 700; color: var(--dim); margin-bottom: 5px; }
+  .in { height: 38px; border-radius: 10px; border: 1px solid var(--card-border); background: var(--input); padding: 0 12px; display: flex; align-items: center; font-size: 13px; }
+  .in.ch { border-color: rgba(var(--accent-rgb), .7); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
+  .in.ta { height: 58px; align-items: flex-start; padding-top: 10px; }
+  .in.lock { color: var(--faint); background: var(--panel2); }
+  .was { font-size: 11px; color: var(--faint); margin-top: 4px; } .was s { opacity: .8; }
+  .sec { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; color: var(--faint); margin: 4px 0 8px; }
+  .note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.45; margin-bottom: 12px; }
+  .note.ok { background: var(--green-soft); color: var(--text); } .note.ok i { color: var(--green); }
+  .note.w { background: var(--amber-soft); border: 1px solid var(--amber); }
+  .note i { font-style: normal; font-weight: 800; }
+  .note b { font-weight: 800; }
+  .diff { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px; font-size: 12.5px; padding: 10px 12px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--card-border); margin-bottom: 12px; }
+  .diff span { color: var(--dim); } .diff b { text-align: right; font-variant-numeric: tabular-nums; }
+  .bs { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn { height: 38px; padding: 0 16px; border-radius: 11px; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+  .btn.p { background: var(--accent-grad); color: var(--accent-ink); }
+  .btn.s { border: 1px solid var(--card-border); color: var(--dim); }
+  .btn.wb { background: var(--amber); color: #1a1200; }
+  :root[data-theme="light"] .btn.wb { color: #fff; }
+  .grid3 { display: grid; grid-template-columns: 1.05fr 1fr 1fr; gap: 18px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--card-border); }
+  .seg div { height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--dim); }
+  .seg .on { background: rgba(var(--accent-rgb), .16); color: var(--accent); font-weight: 800; }
+  .calc { font-size: 12px; color: var(--dim); margin-top: 5px; } .calc b { color: var(--text); }
+  .res { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-size: 12.5px; padding: 10px 13px; border-radius: 12px; background: var(--panel2); border: 1px solid var(--card-border); margin-bottom: 12px; }
+  .res span { color: var(--dim); } .res b { text-align: right; font-variant-numeric: tabular-nums; }
+  .res .hl { color: var(--text); font-weight: 700; }
+  .res .x { grid-column: span 2; font-size: 11px; margin-top: -3px; }
+  .res hr { grid-column: span 2; border: 0; border-top: 1px dashed var(--card-border); margin: 2px 0; }
+  .com { display: block; font-size: 11px; color: var(--amber); font-weight: 700; margin-top: 3px; }
+  .tag { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: rgba(var(--accent-rgb), .14); color: var(--accent); margin-left: 6px; white-space: nowrap; }
+  .mini { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mini th { font-size: 10px; padding: 5px 6px; } .mini td { padding: 6px; }
+  .menu.l { width: 180px; }
+  .modal { margin-top: 12px; padding: 15px 17px; }
+  .card { padding: 16px 18px; }
+</style></head>
+<body>
+  <h1>Comisión en Pagar / Cobrar</h1>
+  <div class="sub">Supervisores → cuenta → <b>Pagar</b> o <b>Cobrar</b>. La comisión se registra sola como <b>gasto operativo</b> en Socios. Mockup 100.</div>
+
+  <div class="grid3">
+    <!-- 1. Formulario -->
+    <div class="card">
+      <div class="lbl"><span class="n">1</span>Pagar con comisión</div>
+      <p class="exp">Campo nuevo, opcional. Si lo dejás vacío, todo funciona como hoy.</p>
+      <div class="modal" style="margin-top:0">
+        <div class="mh"><h3>Pagar a nico</h3><span>Win/Lose</span></div>
+        <div class="ms">Le mandamos USDT: se resta de su cuenta corriente y sale de Wallet Manos.</div>
+        <div class="f" style="margin-bottom:12px"><label>Importe (USDT)</label><div class="in">1.000,00</div></div>
+        <div class="g2">
+          <div class="f"><label>% comisión (opcional)</label><div class="in ch">2</div><div class="calc">= <b>US$ 20,00</b></div></div>
+          <div class="f"><label>¿Quién la paga?</label><div class="seg"><div class="on">Nosotros</div><div>Nos la pagan</div></div></div>
+        </div>
+        <div class="res">
+          <span>Cuenta corriente de nico</span><b>2.500,00 → 1.500,00</b>
+          <span class="hl">Sale de Wallet Manos</span><b>US$ 1.020,00</b>
+          <span class="x">1.000 del pago + 20 de comisión</span>
+          <hr>
+          <span class="hl">Gasto operativo (Socios)</span><b class="neg">+US$ 20,00</b>
+          <span class="x">"Comisión 2% · Pago a nico · US$ 1.000"</span>
+        </div>
+        <div class="bs"><div class="btn s">Cancelar</div><div class="btn p">Pagar 1.000 + 20 comisión</div></div>
+      </div>
+      <div class="sec" style="margin-top:14px">CÓMO QUEDA EN CADA CASO (US$ 1.000 · 2%)</div>
+      <table class="mini">
+        <tr><th></th><th>COMISIÓN</th><th class="num">WALLET</th><th class="num">GASTO OPERATIVO</th></tr>
+        <tr><td><b>Pago</b></td><td>la pagamos</td><td class="num neg">−1.020</td><td class="num neg">+20</td></tr>
+        <tr><td><b>Pago</b></td><td>nos la pagan</td><td class="num neg">−980</td><td class="num pos">−20</td></tr>
+        <tr><td><b>Cobro</b></td><td>la pagamos</td><td class="num pos">+980</td><td class="num neg">+20</td></tr>
+        <tr><td><b>Cobro</b></td><td>nos la pagan</td><td class="num pos">+1.020</td><td class="num pos">−20</td></tr>
+      </table>
+    </div>
+
+    <!-- 2. Historial del supervisor -->
+    <div class="card">
+      <div class="lbl"><span class="n">2</span>En los movimientos de nico</div>
+      <p class="exp">El pago muestra su comisión debajo. Desde el <b>···</b> se edita o se elimina (para las pruebas).</p>
+      <table>
+        <tr><th>FECHA</th><th>TIPO</th><th class="num">IMPORTE</th><th></th></tr>
+        <tr><td>27/11/2026</td><td><span class="pill">Pago USDT</span><span class="com">comisión 2% · US$ 20 (nosotros)</span></td><td class="num neg">−US$ 1.000,00</td>
+          <td><div class="dots">···<div class="menu l"><div class="on">✎ Editar</div><div>Quitar comisión</div><div class="r">Revertir pago</div><div class="r">Eliminar</div></div></div></td></tr>
+        <tr><td>20/11/2026</td><td><span class="pill d">Cobro USDT</span></td><td class="num pos">+US$ 640,00</td><td><div class="dots">···</div></td></tr>
+      </table>
+      <div class="modal" style="margin-top:112px">
+        <div class="mh"><h3>Editar pago</h3><span>27/11/2026 · nico</span></div>
+        <div class="g2">
+          <div class="f"><label>Importe (US$)</label><div class="in">1.000,00</div></div>
+          <div class="f"><label>% comisión</label><div class="in ch">1,5</div><div class="was">antes: <s>2</s> → ahora US$ 15,00</div></div>
+        </div>
+        <div class="f" style="margin-bottom:12px"><label>¿Quién la paga?</label><div class="seg"><div class="on">Nosotros</div><div>Nos la pagan</div></div></div>
+        <div class="note w"><i>!</i><div>Cambia la comisión: la Wallet pasa de <b>−1.020</b> a <b>−1.015</b> y el gasto operativo de <b>20</b> a <b>15</b>. La cuenta de nico no cambia.</div></div>
+        <div class="note ok"><i>✓</i><div><b>Eliminar</b> borra el pago, su salida de Wallet y el gasto operativo, como si nunca se hubiera cargado.</div></div>
+        <div class="bs"><div class="btn s">Cancelar</div><div class="btn wb">Guardar cambios</div></div>
+      </div>
+    </div>
+
+    <!-- 3. Socios -->
+    <div class="card">
+      <div class="lbl"><span class="n">3</span>En Socios → Gastos operativos</div>
+      <p class="exp">Aparece sola en la cuenta <b>Gastos operativo</b>, con la marca <b>Supervisores</b>. Suma al total de Gastos operativos y baja la ganancia neta.</p>
+      <table>
+        <tr><th>FECHA</th><th>CONCEPTO</th><th class="num">MONTO</th><th></th></tr>
+        <tr><td>27/11</td><td>Comisión 2% · Pago a nico · US$ 1.000<span class="tag">Supervisores</span></td><td class="num">20,00</td>
+          <td><div class="dots">···<div class="menu l"><div class="on">✎ Editar</div><div>Ver el pago</div><div class="r">Eliminar</div></div></div></td></tr>
+        <tr><td>25/11</td><td>Comisión 1% · Cobro de Uriel · US$ 3.000<span class="tag">Supervisores</span></td><td class="num">30,00</td><td><div class="dots">···</div></td></tr>
+        <tr><td>16/11</td><td>Fee envio de usdt</td><td class="num">50,30</td><td><div class="dots">···</div></td></tr>
+        <tr><td>11/11</td><td>Fede tarjeta</td><td class="num">65,00</td><td><div class="dots">···</div></td></tr>
+      </table>
+      <div class="note ok" style="margin-top:92px"><i>✓</i><div><b>Editar</b> acá cambia el % o quién la paga, y se corrige también en el pago y en la Wallet. <b>Eliminar</b> saca solo la comisión: el pago queda como estaba.</div></div>
+      <div class="res">
+        <span>Gastos operativos (noviembre)</span><b>US$ 469,36</b>
+        <span>de comisiones de Supervisores</span><b>US$ 50,00</b>
+      </div>
+    </div>
+  </div>
+</body></html>

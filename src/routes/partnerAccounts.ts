@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireAdmin, type AuthedRequest } from "../lib/auth.js";
+import { movimientoDeGastoComision, editarMovimientoSupervisor } from "../repo/supervisores.js";
 import {
   listPartnerAccounts,
   crearCuenta,
@@ -112,6 +113,10 @@ partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (
   const parsed = entryUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
+    // Comisión de un Pagar/Cobrar de Supervisores (mockup 100): se edita desde su pago (% y quién la paga), así Wallet y pago quedan iguales.
+    if (await movimientoDeGastoComision(req.params.id)) {
+      return res.status(400).json({ error: "Esta comisión viene de un pago de Supervisores: editá el % o quién la paga con \"Editar comisión\"." });
+    }
     res.json(await editarMovimiento(req.params.id, parsed.data, req.user?.email));
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -121,6 +126,12 @@ partnerAccountsRouter.put("/movimientos/:id", requireAuth, requireAdmin, async (
 // Borrado real — control 100% pedido explícitamente por el usuario para este módulo.
 partnerAccountsRouter.delete("/movimientos/:id", requireAuth, requireAdmin, async (req: AuthedRequest, res) => {
   try {
+    // Comisión de Supervisores: eliminarla acá saca solo la comisión (el pago queda, la Wallet se corrige).
+    const movId = await movimientoDeGastoComision(req.params.id);
+    if (movId) {
+      await editarMovimientoSupervisor(movId, { comisionPct: 0, editedBy: req.user?.email ?? null });
+      return res.json({ ok: true, comisionQuitada: true });
+    }
     await eliminarMovimiento(req.params.id, req.user?.email);
     res.json({ ok: true });
   } catch (err: any) {

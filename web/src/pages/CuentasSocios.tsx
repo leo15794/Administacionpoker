@@ -7,6 +7,7 @@ import Loading from "../components/Loading";
 import Ayuda from "../components/Ayuda";
 import { Contexto } from "../components/Identidad";
 import ActionsMenu from "../components/ActionsMenu";
+import { PcSeg } from "../components/PagoPiezas";
 import { usePaginado, WmPaginacion, WmTabs, WmSaldoCard, WmConteos, type WmTab } from "../components/ListaWm";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -66,6 +67,8 @@ export default function CuentasSocios() {
   const [showEditarCuenta, setShowEditarCuenta] = useState<any | null>(null);
   const [showNuevoMov, setShowNuevoMov] = useState<string | null>(null);
   const [showEditarMov, setShowEditarMov] = useState<any | null>(null);
+  // Comisión de un Pagar/Cobrar de Supervisores (mockup 100): se edita el % o quién la paga desde acá.
+  const [editandoComision, setEditandoComision] = useState<any | null>(null);
   const [showNuevoAjusteHistorico, setShowNuevoAjusteHistorico] = useState(false);
   const [showEditarAjusteHistorico, setShowEditarAjusteHistorico] = useState<any | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
@@ -129,7 +132,10 @@ export default function CuentasSocios() {
   }
 
   async function eliminarMovimiento(m: any) {
-    if (!(await confirmDialog(`¿Eliminar este movimiento de ${m.account_name}?\n\n${m.concept} — ${usd(m.amount)}\n\nNo se puede deshacer.`))) return;
+    const texto = m.supervisor_movimiento_id
+      ? `¿Quitar esta comisión?\n\n${m.concept} — ${usd(m.amount)}\n\nSe saca solo la comisión: el pago de Supervisores queda y la Wallet se corrige.`
+      : `¿Eliminar este movimiento de ${m.account_name}?\n\n${m.concept} — ${usd(m.amount)}\n\nNo se puede deshacer.`;
+    if (!(await confirmDialog(texto))) return;
     setBorrando(m.id);
     try {
       await api.eliminarMovimientoCuentaSocio(m.id);
@@ -468,6 +474,11 @@ export default function CuentasSocios() {
                           Auto
                         </span>
                       )}
+                      {m.supervisor_movimiento_id && (
+                        <span className="badge neutral" style={{ color: "var(--accent)" }} title="Comisión de un Pagar/Cobrar de Supervisores: se edita el % o quién la paga, y se corrigen el pago y la Wallet.">
+                          Supervisores
+                        </span>
+                      )}
                       {m.treasury_adjustment_id && (
                         <span className="badge neutral" title="Este movimiento generó un ingreso/egreso real en Wallet.">
                           Wallet
@@ -483,7 +494,7 @@ export default function CuentasSocios() {
                       {usd(m.amount)}
                     </div>
                     <div className="row-actions">
-                      <button className="btn secondary small" onClick={() => setShowEditarMov(m)}>Editar</button>
+                      <button className="btn secondary small" onClick={() => (m.supervisor_movimiento_id ? setEditandoComision(m) : setShowEditarMov(m))}>Editar</button>
                       <button
                         className="btn secondary small"
                         disabled={borrando === m.id}
@@ -498,6 +509,21 @@ export default function CuentasSocios() {
               ))}
             </div>
           )}
+        </Modal>
+      )}
+
+      {editandoComision && (
+        <Modal title="Editar comisión" onClose={() => setEditandoComision(null)}>
+          <ComisionSupervisorForm
+            entry={editandoComision}
+            onCancel={() => setEditandoComision(null)}
+            onDone={() => {
+              const accountId = editandoComision.account_id;
+              setEditandoComision(null);
+              refresh();
+              cargarMovimientos(accountId);
+            }}
+          />
         </Modal>
       )}
 
@@ -589,6 +615,62 @@ function CuentaForm({ cuenta, onDone }: { cuenta?: any; onDone: () => void }) {
 
       {msg && <div className={msg.ok ? "success" : "error"}>{msg.text}</div>}
       <button className="btn" disabled={loading}>{loading ? "Guardando..." : cuenta ? "Guardar" : "Crear cuenta"}</button>
+    </form>
+  );
+}
+
+// Editar la comisión de un Pagar/Cobrar de Supervisores desde Socios (27/11/2026, mockup 100). Cambia el % o quién la paga y se
+// corrige todo junto: el pago se recarga con la comisión nueva (Wallet incluida) y este gasto se actualiza solo.
+function ComisionSupervisorForm({ entry, onCancel, onDone }: { entry: any; onCancel: () => void; onDone: () => void }) {
+  const pctOrig = Number((String(entry.concept).match(/Comisión ([\d.,]+)%/)?.[1] ?? "0").replace(",", "."));
+  const importe = Number((String(entry.concept).match(/US\$ ([\d.,]+)/)?.[1] ?? "0").replace(/\./g, "").replace(",", "."));
+  const quienOrig: "NOSOTROS" | "ELLOS" = Number(entry.amount) < 0 ? "ELLOS" : "NOSOTROS";
+  const [pct, setPct] = useState(pctOrig ? String(pctOrig).replace(".", ",") : "");
+  const [quien, setQuien] = useState<"NOSOTROS" | "ELLOS">(quienOrig);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const pctNum = pct.trim() === "" ? 0 : Number(pct.replace(",", "."));
+  const pctOk = Number.isFinite(pctNum) && pctNum >= 0 && pctNum < 100;
+  const nueva = pctOk ? Math.round(((importe * pctNum) / 100) * 100) / 100 : 0;
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!pctOk) return setMsg("El % de comisión tiene que estar entre 0 y 100.");
+    if (pctNum === pctOrig && quien === quienOrig) return onCancel();
+    setGuardando(true);
+    try {
+      await api.editarMovimientoSupervisor(entry.supervisor_movimiento_id, { comisionPct: pctNum, comisionQuien: quien });
+      onDone();
+    } catch (err: any) {
+      setMsg(err.message || "No se pudo guardar.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="muted" style={{ marginBottom: 12 }}>{entry.concept}</div>
+      <div className="form-grid">
+        <div className="field">
+          <label>% comisión (0 = sin comisión)</label>
+          <input value={pct} onChange={(e) => setPct(e.target.value)} inputMode="decimal" />
+          {importe > 0 && pctOk && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>= {usd(nueva)}</div>}
+        </div>
+        <div className="field">
+          <label>¿Quién la paga?</label>
+          <PcSeg opciones={[{ value: "NOSOTROS", label: "Nosotros" }, { value: "ELLOS", label: "Nos la pagan" }]} value={quien} onChange={setQuien} />
+        </div>
+      </div>
+      <div className="warnbox" style={{ marginBottom: 10 }}>
+        Se corrige también el pago de Supervisores y la Wallet. La cuenta del supervisor no cambia.
+      </div>
+      {msg && <div className="error">{msg}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
+        <button className="btn" disabled={guardando}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
+      </div>
     </form>
   );
 }

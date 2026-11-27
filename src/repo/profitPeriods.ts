@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { pool, newId } from "../db/pool.js";
 import { computeGananciaCierresYBancadosPorSemanas } from "./resumenFinanciero.js";
 import { getResumenClubSemanal } from "./clubResumen.js";
-import { MONTO_CATEGORIA_SQL } from "./partnerAccounts.js";
+import { MONTO_CATEGORIA_SQL, asegurarColumnaComisionSocios } from "./partnerAccounts.js";
 import { asegurarTablaSueldosManos, calcularSueldoManos, generarSueldoEnCierre, getSueldoDePeriodo } from "./sueldoManos.js";
 
 // ============================================================
@@ -171,6 +171,7 @@ async function computeRangoFechas(client: PoolClient, weekStarts: string[]) {
 
 async function computeCategoriasSocios(client: PoolClient, desde: string | null, hasta: string | null) {
   if (!desde || !hasta) return { retiros: 0, gastos: 0, ingresosAjustes: 0 };
+  await asegurarColumnaComisionSocios(client);
   const r = await client.query(
     `SELECT category, COALESCE(SUM(${MONTO_CATEGORIA_SQL}), 0) as total
      FROM partner_account_entries

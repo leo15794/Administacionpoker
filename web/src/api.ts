@@ -468,13 +468,17 @@ export const api = {
       notes?: string | null;
       // Link de pago/trackeo (16/10/2026, pedido de Leo) -- opcional, queda en el historial.
       paymentLink?: string | null;
+      // Comisión en Pagar/Cobrar (27/11/2026, mockup 100).
+      comisionPct?: number | null;
+      comisionQuien?: "NOSOTROS" | "ELLOS" | null;
     }
   ) => request(`/supervisores/${supervisorId}/movimientos`, { method: "POST", body: JSON.stringify(data) }),
   revertirMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}/revertir`, { method: "POST" }),
+  eliminarMovimientoSupervisor: (movId: string) => request(`/supervisores/movimientos/${movId}`, { method: "DELETE" }),
   // Editar un movimiento (18/11/2026, mockup 98): undefined = no se toca. Importe o club revierte y recarga corregido.
   editarMovimientoSupervisor: (
     movId: string,
-    data: { occurredAt?: string; agentId?: string | null; notes?: string | null; paymentLink?: string | null; concepto?: string; amount?: number; clubId?: string }
+    data: { occurredAt?: string; agentId?: string | null; notes?: string | null; paymentLink?: string | null; concepto?: string; amount?: number; clubId?: string; comisionPct?: number | null; comisionQuien?: "NOSOTROS" | "ELLOS" | null }
   ) => request(`/supervisores/movimientos/${movId}`, { method: "PUT", body: JSON.stringify(data) }),
   linkPagoMovimientoSupervisor: (movId: string, paymentLink: string | null) =>
     request(`/supervisores/movimientos/${movId}/link-pago`, { method: "PUT", body: JSON.stringify({ paymentLink }) }),
