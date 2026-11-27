@@ -1053,7 +1053,8 @@ function calcularComision(amount: number, direction: "PAGO" | "COBRO", pctIn?: n
   const quien: "NOSOTROS" | "ELLOS" = quienIn === "ELLOS" ? "ELLOS" : "NOSOTROS";
   const monto = pct > 0 ? round2((Math.abs(amount) * pct) / 100) : 0;
   // Lo que se suma a la tesorería: la comisión que pagamos sale de más (o entra de menos); la que nos pagan, al revés.
-  const ajusteTesoreria = monto === 0 ? 0 : (direction === "PAGO") === (quien === "NOSOTROS") ? monto : -monto;
+  // La tesorería mueve exactamente el importe (27/11/2026, Leo): la comisión solo va a Gastos operativos de Socios.
+  const ajusteTesoreria = 0;
   return { pct, quien, monto, ajusteTesoreria };
 }
 
@@ -1167,11 +1168,11 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
       const { id: treasuryId } = await registrarAjusteTesoreria({
         ledger: medio === "EFECTIVO" ? "CAJA_EFECTIVO" : medio === "ZELLE" ? "ZELLE" : "WALLET_MANOS",
         direction: input.direction === "PAGO" ? "EGRESO" : "INGRESO",
-        amount: round2(Math.abs(input.amount) + comision.ajusteTesoreria),
+        amount: round2(Math.abs(input.amount)),
         custodian: medio === "EFECTIVO" ? input.custodian?.trim() : null,
         reason:
           `${input.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${proveedorNombre} (${medio})` +
-          (comision.monto ? ` (importe ${Math.abs(input.amount).toFixed(2)} ${comision.ajusteTesoreria > 0 ? "+" : "−"} comisión ${comision.pct}% ${comision.monto.toFixed(2)})` : "") +
+          (comision.monto ? ` (comisión ${comision.pct}% ${comision.monto.toFixed(2)} a Gastos operativos)` : "") +
           `${input.notes ? ` -- ${input.notes}` : ""}`,
         createdBy: input.createdBy ?? null,
       });
@@ -1202,20 +1203,22 @@ export async function editarComisionPagoProveedor(id: string, pctIn: number, qui
   const antes = calcularComision(amount, pago.direction, Number(pago.comision_monto) > 0 ? Number(pago.comision_pct) : 0, pago.comision_quien);
   if (c.monto === antes.monto && c.quien === antes.quien) return { id, cambios: 0 };
 
-  // Tesorería: revertir el asiento viejo y cargar uno nuevo (si el pago movía tesorería).
+  // Tesorería: debe mover exactamente el importe. Solo se rehace si quedó distinta (pagos cargados con la regla anterior, que sumaba
+  // o restaba la comisión): se revierte el asiento viejo y se carga uno por el importe justo.
   let treasuryId: string | null = pago.treasury_adjustment_id ?? null;
-  if (pago.treasury_adjustment_id) {
-    const adj = (await pool.query(`SELECT * FROM treasury_adjustments WHERE id = $1`, [pago.treasury_adjustment_id])).rows[0];
+  const adjActual = pago.treasury_adjustment_id ? (await pool.query(`SELECT * FROM treasury_adjustments WHERE id = $1`, [pago.treasury_adjustment_id])).rows[0] : null;
+  if (adjActual && adjActual.status !== "REVERTIDO" && round2(Number(adjActual.amount)) !== round2(amount)) {
+    const adj = adjActual;
     await revertirAjusteTesoreria(pago.treasury_adjustment_id, `Se cambió la comisión del pago/cobro ${id} de Proveedores.`, editadoPor ?? null);
     const nuevo = await registrarAjusteTesoreria({
       ledger: adj.ledger,
       direction: pago.direction === "PAGO" ? "EGRESO" : "INGRESO",
-      amount: round2(amount + c.ajusteTesoreria),
+      amount: round2(amount),
       custodian: adj.custodian ?? null,
       reason:
         `${pago.direction === "PAGO" ? "Pago" : "Cobro"} a proveedor ${pago.proveedor_name} (${pago.medio})` +
-        (c.monto ? ` (importe ${amount.toFixed(2)} ${c.ajusteTesoreria > 0 ? "+" : "−"} comisión ${c.pct}% ${c.monto.toFixed(2)})` : "") +
-        " -- comisión corregida",
+        (c.monto ? ` (comisión ${c.pct}% ${c.monto.toFixed(2)} a Gastos operativos)` : "") +
+        " -- tesorería corregida al importe",
       createdBy: editadoPor ?? null,
     });
     treasuryId = nuevo.id;

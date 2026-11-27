@@ -222,7 +222,7 @@ export default function Proveedores() {
   const medioPagoTxt = (m: string) => ({ SIN_TESORERIA: "Sin tesorería", OTRO: "Otro", USDT: "USDT", EFECTIVO: "Efectivo", ZELLE: "Zelle" } as Record<string, string>)[m] ?? m;
   const esPagoReal = (p: any) => p.status !== "REVERTIDO" && (p.origen ?? "PAGO_COBRO") !== "AJUSTE";
   async function onQuitarComisionPago(p: any) {
-    if (!confirm(`¿Quitar la comisión de ${usd(p.comision_monto)}? Se corrige la tesorería y se saca el gasto de Socios. El pago queda.`)) return;
+    if (!confirm(`¿Quitar la comisión de ${usd(p.comision_monto)}? Se saca el gasto de Socios. El pago y la tesorería quedan igual.`)) return;
     try {
       await api.editarComisionPagoProveedor(p.id, { comisionPct: 0 });
       refresh();
@@ -695,7 +695,7 @@ export default function Proveedores() {
             importe={Number(comisionDe.amount)}
             pctInicial={Number(comisionDe.comision_monto) > 0 ? Number(comisionDe.comision_pct) : 0}
             quienInicial={comisionDe.comision_quien === "ELLOS" ? "ELLOS" : "NOSOTROS"}
-            nota="Se corrige la tesorería y el gasto operativo en Socios. El saldo del proveedor no cambia."
+            nota="Solo cambia el gasto operativo en Socios. El pago, la tesorería y el saldo del proveedor quedan igual."
             onCancel={() => setComisionDe(null)}
             onGuardar={async (pct, quien) => {
               await api.editarComisionPagoProveedor(comisionDe.id, { comisionPct: pct, comisionQuien: quien });
@@ -1653,9 +1653,7 @@ function PagoForm({ proveedores, clubes, saldos, proveedorInicial, onDone, onCan
   const r2c = (n: number) => Math.round(n * 100) / 100;
   const comisionDe = (m: { monto: number }) => (pctValido && pctNum > 0 && m.monto > 0 ? r2c((m.monto * pctNum) / 100) : 0);
   const comisionTotal = valido ? r2c(movs.reduce((t, m) => t + comisionDe(m), 0)) : 0;
-  // Efecto de la comisión sobre el neto (+ entra, − sale).
-  const netoComision = valido ? r2c(movs.reduce((t, m) => t + (comisionQuien === "NOSOTROS" ? -comisionDe(m) : comisionDe(m)), 0)) : 0;
-  const netoConComision = r2c(neto + netoComision);
+
   const mueveTesoreria = medio === "USDT" || medio === "EFECTIVO" || medio === "ZELLE";
 
   const saldoClub = (cid: string) => Number((saldos ?? []).find((x) => x.proveedor_id === proveedorId && x.club_id === cid)?.amount ?? 0);
@@ -1880,8 +1878,7 @@ function PagoForm({ proveedores, clubes, saldos, proveedorInicial, onDone, onCan
                   valor:
                     mueveTesoreria ? (
                       <>
-                        <b className={netoConComision < 0 ? "neg" : "pos"}>{netoConComision < 0 ? "sale " : "entra "}{fmtPc(Math.abs(netoConComision))}</b>
-                        {comisionTotal > 0 && <span className="muted"> (incluye la comisión)</span>}
+                        <b className={neto < 0 ? "neg" : "pos"}>{neto < 0 ? "sale " : "entra "}{fmtPc(Math.abs(neto))}</b>
                       </>
                     ) : (
                       <span className="muted">no se mueve</span>
@@ -1897,7 +1894,7 @@ function PagoForm({ proveedores, clubes, saldos, proveedorInicial, onDone, onCan
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
         <button className="btn" disabled={loading || !valido}>
-          {loading ? "Guardando..." : `${verbo}${valido ? " " + fmtPc(totalMostrado) : ""}${comisionTotal > 0 ? " + comisión " + fmtPc(comisionTotal) : ""}`}
+          {loading ? "Guardando..." : `${verbo}${valido ? " " + fmtPc(totalMostrado) : ""}${comisionTotal > 0 ? " · comisión " + fmtPc(comisionTotal) : ""}`}
         </button>
       </div>
     </form>

@@ -272,7 +272,7 @@ export default function Supervisores({ modo = "SUPERVISORES" }: { modo?: "SUPERV
 
   // Comisión (mockup 100): quitarla recarga el pago sin comisión (la Wallet y Socios se corrigen solos).
   async function onQuitarComision(m: any) {
-    if (!confirm(`¿Quitar la comisión de ${fmtPc(Number(m.comision_monto))}? Se corrige la Wallet y se saca el gasto de Socios. El pago queda.`)) return;
+    if (!confirm(`¿Quitar la comisión de ${fmtPc(Number(m.comision_monto))}? Se saca el gasto de Socios. El pago y la Wallet quedan igual.`)) return;
     try {
       await api.editarMovimientoSupervisor(m.id, { comisionPct: 0 });
       refrescarSeleccionado();
@@ -1464,7 +1464,7 @@ function EditarMovimientoForm({
   const comisionNueva = pctOk ? Math.round(((montoOk ? montoNum : amountOrig) * pctNum) / 100 * 100) / 100 : 0;
   const cambiaImporte = montoOk && montoNum !== amountOrig;
   const cambiaClub = !sinClub && clubId !== (mov.club_id ?? "");
-  const cambiaPlata = cambiaImporte || cambiaClub || cambiaComision;
+  const cambiaPlata = cambiaImporte || cambiaClub;
   const ch = {
     fecha: fecha !== fechaOrig,
     agente: !sinAgente && agentId !== (mov.agent_id ?? ""),
@@ -1472,7 +1472,7 @@ function EditarMovimientoForm({
     link: link.trim() !== (mov.payment_link ?? ""),
     concepto: mov.type === "DESCUENTO" && concepto.trim() !== (mov.concepto ?? ""),
   };
-  const hayCambios = cambiaPlata || Object.values(ch).some(Boolean);
+  const hayCambios = cambiaPlata || cambiaComision || Object.values(ch).some(Boolean);
   const nombreClub = (id: string) => clubes.find((c) => c.id === id)?.name ?? "—";
   const nombreAgente = (id: string) => (id ? subordinados.find((a) => a.id === id)?.name ?? mov.agent_name ?? id : "ninguno");
   const fmtUsd = (n: number) => `${n < -0.004 ? "−" : ""}US$ ${Math.abs(n).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1689,8 +1689,6 @@ function PagoCobroForm({
     ? r2c((hayAgentes ? montosAgentes : [monto]).reduce((t, m) => t + r2c((m * pctNum) / 100), 0))
     : 0;
   // Lo que se mueve en la Wallet: la comisión que pagamos sale de más (o entra de menos); la que nos pagan, al revés.
-  const walletComision = comisionTotal === 0 ? 0 : (tipo === "PAGO") === (comisionQuien === "NOSOTROS") ? comisionTotal : -comisionTotal;
-  const montoWallet = montoValido ? r2c(monto + walletComision) : 0;
   // Al tildar un agente se completa solo con lo pendiente en la dirección del movimiento (mockup 68): Pagar → lo que le
   // debemos (su cuenta corriente positiva); Cobrar → lo que nos debe. Se puede corregir para pagar una parte.
   const [completadas, setCompletadas] = useState<Record<string, boolean>>({});
@@ -1834,7 +1832,7 @@ function PagoCobroForm({
             ? [
                 {
                   label: tipo === "PAGO" ? "Sale de Wallet Manos" : "Entra a Wallet Manos",
-                  valor: <><b>{fmt(montoWallet)}</b> <span className="muted">({fmt(monto)} {walletComision > 0 ? "+" : "−"} {fmt(comisionTotal)} comisión)</span></>,
+                  valor: <b>{fmt(monto)}</b>,
                 },
                 {
                   label: "Gasto operativo (Socios)",
@@ -1860,7 +1858,7 @@ function PagoCobroForm({
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn secondary" onClick={onCancel}>Cancelar</button>
         <button className="btn" disabled={loading || !montoValido}>
-          {loading ? "Guardando..." : `${tipo === "PAGO" ? "Pagar" : "Cobrar"}${montoValido ? " " + fmt(monto) : ""}${comisionTotal > 0 ? " + comisión " + fmt(comisionTotal) : ""}${tildados.length > 1 ? " (" + tildados.length + " agentes)" : ""}`}
+          {loading ? "Guardando..." : `${tipo === "PAGO" ? "Pagar" : "Cobrar"}${montoValido ? " " + fmt(monto) : ""}${comisionTotal > 0 ? " · comisión " + fmt(comisionTotal) : ""}${tildados.length > 1 ? " (" + tildados.length + " agentes)" : ""}`}
         </button>
       </div>
     </form>

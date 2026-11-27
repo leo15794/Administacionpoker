@@ -133,7 +133,7 @@ export default function CuentasSocios() {
 
   async function eliminarMovimiento(m: any) {
     const texto = m.supervisor_movimiento_id || m.proveedor_pago_id
-      ? `¿Quitar esta comisión?\n\n${m.concept} — ${usd(m.amount)}\n\nSe saca solo la comisión: el pago queda y la tesorería se corrige.`
+      ? `¿Quitar esta comisión?\n\n${m.concept} — ${usd(m.amount)}\n\nSe saca solo la comisión: el pago y la tesorería quedan igual.`
       : `¿Eliminar este movimiento de ${m.account_name}?\n\n${m.concept} — ${usd(m.amount)}\n\nNo se puede deshacer.`;
     if (!(await confirmDialog(texto))) return;
     setBorrando(m.id);
@@ -475,12 +475,12 @@ export default function CuentasSocios() {
                         </span>
                       )}
                       {m.supervisor_movimiento_id && (
-                        <span className="badge neutral" style={{ color: "var(--accent)" }} title="Comisión de un Pagar/Cobrar de Supervisores: se edita el % o quién la paga, y se corrigen el pago y la Wallet.">
+                        <span className="badge neutral" style={{ color: "var(--accent)" }} title="Comisión de un Pagar/Cobrar de Supervisores: se edita el % o quién la paga desde acá; el pago y la Wallet no cambian.">
                           Supervisores
                         </span>
                       )}
                       {m.proveedor_pago_id && (
-                        <span className="badge neutral" style={{ color: "var(--accent)" }} title="Comisión de un Pago/cobro de Proveedores: se edita el % o quién la paga, y se corrigen el pago y la tesorería.">
+                        <span className="badge neutral" style={{ color: "var(--accent)" }} title="Comisión de un Pago/cobro de Proveedores: se edita el % o quién la paga desde acá; el pago y la tesorería no cambian.">
                           Proveedores
                         </span>
                       )}
@@ -524,7 +524,7 @@ export default function CuentasSocios() {
             importe={comisionDesdeConcepto(editandoComision).importe}
             pctInicial={comisionDesdeConcepto(editandoComision).pct}
             quienInicial={comisionDesdeConcepto(editandoComision).quien}
-            nota={`Se corrige también el pago de ${editandoComision.proveedor_pago_id ? "Proveedores" : "Supervisores"} y la tesorería. El saldo del ${editandoComision.proveedor_pago_id ? "proveedor" : "supervisor"} no cambia.`}
+            nota="Solo cambia este gasto operativo. El pago, la tesorería y el saldo quedan igual."
             onCancel={() => setEditandoComision(null)}
             onGuardar={async (pct, quien) => {
               if (editandoComision.proveedor_pago_id) {
