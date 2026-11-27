@@ -222,7 +222,7 @@ export default function Proveedores() {
   const medioPagoTxt = (m: string) => ({ SIN_TESORERIA: "Sin tesorería", OTRO: "Otro", USDT: "USDT", EFECTIVO: "Efectivo", ZELLE: "Zelle" } as Record<string, string>)[m] ?? m;
   const esPagoReal = (p: any) => p.status !== "REVERTIDO" && (p.origen ?? "PAGO_COBRO") !== "AJUSTE";
   async function onQuitarComisionPago(p: any) {
-    if (!confirm(`¿Quitar la comisión de ${usd(p.comision_monto)}? Se saca el gasto de Socios. El pago y la tesorería quedan igual.`)) return;
+    if (!confirm(`¿Quitar la comisión de ${usd(p.comision_monto)}? Se saca el gasto de Socios y el saldo con el proveedor vuelve a moverse solo por el importe. La tesorería queda igual.`)) return;
     try {
       await api.editarComisionPagoProveedor(p.id, { comisionPct: 0 });
       refresh();
@@ -695,7 +695,7 @@ export default function Proveedores() {
             importe={Number(comisionDe.amount)}
             pctInicial={Number(comisionDe.comision_monto) > 0 ? Number(comisionDe.comision_pct) : 0}
             quienInicial={comisionDe.comision_quien === "ELLOS" ? "ELLOS" : "NOSOTROS"}
-            nota="Solo cambia el gasto operativo en Socios. El pago, la tesorería y el saldo del proveedor quedan igual."
+            nota="Cambia el gasto operativo en Socios y el saldo con el proveedor (se descuenta importe ± comisión). La tesorería queda igual. Solo se puede si es el último movimiento de ese club."
             onCancel={() => setComisionDe(null)}
             onGuardar={async (pct, quien) => {
               await api.editarComisionPagoProveedor(comisionDe.id, { comisionPct: pct, comisionQuien: quien });
@@ -1870,7 +1870,7 @@ function PagoForm({ proveedores, clubes, saldos, proveedorInicial, onDone, onCan
                   : []),
                 ...clubesAfectados.map((cid) => {
                   const antes = saldoClub(cid);
-                  const delta = movs.filter((m) => m.clubId === cid).reduce((t, m) => t + (m.dir === "PAGO" ? -m.monto : m.monto), 0);
+                  const delta = movs.filter((m) => m.clubId === cid).reduce((t, m) => { const mag = m.monto + (comisionQuien === "NOSOTROS" ? comisionDe(m) : -comisionDe(m)); return t + (m.dir === "PAGO" ? -mag : mag); }, 0);
                   return { label: `Saldo con ${nombreProv} en ${nombreClub(cid)}`, antes, despues: Math.round((antes + delta) * 100) / 100 };
                 }),
                 {
@@ -2509,7 +2509,7 @@ function ComisionPago({ p }: { p: any }) {
   if (!(Number(p.comision_monto) > 0)) return null;
   return (
     <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--amber)", marginTop: 3 }}>
-      comisión {String(Number(p.comision_pct)).replace(".", ",")}% · {usdCents(Number(p.comision_monto))} ({p.comision_quien === "ELLOS" ? "nos la pagan" : "nosotros"})
+      comisión {String(Number(p.comision_pct)).replace(".", ",")}% · {usdCents(Number(p.comision_monto))} ({p.comision_quien === "ELLOS" ? "nos la pagan" : "nosotros"}) · al saldo {usdCents(Number(p.amount) + (p.comision_quien === "ELLOS" ? -1 : 1) * Number(p.comision_monto))}
     </span>
   );
 }

@@ -524,7 +524,7 @@ export default function CuentasSocios() {
             importe={comisionDesdeConcepto(editandoComision).importe}
             pctInicial={comisionDesdeConcepto(editandoComision).pct}
             quienInicial={comisionDesdeConcepto(editandoComision).quien}
-            nota="Solo cambia este gasto operativo. El pago, la tesorería y el saldo quedan igual."
+            nota={editandoComision.proveedor_pago_id ? "Cambia este gasto y el saldo con el proveedor (importe ± comisión). La tesorería queda igual." : "Solo cambia este gasto operativo. El pago, la Wallet y la cuenta del supervisor quedan igual."}
             onCancel={() => setEditandoComision(null)}
             onGuardar={async (pct, quien) => {
               if (editandoComision.proveedor_pago_id) {

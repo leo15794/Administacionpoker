@@ -273,7 +273,7 @@ export async function listMovimientosSaldoProveedor(proveedorId: string, clubId:
     [proveedorId, clubId]
   );
   const pagosR = await pool.query(
-    `SELECT id, direction, amount, saldo_anterior, saldo_nuevo, status, occurred_at, medio
+    `SELECT * -- incluye comision_monto/comision_quien si existen (el saldo se mueve importe ± comisión)
      FROM proveedor_pagos
      WHERE proveedor_id = $1 AND club_id = $2
      ORDER BY occurred_at`,
@@ -299,12 +299,12 @@ export async function listMovimientosSaldoProveedor(proveedorId: string, clubId:
     });
   }
   for (const row of pagosR.rows) {
-    const delta = row.direction === "PAGO" ? -Math.abs(Number(row.amount)) : Math.abs(Number(row.amount));
+    const delta = deltaSaldoPago(row.direction, Number(row.amount), row.comision_monto, row.comision_quien);
     movimientos.push({
       id: row.id,
       tipo: row.direction === "PAGO" ? "PAGO" : "COBRO",
       fecha: row.occurred_at,
-      label: `${row.direction === "PAGO" ? "Pago" : "Cobro"} (${row.medio})`,
+      label: `${row.direction === "PAGO" ? "Pago" : "Cobro"} (${row.medio})${Number(row.comision_monto) > 0 ? ` · incluye comisión ${String(Number(row.comision_pct)).replace(".", ",")}%` : ""}`,
       delta,
       saldoAnterior: Number(row.saldo_anterior),
       saldoNuevo: Number(row.saldo_nuevo),
@@ -1036,6 +1036,15 @@ export interface PagoProveedorInput {
   comisionQuien?: "NOSOTROS" | "ELLOS" | null;
 }
 
+// Cuánto mueve el saldo del proveedor un pago/cobro (27/11/2026, pedido de Leo): con comisión que pagamos nosotros se descuenta
+// importe + comisión (cobramos 759 con 37,95 de comisión: la deuda baja 796,95; pagamos 750 con 37,50: lo que le debemos baja
+// 787,50); si nos la pagan, importe − comisión. La tesorería mueve siempre el importe justo y la comisión va a Gastos operativos.
+export function deltaSaldoPago(direction: string, amount: number, comisionMonto?: number | string | null, quien?: string | null): number {
+  const c = Number(comisionMonto) > 0 ? (quien === "ELLOS" ? -Number(comisionMonto) : Number(comisionMonto)) : 0;
+  const magnitud = round2(Math.abs(Number(amount)) + c);
+  return direction === "PAGO" ? -magnitud : magnitud;
+}
+
 let columnasComisionProvListas = false;
 export async function asegurarColumnasComisionProveedor() {
   if (columnasComisionProvListas) return;
@@ -1114,7 +1123,7 @@ export async function registrarPagoProveedor(input: PagoProveedorInput) {
     await client.query("BEGIN");
 
     const saldo = await getSaldoParaUpdate(client, input.proveedorId, input.clubId);
-    const delta = input.direction === "PAGO" ? -Math.abs(input.amount) : Math.abs(input.amount);
+    const delta = deltaSaldoPago(input.direction, input.amount, comision.monto, comision.quien);
     const saldoAnterior = Number(saldo.amount);
     const saldoNuevo = saldoAnterior + delta;
 
@@ -1203,6 +1212,18 @@ export async function editarComisionPagoProveedor(id: string, pctIn: number, qui
   const antes = calcularComision(amount, pago.direction, Number(pago.comision_monto) > 0 ? Number(pago.comision_pct) : 0, pago.comision_quien);
   if (c.monto === antes.monto && c.quien === antes.quien) return { id, cambios: 0 };
 
+  // El saldo del proveedor se mueve importe ± comisión (ver deltaSaldoPago): cambiar la comisión cambia el saldo. Como el saldo es una
+  // cadena anterior → nuevo, solo se puede si este pago es el último movimiento de ese proveedor+club (mismo criterio que Revertir).
+  const deltaViejo = deltaSaldoPago(pago.direction, amount, antes.monto, antes.quien);
+  const deltaNuevo = deltaSaldoPago(pago.direction, amount, c.monto, c.quien);
+  const diff = round2(deltaNuevo - deltaViejo);
+  if (diff !== 0) {
+    const s = (await pool.query(`SELECT amount FROM proveedor_saldos WHERE proveedor_id = $1 AND club_id = $2`, [pago.proveedor_id, pago.club_id])).rows[0];
+    if (!s || round2(Number(s.amount)) !== round2(Number(pago.saldo_nuevo))) {
+      throw new Error("Hay movimientos más nuevos de este proveedor en ese club: la comisión cambia el saldo, así que primero revertí o eliminá lo que se cargó después.");
+    }
+  }
+
   // Tesorería: debe mover exactamente el importe. Solo se rehace si quedó distinta (pagos cargados con la regla anterior, que sumaba
   // o restaba la comisión): se revierte el asiento viejo y se carga uno por el importe justo.
   let treasuryId: string | null = pago.treasury_adjustment_id ?? null;
@@ -1231,6 +1252,15 @@ export async function editarComisionPagoProveedor(id: string, pctIn: number, qui
       `UPDATE proveedor_pagos SET comision_pct = $2, comision_monto = $3, comision_quien = $4, treasury_adjustment_id = $5 WHERE id = $1`,
       [id, c.monto ? c.pct : null, c.monto || null, c.monto ? c.quien : null, treasuryId]
     );
+    if (diff !== 0) {
+      const saldo = await getSaldoParaUpdate(client, pago.proveedor_id, pago.club_id);
+      const nuevo = Number(saldo.amount) + diff; // sin redondear: el saldo guarda 4 decimales
+      await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [nuevo, saldo.id]);
+      await client.query(`UPDATE proveedor_pagos SET saldo_nuevo = $2 WHERE id = $1`, [id, nuevo]);
+      if (pago.cierre_linea_id) {
+        await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado + $1 WHERE id = $2`, [diff, pago.cierre_linea_id]);
+      }
+    }
     await client.query(`DELETE FROM partner_account_entries WHERE proveedor_pago_id = $1`, [id]);
     if (c.monto > 0) {
       const fecha = (await client.query(`SELECT (occurred_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date::text AS f FROM proveedor_pagos WHERE id = $1`, [id])).rows[0]?.f ?? null;
@@ -1278,7 +1308,7 @@ export async function revertirPagoProveedor(id: string) {
     // orden de otros pagos sobre la misma línea (a diferencia del saldo agregado de arriba,
     // que sí es una cadena estricta anterior/nuevo).
     if (pago.cierre_linea_id) {
-      const delta = pago.direction === "PAGO" ? -Math.abs(Number(pago.amount)) : Math.abs(Number(pago.amount));
+      const delta = deltaSaldoPago(pago.direction, Number(pago.amount), pago.comision_monto, pago.comision_quien);
       await client.query(`UPDATE proveedor_cierre_lineas SET pagado = pagado - $1 WHERE id = $2`, [delta, pago.cierre_linea_id]);
     }
     await client.query(`UPDATE proveedor_pagos SET status = 'REVERTIDO' WHERE id = $1`, [id]);
@@ -1499,7 +1529,7 @@ export async function eliminarPagoProveedorDefinitivo(id: string) {
     }
 
     if (pago.status !== "REVERTIDO") {
-      const delta = pago.direction === "PAGO" ? -Math.abs(Number(pago.amount)) : Math.abs(Number(pago.amount));
+      const delta = deltaSaldoPago(pago.direction, Number(pago.amount), pago.comision_monto, pago.comision_quien);
       const saldo = await getSaldoParaUpdate(client, pago.proveedor_id, pago.club_id);
       await client.query(`UPDATE proveedor_saldos SET amount = $1, updated_at = now() WHERE id = $2`, [
         Number(saldo.amount) - delta,
